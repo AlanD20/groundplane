@@ -6,6 +6,12 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,7 +27,7 @@ func TestScriptContextBlueprintPrimaryFenceRejectsConcurrentEdits(t *testing.T) 
 			primary.Desired.Body = hook.Sources.BodyGeneration.Record.Body
 			primary.ActiveReferences++
 			writeScriptContextPrimaryFixture(t, store, primary)
-			ledger := &ReleaseLedger{store: &releasePlanningTestStore{memoryHierarchyStore: store}}
+			ledger := releaseLedgerFixture(t, &releasePlanningTestStore{memoryHierarchyStore: store})
 			conditions, err := ledger.blueprintScriptPrimaryConditions(
 				ctx,
 				[]ReleaseHookExecutionPublication{hook, hook},
@@ -45,11 +51,11 @@ func TestScriptContextBlueprintPrimaryFenceRejectsConcurrentEdits(t *testing.T) 
 			) {
 				t.Fatalf("metadata edit before the final read accepted: %v", err)
 			}
-			key := scriptExecutionKey(execution.ID)
+			key := testscriptexecutions.ScriptExecutionKey(execution.ID)
 			result, err := store.Transact(
 				ctx,
 				conditions,
-				[]Mutation{{Type: MutationPut, Key: key, Value: []byte("published")}},
+				[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: []byte("published")}},
 			)
 			if err != nil || result.Succeeded || store.valueAt(key, store.revision) != nil {
 				t.Fatalf("metadata edit after the final read escaped CAS: %v, %v", result.Succeeded, err)
@@ -64,7 +70,7 @@ func TestScriptContextBlueprintPrimaryFenceRejectsDifferentScript(t *testing.T) 
 	store, _, execution, _, _ := manualScriptLifecycleFixture(t)
 	hook := scriptContextBlueprintPrimaryFixture(t, store, execution, true)
 	hook.Execution.ScriptID = "scr_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	ledger := &ReleaseLedger{store: &releasePlanningTestStore{memoryHierarchyStore: store}}
+	ledger := releaseLedgerFixture(t, &releasePlanningTestStore{memoryHierarchyStore: store})
 	if _, err := ledger.blueprintScriptPrimaryConditions(context.Background(), []ReleaseHookExecutionPublication{hook}); !isKind(
 		err,
 		errs.KindValidationFailed,
@@ -88,11 +94,7 @@ func TestScriptContextBlueprintFinalTransactionRejectsLatePrimaryEdit(t *testing
 		if err != nil || outcome != IdempotencyKnownConflict || conflict == nil {
 			t.Fatalf("late Script edit was not fenced (explicit=%t): %v, %v, %v", explicit, outcome, conflict, err)
 		}
-		for _, key := range []string{
-			taskKey(published.task.ID), taskQueueKey(published.task.Executor, published.task.ID),
-			releasePublicationKey(published.releasePublicationID), environmentBlueprintHeadKey(published.environmentID),
-			scriptSourceRootPrefix + published.task.OperationID,
-		} {
+		for _, key := range []string{testtaskjournal.TaskStorageKey(published.task.ID), testtaskjournal.TaskQueueKey(published.task.Executor, published.task.ID), testreleases.ReleasePublicationKey(published.releasePublicationID), testblueprints.EnvironmentBlueprintHeadKey(published.environmentID), testscriptsourcereference.RootPrefix + published.task.OperationID} {
 			if published.store.valueAt(key, published.store.revision) != nil {
 				t.Fatalf("failed publication exposed authority at %s", key)
 			}

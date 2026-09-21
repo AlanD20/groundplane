@@ -16,6 +16,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
 	infraetcd "github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -57,7 +61,7 @@ func TestStoreCreateValidatesMembershipScopeAndReplays(t *testing.T) {
 	if err != nil || projectionResult.Entry == nil {
 		t.Fatalf("read foreign desired projection: %#v, %v", projectionResult, err)
 	}
-	projection, err := decodeDurable[infraetcd.EnvironmentComposeProjection](
+	projection, err := decodeDurable[testenvironmentprojection.EnvironmentComposeProjection](
 		projectionResult.Entry.Value, "environment-compose-projection",
 	)
 	if err != nil {
@@ -254,18 +258,18 @@ func seedEnvironmentAndServices(store *memoryStore, environmentID string, servic
 	projectID := ids.NewAt(ids.KindProject, now, 8002)
 	createTaskID := ids.NewAt(ids.KindTask, now, 8003)
 	blueprintRevisionID := ids.NewAt(ids.KindTask, now, 8004)
-	tenant := infraetcd.TenantRecord{ID: tenantID, Slug: "tenant", Name: "Tenant"}
-	project := infraetcd.ProjectRecord{
+	tenant := testhierarchy.TenantRecord{ID: tenantID, Slug: "tenant", Name: "Tenant"}
+	project := testhierarchy.ProjectRecord{
 		ID:       projectID,
 		TenantID: tenantID,
 		Slug:     "project",
 		Name:     "Project",
-		Kind:     infraetcd.ProjectKindTenant,
+		Kind:     testhierarchy.ProjectKindTenant,
 	}
-	environment := infraetcd.EnvironmentRecord{
+	environment := testhierarchy.EnvironmentRecord{
 		ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.0.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
-		ProvisioningState: infraetcd.EnvironmentProvisioningReady, CreateTaskID: createTaskID, CreatedAt: now,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady, CreateTaskID: createTaskID, CreatedAt: now,
 	}
 	store.put(tenantKey(tenantID), mustDurableValue("tenant", tenant))
 	store.put(projectKey(projectID), mustDurableValue("project", project))
@@ -276,18 +280,18 @@ func seedEnvironmentAndServices(store *memoryStore, environmentID string, servic
 		environmentMutationEpochKey(environmentID),
 		mustDurableValue("environment-mutation-epoch", epochRecord{EnvironmentID: environmentID}),
 	)
-	projection := infraetcd.EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: blueprintRevisionID, RenderGeneration: 1,
-		DesiredServices: make([]infraetcd.EnvironmentServiceProjection, len(serviceIDs)),
+		DesiredServices: make([]testservices.EnvironmentServiceProjection, len(serviceIDs)),
 	}
 	for index, serviceID := range serviceIDs {
 		name := fmt.Sprintf("service-%02d", index)
 		desired := core.Service{ID: serviceID, Name: name, Image: "example.invalid/image:tag"}
-		projection.DesiredServices[index] = infraetcd.EnvironmentServiceProjection{
+		projection.DesiredServices[index] = testservices.EnvironmentServiceProjection{
 			EnvironmentID: environmentID,
 			Desired:       desired,
 		}
-		store.put(serviceKey(serviceID), mustDurableValue("service", infraetcd.ServiceRecord{
+		store.put(serviceKey(serviceID), mustDurableValue("service", testservices.ServiceRecord{
 			EnvironmentID: environmentID, Desired: desired,
 			Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
 		}))
@@ -307,42 +311,42 @@ func mustDurableValue[T any](kind string, value T) []byte {
 type memoryStore struct {
 	mu       sync.Mutex
 	revision int64
-	values   map[string]infraetcd.KeyValue
+	values   map[string]testkeyvalue.KeyValue
 }
 
 func newMemoryStore() *memoryStore {
-	return &memoryStore{revision: 1, values: make(map[string]infraetcd.KeyValue)}
+	return &memoryStore{revision: 1, values: make(map[string]testkeyvalue.KeyValue)}
 }
 
 func (store *memoryStore) Health(context.Context) error              { return nil }
 func (store *memoryStore) Close() error                              { return nil }
 func (store *memoryStore) Snapshot(context.Context, io.Writer) error { return nil }
-func (store *memoryStore) Watch(context.Context, string, int64) (*infraetcd.WatchStream, error) {
+func (store *memoryStore) Watch(context.Context, string, int64) (*testkeyvalue.WatchStream, error) {
 	return nil, errors.New("not implemented")
 }
 
 func (store *memoryStore) MeasureTransaction(
 	ctx context.Context,
-	conditions []infraetcd.Condition,
-	mutations []infraetcd.Mutation,
-) (infraetcd.TransactionBudget, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionBudget, error) {
 	return infraetcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
 }
 
-func (store *memoryStore) Get(_ context.Context, key string) (*infraetcd.GetResult, error) {
+func (store *memoryStore) Get(_ context.Context, key string) (*testkeyvalue.GetResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	value := store.value(key)
-	return &infraetcd.GetResult{Entry: value, ReadRevision: store.revision}, nil
+	return &testkeyvalue.GetResult{Entry: value, ReadRevision: store.revision}, nil
 }
 
 func (store *memoryStore) GetMany(
 	_ context.Context,
-	request infraetcd.GetManyRequest,
-) (*infraetcd.GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	values := make([]*infraetcd.KeyValue, len(request.Keys))
+	values := make([]*testkeyvalue.KeyValue, len(request.Keys))
 	for index, key := range request.Keys {
 		values[index] = store.value(key)
 	}
@@ -350,7 +354,7 @@ func (store *memoryStore) GetMany(
 	if revision == 0 {
 		revision = store.revision
 	}
-	return &infraetcd.GetManyResult{Values: values, ReadRevision: revision, ResponseRevision: store.revision}, nil
+	return &testkeyvalue.GetManyResult{Values: values, ReadRevision: revision, ResponseRevision: store.revision}, nil
 }
 
 func (store *memoryStore) Put(_ context.Context, key string, value []byte) (int64, error) {
@@ -368,7 +372,10 @@ func (store *memoryStore) Delete(_ context.Context, key string) (int64, error) {
 	return store.revision, nil
 }
 
-func (store *memoryStore) Range(_ context.Context, request infraetcd.RangeRequest) (*infraetcd.RangeResult, error) {
+func (store *memoryStore) Range(
+	_ context.Context,
+	request testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	keys := make([]string, 0)
@@ -382,7 +389,7 @@ func (store *memoryStore) Range(_ context.Context, request infraetcd.RangeReques
 	if request.Limit > 0 && int64(len(keys)) > request.Limit {
 		keys = keys[:request.Limit]
 	}
-	values := make([]infraetcd.KeyValue, len(keys))
+	values := make([]testkeyvalue.KeyValue, len(keys))
 	for index, key := range keys {
 		values[index] = *store.value(key)
 	}
@@ -390,7 +397,7 @@ func (store *memoryStore) Range(_ context.Context, request infraetcd.RangeReques
 	if revision == 0 {
 		revision = store.revision
 	}
-	return &infraetcd.RangeResult{
+	return &testkeyvalue.RangeResult{
 		Values:           values,
 		ReadRevision:     revision,
 		ResponseRevision: store.revision,
@@ -400,12 +407,12 @@ func (store *memoryStore) Range(_ context.Context, request infraetcd.RangeReques
 
 func (store *memoryStore) Transact(
 	_ context.Context,
-	conditions []infraetcd.Condition,
-	mutations []infraetcd.Mutation,
-) (infraetcd.TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	failures := make([]*infraetcd.KeyValue, len(conditions))
+	failures := make([]*testkeyvalue.KeyValue, len(conditions))
 	succeeded := true
 	for index, condition := range conditions {
 		value := store.value(condition.Key)
@@ -425,17 +432,17 @@ func (store *memoryStore) Transact(
 		}
 	}
 	if !succeeded {
-		return infraetcd.TransactionResult{Revision: store.revision, FailureReads: failures}, nil
+		return testkeyvalue.TransactionResult{Revision: store.revision, FailureReads: failures}, nil
 	}
 	store.revision++
 	for _, mutation := range mutations {
-		if mutation.Type == infraetcd.MutationDelete {
+		if mutation.Type == testkeyvalue.MutationDelete {
 			delete(store.values, mutation.Key)
 		} else {
-			store.values[mutation.Key] = infraetcd.KeyValue{Key: mutation.Key, Value: append([]byte(nil), mutation.Value...), Version: 1, ModRevision: store.revision}
+			store.values[mutation.Key] = testkeyvalue.KeyValue{Key: mutation.Key, Value: append([]byte(nil), mutation.Value...), Version: 1, ModRevision: store.revision}
 		}
 	}
-	return infraetcd.TransactionResult{Succeeded: true, Revision: store.revision}, nil
+	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
 func (store *memoryStore) put(key string, value []byte) {
@@ -446,7 +453,7 @@ func (store *memoryStore) put(key string, value []byte) {
 
 func (store *memoryStore) putLocked(key string, value []byte) {
 	store.revision++
-	store.values[key] = infraetcd.KeyValue{
+	store.values[key] = testkeyvalue.KeyValue{
 		Key:         key,
 		Value:       append([]byte(nil), value...),
 		Version:     1,
@@ -461,7 +468,7 @@ func (store *memoryStore) delete(key string) {
 	delete(store.values, key)
 }
 
-func (store *memoryStore) value(key string) *infraetcd.KeyValue {
+func (store *memoryStore) value(key string) *testkeyvalue.KeyValue {
 	value, exists := store.values[key]
 	if !exists {
 		return nil

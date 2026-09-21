@@ -13,10 +13,17 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -28,7 +35,7 @@ import (
 // even when they identify exactly the same desired runtime at the capture read.
 func TestEntryMutationCapturesImmutableRevisionSource(t *testing.T) {
 	testBlueprintExecutedArtifact(t, true, false, func(fixture *etcd.ExecutedArtifactFixture,
-		resolver *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, _ domain.Intent,
+		resolver *testtaskplanning.TaskPlanResolver, original testreleaserender.ReleaseRenderInput, _ domain.Intent,
 		_ *agentpb.ComposeArtifact) {
 		ctx := t.Context()
 		if err := resolver.EnableReleasePlans(fixture.Ledger); err != nil {
@@ -113,10 +120,10 @@ func testEntryMutationServingRuntime(
 		}
 	}
 	testBlueprintExecutedArtifactConfigured(t, true, false, configure, func(fixture *etcd.ExecutedArtifactFixture,
-		resolver *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, originalIntent domain.Intent,
+		resolver *testtaskplanning.TaskPlanResolver, original testreleaserender.ReleaseRenderInput, originalIntent domain.Intent,
 		_ *agentpb.ComposeArtifact) {
 		ctx := t.Context()
-		project, err := controller.LoadNormalizedEnvironmentProject(ctx, original.Projection)
+		project, err := testcomposerender.LoadNormalizedEnvironmentProject(ctx, original.Projection)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -143,7 +150,7 @@ func testEntryMutationServingRuntime(
 		if err != nil {
 			t.Fatal(err)
 		}
-		authority := etcd.ServiceLifecycleRelease{ServingReleaseID: currentRelease.ReleaseID,
+		authority := testreleaserender.ServiceLifecycleRelease{ServingReleaseID: currentRelease.ReleaseID,
 			PriorServingReleaseID: intent.PriorServingReleaseID, Current: currentRelease, RetainedPrior: &prior.Record}
 		fragments, err := resolver.RenderRetainedServiceRuntime(ctx, authority)
 		if err != nil {
@@ -151,9 +158,15 @@ func testEntryMutationServingRuntime(
 		}
 		if withAttach {
 			for index, fragment := range fragments {
-				fragments[index], err = controller.MutateAttachNetworkArtifact(ctx, fragment, authorityView.Record,
-					[]etcd.AttachTaskNetworkJoin{{NetworkID: networkID, ServiceIDs: []string{original.ServiceID}}},
-					fragment.ArtifactId)
+				fragments[index], err = testtaskplanning.MutateAttachNetworkArtifact(
+					ctx,
+					fragment,
+					authorityView.Record,
+					[]testattachrender.AttachTaskNetworkJoin{
+						{NetworkID: networkID, ServiceIDs: []string{original.ServiceID}},
+					},
+					fragment.ArtifactId,
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -174,21 +187,20 @@ func testEntryMutationServingRuntime(
 		) != (runtimeIntent == core.ServiceRuntimeIntentRunning) {
 			t.Fatal("Entry capture lost operational intent")
 		}
-		entry, err := etcd.NewBlueprintEntryRecord(original.EnvironmentID, "floor-probe",
+		entry, err := testentries.NewBlueprintRecord(original.EnvironmentID, "floor-probe",
 			core.EnvEntry{ID: ids.New(ids.KindEnvEntry), Kind: core.EntryKindEnv,
 				Key: "FLOOR_PROBE", Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"api"}},
 			ids.New(ids.KindConfig))
 		if err != nil {
 			t.Fatal(err)
 		}
-		candidate, materials, err := controller.ProjectEnvironmentEntryMutation(
-			captured.Projection,
-			controller.EnvironmentEntryArtifactMutation{
+		candidate, materials, err := testcomposerender.ProjectEnvironmentEntryMutation(
+			captured.Projection, testcomposerender.EnvironmentEntryArtifactMutation{
 				RevisionID:       ids.New(ids.KindTask),
 				ArtifactID:       ids.New(ids.KindConfig),
 				PlanID:           ids.New(ids.KindPlan),
 				RenderGeneration: current.Record.RenderGeneration + 1,
-				Entries:          []etcd.EntryRecord{entry},
+				Entries:          []testentries.Record{entry},
 			},
 		)
 		if err != nil {
@@ -230,16 +242,19 @@ func testEntryMutationServingRuntime(
 	})
 }
 
-func proveEntryServingPlanReconstruction(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
-	captured controller.EntryMutationRuntime, desired, candidate etcd.EnvironmentComposeProjection,
-	materials []controller.EnvironmentEntryMaterialization,
+func proveEntryServingPlanReconstruction(
+	t *testing.T,
+	fixture *etcd.ExecutedArtifactFixture,
+	captured testtaskplanning.EntryMutationRuntime,
+	desired, candidate testenvironmentprojection.EnvironmentComposeProjection,
+	materials []testcomposerender.EnvironmentEntryMaterialization,
 ) etcd.TaskRecord {
 	t.Helper()
 	task := fixture.Task(t, 961)
 	task.ID, task.RenderGeneration = candidate.RevisionID, int32(candidate.RenderGeneration)
 	digest := sha256.Sum256([]byte("FLOOR_PROBE=one\n"))
 	for _, material := range materials {
-		task.Materializations = append(task.Materializations, etcd.TaskMaterializationRecord{
+		task.Materializations = append(task.Materializations, testtaskmaterialization.Record{
 			StepID: ids.New(ids.KindStep), MaterializationID: ids.New(ids.KindConfig),
 			EnvironmentID: candidate.EnvironmentID, Destination: material.Destination,
 			ServiceID: material.ServiceID, ServiceName: material.ServiceName, OutputKind: material.OutputKind,
@@ -253,11 +268,11 @@ func proveEntryServingPlanReconstruction(t *testing.T, fixture *etcd.ExecutedArt
 		t.Fatal("prepare captured Entry plan", err)
 	}
 	reader := &entryServingPlanReader{HierarchyRepository: fixture.Hierarchy,
-		projections: map[string]etcd.EnvironmentComposeProjection{
+		projections: map[string]testenvironmentprojection.EnvironmentComposeProjection{
 			desired.RevisionID:   desired,
 			candidate.RevisionID: candidate,
 		}}
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,12 +303,14 @@ func proveEntryServingPlanReconstruction(t *testing.T, fixture *etcd.ExecutedArt
 
 type entryServingPlanReader struct {
 	*etcd.HierarchyRepository
-	projections map[string]etcd.EnvironmentComposeProjection
+	projections map[string]testenvironmentprojection.EnvironmentComposeProjection
 }
 
 func (reader *entryServingPlanReader) GetEnvironmentComposeProjectionRevision(
 	ctx context.Context, environmentID, revisionID string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
 	projection, found := reader.projections[revisionID]
-	return etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: projection}, found, ctx.Err()
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+		Record: projection,
+	}, found, ctx.Err()
 }

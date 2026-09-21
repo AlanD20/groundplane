@@ -6,12 +6,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 )
 
 // Rationale: context is mutable metadata; explicit grants and inherited reset
 // survive storage without creating a generation or moving body bytes into it.
 func TestScriptContextRoundTripPreservesBodyGeneration(t *testing.T) {
-	record, err := NewScriptRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
+	record, err := testscripts.NewRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
 		ID: ids.New(ids.KindScript), Slug: "initialize", ServiceName: "api", Body: "echo initialize",
 		When: core.ScriptPreDeploy,
 	})
@@ -26,15 +27,15 @@ func TestScriptContextRoundTripPreservesBodyGeneration(t *testing.T) {
 	for _, execution := range []*core.ScriptExecution{explicit, {Mode: core.ScriptExecutionInherited}, nil} {
 		desired := record.Desired
 		desired.Execution = execution
-		replacement, err := ReplaceScriptDesired(record, desired)
+		replacement, err := testscripts.ReplaceDesired(record, desired)
 		if err != nil {
 			t.Fatal(err)
 		}
-		encoded, err := encodeScriptRecord(replacement)
+		encoded, err := testscripts.EncodeRecord(replacement)
 		if err != nil {
 			t.Fatal(err)
 		}
-		decoded, err := decodeScriptRecord(encoded)
+		decoded, err := testscripts.DecodeRecord(encoded)
 		if err != nil || decoded.ActiveGeneration != record.ActiveGeneration || decoded.Desired.Body != "" ||
 			replacement.Desired.Body != record.Desired.Body {
 			t.Fatalf("context edit changed body ownership: %v", err)
@@ -58,7 +59,7 @@ func TestScriptContextRoundTripPreservesBodyGeneration(t *testing.T) {
 // Rationale: malformed context must fail the durable write boundary as well as
 // its eventual human-facing decoder; a typed internal caller is not authority.
 func TestScriptContextRecordRejectsMalformedMetadata(t *testing.T) {
-	_, err := NewScriptRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
+	_, err := testscripts.NewRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
 		ID: ids.New(ids.KindScript), Slug: "initialize", ServiceName: "api", Body: "echo initialize",
 		When: core.ScriptPreDeploy, Execution: &core.ScriptExecution{Mode: core.ScriptExecutionExplicit},
 	})

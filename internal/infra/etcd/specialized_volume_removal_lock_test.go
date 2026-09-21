@@ -8,6 +8,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -82,11 +87,11 @@ func specializedServiceRemovalLockFixture(t *testing.T) specializedRemovalLockFi
 	claim := stageDirectServicePublicationForTest(t, ctx, store, fixture, marker, 0)
 	input := EnvironmentServiceDesiredPublication{
 		Project: project, Environment: environment, Claim: claim,
-		Revision: EnvironmentDesiredRevisionIdentity{
+		Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: environment.Record.ID,
 			RevisionID:    fixture.Projection.Record.RevisionID,
 		},
-		Projection: fixture.Projection.Record, Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
+		Projection: fixture.Projection.Record, Change: testblueprints.EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
 	}
 	return specializedRemovalLockFixture{store: store, environmentID: environment.Record.ID,
 		publish: func(ctx context.Context, repository *HierarchyRepository) (IdempotencyTransactionResult, error) {
@@ -110,39 +115,52 @@ func specializedZoneRemovalLockFixture(t *testing.T) specializedRemovalLockFixtu
 	if err != nil || !found {
 		t.Fatalf("baseline: %v", err)
 	}
-	zone, err := NewZoneRecord(environment.Record.ID, core.Zone{
+	zone, err := testzones.NewRecord(environment.Record.ID, core.Zone{
 		ID: ids.New(ids.KindNetwork), Name: "frontend", Subnet: "10.40.20.0/24", Internal: true,
 		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environment.Record.ID,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidate := cloneEnvironmentComposeProjection(current.Record)
+	candidate := testenvironmentprojection.CloneEnvironmentComposeProjection(current.Record)
 	candidate.RevisionID, candidate.RenderGeneration = ids.New(ids.KindTask), 2
 	candidate.DesiredZones = append(
 		candidate.DesiredZones,
-		EnvironmentZoneProjection{EnvironmentID: environment.Record.ID, Desired: zone.Desired},
+		testenvironmentprojection.EnvironmentZoneProjection{
+			EnvironmentID: environment.Record.ID,
+			Desired:       zone.Desired,
+		},
 	)
 	candidate = zonePublicationTestArtifact(t, candidate, zone)
-	locator := IdempotencyLocator{ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
-		Method: http.MethodPost, Route: "/zones", Key: "zone-removal-lock-publication"}
+	locator := testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
+		ScopeID:   environment.Record.ID,
+		Method:    http.MethodPost,
+		Route:     "/zones",
+		Key:       "zone-removal-lock-publication",
+	}
 	intent := validEnvironmentBlueprintProtectedIntentForTest("zone-create")
 	at := testAttachTime
-	claim := stageZoneDesiredPublicationTest(t, store, EnvironmentBlueprintStageClaim{
+	claim := stageZoneDesiredPublicationTest(t, store, testblueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID: strings.TrimPrefix(candidate.RevisionID, "task_"), EnvironmentID: environment.Record.ID,
 		RevisionID: candidate.RevisionID, TaskID: candidate.RevisionID, Locator: locator, Intent: intent,
-		BaselineHeadRevision: current.Revision, SourceKind: EnvironmentBlueprintSourceMutation,
-		RenderGeneration: 2, ProjectionSchema: EnvironmentDesiredProjectionSchema, CreatedAt: at,
+		BaselineHeadRevision: current.Revision, SourceKind: testblueprints.EnvironmentBlueprintSourceMutation,
+		RenderGeneration: 2, ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: at,
 	}, current.Record.RevisionID, candidate, zone)
-	marker, err := NewCompletedDirectIdempotencyMarker(locator, intent, IdempotencyResponse{
-		Status: http.StatusCreated, ContentKind: "application/json", Body: []byte(`{"id":"` + zone.Desired.ID + `"}`),
-	}, at)
+	marker, err := testidempotency.NewCompletedDirectIdempotencyMarker(
+		locator,
+		intent,
+		testidempotency.IdempotencyResponse{
+			Status: http.StatusCreated, ContentKind: "application/json", Body: []byte(`{"id":"` + zone.Desired.ID + `"}`),
+		},
+		at,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := EnvironmentZoneDesiredPublication{Project: project, Environment: environment,
 		ExpectedHeadRevision: current.Revision, Claim: claim,
-		Revision: EnvironmentDesiredRevisionIdentity{
+		Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: environment.Record.ID,
 			RevisionID:    candidate.RevisionID,
 		},
@@ -159,7 +177,7 @@ func putSpecializedRemovalLock(t *testing.T, store *memoryHierarchyStore, owner 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Transact(context.Background(), nil, []Mutation{{Type: MutationPut,
+	if _, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut,
 		Key: removalrecord.EnvironmentLockKey(owner.EnvironmentID), Value: value}}); err != nil {
 		t.Fatal(err)
 	}
@@ -172,18 +190,18 @@ type specializedRemovalLockRaceStore struct {
 
 func (store *specializedRemovalLockRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.owner != nil {
 		owner := *store.owner
 		value, err := removalrecord.EncodeOwner(owner)
 		if err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
-		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{Type: MutationPut,
+		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut,
 			Key: removalrecord.EnvironmentLockKey(owner.EnvironmentID), Value: value}}); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		store.owner = nil
 	}

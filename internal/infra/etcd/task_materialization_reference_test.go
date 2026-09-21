@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,11 +19,11 @@ import (
 // union for every materialization without persisting any value bytes.
 func TestTaskMaterializationReferencesRoundTripAndClone(t *testing.T) {
 	task := taskWithMaterializationReferences()
-	encoded, err := encodeTaskRecord(task)
+	encoded, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord() error = %v", err)
 	}
-	restored, err := decodeTaskRecord(encoded)
+	restored, err := DecodeTaskRecord(encoded)
 	if err != nil {
 		t.Fatalf("decodeTaskRecord() error = %v", err)
 	}
@@ -29,19 +31,27 @@ func TestTaskMaterializationReferencesRoundTripAndClone(t *testing.T) {
 		t.Fatalf("restored materializations = %#v", restored.Materializations)
 	}
 
-	failed, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, task.CreatedAt.Add(1))
+	failed, err := TransitionTaskStatus(
+		task,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		task.CreatedAt.Add(1),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(running) error = %v", err)
 	}
-	failed, err = transitionTaskStatus(failed, TaskStatusRunning, TaskStatusFailed, task.CreatedAt.Add(2))
+	failed, err = TransitionTaskStatus(
+		failed,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusFailed,
+		task.CreatedAt.Add(2),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(failed) error = %v", err)
 	}
-	retry, err := cloneRetryTask(
+	retry, err := CloneRetryTask(
 		failed,
-		ids.NewAt(ids.KindTask, task.CreatedAt, 31),
-		TaskActorOperator,
-		task.CreatedAt.Add(3),
+		ids.NewAt(ids.KindTask, task.CreatedAt, 31), testtaskjournal.TaskActorOperator, task.CreatedAt.Add(3),
 	)
 	if err != nil {
 		t.Fatalf("cloneRetryTask() error = %v", err)
@@ -67,10 +77,10 @@ func TestTaskMaterializationReferencesRejectConfusedShapes(t *testing.T) {
 			task.Materializations[0].EnvironmentID = ids.NewAt(ids.KindEnvironment, task.CreatedAt, 30)
 		},
 		"multiple union members": func(task *TaskRecord) {
-			task.Materializations[0].Source.EntryValue = &TaskEntryValueReference{
+			task.Materializations[0].Source.EntryValue = &testtaskmaterialization.EntryValueReference{
 				EntryID:           ids.NewAt(ids.KindEnvEntry, task.CreatedAt, 30),
 				ValueGenerationID: ids.NewAt(ids.KindConfig, task.CreatedAt, 31),
-				Storage:           TaskEntryValueStoragePlain,
+				Storage:           testtaskmaterialization.EntryValueStoragePlain,
 			}
 		},
 		"unsorted generated values": func(task *TaskRecord) {
@@ -93,7 +103,7 @@ func TestTaskMaterializationReferencesRejectConfusedShapes(t *testing.T) {
 			task.Materializations[0].Mode = 0o600
 		},
 		"source output mismatch": func(task *TaskRecord) {
-			task.Materializations[0].OutputKind = TaskMaterializationOutputSecretFile
+			task.Materializations[0].OutputKind = testtaskmaterialization.OutputSecretFile
 			task.Materializations[0].Mode = 0o600
 		},
 	}
@@ -101,7 +111,7 @@ func TestTaskMaterializationReferencesRejectConfusedShapes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			task := taskWithMaterializationReferences()
 			mutate(&task)
-			if _, err := encodeTaskRecord(task); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+			if _, err := EncodeTaskRecord(task); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 				t.Fatalf("encodeTaskRecord() error = %v, want validation.failed", err)
 			}
 		})
@@ -119,34 +129,34 @@ func taskWithMaterializationReferences() TaskRecord {
 		ids.NewAt(ids.KindStep, now, 8),
 	}
 	sort.Strings(stepIDs)
-	task.Type = TaskUpdate
+	task.Type = testtaskjournal.TaskUpdate
 	task.Target = environmentID
-	task.Params = map[string]string{TaskMaterializationEnvironmentParam: environmentID}
-	task.Steps = []TaskStepRecord{
-		{Kind: TaskStepOperation, ID: stepIDs[0]},
-		{Kind: TaskStepOperation, ID: stepIDs[1]},
-		{Kind: TaskStepOperation, ID: stepIDs[2]},
-		{Kind: TaskStepOperation, ID: stepIDs[3]},
+	task.Params = map[string]string{testtaskjournal.TaskMaterializationEnvironmentParam: environmentID}
+	task.Steps = []testtaskjournal.TaskStepRecord{
+		{Kind: testtaskjournal.TaskStepOperation, ID: stepIDs[0]},
+		{Kind: testtaskjournal.TaskStepOperation, ID: stepIDs[1]},
+		{Kind: testtaskjournal.TaskStepOperation, ID: stepIDs[2]},
+		{Kind: testtaskjournal.TaskStepOperation, ID: stepIDs[3]},
 	}
-	plain := TaskEntryValueReference{
+	plain := testtaskmaterialization.EntryValueReference{
 		EntryID:           ids.NewAt(ids.KindEnvEntry, now, 21),
 		ValueGenerationID: ids.NewAt(ids.KindConfig, now, 22),
-		Storage:           TaskEntryValueStoragePlain,
+		Storage:           testtaskmaterialization.EntryValueStoragePlain,
 	}
-	secret := TaskEntryValueReference{
+	secret := testtaskmaterialization.EntryValueReference{
 		EntryID:           ids.NewAt(ids.KindEnvEntry, now, 23),
 		ValueGenerationID: ids.NewAt(ids.KindConfig, now, 24),
-		Storage:           TaskEntryValueStorageSecret,
+		Storage:           testtaskmaterialization.EntryValueStorageSecret,
 	}
-	task.Materializations = []TaskMaterializationRecord{
+	task.Materializations = []testtaskmaterialization.Record{
 		{
 			StepID: stepIDs[0], MaterializationID: ids.NewAt(ids.KindConfig, now, 40),
 			EnvironmentID: environmentID, Destination: "config/app.yaml",
-			OutputKind: TaskMaterializationOutputPlainFile, Mode: 0o444, Length: 12,
+			OutputKind: testtaskmaterialization.OutputPlainFile, Mode: 0o444, Length: 12,
 			SHA256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			Source: TaskMaterializationSource{
-				Kind: TaskMaterializationSourceBlueprintFile,
-				BlueprintFile: &TaskBlueprintFileValueReference{
+			Source: testtaskmaterialization.Source{
+				Kind: testtaskmaterialization.SourceBlueprintFile,
+				BlueprintFile: &testtaskmaterialization.BlueprintFileValueReference{
 					RevisionID: ids.NewAt(ids.KindTask, now, 25), Path: "config/app.yaml",
 				},
 			},
@@ -154,11 +164,11 @@ func taskWithMaterializationReferences() TaskRecord {
 		{
 			StepID: stepIDs[1], MaterializationID: ids.NewAt(ids.KindConfig, now, 41),
 			EnvironmentID: environmentID, Destination: "components/caddy/Caddyfile",
-			OutputKind: TaskMaterializationOutputPlainFile, Mode: 0o444, Length: 13,
+			OutputKind: testtaskmaterialization.OutputPlainFile, Mode: 0o444, Length: 13,
 			SHA256: "1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			Source: TaskMaterializationSource{
-				Kind: TaskMaterializationSourceComponentFile,
-				ComponentFile: &TaskComponentFileValueReference{
+			Source: testtaskmaterialization.Source{
+				Kind: testtaskmaterialization.SourceComponentFile,
+				ComponentFile: &testtaskmaterialization.ComponentFileValueReference{
 					RevisionID:  ids.NewAt(ids.KindTask, now, 26),
 					ComponentID: ids.NewAt(ids.KindComponent, now, 27),
 					Path:        "components/caddy/Caddyfile",
@@ -168,22 +178,22 @@ func taskWithMaterializationReferences() TaskRecord {
 		{
 			StepID: stepIDs[2], MaterializationID: ids.NewAt(ids.KindConfig, now, 42),
 			EnvironmentID: environmentID, Destination: "config/plain.txt",
-			OutputKind: TaskMaterializationOutputPlainFile, UID: 1000, GID: 1000, Mode: 0o444, Length: 14,
+			OutputKind: testtaskmaterialization.OutputPlainFile, UID: 1000, GID: 1000, Mode: 0o444, Length: 14,
 			SHA256: "2123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			Source: TaskMaterializationSource{Kind: TaskMaterializationSourceEntryValue, EntryValue: &plain},
+			Source: testtaskmaterialization.Source{Kind: testtaskmaterialization.SourceEntryValue, EntryValue: &plain},
 		},
 		{
 			StepID: stepIDs[3], MaterializationID: ids.NewAt(ids.KindConfig, now, 43),
 			EnvironmentID: environmentID, Destination: "secrets/.env." + environmentID + ".app",
 			ServiceID: ids.NewAt(ids.KindService, now, 44), ServiceName: "app",
-			OutputKind: TaskMaterializationOutputGeneratedEnvironment,
+			OutputKind: testtaskmaterialization.OutputGeneratedEnvironment,
 			Mode:       0o600, Length: 15,
 			SHA256: "3123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			Source: TaskMaterializationSource{
-				Kind: TaskMaterializationSourceGeneratedEnvironment,
-				GeneratedEnvironment: &TaskGeneratedEnvironmentValueReference{
+			Source: testtaskmaterialization.Source{
+				Kind: testtaskmaterialization.SourceGeneratedEnvironment,
+				GeneratedEnvironment: &testtaskmaterialization.GeneratedEnvironmentValueReference{
 					FormatVersion: generatedEnvironmentFormatVersion,
-					Values: []TaskGeneratedEnvironmentEntryReference{
+					Values: []testtaskmaterialization.GeneratedEnvironmentEntryReference{
 						{Name: "APP_ENV", Value: plain},
 						{Name: "TOKEN", Value: secret},
 					},
@@ -202,28 +212,28 @@ func TestTaskMaterializationRemovalReferenceIsClosed(t *testing.T) {
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
 	stepID := ids.NewAt(ids.KindStep, now, 2)
 	emptyDigest := sha256.Sum256(nil)
-	reference := TaskMaterializationRecord{
+	reference := testtaskmaterialization.Record{
 		StepID:            stepID,
 		MaterializationID: ids.NewAt(ids.KindConfig, now, 3),
 		EnvironmentID:     environmentID,
 		Destination:       "config/app.yaml",
-		OutputKind:        TaskMaterializationOutputRemovePlainFile,
+		OutputKind:        testtaskmaterialization.OutputRemovePlainFile,
 		UID:               1000,
 		GID:               1000,
 		Mode:              0o444,
 		SHA256: hex.EncodeToString(
 			emptyDigest[:],
 		),
-		Source: TaskMaterializationSource{Kind: TaskMaterializationSourceRemoval},
+		Source: testtaskmaterialization.Source{Kind: testtaskmaterialization.SourceRemoval},
 	}
 	if err := validateTaskMaterializationReferences(
-		[]TaskMaterializationRecord{reference}, []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}, environmentID, true, 7,
+		[]testtaskmaterialization.Record{reference}, []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}}, environmentID, true, 7,
 	); err != nil {
 		t.Fatalf("validateTaskMaterializationReferences(removal) error = %v", err)
 	}
-	reference.Source.EntryValue = &TaskEntryValueReference{}
+	reference.Source.EntryValue = &testtaskmaterialization.EntryValueReference{}
 	if err := validateTaskMaterializationReferences(
-		[]TaskMaterializationRecord{reference}, []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}, environmentID, true, 7,
+		[]testtaskmaterialization.Record{reference}, []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}}, environmentID, true, 7,
 	); err == nil {
 		t.Fatal("validateTaskMaterializationReferences accepted removal with a value source")
 	}

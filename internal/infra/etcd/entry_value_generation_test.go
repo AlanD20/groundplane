@@ -1,20 +1,20 @@
 package etcd
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"testing"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/pkg/errs"
+	context "context"
+	sha256 "crypto/sha256"
+	hex "encoding/hex"
+	errors "errors"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	testing "testing"
 )
 
 // Rationale: a Task retry must resolve the same immutable plain bytes even
 // after caller buffers are reused or a duplicate create is replayed.
 func TestPlainEntryValueGenerationIsImmutableAndOwned(t *testing.T) {
-	repository, err := newEntryValueGenerationRepository(newMemoryHierarchyStore())
+	repository, err := testentryvalues.New(&releaseLogMemoryStore{newMemoryHierarchyStore()})
 	if err != nil {
 		t.Fatalf("newEntryValueGenerationRepository() error = %v", err)
 	}
@@ -47,7 +47,7 @@ func TestPlainEntryValueGenerationIsImmutableAndOwned(t *testing.T) {
 // under the non-listable secret root and reject generation-id reuse.
 func TestSecretEntryValueGenerationIsImmutableCiphertext(t *testing.T) {
 	store := newMemoryHierarchyStore()
-	repository, err := newEntryValueGenerationRepository(store)
+	repository, err := testentryvalues.New(&releaseLogMemoryStore{store})
 	if err != nil {
 		t.Fatalf("newEntryValueGenerationRepository() error = %v", err)
 	}
@@ -59,8 +59,8 @@ func TestSecretEntryValueGenerationIsImmutableCiphertext(t *testing.T) {
 	if err != nil || !found || string(stored.Ciphertext) != "age-ciphertext" {
 		t.Fatalf("GetSecret() = %#v, %v, %v", stored, found, err)
 	}
-	if store.valueAt(secretEntryValueGenerationKey(record.EntryID, record.GenerationID), store.revision) == nil ||
-		store.valueAt(plainEntryValueGenerationKey(record.EntryID, record.GenerationID), store.revision) != nil {
+	if store.valueAt(testentryvalues.SecretKey(record.EntryID, record.GenerationID), store.revision) == nil ||
+		store.valueAt(testentryvalues.PlainKey(record.EntryID, record.GenerationID), store.revision) != nil {
 		t.Fatal("secret Entry generation used the wrong durable keyspace")
 	}
 	record.Ciphertext = []byte("other-ciphertext")
@@ -75,33 +75,11 @@ func TestSecretEntryValueGenerationIsImmutableCiphertext(t *testing.T) {
 	clear(stored.Ciphertext)
 }
 
-// Rationale: a corrupted value generation must fail before any resolver can
-// expose its bytes to the transient materialization channel.
-func TestEntryValueGenerationRejectsCorruptDurableDigest(t *testing.T) {
-	record := testPlainEntryValueGeneration()
-	encoded, err := encodePlainEntryValueGeneration(record)
-	if err != nil {
-		t.Fatalf("encodePlainEntryValueGeneration() error = %v", err)
-	}
-	data, err := decodeEnvelope[plainEntryValueGenerationData](encoded, "entry_plain_value_generation")
-	if err != nil {
-		t.Fatalf("decodeEnvelope() error = %v", err)
-	}
-	data.Content[0] ^= 1
-	corrupt, err := encodeEnvelope("entry_plain_value_generation", data)
-	if err != nil {
-		t.Fatalf("encodeEnvelope() error = %v", err)
-	}
-	if _, err := decodePlainEntryValueGeneration(corrupt); err == nil {
-		t.Fatal("decodePlainEntryValueGeneration(corrupt) error = nil")
-	}
-}
-
-func testPlainEntryValueGeneration() PlainEntryValueGeneration {
+func testPlainEntryValueGeneration() testentryvalues.PlainGeneration {
 	content := []byte("plain-entry-value")
 	digest := sha256.Sum256(content)
 	now := taskJournalTime()
-	return PlainEntryValueGeneration{
+	return testentryvalues.PlainGeneration{
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 40),
 		EntryID:       ids.NewAt(ids.KindEnvEntry, now, 41),
 		GenerationID:  ids.NewAt(ids.KindConfig, now, 42),
@@ -109,11 +87,11 @@ func testPlainEntryValueGeneration() PlainEntryValueGeneration {
 	}
 }
 
-func testSecretEntryValueGeneration() SecretEntryValueGeneration {
+func testSecretEntryValueGeneration() testentryvalues.SecretGeneration {
 	ciphertext := []byte("age-ciphertext")
 	digest := sha256.Sum256(ciphertext)
 	now := taskJournalTime()
-	return SecretEntryValueGeneration{
+	return testentryvalues.SecretGeneration{
 		EnvironmentID:   ids.NewAt(ids.KindEnvironment, now, 40),
 		EntryID:         ids.NewAt(ids.KindEnvEntry, now, 41),
 		GenerationID:    ids.NewAt(ids.KindConfig, now, 42),

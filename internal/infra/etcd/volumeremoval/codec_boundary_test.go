@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 )
 
@@ -44,8 +45,9 @@ func TestVolumeRemovalCanonicalRecordEncoding(t *testing.T) {
 		}
 		clear(value)
 	}
-	if got := removalrecord.RuntimeKey(runtime.OperationID); got != "/v1/runtime/environment-volume-removals/"+
-		etcd.EncodeCapabilityKeySegment(runtime.OperationID)+"/runtime" {
+	if got := removalrecord.RuntimeKey(runtime.OperationID); got != "/v1/runtime/environment-volume-removals/"+testrecordcodec.EncodeKeySegment(
+		runtime.OperationID,
+	)+"/runtime" {
 		t.Fatal("record extraction changed the existing runtime key")
 	}
 }
@@ -69,7 +71,7 @@ func TestVolumeRemovalRecordPreservesReplayLocatorValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			candidate := runtime
 			change(&candidate.RootLocator)
-			_, markerErr := etcd.CapabilityIdempotencyMarkerKey(volumeRemovalRootLocator(candidate))
+			_, markerErr := testidempotency.IdempotencyMarkerKey(volumeRemovalRootLocator(candidate))
 			value, recordErr := removalrecord.EncodeRuntime(candidate)
 			defer clear(value)
 			if (markerErr == nil) != (recordErr == nil) {

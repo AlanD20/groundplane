@@ -7,6 +7,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 )
 
 // Rationale: even a consistently resealed publication cannot authorize a foreign
@@ -18,29 +21,32 @@ func TestOrdinaryRecoveryIntentLineageAndPriorImage(t *testing.T) {
 			ctx := context.Background()
 			f, assignment, _, revision, renderKey := recoveryProofFixture(t, false)
 			task := f.claim.Task.Record
-			publication := task.Params[TaskReleasePublicationParam]
+			publication := task.Params[testreleaserender.TaskReleasePublicationParam]
 			keys := []string{
-				releaseIntentStagingKey(publication, f.releaseID),
+				testreleases.ReleaseIntentStagingKey(publication, f.releaseID),
 				renderKey,
-				releaseOperationKey(task.OperationID),
+				testreleases.ReleaseOperationKey(task.OperationID),
 			}
-			read, err := f.repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+			read, err := f.repository.store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys, Revision: revision})
 			if err != nil {
 				t.Fatal(err)
 			}
-			intent, err := decodeReleaseRecord[domain.Intent](read.Values[0].Value, "release-intent")
+			intent, err := testreleases.DecodeReleaseRecord[domain.Intent](read.Values[0].Value, "release-intent")
 			if err != nil {
 				t.Fatal(err)
 			}
-			raw, err := decodeReleaseRecord[json.RawMessage](read.Values[1].Value, "release-render-input")
+			raw, err := testreleases.DecodeReleaseRecord[json.RawMessage](read.Values[1].Value, "release-render-input")
 			if err != nil {
 				t.Fatal(err)
 			}
-			render, err := decodeReleaseRenderInput(raw)
+			render, err := testreleaserender.DecodeReleaseRenderInput(raw)
 			if err != nil {
 				t.Fatal(err)
 			}
-			head, err := decodeReleaseRecord[ReleaseOperationHead](read.Values[2].Value, "release-operation")
+			head, err := testreleases.DecodeReleaseRecord[testreleases.ReleaseOperationHead](
+				read.Values[2].Value,
+				"release-operation",
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -74,7 +80,7 @@ func TestOrdinaryRecoveryIntentLineageAndPriorImage(t *testing.T) {
 					t.Fatal("candidate image absent")
 				}
 			}
-			raw, err = EncodeReleaseRenderInput(render)
+			raw, err = testreleaserender.EncodeReleaseRenderInput(render)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -82,7 +88,7 @@ func TestOrdinaryRecoveryIntentLineageAndPriorImage(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			member := ReleaseStagedMemberRef{
+			member := testreleases.ReleaseStagedMemberRef{
 				ServiceID:    f.serviceID,
 				ReleaseID:    f.releaseID,
 				RenderDigest: intent.RenderInputDigest,
@@ -91,22 +97,22 @@ func TestOrdinaryRecoveryIntentLineageAndPriorImage(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			intentBytes, err := encodeReleaseRecord("release-intent", intent)
+			intentBytes, err := testreleases.EncodeReleaseRecord("release-intent", intent)
 			if err != nil {
 				t.Fatal(err)
 			}
-			renderBytes, err := encodeReleaseRecord("release-render-input", raw)
+			renderBytes, err := testreleases.EncodeReleaseRecord("release-render-input", raw)
 			if err != nil {
 				t.Fatal(err)
 			}
-			headBytes, err := encodeReleaseRecord("release-operation", head)
+			headBytes, err := testreleases.EncodeReleaseRecord("release-operation", head)
 			if err != nil {
 				t.Fatal(err)
 			}
-			txn, err := f.repository.store.Transact(ctx, nil, []Mutation{
-				{Type: MutationPut, Key: keys[0], Value: intentBytes},
-				{Type: MutationPut, Key: keys[1], Value: renderBytes},
-				{Type: MutationPut, Key: keys[2], Value: headBytes},
+			txn, err := f.repository.store.Transact(ctx, nil, []testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationPut, Key: keys[0], Value: intentBytes},
+				{Type: testkeyvalue.MutationPut, Key: keys[1], Value: renderBytes},
+				{Type: testkeyvalue.MutationPut, Key: keys[2], Value: headBytes},
 			})
 			if err != nil {
 				t.Fatal(err)

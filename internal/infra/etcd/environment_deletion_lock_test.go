@@ -1,15 +1,35 @@
 package etcd
 
 import (
-	"context"
-	"errors"
-	"net/http"
-	"strings"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/pkg/errs"
+	context "context"
+	errors "errors"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testenvironmentcoordination "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	testenvironmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testnetworkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	http "net/http"
+	strings "strings"
+	testing "testing"
+	time "time"
 )
 
 // Rationale: Environment deletion must lose before publishing host effects when
@@ -17,11 +37,11 @@ import (
 func TestEnvironmentDeletionRejectsHeldOperationLock(t *testing.T) {
 	t.Parallel()
 	fixture := newEnvironmentDeletionLockFixture(t)
-	other := BackupOperationLockRecord{
+	other := testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: fixture.environment.Record.ID,
 		OperationID:   ids.NewAt(ids.KindOperation, fixture.now, 8010),
 		TaskID:        ids.NewAt(ids.KindTask, fixture.now, 8011),
-		Kind:          BackupOperationBackup,
+		Kind:          testbackupruntime.BackupOperationBackup,
 		CreatedAt:     fixture.now,
 		UpdatedAt:     fixture.now,
 	}
@@ -34,7 +54,7 @@ func TestEnvironmentDeletionRejectsHeldOperationLock(t *testing.T) {
 	if classifyErr != nil || !isKind(conflict, errs.KindResourceInUse) {
 		t.Fatalf("BeginEnvironmentDeletionWithTask(held lock) = %#v, %v", result, err)
 	}
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(fixture.task.ID), false)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(fixture.task.ID), false)
 }
 
 // Rationale: stale and corrupt mutation epochs must fail closed instead of
@@ -57,9 +77,7 @@ func TestEnvironmentDeletionRejectsStaleAndCorruptMutationEpoch(t *testing.T) {
 	t.Run("corrupt", func(t *testing.T) {
 		fixture := newEnvironmentDeletionLockFixture(t)
 		fixture.putRaw(
-			t,
-			environmentMutationEpochKey(fixture.environment.Record.ID),
-			[]byte("corrupt"),
+			t, testhierarchy.EnvironmentMutationEpochKey(fixture.environment.Record.ID), []byte("corrupt"),
 		)
 		current, err := fixture.hierarchy.GetEnvironment(
 			context.Background(),
@@ -85,14 +103,14 @@ func TestEnvironmentDeletionBlueprintBatchFencesOwnedLockAndAdvancesEpoch(t *tes
 	revisionID := ids.NewAt(ids.KindTask, fixture.now, 8020)
 	fixture.putRaw(
 		t,
-		environmentBlueprintManifestKey(fixture.environment.Record.ID, revisionID),
+		testblueprints.EnvironmentBlueprintRevisionsPrefix(fixture.environment.Record.ID)+revisionID+"/manifest",
 		[]byte("revision"),
 	)
-	other := BackupOperationLockRecord{
+	other := testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: fixture.environment.Record.ID,
 		OperationID:   ids.NewAt(ids.KindOperation, fixture.now, 8021),
 		TaskID:        ids.NewAt(ids.KindTask, fixture.now, 8022),
-		Kind:          BackupOperationRestore,
+		Kind:          testbackupruntime.BackupOperationRestore,
 		CreatedAt:     fixture.now,
 		UpdatedAt:     fixture.now,
 	}
@@ -102,30 +120,30 @@ func TestEnvironmentDeletionBlueprintBatchFencesOwnedLockAndAdvancesEpoch(t *tes
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("finalizeEnvironmentBlueprintRevisionBatch(other owner) error = %v", err)
 	}
-	owned := BackupOperationLockRecord{
+	owned := testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: fixture.environment.Record.ID,
 		OperationID:   fixture.task.OperationID,
 		TaskID:        fixture.task.ID,
-		Kind:          BackupOperationDeletion,
+		Kind:          testbackupruntime.BackupOperationDeletion,
 		CreatedAt:     fixture.task.CreatedAt,
 		UpdatedAt:     fixture.task.CreatedAt,
 	}
 	fixture.putLock(t, owned)
-	before := fixture.mustGet(t, environmentMutationEpochKey(fixture.environment.Record.ID))
+	before := fixture.mustGet(t, testhierarchy.EnvironmentMutationEpochKey(fixture.environment.Record.ID))
 	changed, err := fixture.tasks.finalizeEnvironmentBlueprintRevisionBatch(
 		context.Background(), fixture.task, fixture.now.Add(2*time.Second),
 	)
 	if err != nil || !changed {
 		t.Fatalf("finalizeEnvironmentBlueprintRevisionBatch() = %t, %v", changed, err)
 	}
-	after := fixture.mustGet(t, environmentMutationEpochKey(fixture.environment.Record.ID))
+	after := fixture.mustGet(t, testhierarchy.EnvironmentMutationEpochKey(fixture.environment.Record.ID))
 	if after.ModRevision <= before.ModRevision {
 		t.Fatalf("mutation epoch revision = %d, want > %d", after.ModRevision, before.ModRevision)
 	}
 	assertEnvironmentDeletionCompanion(
 		t,
 		fixture.store,
-		environmentBlueprintManifestKey(fixture.environment.Record.ID, revisionID),
+		testblueprints.EnvironmentBlueprintRevisionsPrefix(fixture.environment.Record.ID)+revisionID+"/manifest",
 		false,
 	)
 }
@@ -141,10 +159,10 @@ func TestEnvironmentDeletionOwnedFenceValidatesExactTombstone(t *testing.T) {
 		{
 			name: "missing",
 			mutate: func(t *testing.T, fixture *environmentDeletionLockFixture) {
-				result, err := fixture.store.Transact(context.Background(), nil, []Mutation{{
-					Type: MutationDelete,
-					Key: deletionTombstoneKey(
-						string(DeletionTargetEnvironment),
+				result, err := fixture.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+					Type: testkeyvalue.MutationDelete,
+					Key: testdeletions.TombstoneKey(
+						string(testdeletions.DeletionTargetEnvironment),
 						fixture.environment.Record.ID,
 					),
 				}})
@@ -158,15 +176,13 @@ func TestEnvironmentDeletionOwnedFenceValidatesExactTombstone(t *testing.T) {
 			mutate: func(t *testing.T, fixture *environmentDeletionLockFixture) {
 				tombstone := fixture.tombstone
 				tombstone.TaskID = ids.NewAt(ids.KindTask, fixture.now, 8050)
-				value, err := encodeDeletionTombstone(tombstone)
+				value, err := testdeletions.EncodeDeletionTombstone(tombstone)
 				if err != nil {
 					t.Fatalf("encodeDeletionTombstone() error = %v", err)
 				}
 				defer clear(value)
 				fixture.putRaw(
-					t,
-					deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
-					value,
+					t, testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEnvironment), fixture.environment.Record.ID), value,
 				)
 			},
 		},
@@ -176,13 +192,12 @@ func TestEnvironmentDeletionOwnedFenceValidatesExactTombstone(t *testing.T) {
 			fixture := newEnvironmentDeletionLockFixture(t)
 			fixture.mustBegin(t)
 			test.mutate(t, fixture)
-			_, err := loadOwnedEnvironmentMutationFence(
+			_, err := testenvironmentfence.LoadOwned(
 				context.Background(),
 				fixture.store,
 				fixture.environment.Record.ID,
-				fixture.store.revision,
-				environmentMutationFenceOwner{
-					Kind:        BackupOperationDeletion,
+				fixture.store.revision, testenvironmentfence.Owner{
+					Kind:        testbackupruntime.BackupOperationDeletion,
 					OperationID: fixture.task.OperationID,
 					TaskID:      fixture.task.ID,
 				},
@@ -195,12 +210,12 @@ func TestEnvironmentDeletionOwnedFenceValidatesExactTombstone(t *testing.T) {
 
 	fixture := newEnvironmentDeletionLockFixture(t)
 	fixture.mustBegin(t)
-	owner := environmentMutationFenceOwner{
-		Kind:        BackupOperationDeletion,
+	owner := testenvironmentfence.Owner{
+		Kind:        testbackupruntime.BackupOperationDeletion,
 		OperationID: fixture.task.OperationID,
 		TaskID:      fixture.task.ID,
 	}
-	evidence, err := loadOwnedEnvironmentMutationFence(
+	evidence, err := testenvironmentfence.LoadOwned(
 		context.Background(),
 		fixture.store,
 		fixture.environment.Record.ID,
@@ -211,236 +226,24 @@ func TestEnvironmentDeletionOwnedFenceValidatesExactTombstone(t *testing.T) {
 		t.Fatalf("loadOwnedEnvironmentMutationFence() error = %v", err)
 	}
 	tombstone := fixture.mustGet(
-		t,
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
+		t, testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEnvironment), fixture.environment.Record.ID),
 	)
 	fixture.putRaw(t, tombstone.Key, tombstone.Value)
-	epochMutation, err := evidence.epochRewriteMutation()
+	epochMutation, err := evidence.EpochRewriteMutation()
 	if err != nil {
 		t.Fatalf("epochRewriteMutation() error = %v", err)
 	}
 	defer clear(epochMutation.Value)
 	result, err := fixture.store.Transact(
-		context.Background(), evidence.transactionConditions(), []Mutation{epochMutation},
+		context.Background(), evidence.TransactionConditions(), []testkeyvalue.Mutation{epochMutation},
 	)
 	if err != nil || result.Succeeded {
 		t.Fatalf("Transact(stale tombstone) = %#v, %v", result, err)
 	}
-	conflict := evidence.classifyCAS(result.FailureReads)
-	clearKeyValues(result.FailureReads)
+	conflict := evidence.ClassifyConflict(result.FailureReads)
+	testkeyvalue.ClearValues(result.FailureReads)
 	if !isKind(conflict, errs.KindStateConflict) {
 		t.Fatalf("classifyCAS(stale tombstone) error = %v", conflict)
-	}
-}
-
-// Rationale: a non-successful Environment deletion must retain its exact
-// operation fence and immutable cleanup intent so retry cannot resnapshot or
-// expose an unlocked interval; only success may remove them.
-func TestEnvironmentDeletionTerminalOutcomesCleanCompanionsAndReplay(t *testing.T) {
-	t.Parallel()
-	for _, terminalStatus := range []TaskStatus{TaskStatusCompleted, TaskStatusFailed, TaskStatusAborted} {
-		t.Run(string(terminalStatus), func(t *testing.T) {
-			fixture := newEnvironmentDeletionLockFixture(t)
-			collectionValue, encodeErr := encodeReleaseGroupCollectionEpoch(fixture.environment.Record.ID)
-			if encodeErr != nil {
-				t.Fatalf("encodeReleaseGroupCollectionEpoch() error = %v", encodeErr)
-			}
-			fixture.putRaw(
-				t,
-				releaseGroupCollectionEpochKey(fixture.environment.Record.ID),
-				collectionValue,
-			)
-			fixture.mustBegin(t)
-			agentID := ids.NewAt(ids.KindAgent, fixture.now, 8030)
-			var terminal Versioned[TaskRecord]
-			var err error
-			if terminalStatus == TaskStatusAborted {
-				terminal, err = fixture.tasks.AbortPendingTask(
-					context.Background(), fixture.task.ID, fixture.now.Add(time.Second),
-				)
-			} else {
-				if _, found, claimErr := fixture.tasks.ClaimNextTask(
-					context.Background(), agentID, 1, fixture.now.Add(time.Second),
-				); claimErr != nil || !found {
-					t.Fatalf("ClaimNextTask() found/error = %t/%v", found, claimErr)
-				}
-				result := TaskResultRecord{
-					Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
-				}
-				if terminalStatus == TaskStatusFailed {
-					result.ExitCode = 1
-				}
-				terminal, err = fixture.tasks.AcknowledgeTask(
-					context.Background(),
-					agentID,
-					1,
-					fixture.task.ID,
-					taskAssignmentIDForTest(t, fixture.tasks,
-						fixture.task.ID),
-					terminalStatus,
-					result,
-					fixture.now.Add(2*time.Second),
-				)
-
-			}
-			if err != nil {
-				t.Fatalf("terminalize Environment deletion error = %v", err)
-			}
-			if terminalStatus == TaskStatusCompleted {
-				assertEnvironmentDeletionCompanion(
-					t,
-					fixture.store,
-					environmentOperationLockKey(fixture.environment.Record.ID),
-					false,
-				)
-				assertEnvironmentDeletionCompanion(
-					t,
-					fixture.store,
-					deletionTombstoneKey(
-						string(DeletionTargetEnvironment),
-						fixture.environment.Record.ID,
-					),
-					false,
-				)
-				assertEnvironmentDeletionCompanion(
-					t, fixture.store, environmentDeletionIntentKey(fixture.task.OperationID), false,
-				)
-				assertEnvironmentDeletionCompanion(
-					t, fixture.store, environmentKey(fixture.environment.Record.ID), false,
-				)
-				assertEnvironmentDeletionCompanion(
-					t,
-					fixture.store,
-					environmentMutationEpochKey(fixture.environment.Record.ID),
-					false,
-				)
-				assertEnvironmentDeletionCompanion(
-					t,
-					fixture.store,
-					releaseGroupCollectionEpochKey(fixture.environment.Record.ID),
-					false,
-				)
-			} else {
-				lockValue := fixture.mustGet(
-					t,
-					environmentOperationLockKey(fixture.environment.Record.ID),
-				)
-				lock, decodeErr := decodeOwnedEnvironmentDeletionLock(lockValue, fixture.task)
-				if decodeErr != nil || lock.OperationID != fixture.task.OperationID {
-					t.Fatalf("retained Environment deletion lock = %#v, %v", lock, decodeErr)
-				}
-				tombstoneValue := fixture.mustGet(
-					t,
-					deletionTombstoneKey(
-						string(DeletionTargetEnvironment),
-						fixture.environment.Record.ID,
-					),
-				)
-				tombstone, decodeErr := decodeDeletionTombstone(tombstoneValue.Value)
-				if decodeErr != nil || tombstone.TaskID != fixture.task.ID ||
-					tombstone.Checkpoint != fixture.tombstone.Checkpoint {
-					t.Fatalf(
-						"retained Environment deletion tombstone = %#v, %v",
-						tombstone,
-						decodeErr,
-					)
-				}
-				intentValue := fixture.mustGet(
-					t,
-					environmentDeletionIntentKey(fixture.task.OperationID),
-				)
-				intent, decodeErr := decodeEnvironmentDeletionIntent(intentValue.Value)
-				if decodeErr != nil || intent.EnvironmentID != fixture.environment.Record.ID ||
-					intent.OperationID != fixture.task.OperationID ||
-					intent.TargetRevision != fixture.environment.Revision {
-					t.Fatalf("retained Environment deletion intent = %#v, %v", intent, decodeErr)
-				}
-				assertEnvironmentDeletionCompanion(
-					t, fixture.store, environmentKey(fixture.environment.Record.ID), true,
-				)
-				epoch := fixture.mustGet(
-					t,
-					environmentMutationEpochKey(fixture.environment.Record.ID),
-				)
-				if epoch.ModRevision != terminal.Revision {
-					t.Fatalf(
-						"terminal epoch revision = %d, want %d",
-						epoch.ModRevision,
-						terminal.Revision,
-					)
-				}
-				assertEnvironmentDeletionCompanion(
-					t,
-					fixture.store,
-					releaseGroupCollectionEpochKey(fixture.environment.Record.ID),
-					true,
-				)
-			}
-			var replay Versioned[TaskRecord]
-			if terminalStatus == TaskStatusAborted {
-				replay, err = fixture.tasks.AbortPendingTask(
-					context.Background(), fixture.task.ID, fixture.now.Add(3*time.Second),
-				)
-			} else {
-				replay, err = fixture.tasks.AcknowledgeTask(
-					context.Background(),
-					agentID,
-					1,
-					fixture.task.ID,
-					taskAssignmentIDForTest(t, fixture.tasks,
-						fixture.task.ID),
-					terminalStatus,
-					*terminal.Record.Result,
-					fixture.now.Add(2*time.Second),
-				)
-
-			}
-			if err != nil || replay.Revision != terminal.Revision {
-				t.Fatalf("terminal replay = %#v, %v", replay, err)
-			}
-		})
-	}
-}
-
-// Rationale: when etcd commits terminal cleanup but the response is lost, the
-// exact acknowledgement retry must validate companion cleanup and return replay.
-func TestEnvironmentDeletionTerminalUnknownOutcomeReplaysCommittedCleanup(t *testing.T) {
-	t.Parallel()
-	fixture := newEnvironmentDeletionLockFixture(t)
-	fixture.mustBegin(t)
-	agentID := ids.NewAt(ids.KindAgent, fixture.now, 8040)
-	if _, found, err := fixture.tasks.ClaimNextTask(
-		context.Background(), agentID, 1, fixture.now.Add(time.Second),
-	); err != nil || !found {
-		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
-	}
-	unknown := errs.New(errs.KindStorageUnavailable, "unknown Environment deletion outcome")
-	failingStore := &environmentDeletionUnknownStore{
-		memoryHierarchyStore: fixture.store,
-		failNext:             unknown,
-	}
-	failingTasks, err := newTaskRepository(failingStore)
-	if err != nil {
-		t.Fatalf("newTaskRepository() error = %v", err)
-	}
-	result := TaskResultRecord{
-		Kind:       TaskResultEnvironmentDirectory,
-		Diagnostic: TaskResultDiagnosticNone,
-	}
-	terminalAt := fixture.now.Add(2 * time.Second)
-	if _, err := failingTasks.AcknowledgeTask(
-		context.Background(), agentID, 1, fixture.task.ID, taskAssignmentIDForTest(t, failingTasks,
-			fixture.task.ID),
-		TaskStatusCompleted, result, terminalAt); !errors.Is(err, unknown) {
-		t.Fatalf("AcknowledgeTask(unknown) error = %v", err)
-	}
-	replay, err := fixture.tasks.AcknowledgeTask(
-		context.Background(), agentID, 1, fixture.task.ID, taskAssignmentIDForTest(t, fixture.tasks,
-			fixture.task.ID),
-		TaskStatusCompleted, result, terminalAt)
-
-	if err != nil || replay.Record.Status != TaskStatusCompleted {
-		t.Fatalf("AcknowledgeTask(after unknown) = %#v, %v", replay, err)
 	}
 }
 
@@ -450,12 +253,20 @@ func TestEnvironmentDeletionPublishesIntentAtomically(t *testing.T) {
 	t.Parallel()
 	fixture := newEnvironmentDeletionLockFixture(t)
 	fixture.mustBegin(t)
-	stored, err := fixture.store.GetMany(context.Background(), GetManyRequest{Keys: []string{
-		taskKey(fixture.task.ID),
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
-		environmentOperationLockKey(fixture.environment.Record.ID),
-		environmentDeletionIntentKey(fixture.task.OperationID),
-	}})
+	stored, err := fixture.store.GetMany(
+		context.Background(),
+		testkeyvalue.GetManyRequest{
+			Keys: []string{
+				testtaskjournal.TaskStorageKey(fixture.task.ID),
+				testdeletions.TombstoneKey(
+					string(testdeletions.DeletionTargetEnvironment),
+					fixture.environment.Record.ID,
+				),
+				testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID),
+				testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID),
+			},
+		},
+	)
 	if err != nil || stored == nil || len(stored.Values) != 4 {
 		t.Fatalf("Environment deletion publication = %#v, %v", stored, err)
 	}
@@ -464,11 +275,11 @@ func TestEnvironmentDeletionPublishesIntentAtomically(t *testing.T) {
 			t.Fatalf("Environment deletion publication revisions = %#v", stored.Values)
 		}
 	}
-	intent, err := decodeEnvironmentDeletionIntent(stored.Values[3].Value)
+	intent, err := testdeletions.DecodeEnvironmentDeletionIntent(stored.Values[3].Value)
 	if err != nil || intent.EnvironmentID != fixture.environment.Record.ID ||
 		intent.OperationID != fixture.task.OperationID || intent.TaskID != fixture.task.ID ||
 		intent.TargetRevision != fixture.environment.Revision ||
-		intent.CleanupPhase != EnvironmentDeletionCleanupComplete {
+		intent.CleanupPhase != testdeletions.EnvironmentDeletionCleanupComplete {
 		t.Fatalf("Environment deletion intent = %#v, %v", intent, err)
 	}
 }
@@ -481,13 +292,13 @@ func TestEnvironmentDeletionInitialCleanupUsesTransactionReadRevision(t *testing
 	fixture := newEnvironmentDeletionLockFixture(t)
 	fixture.putRaw(
 		t,
-		backupPolicyKey(fixture.environment.Record.ID),
+		testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID),
 		[]byte("authority-created-after-environment-read"),
 	)
 	fixture.mustBegin(t)
-	entry := fixture.mustGet(t, environmentDeletionIntentKey(fixture.task.OperationID))
-	intent, err := decodeEnvironmentDeletionIntent(entry.Value)
-	if err != nil || intent.CleanupPhase != EnvironmentDeletionCleanupEnumerating {
+	entry := fixture.mustGet(t, testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID))
+	intent, err := testdeletions.DecodeEnvironmentDeletionIntent(entry.Value)
+	if err != nil || intent.CleanupPhase != testdeletions.EnvironmentDeletionCleanupEnumerating {
 		t.Fatalf("inter-read Environment deletion intent = %#v, %v", intent, err)
 	}
 }
@@ -501,19 +312,18 @@ func TestEnvironmentDeletionRetryTransfersFenceWithoutUnlockedInterval(t *testin
 	fixture.mustBegin(t)
 	ctx := context.Background()
 	tombstoneEntry := fixture.mustGet(
-		t,
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
+		t, testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEnvironment), fixture.environment.Record.ID),
 	)
-	tombstoneBefore, err := decodeDeletionTombstone(tombstoneEntry.Value)
+	tombstoneBefore, err := testdeletions.DecodeDeletionTombstone(tombstoneEntry.Value)
 	if err != nil {
 		t.Fatalf("decodeDeletionTombstone() error = %v", err)
 	}
-	tombstoneBefore.Phase = DeletionPhaseFinalizing
-	tombstoneBefore.Checkpoint = DeletionCheckpoint{
+	tombstoneBefore.Phase = testdeletions.DeletionPhaseFinalizing
+	tombstoneBefore.Checkpoint = testdeletions.DeletionCheckpoint{
 		ResourceKind: "backup_policy", StableID: fixture.environment.Record.ID,
 	}
 	tombstoneBefore.UpdatedAt = fixture.now.Add(time.Nanosecond)
-	tombstoneValue, err := encodeDeletionTombstone(tombstoneBefore)
+	tombstoneValue, err := testdeletions.EncodeDeletionTombstone(tombstoneBefore)
 	if err != nil {
 		t.Fatalf("encodeDeletionTombstone() error = %v", err)
 	}
@@ -529,23 +339,21 @@ func TestEnvironmentDeletionRetryTransfersFenceWithoutUnlockedInterval(t *testin
 		!found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
-	result := TaskResultRecord{
-		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone, ExitCode: 1,
+	result := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone, ExitCode: 1,
 	}
 	failed, err := fixture.tasks.AcknowledgeTask(
 		ctx,
 		agentID,
 		1,
 		fixture.task.ID,
-		taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID),
-		TaskStatusFailed,
-		result,
+		taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID), testtaskjournal.TaskStatusFailed, result,
 		fixture.now.Add(2*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(failed) error = %v", err)
 	}
-	fixture.mustGet(t, environmentOperationLockKey(fixture.environment.Record.ID))
+	fixture.mustGet(t, testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID))
 
 	retryAt := fixture.now.Add(3 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 8061)
@@ -556,7 +364,7 @@ func TestEnvironmentDeletionRetryTransfersFenceWithoutUnlockedInterval(t *testin
 		"environment-delete-retry-key-0001",
 	)
 	retryResult, err := fixture.tasks.RetryTask(
-		ctx, fixture.task.ID, retryID, TaskActorOperator, marker,
+		ctx, fixture.task.ID, retryID, testtaskjournal.TaskActorOperator, marker,
 	)
 	if err != nil {
 		t.Fatalf("RetryTask(Environment deletion) error = %v", err)
@@ -565,13 +373,21 @@ func TestEnvironmentDeletionRetryTransfersFenceWithoutUnlockedInterval(t *testin
 	if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("RetryTask(Environment deletion) = %#v, %v", retryResult, err)
 	}
-	stored, err := fixture.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		taskKey(retryID),
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
-		environmentOperationLockKey(fixture.environment.Record.ID),
-		environmentMutationEpochKey(fixture.environment.Record.ID),
-		environmentDeletionIntentKey(fixture.task.OperationID),
-	}})
+	stored, err := fixture.store.GetMany(
+		ctx,
+		testkeyvalue.GetManyRequest{
+			Keys: []string{
+				testtaskjournal.TaskStorageKey(retryID),
+				testdeletions.TombstoneKey(
+					string(testdeletions.DeletionTargetEnvironment),
+					fixture.environment.Record.ID,
+				),
+				testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID),
+				testhierarchy.EnvironmentMutationEpochKey(fixture.environment.Record.ID),
+				testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID),
+			},
+		},
+	)
 	if err != nil || stored == nil || len(stored.Values) != 5 {
 		t.Fatalf("Environment deletion retry state = %#v, %v", stored, err)
 	}
@@ -580,8 +396,8 @@ func TestEnvironmentDeletionRetryTransfersFenceWithoutUnlockedInterval(t *testin
 			t.Fatalf("Environment deletion retry revisions = %#v", stored.Values)
 		}
 	}
-	tombstone, err := decodeDeletionTombstone(stored.Values[1].Value)
-	if err != nil || tombstone.TaskID != retryID || tombstone.Phase != DeletionPhaseFinalizing ||
+	tombstone, err := testdeletions.DecodeDeletionTombstone(stored.Values[1].Value)
+	if err != nil || tombstone.TaskID != retryID || tombstone.Phase != testdeletions.DeletionPhaseFinalizing ||
 		tombstone.Checkpoint != tombstoneBefore.Checkpoint {
 		t.Fatalf("transferred Environment deletion tombstone = %#v, %v", tombstone, err)
 	}
@@ -589,9 +405,9 @@ func TestEnvironmentDeletionRetryTransfersFenceWithoutUnlockedInterval(t *testin
 	if err != nil || lock.TaskID != retryID || lock.OperationID != fixture.task.OperationID {
 		t.Fatalf("transferred Environment deletion lock = %#v, %v", lock, err)
 	}
-	intent, err := decodeEnvironmentDeletionIntent(stored.Values[4].Value)
+	intent, err := testdeletions.DecodeEnvironmentDeletionIntent(stored.Values[4].Value)
 	if err != nil || intent.TaskID != retryID ||
-		intent.CleanupPhase != EnvironmentDeletionCleanupComplete {
+		intent.CleanupPhase != testdeletions.EnvironmentDeletionCleanupComplete {
 		t.Fatalf("transferred Environment deletion intent = %#v, %v", intent, err)
 	}
 }
@@ -612,16 +428,15 @@ func TestEnvironmentDeletionRetryLosesOwnerRaceAtomically(t *testing.T) {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
 	tombstoneValue := fixture.mustGet(
-		t,
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
+		t, testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEnvironment), fixture.environment.Record.ID),
 	)
-	tombstone, err := decodeDeletionTombstone(tombstoneValue.Value)
+	tombstone, err := testdeletions.DecodeDeletionTombstone(tombstoneValue.Value)
 	if err != nil {
 		t.Fatalf("decodeDeletionTombstone() error = %v", err)
 	}
 	tombstone.TaskID = ids.NewAt(ids.KindTask, fixture.now, 8070)
 	tombstone.UpdatedAt = fixture.now.Add(2 * time.Second)
-	changedValue, err := encodeDeletionTombstone(tombstone)
+	changedValue, err := testdeletions.EncodeDeletionTombstone(tombstone)
 	if err != nil {
 		t.Fatalf("encodeDeletionTombstone() error = %v", err)
 	}
@@ -642,7 +457,7 @@ func TestEnvironmentDeletionRetryLosesOwnerRaceAtomically(t *testing.T) {
 		"environment-delete-race-key-0001",
 	)
 	retryResult, err := racingTasks.RetryTask(
-		ctx, fixture.task.ID, retryID, TaskActorOperator, marker,
+		ctx, fixture.task.ID, retryID, testtaskjournal.TaskActorOperator, marker,
 	)
 	if err != nil {
 		t.Fatalf("RetryTask(owner race) error = %v", err)
@@ -651,7 +466,7 @@ func TestEnvironmentDeletionRetryLosesOwnerRaceAtomically(t *testing.T) {
 	if classifyErr != nil || !isKind(conflict, errs.KindStateConflict) {
 		t.Fatalf("RetryTask(owner race) = %#v, %v", retryResult, classifyErr)
 	}
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(retryID), false)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(retryID), false)
 }
 
 // Rationale: successful Environment deletion must fail closed while any
@@ -665,79 +480,79 @@ func TestEnvironmentDeletionCompletionRejectsRetainedBackupState(t *testing.T) {
 		{
 			name: "policy",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupPolicyKey(fixture.environment.Record.ID)
+				return testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID)
 			},
 		},
 		{
 			name: "key metadata",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupKeyKey(fixture.environment.Record.ID)
+				return testbackuppolicy.BackupKeyKey(fixture.environment.Record.ID)
 			},
 		},
 		{
 			name: "wrapped key identity",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupKeyValueKey(fixture.environment.Record.ID)
+				return testbackuppolicy.BackupKeyValueKey(fixture.environment.Record.ID)
 			},
 		},
 		{
 			name: "source membership",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupSourceEnvironmentPrefix(fixture.environment.Record.ID) + "retained"
+				return testbackuppolicy.BackupSourceEnvironmentPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
 			name: "connector membership",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return connectorEnvironmentPrefix(fixture.environment.Record.ID) + "retained"
+				return testconnectors.ConnectorEnvironmentPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
 			name: "schedule cursor",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupScheduleCursorPrefix + fixture.environment.Record.ID + "/retained"
+				return testbackupruntime.BackupScheduleCursorPrefix + fixture.environment.Record.ID + "/retained"
 			},
 		},
 		{
 			name: "due authority",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupDueOutcomePrefix + fixture.environment.Record.ID + "/retained"
+				return testbackupruntime.BackupDueOutcomePrefix + fixture.environment.Record.ID + "/retained"
 			},
 		},
 		{
 			name: "recovery point",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupRecoveryPointEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
+				return testbackupruntime.BackupRecoveryPointEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
 			},
 		},
 		{
 			name: "run",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupRunEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
+				return testbackupruntime.BackupRunEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
 			},
 		},
 		{
 			name: "orphan",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupOrphanEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
+				return testbackupruntime.BackupOrphanEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
 			},
 		},
 		{
 			name: "restore",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupRestoreEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
+				return testbackupruntime.BackupRestoreEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
 			},
 		},
 		{
 			name: "key rotation",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return backupKeyRotationEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
+				return testbackupruntime.BackupKeyRotationEnvironmentPrefix + fixture.environment.Record.ID + "/retained"
 			},
 		},
 		{
 			name: "cleanup work",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return environmentDeletionWorkOperationPrefix(fixture.task.OperationID) + "retained"
+				return testdeletions.EnvironmentDeletionWorkOperationPrefix(fixture.task.OperationID) + "retained"
 			},
 		},
 	} {
@@ -752,21 +567,20 @@ func TestEnvironmentDeletionCompletionRejectsRetainedBackupState(t *testing.T) {
 			); err != nil || !found {
 				t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 			}
-			result := TaskResultRecord{
-				Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+			result := testtaskjournal.TaskResultRecord{
+				Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 			}
 			if _, err := fixture.tasks.AcknowledgeTask(
 				context.Background(), agentID, 1, fixture.task.ID,
-				taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID),
-				TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
+				taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID), testtaskjournal.TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
 			); !isKind(err, errs.KindStateConflict) {
 				t.Fatalf("AcknowledgeTask(retained %s) error = %v", test.name, err)
 			}
 			assertEnvironmentDeletionCompanion(
-				t, fixture.store, environmentOperationLockKey(fixture.environment.Record.ID), true,
+				t, fixture.store, testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID), true,
 			)
 			assertEnvironmentDeletionCompanion(
-				t, fixture.store, environmentDeletionIntentKey(fixture.task.OperationID), true,
+				t, fixture.store, testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID), true,
 			)
 		})
 	}
@@ -784,55 +598,55 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 		{
 			name: "zone reservation",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return zonePoolRegistryKey(fixture.environment.Record.ID)
+				return testnetworkreservations.ZonePoolRegistryKey(fixture.environment.Record.ID)
 			},
 		},
 		{
 			name: "Blueprint revision",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return environmentBlueprintRevisionsPrefix(fixture.environment.Record.ID) + "retained"
+				return testblueprints.EnvironmentBlueprintRevisionsPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
 			name: "route",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return routeOwnerPrefix(fixture.environment.Record.ID) + "retained"
+				return testroutes.OwnerPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
 			name: "entry",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return entryOwnerCollectionPrefix(fixture.environment.Record.ID) + "retained"
+				return testentries.EntryOwnerCollectionPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
 			name: "script",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				active, err := readActiveScriptSet(
+				active, err := testscripts.ReadActiveScriptSet(
 					context.Background(), fixture.store, fixture.environment.Record.ID, 0,
 				)
 				if err != nil {
 					panic(err)
 				}
-				return scriptSetOwnerKey(fixture.environment.Record.ID, active.Record.GenerationID, "retained")
+				return testscripts.ScriptSetOwnerKey(fixture.environment.Record.ID, active.Record.GenerationID, "retained")
 			},
 		},
 		{
 			name: "attach",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return attachOwnerPrefix(fixture.environment.Record.ID) + "retained"
+				return testattachments.AttachOwnerPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
 			name: "component",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return componentEnvironmentOwnerPrefix(fixture.environment.Record.ID) + "retained"
+				return testcomponents.EnvironmentOwnerPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
 			name: "connector",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return connectorEnvironmentPrefix(fixture.environment.Record.ID) + "retained"
+				return testconnectors.ConnectorEnvironmentPrefix(fixture.environment.Record.ID) + "retained"
 			},
 		},
 		{
@@ -845,13 +659,13 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 		{
 			name: "component task authority",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return componentTaskActiveEnvironmentKey(fixture.environment.Record.ID)
+				return testenvironmentchanges.ComponentTaskActiveEnvironmentKey(fixture.environment.Record.ID)
 			},
 		},
 		{
 			name: "coordination authority",
 			key: func(fixture *environmentDeletionLockFixture) string {
-				return environmentCoordinationKey(fixture.environment.Record.ID)
+				return testenvironmentcoordination.Key(fixture.environment.Record.ID)
 			},
 		},
 	} {
@@ -866,26 +680,28 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 				t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 			}
 			fixture.putRaw(t, test.key(fixture), []byte("retained"))
-			result := TaskResultRecord{
-				Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+			result := testtaskjournal.TaskResultRecord{
+				Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 			}
 			_, err := fixture.tasks.AcknowledgeTask(
-				context.Background(), agentID, 1, fixture.task.ID,
-				taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID),
-				TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
+				context.Background(),
+				agentID,
+				1,
+				fixture.task.ID,
+				taskAssignmentIDForTest(
+					t,
+					fixture.tasks,
+					fixture.task.ID,
+				),
+				testtaskjournal.TaskStatusCompleted,
+				result,
+				fixture.now.Add(2*time.Second),
 			)
 			assertExactStateConflict(t, err, "AcknowledgeTask(retained "+test.name+")")
 			assertEnvironmentDeletionCompanion(
-				t, fixture.store, environmentKey(fixture.environment.Record.ID), true,
+				t, fixture.store, testhierarchy.EnvironmentKey(fixture.environment.Record.ID), true,
 			)
-			for _, key := range []string{
-				deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
-				environmentDeletionIntentKey(fixture.task.OperationID),
-				taskKey(fixture.task.ID),
-				environmentOperationLockKey(fixture.environment.Record.ID),
-				environmentMutationEpochKey(fixture.environment.Record.ID),
-				environmentPoolRegistryKey,
-			} {
+			for _, key := range []string{testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEnvironment), fixture.environment.Record.ID), testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID), testtaskjournal.TaskStorageKey(fixture.task.ID), testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID), testhierarchy.EnvironmentMutationEpochKey(fixture.environment.Record.ID), testnetworkreservations.EnvironmentPoolRegistryKey} {
 				assertEnvironmentDeletionCompanion(t, fixture.store, key, true)
 			}
 		})
@@ -904,22 +720,22 @@ func TestEnvironmentDeletionCompletionFencesChildInsertionAtTerminalCommit(t *te
 	desired := serviceRecordTestDesired()
 	desired.ID = ids.NewAt(ids.KindService, projectionTask.CreatedAt, 70)
 	desired.Name = "api"
-	projection.DesiredServices = []EnvironmentServiceProjection{
+	projection.DesiredServices = []testservices.EnvironmentServiceProjection{
 		{EnvironmentID: fixture.environment.Record.ID, Desired: desired},
 	}
-	projectionValue, err := encodeEnvironmentComposeProjection(projection)
+	projectionValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		t.Fatalf("encode Environment projection = %v", err)
 	}
 	defer clear(projectionValue)
-	headValue, err := encodeTaskReference(projection.RevisionID)
+	headValue, err := testidempotency.EncodeTaskReference(projection.RevisionID)
 	if err != nil {
 		t.Fatalf("encode Environment desired head = %v", err)
 	}
 	defer clear(headValue)
-	if transaction, transactErr := fixture.store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(fixture.environment.Record.ID), Value: headValue},
-		{Type: MutationPut, Key: environmentComposeProjectionKey(fixture.environment.Record.ID), Value: projectionValue},
+	if transaction, transactErr := fixture.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(fixture.environment.Record.ID), Value: headValue},
+		{Type: testkeyvalue.MutationPut, Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(fixture.environment.Record.ID), Value: projectionValue},
 	}); transactErr != nil || !transaction.Succeeded {
 		t.Fatalf("seed Environment projection = %#v, %v", transaction, transactErr)
 	}
@@ -928,7 +744,7 @@ func TestEnvironmentDeletionCompletionFencesChildInsertionAtTerminalCommit(t *te
 		!found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
-	childKey := serviceRuntimeKey(desired.ID)
+	childKey := testservices.ServiceRuntimeKey(desired.ID)
 	racingStore := &environmentDeletionFinalizationRaceStore{
 		memoryHierarchyStore: fixture.store,
 		environmentID:        fixture.environment.Record.ID,
@@ -938,21 +754,39 @@ func TestEnvironmentDeletionCompletionFencesChildInsertionAtTerminalCommit(t *te
 	if err != nil {
 		t.Fatalf("newTaskRepository(racing) error = %v", err)
 	}
-	result := TaskResultRecord{
-		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+	result := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 	}
 	_, err = racingTasks.AcknowledgeTask(
-		context.Background(), agentID, 1, fixture.task.ID,
-		taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID),
-		TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
+		context.Background(),
+		agentID,
+		1,
+		fixture.task.ID,
+		taskAssignmentIDForTest(
+			t,
+			fixture.tasks,
+			fixture.task.ID,
+		),
+		testtaskjournal.TaskStatusCompleted,
+		result,
+		fixture.now.Add(2*time.Second),
 	)
 	assertExactStateConflict(t, err, "AcknowledgeTask(child insertion race)")
 	if !racingStore.raced {
 		t.Fatal("terminal transaction did not reach the child insertion race")
 	}
-	assertEnvironmentDeletionCompanion(t, fixture.store, environmentKey(fixture.environment.Record.ID), true)
-	assertEnvironmentDeletionCompanion(t, fixture.store,
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID), true)
+	assertEnvironmentDeletionCompanion(
+		t,
+		fixture.store,
+		testhierarchy.EnvironmentKey(fixture.environment.Record.ID),
+		true,
+	)
+	assertEnvironmentDeletionCompanion(
+		t,
+		fixture.store,
+		testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEnvironment), fixture.environment.Record.ID),
+		true,
+	)
 	assertEnvironmentDeletionCompanion(t, fixture.store, childKey, true)
 }
 
@@ -968,19 +802,19 @@ func TestEnvironmentDeletionCompletionRemovesDesiredProjectionBeforeParent(t *te
 	projection := environmentBlueprintTestProjection(
 		fixture.environment.Record.ID, projectionTask, 1,
 	)
-	projectionValue, err := encodeEnvironmentComposeProjection(projection)
+	projectionValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		t.Fatalf("encode Environment projection = %v", err)
 	}
 	defer clear(projectionValue)
-	headValue, err := encodeTaskReference(projection.RevisionID)
+	headValue, err := testidempotency.EncodeTaskReference(projection.RevisionID)
 	if err != nil {
 		t.Fatalf("encode Environment desired head = %v", err)
 	}
 	defer clear(headValue)
-	if transaction, transactErr := fixture.store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(fixture.environment.Record.ID), Value: headValue},
-		{Type: MutationPut, Key: environmentComposeProjectionKey(fixture.environment.Record.ID), Value: projectionValue},
+	if transaction, transactErr := fixture.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(fixture.environment.Record.ID), Value: headValue},
+		{Type: testkeyvalue.MutationPut, Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(fixture.environment.Record.ID), Value: projectionValue},
 	}); transactErr != nil || !transaction.Succeeded {
 		t.Fatalf("seed Environment projection = %#v, %v", transaction, transactErr)
 	}
@@ -998,19 +832,18 @@ func TestEnvironmentDeletionCompletionRemovesDesiredProjectionBeforeParent(t *te
 	if err != nil {
 		t.Fatalf("newTaskRepository(recording) error = %v", err)
 	}
-	result := TaskResultRecord{
-		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+	result := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 	}
 	if _, err := recordingTasks.AcknowledgeTask(
 		context.Background(), agentID, 1, fixture.task.ID,
-		taskAssignmentIDForTest(t, recordingTasks, fixture.task.ID),
-		TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
+		taskAssignmentIDForTest(t, recordingTasks, fixture.task.ID), testtaskjournal.TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
 	); err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
-	headKey := environmentBlueprintHeadKey(fixture.environment.Record.ID)
-	projectionKey := environmentComposeProjectionKey(fixture.environment.Record.ID)
-	parentKey := environmentKey(fixture.environment.Record.ID)
+	headKey := testblueprints.EnvironmentBlueprintHeadKey(fixture.environment.Record.ID)
+	projectionKey := testenvironmentprojection.EnvironmentComposeProjectionStorageKey(fixture.environment.Record.ID)
+	parentKey := testhierarchy.EnvironmentKey(fixture.environment.Record.ID)
 	headIndex, projectionIndex, parentIndex := -1, -1, -1
 	for index, key := range recordingStore.terminalMutationKeys {
 		switch key {
@@ -1046,30 +879,27 @@ func TestEnvironmentDeletionCompletionRetainsHistoricalTaskJournal(t *testing.T)
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
-	result := TaskResultRecord{
-		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+	result := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 	}
 	if _, err := fixture.tasks.AcknowledgeTask(
 		context.Background(), agentID, 1, fixture.task.ID,
-		taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID),
-		TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
+		taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID), testtaskjournal.TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
 	); err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
 	assertEnvironmentDeletionCompanion(
-		t, fixture.store, environmentKey(fixture.environment.Record.ID), false,
+		t, fixture.store, testhierarchy.EnvironmentKey(fixture.environment.Record.ID), false,
 	)
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(fixture.task.ID), true)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(fixture.task.ID), true)
 	assertEnvironmentDeletionCompanion(
 		t,
-		fixture.store,
-		taskEnvironmentIndexKey(fixture.environment.Record.ID, fixture.task.ID),
-		true,
+		fixture.store, testtaskjournal.TaskEnvironmentIndexKey(fixture.environment.Record.ID, fixture.task.ID), true,
 	)
 	assertEnvironmentDeletionCompanion(
 		t,
 		fixture.store,
-		taskWorkspaceTenantIndexKey(fixture.project.Record.TenantID, fixture.task.ID),
+		testtaskjournal.TaskWorkspaceTenantIndexKey(fixture.project.Record.TenantID, fixture.task.ID),
 		true,
 	)
 }
@@ -1081,7 +911,7 @@ func TestEnvironmentDeletionRequiresAffirmativeCleanupCompletion(t *testing.T) {
 	t.Parallel()
 	fixture := newEnvironmentDeletionLockFixture(t)
 	ctx := context.Background()
-	policyKey := backupPolicyKey(fixture.environment.Record.ID)
+	policyKey := testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID)
 	fixture.putRaw(t, policyKey, []byte("retained"))
 	current, err := fixture.hierarchy.GetEnvironment(ctx, fixture.environment.Record.ID)
 	if err != nil {
@@ -1089,15 +919,15 @@ func TestEnvironmentDeletionRequiresAffirmativeCleanupCompletion(t *testing.T) {
 	}
 	fixture.environment = current
 	fixture.mustBegin(t)
-	intentEntry := fixture.mustGet(t, environmentDeletionIntentKey(fixture.task.OperationID))
-	intent, err := decodeEnvironmentDeletionIntent(intentEntry.Value)
-	if err != nil || intent.CleanupPhase != EnvironmentDeletionCleanupEnumerating {
+	intentEntry := fixture.mustGet(t, testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID))
+	intent, err := testdeletions.DecodeEnvironmentDeletionIntent(intentEntry.Value)
+	if err != nil || intent.CleanupPhase != testdeletions.EnvironmentDeletionCleanupEnumerating {
 		t.Fatalf("initial Environment deletion cleanup intent = %#v, %v", intent, err)
 	}
 	transaction, err := fixture.store.Transact(
 		ctx,
-		[]Condition{{Key: policyKey, ModRevision: fixture.mustGet(t, policyKey).ModRevision}},
-		[]Mutation{{Type: MutationDelete, Key: policyKey}},
+		[]testkeyvalue.Condition{{Key: policyKey, ModRevision: fixture.mustGet(t, policyKey).ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: policyKey}},
 	)
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("delete retained Backup policy = %#v, %v", transaction, err)
@@ -1108,13 +938,12 @@ func TestEnvironmentDeletionRequiresAffirmativeCleanupCompletion(t *testing.T) {
 	); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
-	result := TaskResultRecord{
-		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+	result := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 	}
 	if _, err := fixture.tasks.AcknowledgeTask(
 		ctx, agentID, 1, fixture.task.ID,
-		taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID),
-		TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
+		taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID), testtaskjournal.TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("AcknowledgeTask(before cleanup completion) error = %v", err)
 	}
@@ -1126,15 +955,24 @@ func TestEnvironmentDeletionRequiresAffirmativeCleanupCompletion(t *testing.T) {
 		ctx,
 		currentTask.Record,
 	)
-	if err != nil || completed.Record.CleanupPhase != EnvironmentDeletionCleanupComplete {
+	if err != nil || completed.Record.CleanupPhase != testdeletions.EnvironmentDeletionCleanupComplete {
 		t.Fatalf("CompleteEnvironmentDeletionCleanupEnumeration() = %#v, %v", completed, err)
 	}
 	terminal, err := fixture.tasks.AcknowledgeTask(
-		ctx, agentID, 1, fixture.task.ID,
-		taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID),
-		TaskStatusCompleted, result, fixture.now.Add(2*time.Second),
+		ctx,
+		agentID,
+		1,
+		fixture.task.ID,
+		taskAssignmentIDForTest(
+			t,
+			fixture.tasks,
+			fixture.task.ID,
+		),
+		testtaskjournal.TaskStatusCompleted,
+		result,
+		fixture.now.Add(2*time.Second),
 	)
-	if err != nil || terminal.Record.Status != TaskStatusCompleted {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeTask(after cleanup completion) = %#v, %v", terminal, err)
 	}
 }
@@ -1145,13 +983,13 @@ func TestEnvironmentDeletionTerminalTaskCannotCompleteCleanupEnumeration(t *test
 	t.Parallel()
 	ctx := context.Background()
 	fixture := newEnvironmentDeletionLockFixture(t)
-	policyKey := backupPolicyKey(fixture.environment.Record.ID)
+	policyKey := testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID)
 	fixture.putRaw(t, policyKey, []byte("retained"))
 	fixture.mustBegin(t)
 	if transaction, err := fixture.store.Transact(
 		ctx,
 		nil,
-		[]Mutation{{Type: MutationDelete, Key: policyKey}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: policyKey}},
 	); err != nil || !transaction.Succeeded {
 		t.Fatalf("delete retained Backup policy = %#v, %v", transaction, err)
 	}
@@ -1169,9 +1007,9 @@ func TestEnvironmentDeletionTerminalTaskCannotCompleteCleanupEnumeration(t *test
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("CompleteEnvironmentDeletionCleanupEnumeration(terminal) error = %v", err)
 	}
-	entry := fixture.mustGet(t, environmentDeletionIntentKey(fixture.task.OperationID))
-	intent, err := decodeEnvironmentDeletionIntent(entry.Value)
-	if err != nil || intent.CleanupPhase != EnvironmentDeletionCleanupEnumerating {
+	entry := fixture.mustGet(t, testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID))
+	intent, err := testdeletions.DecodeEnvironmentDeletionIntent(entry.Value)
+	if err != nil || intent.CleanupPhase != testdeletions.EnvironmentDeletionCleanupEnumerating {
 		t.Fatalf("terminal cleanup intent = %#v, %v", intent, err)
 	}
 }
@@ -1199,23 +1037,21 @@ func TestEnvironmentDeletionTimeoutRetainsFenceAndIntent(t *testing.T) {
 		t.Fatalf("ExpireTimedOutTasks() = %d, %v", count, err)
 	}
 	terminal, err := fixture.tasks.GetTask(context.Background(), fixture.task.ID)
-	if err != nil || terminal.Record.Status != TaskStatusTimedOut {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusTimedOut {
 		t.Fatalf("timed-out Environment deletion = %#v, %v", terminal, err)
 	}
 	assertEnvironmentDeletionCompanion(
-		t, fixture.store, environmentOperationLockKey(fixture.environment.Record.ID), true,
+		t, fixture.store, testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID), true,
 	)
 	assertEnvironmentDeletionCompanion(
 		t,
-		fixture.store,
-		deletionTombstoneKey(
-			string(DeletionTargetEnvironment),
+		fixture.store, testdeletions.TombstoneKey(
+			string(testdeletions.DeletionTargetEnvironment),
 			fixture.environment.Record.ID,
-		),
-		true,
+		), true,
 	)
 	assertEnvironmentDeletionCompanion(
-		t, fixture.store, environmentDeletionIntentKey(fixture.task.OperationID), true,
+		t, fixture.store, testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID), true,
 	)
 }
 
@@ -1228,15 +1064,15 @@ type environmentDeletionRetryRaceStore struct {
 
 func (store *environmentDeletionRetryRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if !store.raced {
 		store.raced = true
-		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
-			Type: MutationPut, Key: store.key, Value: store.value,
+		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: store.key, Value: store.value,
 		}}); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 	}
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
@@ -1251,32 +1087,35 @@ type environmentDeletionFinalizationRaceStore struct {
 
 func (store *environmentDeletionFinalizationRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if !store.raced {
 		for _, mutation := range mutations {
-			if mutation.Type != MutationDelete || mutation.Prefix ||
-				mutation.Key != environmentKey(store.environmentID) {
+			if mutation.Type != testkeyvalue.MutationDelete || mutation.Prefix ||
+				mutation.Key != testhierarchy.EnvironmentKey(store.environmentID) {
 				continue
 			}
-			inserted, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
-				Type: MutationPut, Key: store.childKey, Value: []byte("retained"),
+			inserted, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+				Type: testkeyvalue.MutationPut, Key: store.childKey, Value: []byte("retained"),
 			}})
 			if err != nil {
-				return TransactionResult{}, err
+				return testkeyvalue.TransactionResult{}, err
 			}
 			if !inserted.Succeeded {
-				return TransactionResult{}, errs.New(errs.KindInternal, "child insertion race did not commit")
+				return testkeyvalue.TransactionResult{}, errs.New(
+					errs.KindInternal,
+					"child insertion race did not commit",
+				)
 			}
 			store.raced = true
 			for _, condition := range conditions {
 				if condition.Key == store.childKey ||
 					(condition.Prefix && strings.HasPrefix(store.childKey, condition.Key)) {
-					return TransactionResult{Succeeded: false, Revision: inserted.Revision}, nil
+					return testkeyvalue.TransactionResult{Succeeded: false, Revision: inserted.Revision}, nil
 				}
 			}
-			return TransactionResult{}, errs.New(errs.KindInternal,
+			return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal,
 				"terminal transaction did not compare the child authority")
 		}
 	}
@@ -1291,12 +1130,12 @@ type environmentDeletionMutationRecordingStore struct {
 
 func (store *environmentDeletionMutationRecordingStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	for _, mutation := range mutations {
-		if mutation.Type == MutationDelete && !mutation.Prefix &&
-			mutation.Key == environmentKey(store.environmentID) {
+		if mutation.Type == testkeyvalue.MutationDelete && !mutation.Prefix &&
+			mutation.Key == testhierarchy.EnvironmentKey(store.environmentID) {
 			store.terminalMutationKeys = make([]string, 0, len(mutations))
 			for _, terminalMutation := range mutations {
 				store.terminalMutationKeys = append(store.terminalMutationKeys, terminalMutation.Key)
@@ -1311,11 +1150,11 @@ type environmentDeletionLockFixture struct {
 	store       *memoryHierarchyStore
 	hierarchy   *HierarchyRepository
 	tasks       *TaskRepository
-	project     Versioned[ProjectRecord]
-	environment Versioned[EnvironmentRecord]
+	project     testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
 	task        TaskRecord
-	tombstone   DeletionTombstoneRecord
-	marker      IdempotencyMarker
+	tombstone   testdeletions.DeletionTombstoneRecord
+	marker      testidempotency.IdempotencyMarker
 	now         time.Time
 }
 
@@ -1329,33 +1168,33 @@ func newEnvironmentDeletionLockFixture(t *testing.T) *environmentDeletionLockFix
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	tenantID := ids.NewAt(ids.KindTenant, now, 8000)
-	if _, err := hierarchy.CreateTenant(ctx, TenantRecord{
+	if _, err := hierarchy.CreateTenant(ctx, testhierarchy.TenantRecord{
 		ID: tenantID, Slug: "deletion-tenant", Name: "Deletion Tenant",
 	}); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	project, err := hierarchy.CreateProject(ctx, ProjectRecord{
+	project, err := hierarchy.CreateProject(ctx, testhierarchy.ProjectRecord{
 		ID: ids.NewAt(ids.KindProject, now, 8001), TenantID: tenantID,
-		Slug: "deletion-project", Name: "Deletion Project", Kind: ProjectKindTenant,
+		Slug: "deletion-project", Name: "Deletion Project", Kind: testhierarchy.ProjectKindTenant,
 	})
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 8002)
-	environment, err := hierarchy.CreateEnvironment(ctx, EnvironmentRecord{
+	environment, err := hierarchy.CreateEnvironment(ctx, testhierarchy.EnvironmentRecord{
 		ID:                environmentID,
 		ProjectID:         project.Record.ID,
 		Name:              "production",
 		NetworkPool:       "10.248.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + project.Record.ID + "/" + environmentID,
-		ProvisioningState: EnvironmentProvisioningReady,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      ids.NewAt(ids.KindTask, now, 8003),
 		CreatedAt:         now,
 	})
 	if err != nil {
 		t.Fatalf("CreateEnvironment() error = %v", err)
 	}
-	owner, err := EnvironmentTaskOwner(project.Record, environment.Record)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
 	}
@@ -1364,20 +1203,20 @@ func newEnvironmentDeletionLockFixture(t *testing.T) *environmentDeletionLockFix
 	task.OperationID = ids.NewAt(ids.KindOperation, task.CreatedAt, 8005)
 	task.IdempotencyKey = "environment-delete-key-0001"
 	task.Owner = owner
-	task.Actor = TaskActorOperator
-	task.Executor = TaskExecutorAgent
-	task.Type = TaskRemove
+	task.Actor = testtaskjournal.TaskActorOperator
+	task.Executor = testtaskjournal.TaskExecutorAgent
+	task.Type = testtaskjournal.TaskRemove
 	task.Target = environment.Record.ID
-	task.Params = map[string]string{TaskMaterializationEnvironmentParam: environment.Record.ID}
+	task.Params = map[string]string{testtaskjournal.TaskMaterializationEnvironmentParam: environment.Record.ID}
 	marker := pendingTaskMarker(task)
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
 		Method: http.MethodDelete, Route: "/environments/{id}", Key: task.IdempotencyKey,
 	}
-	tombstone := DeletionTombstoneRecord{
-		TargetKind: DeletionTargetEnvironment, TargetID: environment.Record.ID,
+	tombstone := testdeletions.DeletionTombstoneRecord{
+		TargetKind: testdeletions.DeletionTargetEnvironment, TargetID: environment.Record.ID,
 		TargetRevision: environment.Revision, TaskID: task.ID,
-		Phase: DeletionPhaseHostEffects, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
+		Phase: testdeletions.DeletionPhaseHostEffects, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	}
 	tasks, err := newTaskRepository(store)
 	if err != nil {
@@ -1394,14 +1233,17 @@ func newEnvironmentDeletionLockFixture(t *testing.T) *environmentDeletionLockFix
 		marker:      marker,
 		now:         task.CreatedAt,
 	}
-	poolRegistryValue, err := encodeEnvelope("environment_pool_registry", EnvironmentPoolRegistry{
-		Reservations: map[string]string{environmentID: environment.Record.NetworkPool},
-	})
+	poolRegistryValue, err := testrecordcodec.Encode(
+		"environment_pool_registry",
+		testnetworkreservations.EnvironmentPoolRegistry{
+			Reservations: map[string]string{environmentID: environment.Record.NetworkPool},
+		},
+	)
 	if err != nil {
 		t.Fatalf("encode Environment pool registry error = %v", err)
 	}
 	defer clear(poolRegistryValue)
-	fixture.putRaw(t, environmentPoolRegistryKey, poolRegistryValue)
+	fixture.putRaw(t, testnetworkreservations.EnvironmentPoolRegistryKey, poolRegistryValue)
 	return fixture
 }
 
@@ -1426,34 +1268,34 @@ func (fixture *environmentDeletionLockFixture) mustBegin(t *testing.T) {
 
 func (fixture *environmentDeletionLockFixture) putLock(
 	t *testing.T,
-	record BackupOperationLockRecord,
+	record testbackupruntime.BackupOperationLockRecord,
 ) {
 	t.Helper()
-	value, err := encodeBackupOperationLockRecord(record)
+	value, err := testbackupruntime.EncodeBackupOperationLockRecord(record)
 	if err != nil {
 		t.Fatalf("encodeBackupOperationLockRecord() error = %v", err)
 	}
 	defer clear(value)
-	fixture.putRaw(t, environmentOperationLockKey(fixture.environment.Record.ID), value)
+	fixture.putRaw(t, testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID), value)
 }
 
 func (fixture *environmentDeletionLockFixture) rewriteEpoch(t *testing.T) {
 	t.Helper()
-	value := fixture.mustGet(t, environmentMutationEpochKey(fixture.environment.Record.ID))
+	value := fixture.mustGet(t, testhierarchy.EnvironmentMutationEpochKey(fixture.environment.Record.ID))
 	fixture.putRaw(t, value.Key, value.Value)
 }
 
 func (fixture *environmentDeletionLockFixture) putRaw(t *testing.T, key string, value []byte) {
 	t.Helper()
 	transaction, err := fixture.store.Transact(
-		context.Background(), nil, []Mutation{{Type: MutationPut, Key: key, Value: value}},
+		context.Background(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}},
 	)
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("put %s = %#v, %v", key, transaction, err)
 	}
 }
 
-func (fixture *environmentDeletionLockFixture) mustGet(t *testing.T, key string) *KeyValue {
+func (fixture *environmentDeletionLockFixture) mustGet(t *testing.T, key string) *testkeyvalue.KeyValue {
 	t.Helper()
 	result, err := fixture.store.Get(context.Background(), key)
 	if err != nil || result.Entry == nil {
@@ -1495,14 +1337,14 @@ type environmentDeletionUnknownStore struct {
 
 func (store *environmentDeletionUnknownStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	result, err := store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 	if err == nil && result.Succeeded && store.failNext != nil {
 		failure := store.failNext
 		store.failNext = nil
-		return TransactionResult{}, failure
+		return testkeyvalue.TransactionResult{}, failure
 	}
 	return result, err
 }

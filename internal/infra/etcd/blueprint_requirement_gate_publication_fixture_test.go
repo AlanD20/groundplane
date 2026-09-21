@@ -12,6 +12,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -21,7 +31,7 @@ func publishBlueprintRequirementCandidateForAttach(
 	store *attachTestStore,
 	tasks *TaskRepository,
 	scope AttachCreateScope,
-	attach Versioned[AttachRecord],
+	attach testkeyvalue.Versioned[testattachments.Record],
 	condition core.RequirementCondition,
 ) (TaskRecord, int64) {
 	t.Helper()
@@ -34,11 +44,12 @@ func publishBlueprintRequirementCandidateForAttach(
 	service := scope.Services[0].Record.Desired
 	probeStepID := ids.NewAt(ids.KindStep, task.CreatedAt, 935)
 	compensateStepID := ids.NewAt(ids.KindStep, task.CreatedAt, 936)
-	task.Params[TaskReleasePublicationParam] = publicationID
-	task.Params[TaskComposeArtifactParam] = artifactID
-	task.Steps = append(task.Steps,
-		TaskStepRecord{Kind: TaskStepOperation, ID: probeStepID},
-		TaskStepRecord{Kind: TaskStepOperation, ID: compensateStepID},
+	task.Params[testreleaserender.TaskReleasePublicationParam] = publicationID
+	task.Params[testtaskjournal.TaskComposeArtifactParam] = artifactID
+	task.Steps = append(
+		task.Steps,
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: probeStepID},
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: compensateStepID},
 	)
 
 	workload := releaseTestWorkloadSeal(service.Image)
@@ -48,7 +59,7 @@ func publishBlueprintRequirementCandidateForAttach(
 		t.Fatalf("describe Blueprint requirement fixture candidate: %v", err)
 	}
 	task.PlanHash = hex.EncodeToString(descriptor.PlanHash)
-	projection := cloneEnvironmentComposeProjection(scope.ComposeProjection.Record)
+	projection := testenvironmentprojection.CloneEnvironmentComposeProjection(scope.ComposeProjection.Record)
 	projection.RevisionID = task.ID
 	projection.RenderGeneration = uint64(task.RenderGeneration)
 	projection.ComposeArtifact, err = proto.MarshalOptions{Deterministic: true}.Marshal(plan.Artifacts[0])
@@ -56,7 +67,7 @@ func publishBlueprintRequirementCandidateForAttach(
 		t.Fatalf("marshal Blueprint requirement fixture artifact: %v", err)
 	}
 	projection.NormalizedCompose = append([]byte(nil), plan.Artifacts[0].CanonicalYaml...)
-	render := ReleaseRenderInput{
+	render := testreleaserender.ReleaseRenderInput{
 		ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
 		ServiceID: service.ID, ServiceName: service.Name, CandidateWorkload: workload,
 		Strategy: domain.StrategyRecreate, PriorStrategy: domain.StrategyRecreate,
@@ -67,7 +78,7 @@ func publishBlueprintRequirementCandidateForAttach(
 		AuthorizedVolumeDir: scope.Environment.Record.VolumeDir, Projection: projection,
 		ServiceDependencyPlans: projection.ServiceDependencyPlans,
 	}
-	rawRender, err := EncodeReleaseRenderInput(render)
+	rawRender, err := testreleaserender.EncodeReleaseRenderInput(render)
 	if err != nil {
 		t.Fatalf("encode Blueprint requirement fixture render input: %v", err)
 	}
@@ -91,9 +102,9 @@ func publishBlueprintRequirementCandidateForAttach(
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, err := ledger.Stage(ctx, ReleaseStage{
+	manifest, err := ledger.Stage(ctx, testreleases.ReleaseStage{
 		PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: task.CreatedAt,
-		Members: []ReleaseStageMember{{
+		Members: []testreleases.ReleaseStageMember{{
 			Intent: intent, RenderInput: rawRender,
 			Checkpoint: domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: task.CreatedAt},
 		}},
@@ -138,22 +149,37 @@ func publishBlueprintRequirementCandidateForAttach(
 	if err != nil {
 		t.Fatal(err)
 	}
-	headValue, err := encodeTaskReference(task.ID)
+	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
-		EnvironmentID: task.Owner.EnvironmentID,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	mutations := append(cloneBlueprintReleaseMutations(releasePublication.mutations),
-		Mutation{Type: MutationPut, Key: environmentBlueprintHeadKey(task.Owner.EnvironmentID), Value: headValue},
-		Mutation{Type: MutationPut, Key: blueprintRequirementGateKey(task.ID), Value: gateValue},
-		Mutation{Type: MutationPut, Key: environmentMutationEpochKey(task.Owner.EnvironmentID), Value: epochValue},
+	epochValue, err := testbackupruntime.EncodeEnvironmentMutationEpochRecord(
+		testbackupruntime.EnvironmentMutationEpochRecord{
+			EnvironmentID: task.Owner.EnvironmentID,
+		},
 	)
-	defer clearMutations(mutations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations := append(
+		cloneBlueprintReleaseMutations(releasePublication.mutations),
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintHeadKey(task.Owner.EnvironmentID),
+			Value: headValue,
+		},
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   blueprintRequirementGateKey(task.ID),
+			Value: gateValue,
+		},
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testhierarchy.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
+			Value: epochValue,
+		},
+	)
+	defer testkeyvalue.ClearMutationValues(mutations)
 	published, err := store.Transact(ctx, releasePublication.conditions, mutations)
 	if err != nil || !published.Succeeded {
 		t.Fatalf("publish Blueprint requirement fixture candidate = %#v, %v", published, err)
@@ -169,7 +195,7 @@ func blueprintRequirementGateCandidatePlan(
 	workload domain.WorkloadSeal,
 ) *agentpb.ExecutionPlan {
 	t.Helper()
-	artifactID := task.Params[TaskComposeArtifactParam]
+	artifactID := task.Params[testtaskjournal.TaskComposeArtifactParam]
 	forwardStepID, probeStepID, compensateStepID := task.Steps[0].ID, task.Steps[1].ID, task.Steps[2].ID
 	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY,

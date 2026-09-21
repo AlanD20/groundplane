@@ -1,24 +1,24 @@
-package etcd
+package agentregistration
 
 import (
-	"bytes"
-	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"errors"
-	"strings"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/pkg/errs"
+	bytes "bytes"
+	context "context"
+	sha256 "crypto/sha256"
+	base64 "encoding/base64"
+	errors "errors"
+	agentprotocol "github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	strings "strings"
+	testing "testing"
+	time "time"
 )
 
 func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
-	repository, err := newLocalAgentRepository(store)
+	repository, err := newRepository(store)
 	if err != nil {
 		t.Fatalf("newLocalAgentRepository() error = %v", err)
 	}
@@ -29,10 +29,10 @@ func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSingleton() error = %v", err)
 	}
-	if created.Revision <= 0 || created.Record.Phase != LocalAgentPhaseProvisioning {
+	if created.Revision <= 0 || created.Record.Phase != testlocalagents.LocalAgentPhaseProvisioning {
 		t.Fatalf("CreateSingleton() = %#v", created)
 	}
-	for _, key := range localAgentKeys(record.ID, record.TokenDigest) {
+	for _, key := range testlocalagents.LocalAgentKeys(record.ID, record.TokenDigest) {
 		assertTaskLifecycleValue(t, store, key, true)
 	}
 
@@ -66,7 +66,7 @@ func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MarkReady() error = %v", err)
 	}
-	if ready.Record.Phase != LocalAgentPhaseReady || !ready.Record.ReadyAt.Equal(readyAt) ||
+	if ready.Record.Phase != testlocalagents.LocalAgentPhaseReady || !ready.Record.ReadyAt.Equal(readyAt) ||
 		ready.Revision <= stored.Revision {
 		t.Fatalf("MarkReady() = %#v", ready)
 	}
@@ -74,10 +74,10 @@ func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeginDelete() error = %v", err)
 	}
-	if deleting.Record.Phase != LocalAgentPhaseDeleting || deleting.Record.TokenDigest != "" {
+	if deleting.Record.Phase != testlocalagents.LocalAgentPhaseDeleting || deleting.Record.TokenDigest != "" {
 		t.Fatalf("BeginDelete() = %#v", deleting)
 	}
-	assertTaskLifecycleValue(t, store, localAgentDigestKey(record.TokenDigest), false)
+	assertTaskLifecycleValue(t, store, testlocalagents.LocalAgentDigestKey(record.TokenDigest), false)
 	if _, err := repository.ResolveAgentChannel(ctx, record.ID, token); !errors.Is(
 		err,
 		errs.New(errs.KindAgentNotFound, ""),
@@ -96,11 +96,10 @@ func TestLocalAgentRepositoryLifecycleAndAuthentication(t *testing.T) {
 }
 
 func TestLocalAgentRepositoryAtomicallyRotatesReplacementGeneration(t *testing.T) {
-	// Rationale: a restart must observe either the complete old generation or
-	// the complete replacement generation, never split image/config/token state.
+
 	ctx := context.Background()
 	store := newMemoryTaskStore()
-	repository, err := newLocalAgentRepository(store)
+	repository, err := newRepository(store)
 	if err != nil {
 		t.Fatalf("newLocalAgentRepository() error = %v", err)
 	}
@@ -132,13 +131,13 @@ func TestLocalAgentRepositoryAtomicallyRotatesReplacementGeneration(t *testing.T
 		t.Fatalf("ReplaceGeneration() error = %v", err)
 	}
 	if replaced.Record.Image != newImage || replaced.Record.Generation != record.Generation+1 ||
-		replaced.Record.Phase != LocalAgentPhaseUpdating ||
+		replaced.Record.Phase != testlocalagents.LocalAgentPhaseUpdating ||
 		!replaced.Record.ReadyAt.Equal(firstReadyAt) ||
 		replaced.Record.Config.MaxConcurrentTasks != record.Config.MaxConcurrentTasks {
 		t.Fatalf("ReplaceGeneration() = %#v", replaced)
 	}
-	assertTaskLifecycleValue(t, store, localAgentDigestKey(record.TokenDigest), false)
-	assertTaskLifecycleValue(t, store, localAgentDigestKey(newDigest), true)
+	assertTaskLifecycleValue(t, store, testlocalagents.LocalAgentDigestKey(record.TokenDigest), false)
+	assertTaskLifecycleValue(t, store, testlocalagents.LocalAgentDigestKey(newDigest), true)
 	if _, err := repository.ResolveAgentChannel(ctx, record.ID, oldToken); !errors.Is(
 		err,
 		errs.New(errs.KindAgentNotFound, ""),
@@ -159,7 +158,7 @@ func TestLocalAgentRepositoryAtomicallyRotatesReplacementGeneration(t *testing.T
 	if err != nil {
 		t.Fatalf("MarkReplacementReady() error = %v", err)
 	}
-	if completed.Record.Phase != LocalAgentPhaseReady ||
+	if completed.Record.Phase != testlocalagents.LocalAgentPhaseReady ||
 		!completed.Record.ReadyAt.Equal(firstReadyAt) {
 		t.Fatalf("MarkReplacementReady() = %#v", completed)
 	}
@@ -168,7 +167,7 @@ func TestLocalAgentRepositoryAtomicallyRotatesReplacementGeneration(t *testing.T
 func TestLocalAgentRepositoryEnforcesOneAtomicSingleton(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
-	repository, err := newLocalAgentRepository(store)
+	repository, err := newRepository(store)
 	if err != nil {
 		t.Fatalf("newLocalAgentRepository() error = %v", err)
 	}
@@ -183,13 +182,13 @@ func TestLocalAgentRepositoryEnforcesOneAtomicSingleton(t *testing.T) {
 	) {
 		t.Fatalf("CreateSingleton(second) error = %v, want state.conflict", err)
 	}
-	assertTaskLifecycleValue(t, store, localAgentPrimaryKey(second.ID), false)
-	assertTaskLifecycleValue(t, store, localAgentTokenKey(second.ID), false)
+	assertTaskLifecycleValue(t, store, testlocalagents.LocalAgentPrimaryKey(second.ID), false)
+	assertTaskLifecycleValue(t, store, testlocalagents.LocalAgentTokenKey(second.ID), false)
 }
 
 func TestLocalAgentRepositoryPreservesUnknownCreateOutcome(t *testing.T) {
 	store := newMemoryTaskStore()
-	repository, err := newLocalAgentRepository(store)
+	repository, err := newRepository(store)
 	if err != nil {
 		t.Fatalf("newLocalAgentRepository() error = %v", err)
 	}
@@ -206,40 +205,17 @@ func TestLocalAgentRepositoryPreservesUnknownCreateOutcome(t *testing.T) {
 	}
 }
 
-func TestLocalAgentReferenceCodecRejectsUnknownAndDuplicateFields(t *testing.T) {
-	t.Parallel()
-
-	agentID := ids.NewAt(ids.KindAgent, taskJournalTime(), 31)
-	value, err := encodeLocalAgentReference(agentID)
-	if err != nil {
-		t.Fatalf("encodeLocalAgentReference() error = %v", err)
-	}
-	for name, malformed := range map[string][]byte{
-		"duplicate": bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"schema":1`), 1),
-		"unknown":   bytes.Replace(value, []byte(`"schema":1`), []byte(`"schema":1,"extra":true`), 1),
-	} {
-		t.Run(name, func(t *testing.T) {
-			if _, err := decodeLocalAgentReference(malformed); !errors.Is(
-				err,
-				errs.New(errs.KindInternal, ""),
-			) {
-				t.Fatalf("decodeLocalAgentReference() error = %v, want internal", err)
-			}
-		})
-	}
-}
-
 func localAgentTestRecord(
 	token [agentprotocol.RawTokenBytes]byte,
 	now time.Time,
-) LocalAgentRecord {
+) testlocalagents.LocalAgentRecord {
 	digest := sha256.Sum256(token[:])
-	return LocalAgentRecord{
+	return testlocalagents.LocalAgentRecord{
 		ID:               ids.NewAt(ids.KindAgent, now, 41),
 		EnrollmentTaskID: ids.NewAt(ids.KindTask, now, 40),
 		Image:            "ghcr.io/groundplane/agent@sha256:" + strings.Repeat("a", 64),
-		Generation:       1, Phase: LocalAgentPhaseProvisioning,
-		Config: LocalAgentConfig{
+		Generation:       1, Phase: testlocalagents.LocalAgentPhaseProvisioning,
+		Config: testlocalagents.LocalAgentConfig{
 			PullIntervalSeconds: 5, MaxConcurrentTasks: 4,
 			Labels: map[string]string{"role": "local"},
 		},

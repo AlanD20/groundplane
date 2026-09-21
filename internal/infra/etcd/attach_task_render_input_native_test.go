@@ -6,6 +6,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testenvironmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -16,11 +20,12 @@ import (
 func TestAttachTaskRenderInputFitsCapturedMultiServiceRuntime(t *testing.T) {
 	t.Parallel()
 	input := capturedAttachRenderInputFixture(t)
-	value, err := encodeAttachTaskRenderInput(input)
+	value, err := testattachrender.EncodeAttachTaskRenderInput(input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(input.RuntimeProjection.DesiredServices) < 11 || len(value) >= MaximumAttachTaskRenderInputBytes {
+	if len(input.RuntimeProjection.DesiredServices) < 11 ||
+		len(value) >= testattachrender.MaximumAttachTaskRenderInputBytes {
 		t.Fatalf("captured %d-Service Attach input size = %d", len(input.RuntimeProjection.DesiredServices), len(value))
 	}
 }
@@ -71,15 +76,16 @@ func TestAttachTaskRenderInputRetainsCurrentGenerationSlot(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if test.generation == 2 && validateEnvironmentComposeProjection(input.RuntimeProjection) == nil {
+			if test.generation == 2 &&
+				testenvironmentprojection.ValidateEnvironmentComposeProjection(input.RuntimeProjection) == nil {
 				t.Fatal("desired-state validator accepted incomplete fresh slot topology")
 			}
-			encoded, err := encodeAttachTaskRenderInput(input)
+			encoded, err := testattachrender.EncodeAttachTaskRenderInput(input)
 			if (err != nil) != test.wantError {
 				t.Fatalf("encode captured runtime = %v, want error %t", err, test.wantError)
 			}
 			if !test.wantError {
-				decoded, err := decodeAttachTaskRenderInput(encoded)
+				decoded, err := testattachrender.DecodeAttachTaskRenderInput(encoded)
 				if err != nil || !proto.Equal(artifact, mustAttachRuntimeArtifact(t, decoded)) {
 					t.Fatalf("captured runtime changed in durable roundtrip: %v", err)
 				}
@@ -88,7 +94,7 @@ func TestAttachTaskRenderInputRetainsCurrentGenerationSlot(t *testing.T) {
 	}
 }
 
-func mustAttachRuntimeArtifact(t *testing.T, input AttachTaskRenderInput) *agentpb.ComposeArtifact {
+func mustAttachRuntimeArtifact(t *testing.T, input testattachrender.AttachTaskRenderInput) *agentpb.ComposeArtifact {
 	t.Helper()
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(input.RuntimeProjection.ComposeArtifact, artifact); err != nil {
@@ -97,12 +103,12 @@ func mustAttachRuntimeArtifact(t *testing.T, input AttachTaskRenderInput) *agent
 	return artifact
 }
 
-func capturedAttachRenderInputFixture(t *testing.T) AttachTaskRenderInput {
+func capturedAttachRenderInputFixture(t *testing.T) testattachrender.AttachTaskRenderInput {
 	t.Helper()
 	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
 	runtime := desiredTopologyProjectionFixture(t)
 	consumerID := runtime.DesiredServices[0].Desired.ID
-	return AttachTaskRenderInput{
+	return testattachrender.AttachTaskRenderInput{
 		PlanID: ids.NewAt(ids.KindPlan, now, 1), AttachID: ids.NewAt(ids.KindAttach, now, 2),
 		AttachName: "database", TenantID: ids.NewAt(ids.KindTenant, now, 3), TenantSlug: "tenant",
 		ProjectID: ids.NewAt(ids.KindProject, now, 4), ProjectSlug: "project",
@@ -113,10 +119,10 @@ func capturedAttachRenderInputFixture(t *testing.T) AttachTaskRenderInput {
 		DesiredRevisionID: runtime.RevisionID, ArtifactID: ids.NewAt(ids.KindConfig, now, 7),
 		RenderGeneration: runtime.RenderGeneration, EnvironmentEpochRevision: 1,
 		RuntimeProjection: runtime, RunningServiceIDs: []string{consumerID},
-		Services: attachTaskServiceSnapshots(runtime.DesiredServices),
-		Networks: attachTaskOwnedNetworkSnapshots(runtime.DesiredZones),
+		Services: testattachrender.AttachTaskServiceSnapshots(runtime.DesiredServices),
+		Networks: testattachrender.AttachTaskOwnedNetworkSnapshots(runtime.DesiredZones),
 		Volumes:  runtime.Volumes, VolumeMounts: runtime.VolumeMounts,
-		NetworkJoins: []AttachTaskNetworkJoin{{
+		NetworkJoins: []testattachrender.AttachTaskNetworkJoin{{
 			NetworkID: ids.NewAt(ids.KindNetwork, now, 8), ServiceIDs: []string{consumerID},
 		}},
 		ConsumerServiceIDs:     []string{consumerID},
@@ -126,16 +132,21 @@ func capturedAttachRenderInputFixture(t *testing.T) AttachTaskRenderInput {
 
 // AssertAttachRuntimeRoundTrip crosses capture and durable encoding in the
 // Controller renderer fixture without adding a production persistence API.
-func AssertAttachRuntimeRoundTrip(t *testing.T, runtime EnvironmentComposeProjection, epoch int64, running []string) {
+func AssertAttachRuntimeRoundTrip(
+	t *testing.T,
+	runtime testenvironmentprojection.EnvironmentComposeProjection,
+	epoch int64,
+	running []string,
+) {
 	t.Helper()
 	input := capturedAttachRenderInputFixture(t)
 	input.EnvironmentID, input.DesiredRevisionID = runtime.EnvironmentID, runtime.RevisionID
 	input.RenderGeneration, input.EnvironmentEpochRevision = runtime.RenderGeneration, epoch
 	input.RuntimeProjection = runtime
 	input.ArtifactID = mustAttachRuntimeArtifact(t, input).ArtifactId
-	input.Services, input.Networks = attachTaskServiceSnapshots(
+	input.Services, input.Networks = testattachrender.AttachTaskServiceSnapshots(
 		runtime.DesiredServices,
-	), attachTaskOwnedNetworkSnapshots(
+	), testattachrender.AttachTaskOwnedNetworkSnapshots(
 		runtime.DesiredZones,
 	)
 	input.Volumes, input.VolumeMounts = runtime.Volumes, runtime.VolumeMounts
@@ -143,11 +154,11 @@ func AssertAttachRuntimeRoundTrip(t *testing.T, runtime EnvironmentComposeProjec
 	input.ConsumerServiceIDs = []string{runtime.DesiredServices[0].Desired.ID}
 	input.RunningServiceIDs = running
 	input.NetworkJoins[0].ServiceIDs = input.ConsumerServiceIDs
-	encoded, err := encodeAttachTaskRenderInput(input)
+	encoded, err := testattachrender.EncodeAttachTaskRenderInput(input)
 	if err != nil {
 		t.Fatal("captured Attach runtime cannot be persisted", err)
 	}
-	decoded, err := decodeAttachTaskRenderInput(encoded)
+	decoded, err := testattachrender.DecodeAttachTaskRenderInput(encoded)
 	if err != nil || !proto.Equal(mustAttachRuntimeArtifact(t, input), mustAttachRuntimeArtifact(t, decoded)) {
 		t.Fatalf("captured Attach runtime changed through persistence: %v", err)
 	}
@@ -158,22 +169,27 @@ func AssertAttachRuntimeRoundTrip(t *testing.T, runtime EnvironmentComposeProjec
 func TestAttachRuntimeEpochRejectsStaleCapture(t *testing.T) {
 	store := newAttachTestStore()
 	scope := seedAttachScope(t, t.Context(), store)
-	load := func() *ordinaryEnvironmentMutationContext {
-		context, err := loadOrdinaryEnvironmentMutationContext(t.Context(), store,
-			scope.Environment.Record.ID, environmentKey(scope.Environment.Record.ID),
-			scope.Project.Record.ID, scope.Tenant.Record.ID)
+	load := func() *testenvironmentfence.MutationContext {
+		context, err := testenvironmentfence.LoadMutationContext(
+			t.Context(),
+			store,
+			scope.Environment.Record.ID,
+			testhierarchy.EnvironmentKey(scope.Environment.Record.ID),
+			scope.Project.Record.ID,
+			scope.Tenant.Record.ID,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return context
 	}
-	key := environmentMutationEpochKey(scope.Environment.Record.ID)
+	key := testhierarchy.EnvironmentMutationEpochKey(scope.Environment.Record.ID)
 	captured := load()
-	epoch, found := captured.revisionForKey(key)
+	epoch, found := captured.RevisionForKey(key)
 	if !found {
 		t.Fatal("capture lacks epoch")
 	}
-	input := AttachTaskRenderInput{EnvironmentEpochRevision: epoch}
+	input := testattachrender.AttachTaskRenderInput{EnvironmentEpochRevision: epoch}
 	if err := validateAttachRuntimeEpoch(captured, scope.Environment.Record.ID, input); err != nil {
 		t.Fatal(err)
 	}

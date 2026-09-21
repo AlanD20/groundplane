@@ -107,8 +107,10 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	if marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
-		marker.TaskID != runtime.OriginTaskID || marker.Response.Status != http.StatusAccepted ||
+	if marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.TaskID != runtime.OriginTaskID ||
+		marker.Response.Status != http.StatusAccepted ||
 		marker.ReplayTarget == nil ||
 		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
 		marker.ReplayTarget.ID != runtime.VolumeID ||
@@ -266,8 +268,10 @@ func volumeRemovalTaskMatchesRuntime(task TaskRecord, runtime removalrecord.Runt
 	if task.Actor != taskjournal.TaskActorOperator || task.Executor != taskjournal.TaskExecutorAgent || task.FinishedAt == nil ||
 		task.FinishedAt.Before(
 			runtime.UpdatedAt,
-		) || task.ID != runtime.CurrentTaskID || task.OperationID != runtime.OperationID ||
-		task.Target != runtime.VolumeID || task.Owner.EnvironmentID != runtime.EnvironmentID ||
+		) || task.ID != runtime.CurrentTaskID ||
+		task.OperationID != runtime.OperationID ||
+		task.Target != runtime.VolumeID ||
+		task.Owner.EnvironmentID != runtime.EnvironmentID ||
 		task.RetryOf != runtime.PredecessorTaskID ||
 		!EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||
 		task.RenderGeneration != int32(
@@ -419,8 +423,10 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != runtime.OriginTaskID || marker.Response.Status != http.StatusAccepted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != runtime.OriginTaskID ||
+		marker.Response.Status != http.StatusAccepted ||
 		marker.ReplayTarget == nil ||
 		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
 		marker.ReplayTarget.ID != runtime.VolumeID ||

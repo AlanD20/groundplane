@@ -5,8 +5,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskmaterializationowner "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -57,13 +59,17 @@ func (cipher manualJourneyAgeCipher) Open(ctx context.Context, value []byte) ([]
 
 // checkManualJourneyValueSubstitution injects corruption only after real source
 // resolution. Actual plan admission and source-root checks remain in place.
-func checkManualJourneyValueSubstitution(t *testing.T, scripts *etcd.ScriptRepository,
-	materializer *controller.TaskMaterializationResolver, task etcd.TaskRecord, plan *agentpb.ExecutionPlan,
+func checkManualJourneyValueSubstitution(
+	t *testing.T,
+	scripts *etcd.ScriptRepository,
+	materializer *testtaskmaterialization.TaskMaterializationResolver,
+	task etcd.TaskRecord,
+	plan *agentpb.ExecutionPlan,
 ) {
 	t.Helper()
 	repository := &retainingManualJourneyBodies{ScriptRepository: scripts}
 	values := &substitutingManualJourneyValue{TaskMaterializationResolver: materializer}
-	service, err := controller.NewScriptArtifactService(repository, values)
+	service, err := testtaskplanning.NewScriptArtifactService(repository, values)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,12 +103,12 @@ func (repository *retainingManualJourneyBodies) ResolveScriptAssignmentArtifacts
 }
 
 type substitutingManualJourneyValue struct {
-	*controller.TaskMaterializationResolver
+	*testtaskmaterialization.TaskMaterializationResolver
 	value []byte
 }
 
 func (resolver *substitutingManualJourneyValue) ResolveTaskMaterializationSource(ctx context.Context,
-	environmentID string, source etcd.TaskMaterializationSource,
+	environmentID string, source testtaskmaterializationowner.Source,
 ) ([]byte, error) {
 	value, err := resolver.TaskMaterializationResolver.ResolveTaskMaterializationSource(ctx, environmentID, source)
 	if err == nil && len(value) > 0 {

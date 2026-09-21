@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,7 +27,7 @@ func TestComponentRepositoryCreatesReadsAndPagesEnvironmentSingletons(t *testing
 	if err != nil || !reflectComponentRecordEqual(stored.Record, record) || stored.Revision != created.Revision {
 		t.Fatalf("GetComponent() = %#v, %v", stored, err)
 	}
-	page, err := repository.ListEnvironmentComponents(ctx, environment.Record.ID, PageRequest{Limit: 20})
+	page, err := repository.ListEnvironmentComponents(ctx, environment.Record.ID, testkeyvalue.PageRequest{Limit: 20})
 	if err != nil || len(page.Items) != 1 || page.Items[0].Record.Desired.ID != record.Desired.ID {
 		t.Fatalf("ListEnvironmentComponents() = %#v, %v", page, err)
 	}
@@ -50,7 +53,7 @@ func TestComponentRepositoryFencesDesiredAndRuntimeCAS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateEnvironmentComponent() error = %v", err)
 	}
-	component, err := ProjectComponentRecord(current.Record)
+	component, err := testcomponents.ProjectRecord(current.Record)
 	if err != nil {
 		t.Fatalf("ProjectComponentRecord() error = %v", err)
 	}
@@ -75,7 +78,7 @@ func TestComponentRepositoryFencesDesiredAndRuntimeCAS(t *testing.T) {
 
 func componentRepositoryTestHierarchy(
 	t *testing.T,
-) (*ComponentRepository, *memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {
+) (*ComponentRepository, *memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], testkeyvalue.Versioned[testhierarchy.ProjectRecord]) {
 	t.Helper()
 	store := newMemoryHierarchyStore()
 	hierarchy, err := newHierarchyRepository(store)
@@ -90,11 +93,11 @@ func componentRepositoryTestHierarchy(
 	return repository, store, environment, project
 }
 
-func componentRepositoryTestRecord(t *testing.T, environmentID string, offset int64) ComponentRecord {
+func componentRepositoryTestRecord(t *testing.T, environmentID string, offset int64) testcomponents.Record {
 	t.Helper()
 	record := componentRecordTestRecord(t, offset)
 	record.Desired.OwnerID = environmentID
-	if err := validateComponentRecord(record); err != nil {
+	if err := testcomponents.ValidateRecord(record); err != nil {
 		t.Fatalf("validateComponentRecord() error = %v", err)
 	}
 	return record

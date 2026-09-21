@@ -5,11 +5,12 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 )
 
 func TestReplaceScriptDesiredPreservesStableReferencesAndAllowsSlugRename(t *testing.T) {
 	// Rationale: an edit may rename the operator label but must never retarget a Script behind its stable id.
-	record, err := NewScriptRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
+	record, err := testscripts.NewRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
 		ID: ids.New(ids.KindScript), Slug: "migrate", ServiceName: "api",
 		Body: "first", When: core.ScriptHook("manual"),
 	})
@@ -20,7 +21,7 @@ func TestReplaceScriptDesiredPreservesStableReferencesAndAllowsSlugRename(t *tes
 	desired.Slug = "migrate-database"
 	desired.Body = "second"
 	desired.When = core.ScriptHook("pre-deploy")
-	replacement, err := ReplaceScriptDesired(record, desired)
+	replacement, err := testscripts.ReplaceDesired(record, desired)
 	if err != nil {
 		t.Fatalf("ReplaceScriptDesired(): %v", err)
 	}
@@ -33,7 +34,7 @@ func TestReplaceScriptDesiredPreservesStableReferencesAndAllowsSlugRename(t *tes
 
 func TestReplaceScriptDesiredAllowsServiceLabelRefresh(t *testing.T) {
 	// Rationale: Service names are renamable labels; refreshing the projection must preserve its stable Service id.
-	record, err := NewScriptRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
+	record, err := testscripts.NewRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
 		ID: ids.New(ids.KindScript), Slug: "migrate", ServiceName: "api",
 		Body: "first", When: core.ScriptHook("manual"),
 	})
@@ -42,7 +43,7 @@ func TestReplaceScriptDesiredAllowsServiceLabelRefresh(t *testing.T) {
 	}
 	desired := record.Desired
 	desired.ServiceName = "worker"
-	replacement, err := ReplaceScriptDesired(record, desired)
+	replacement, err := testscripts.ReplaceDesired(record, desired)
 	if err != nil {
 		t.Fatalf("ReplaceScriptDesired(): %v", err)
 	}

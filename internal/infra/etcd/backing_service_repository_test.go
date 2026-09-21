@@ -9,6 +9,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testbackingservices "github.com/AlanD20/groundplane/internal/infra/etcd/backingservices"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,13 +25,20 @@ type backingReadRaceStore struct {
 	injected  bool
 }
 
-func (store *backingReadRaceStore) Range(ctx context.Context, request RangeRequest) (*RangeResult, error) {
+func (store *backingReadRaceStore) Range(
+	ctx context.Context,
+	request testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	result, err := store.memoryHierarchyStore.Range(ctx, request)
-	if err != nil || !store.armed || store.injected || request.Prefix != projectPlatformOwnerPrefix {
+	if err != nil || !store.armed || store.injected || request.Prefix != testhierarchy.ProjectPlatformOwnerPrefix {
 		return result, err
 	}
 	store.injected = true
-	_, err = store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: store.deleteKey}})
+	_, err = store.memoryHierarchyStore.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: store.deleteKey}},
+	)
 	return result, err
 }
 
@@ -36,13 +49,13 @@ func TestBackingServiceRepositoryReadsFacadeFromOneSnapshot(t *testing.T) {
 	ctx := context.Background()
 	store := &backingReadRaceStore{memoryHierarchyStore: newMemoryHierarchyStore()}
 	want := seedBackingService(t, store, 900, "shared-postgres")
-	store.deleteKey = serviceRuntimeKey(want.ServiceID)
+	store.deleteKey = testservices.ServiceRuntimeKey(want.ServiceID)
 	store.armed = true
-	repository, err := newBackingServiceRepository(store)
+	repository, err := testbackingservices.NewRepository(store)
 	if err != nil {
 		t.Fatalf("newBackingServiceRepository() error = %v", err)
 	}
-	page, err := repository.ListBackingServices(ctx, PageRequest{Limit: 1})
+	page, err := repository.ListBackingServices(ctx, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil || !store.injected || len(page.Items) != 1 || !reflect.DeepEqual(page.Items[0].Record, want) {
 		t.Fatalf("ListBackingServices() = %#v, %v, injected %t", page, err, store.injected)
 	}
@@ -74,18 +87,18 @@ func TestBackingServiceRepositoryRejectsNonBackingProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 930), Slug: "acme", Name: "Acme"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 930), Slug: "acme", Name: "Acme"}
 	if _, err := hierarchy.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	project := ProjectRecord{
+	project := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 931), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 	}
 	if _, err := hierarchy.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	repository, err := newBackingServiceRepository(store)
+	repository, err := testbackingservices.NewRepository(store)
 	if err != nil {
 		t.Fatalf("newBackingServiceRepository() error = %v", err)
 	}
@@ -101,12 +114,12 @@ func TestBackingServiceRepositoryDefaultsMissingRuntimeToRunning(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
 	want := seedBackingService(t, store, 940, "missing-runtime")
-	if _, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationDelete, Key: serviceRuntimeKey(want.ServiceID),
+	if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationDelete, Key: testservices.ServiceRuntimeKey(want.ServiceID),
 	}}); err != nil {
 		t.Fatalf("Delete(Service runtime sidecar) error = %v", err)
 	}
-	repository, err := newBackingServiceRepository(store)
+	repository, err := testbackingservices.NewRepository(store)
 	if err != nil {
 		t.Fatalf("newBackingServiceRepository() error = %v", err)
 	}
@@ -129,22 +142,22 @@ func seedBackingService(
 	store hierarchyStore,
 	offset int64,
 	slug string,
-) BackingServiceRecord {
+) testbackingservices.Record {
 	t.Helper()
 	ctx := context.Background()
 	hierarchy, err := newHierarchyRepository(store)
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	projectRecord := ProjectRecord{
+	projectRecord := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, offset), Slug: slug,
-		Name: "Shared PostgreSQL", Kind: ProjectKindBacking,
+		Name: "Shared PostgreSQL", Kind: testhierarchy.ProjectKindBacking,
 	}
 	if _, err := hierarchy.CreateProject(ctx, projectRecord); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 	environmentID := hierarchyTestID(ids.KindEnvironment, offset+1)
-	environmentRecord, err := NewProvisioningEnvironment(
+	environmentRecord, err := testhierarchy.NewProvisioningEnvironment(
 		environmentpath.DefaultVolumeRoot,
 		projectRecord,
 		environmentID,
@@ -156,28 +169,42 @@ func seedBackingService(
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment() error = %v", err)
 	}
-	environmentValue, err := encodeEnvironment(environmentRecord)
+	environmentValue, err := testhierarchy.EncodeEnvironment(environmentRecord)
 	if err != nil {
 		t.Fatalf("encodeEnvironment() error = %v", err)
 	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
-		EnvironmentID: environmentID,
-	})
+	epochValue, err := testbackupruntime.EncodeEnvironmentMutationEpochRecord(
+		testbackupruntime.EnvironmentMutationEpochRecord{
+			EnvironmentID: environmentID,
+		},
+	)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentMutationEpochRecord() error = %v", err)
 	}
-	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
+	scriptSetValue, err := testscripts.EncodeScriptSetGeneration(testscripts.SetGenerationRecord{
 		EnvironmentID: environmentID, GenerationID: environmentID,
 	})
 	if err != nil {
 		t.Fatalf("encodeScriptSetGeneration() error = %v", err)
 	}
-	result, err := store.Transact(ctx, nil, []Mutation{
-		{Type: MutationPut, Key: environmentKey(environmentID), Value: environmentValue},
-		{Type: MutationPut, Key: environmentNameKey(projectRecord.ID, "main"), Value: []byte(environmentID)},
-		{Type: MutationPut, Key: environmentOwnerKey(projectRecord.ID, environmentID), Value: []byte(environmentID)},
-		{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: epochValue},
-		{Type: MutationPut, Key: scriptSetActiveKey(environmentID), Value: scriptSetValue},
+	result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentKey(environmentID), Value: environmentValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testhierarchy.EnvironmentNameKey(projectRecord.ID, "main"),
+			Value: []byte(environmentID),
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testhierarchy.EnvironmentOwnerKey(projectRecord.ID, environmentID),
+			Value: []byte(environmentID),
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testhierarchy.EnvironmentMutationEpochKey(environmentID),
+			Value: epochValue,
+		},
+		{Type: testkeyvalue.MutationPut, Key: testscripts.ScriptSetActiveKey(environmentID), Value: scriptSetValue},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed backing Environment = %#v, %v", result, err)
@@ -196,7 +223,7 @@ func seedBackingService(
 		old.Projection.Revision >= current.Projection.Revision {
 		t.Fatalf("desired head fixture revisions = %d/%d", old.Projection.Revision, current.Projection.Revision)
 	}
-	return BackingServiceRecord{
+	return testbackingservices.Record{
 		ProjectID: projectRecord.ID, EnvironmentID: environmentID, ServiceID: serviceID,
 		BackingNetworkID: current.Service.Record.BackingNetworkID,
 	}

@@ -9,20 +9,24 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type collectorSnapshot struct {
-	rangeResult RangeResult
-	markers     GetManyResult
+	rangeResult testkeyvalue.RangeResult
+	markers     testkeyvalue.GetManyResult
 }
 
 type collectorTestStore struct {
-	Store
+	testkeyvalue.Store
+
 	mu                 sync.Mutex
 	snapshots          []collectorSnapshot
-	transactionResults []TransactionResult
+	transactionResults []testkeyvalue.TransactionResult
 	transactionErrors  []error
 	rangeCalls         int
 	getManyCalls       int
@@ -30,13 +34,17 @@ type collectorTestStore struct {
 	getManyRevisions   []int64
 }
 
-func (store *collectorTestStore) Range(ctx context.Context, request RangeRequest) (*RangeResult, error) {
+func (store *collectorTestStore) Range(
+	ctx context.Context,
+	request testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if request.Prefix != idempotencyRetentionPrefix || request.Limit != maximumPruneMarkers || request.Revision != 0 ||
+	if request.Prefix != testidempotency.IdempotencyRetentionPrefix || request.Limit != maximumPruneMarkers ||
+		request.Revision != 0 ||
 		store.rangeCalls >= len(store.snapshots) {
 		return nil, errs.New(errs.KindInternal, "unexpected collector range")
 	}
@@ -49,8 +57,8 @@ func (store *collectorTestStore) Range(ctx context.Context, request RangeRequest
 
 func (store *collectorTestStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -70,65 +78,67 @@ func (store *collectorTestStore) GetMany(
 
 func (store *collectorTestStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if err := ctx.Err(); err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	index := store.transactionCalls
 	store.transactionCalls++
 	if len(conditions) != 2 || len(mutations) != 2 {
-		return TransactionResult{}, errs.New(errs.KindInternal, "unexpected collector transaction")
+		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "unexpected collector transaction")
 	}
 	if index < len(store.transactionErrors) && store.transactionErrors[index] != nil {
-		return TransactionResult{}, store.transactionErrors[index]
+		return testkeyvalue.TransactionResult{}, store.transactionErrors[index]
 	}
 	if index >= len(store.transactionResults) {
-		return TransactionResult{}, errs.New(errs.KindInternal, "missing collector transaction result")
+		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "missing collector transaction result")
 	}
 	return store.transactionResults[index], nil
 }
 
 func testCollectorSnapshot(
 	t *testing.T,
-	marker IdempotencyMarker,
+	marker testidempotency.IdempotencyMarker,
 	revision int64,
 	retentionRevision int64,
 	markerRevision int64,
 ) collectorSnapshot {
 	t.Helper()
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", err)
 	}
-	retentionKey, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
+	retentionKey, err := testidempotency.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
 	if err != nil {
 		t.Fatalf("idempotencyRetentionKey() error = %v", err)
 	}
-	retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+	retentionValue, err := json.Marshal(testidempotency.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 	if err != nil {
 		t.Fatalf("json.Marshal(retention) error = %v", err)
 	}
-	markerValue, err := encodeIdempotencyMarker(marker)
+	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
 	}
 	return collectorSnapshot{
-		rangeResult: RangeResult{
-			Values:       []KeyValue{{Key: retentionKey, Value: retentionValue, ModRevision: retentionRevision}},
+		rangeResult: testkeyvalue.RangeResult{
+			Values: []testkeyvalue.KeyValue{
+				{Key: retentionKey, Value: retentionValue, ModRevision: retentionRevision},
+			},
 			ReadRevision: revision, ResponseRevision: revision,
 		},
-		markers: GetManyResult{
-			Values:       []*KeyValue{{Key: markerKey, Value: markerValue, ModRevision: markerRevision}},
+		markers: testkeyvalue.GetManyResult{
+			Values:       []*testkeyvalue.KeyValue{{Key: markerKey, Value: markerValue, ModRevision: markerRevision}},
 			ReadRevision: revision, ResponseRevision: revision,
 		},
 	}
 }
 
-func (store *collectorTestStore) Get(ctx context.Context, key string) (*GetResult, error) {
+func (store *collectorTestStore) Get(ctx context.Context, key string) (*testkeyvalue.GetResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -137,37 +147,37 @@ func (store *collectorTestStore) Get(ctx context.Context, key string) (*GetResul
 	if key != idempotencyPruneCursorKey || store.rangeCalls >= len(store.snapshots) {
 		return nil, errs.New(errs.KindInternal, "unexpected collector cursor read")
 	}
-	return &GetResult{ReadRevision: store.snapshots[store.rangeCalls].rangeResult.ReadRevision}, nil
+	return &testkeyvalue.GetResult{ReadRevision: store.snapshots[store.rangeCalls].rangeResult.ReadRevision}, nil
 }
 
-func SeedIndependentPruneMarker(t *testing.T, backend Store, at time.Time) string {
+func SeedIndependentPruneMarker(t *testing.T, backend testkeyvalue.Store, at time.Time) string {
 	t.Helper()
 	marker := testDirectMarker()
 	marker.Locator.Key = "volume-retention-independent-0001"
 	marker.CreatedAt, marker.UpdatedAt, marker.TerminalAt = at, at, at
-	marker.RetainUntil = at.Add(markerRetention)
-	key, err := idempotencyMarkerKey(marker.Locator)
+	marker.RetainUntil = at.Add(testidempotency.MarkerRetention)
+	key, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	value, err := encodeIdempotencyMarker(marker)
+	value, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatal(err)
 	}
-	retentionKey, err := idempotencyRetentionKey(key, marker.RetainUntil)
+	retentionKey, err := testidempotency.IdempotencyRetentionKey(key, marker.RetainUntil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	retention, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: key})
+	retention, err := json.Marshal(testidempotency.RetentionReferenceJSON{Schema: 1, MarkerKey: key})
 	if err != nil {
 		t.Fatal(err)
 	}
 	result, err := backend.Transact(
 		context.Background(),
-		[]Condition{{Key: key}, {Key: retentionKey}},
-		[]Mutation{
-			{Type: MutationPut, Key: key, Value: value},
-			{Type: MutationPut, Key: retentionKey, Value: retention},
+		[]testkeyvalue.Condition{{Key: key}, {Key: retentionKey}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: key, Value: value},
+			{Type: testkeyvalue.MutationPut, Key: retentionKey, Value: retention},
 		},
 	)
 	if err != nil || !result.Succeeded {
@@ -188,32 +198,35 @@ func SeedCompletedVolumePruneBatch(t *testing.T, fixture *VolumePolicyDesiredFix
 		task.Params[removalrecord.OriginTaskParam] = task.ID
 		marker := fixture.Marker
 		marker.Locator.Key, marker.TaskID = task.IdempotencyKey, task.ID
-		marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetVolume, ID: task.Target}
+		marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+			Kind: testidempotency.IdempotencyReplayTargetVolume,
+			ID:   task.Target,
+		}
 		marker.Response.Body = []byte(`{"task_id":"` + task.ID + `"}`)
-		marker.State, marker.UpdatedAt, marker.TerminalAt = IdempotencyMarkerCompleted, *task.FinishedAt, *task.FinishedAt
+		marker.State, marker.UpdatedAt, marker.TerminalAt = testidempotency.IdempotencyMarkerCompleted, *task.FinishedAt, *task.FinishedAt
 		marker.RetainUntil = *task.RetainUntil
 		task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-		key, err := idempotencyMarkerKey(marker.Locator)
+		key, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 		if err != nil {
 			t.Fatal(err)
 		}
-		taskValue, err := encodeTaskRecord(task)
+		taskValue, err := EncodeTaskRecord(task)
 		if err != nil {
 			t.Fatal(err)
 		}
-		markerValue, err := encodeIdempotencyMarker(marker)
+		markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 		if err != nil {
 			t.Fatal(err)
 		}
-		retentionKey, err := idempotencyRetentionKey(key, marker.RetainUntil)
+		retentionKey, err := testidempotency.IdempotencyRetentionKey(key, marker.RetainUntil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: key})
+		retentionValue, err := json.Marshal(testidempotency.RetentionReferenceJSON{Schema: 1, MarkerKey: key})
 		if err != nil {
 			t.Fatal(err)
 		}
-		replayKey, err := idempotencyReplayTargetKey(
+		replayKey, err := testidempotency.IdempotencyReplayTargetKey(
 			*marker.ReplayTarget,
 			marker.Locator.Method,
 			marker.Locator.Route,
@@ -222,15 +235,15 @@ func SeedCompletedVolumePruneBatch(t *testing.T, fixture *VolumePolicyDesiredFix
 		if err != nil {
 			t.Fatal(err)
 		}
-		replayValue, err := encodeReplayTargetReference(key)
+		replayValue, err := testidempotency.EncodeReplayTargetReference(key)
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := fixture.Store.Transact(context.Background(), nil, []Mutation{
-			{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-			{Type: MutationPut, Key: key, Value: markerValue},
-			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
-			{Type: MutationPut, Key: replayKey, Value: replayValue},
+		result, err := fixture.Store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: taskValue},
+			{Type: testkeyvalue.MutationPut, Key: key, Value: markerValue},
+			{Type: testkeyvalue.MutationPut, Key: retentionKey, Value: retentionValue},
+			{Type: testkeyvalue.MutationPut, Key: replayKey, Value: replayValue},
 		})
 		if err != nil || !result.Succeeded {
 			t.Fatalf("seed completed removal marker: %v", err)

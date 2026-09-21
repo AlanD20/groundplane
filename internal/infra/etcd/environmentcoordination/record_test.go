@@ -1,13 +1,13 @@
-package etcd
+package environmentcoordination
 
 import (
-	"bytes"
-	"errors"
-	"strings"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/pkg/errs"
+	bytes "bytes"
+	errors "errors"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	strings "strings"
+	testing "testing"
+	time "time"
 )
 
 const coordinationTestEnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
@@ -30,11 +30,11 @@ func TestEnvironmentCoordinationRecordRoundTripsCompleteSchedule(t *testing.T) {
 		},
 	}
 
-	encoded, err := encodeEnvironmentCoordinationRecord(record)
+	encoded, err := Encode(record)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentCoordinationRecord() error = %v", err)
 	}
-	decoded, err := decodeEnvironmentCoordinationRecord(encoded)
+	decoded, err := Decode(encoded)
 	if err != nil {
 		t.Fatalf("decodeEnvironmentCoordinationRecord() error = %v", err)
 	}
@@ -58,11 +58,11 @@ func TestEnvironmentCoordinationRecordAllowsScheduleAbsence(t *testing.T) {
 		EnvironmentID:      coordinationTestEnvironmentID,
 		ScheduleClockFloor: time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC),
 	}
-	encoded, err := encodeEnvironmentCoordinationRecord(record)
+	encoded, err := Encode(record)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentCoordinationRecord() error = %v", err)
 	}
-	decoded, err := decodeEnvironmentCoordinationRecord(encoded)
+	decoded, err := Decode(encoded)
 	if err != nil || decoded.CurrentBackupScheduleState != nil {
 		t.Fatalf("decodeEnvironmentCoordinationRecord() = %#v, %v", decoded, err)
 	}
@@ -84,7 +84,7 @@ func TestEnvironmentCoordinationRecordRejectsInvalidAndOversizedState(t *testing
 			UpdatedAt:       floor,
 		},
 	}
-	if _, err := encodeEnvironmentCoordinationRecord(invalid); !errors.Is(
+	if _, err := Encode(invalid); !errors.Is(
 		err,
 		errs.New(errs.KindValidationFailed, ""),
 	) {
@@ -94,7 +94,7 @@ func TestEnvironmentCoordinationRecordRejectsInvalidAndOversizedState(t *testing
 		EnvironmentID:      coordinationTestEnvironmentID,
 		ScheduleClockFloor: floor,
 	}
-	encoded, err := encodeEnvironmentCoordinationRecord(valid)
+	encoded, err := Encode(valid)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentCoordinationRecord(valid) error = %v", err)
 	}
@@ -104,11 +104,11 @@ func TestEnvironmentCoordinationRecordRejectsInvalidAndOversizedState(t *testing
 	if len(exact) != maximumEnvironmentCoordinationRecordBytes {
 		t.Fatalf("exact coordination bytes = %d", len(exact))
 	}
-	if _, err := decodeEnvironmentCoordinationRecord(exact); err != nil {
+	if _, err := Decode(exact); err != nil {
 		t.Fatalf("decodeEnvironmentCoordinationRecord(4096 bytes) error = %v", err)
 	}
 	oversized := append(exact, ' ')
-	if _, err := decodeEnvironmentCoordinationRecord(oversized); !errors.Is(
+	if _, err := Decode(oversized); !errors.Is(
 		err,
 		errs.New(errs.KindInternal, ""),
 	) {
@@ -121,7 +121,7 @@ func TestEnvironmentCoordinationRecordRejectsInvalidAndOversizedState(t *testing
 func TestBackupPolicyScheduleDigestBindsCanonicalPolicy(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
-	policy := BackupPolicyRecord{
+	policy := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: coordinationTestEnvironmentID,
 		Enabled:       true,
 		Frequency:     "*-*-* 03:15:00",
@@ -134,18 +134,18 @@ func TestBackupPolicyScheduleDigestBindsCanonicalPolicy(t *testing.T) {
 		},
 		UpdatedAt: at,
 	}
-	digest, err := backupPolicyScheduleDigest(policy)
+	digest, err := PolicyScheduleDigest(policy)
 	if err != nil {
 		t.Fatalf("backupPolicyScheduleDigest() error = %v", err)
 	}
 	const golden = "4943b66263a15ae97a5bc2a568631b1594c9c7d29932ff6eef1947ed5aed046f"
-	repeated, err := backupPolicyScheduleDigest(policy)
+	repeated, err := PolicyScheduleDigest(policy)
 	if err != nil || digest != golden || repeated != golden {
 		t.Fatalf("repeated digests = %q and %q, want %q; error = %v", digest, repeated, golden, err)
 	}
 	reordered := policy
 	reordered.SourceIDs = []string{policy.SourceIDs[1], policy.SourceIDs[0]}
-	reorderedDigest, err := backupPolicyScheduleDigest(reordered)
+	reorderedDigest, err := PolicyScheduleDigest(reordered)
 	if err != nil {
 		t.Fatalf("backupPolicyScheduleDigest(reordered) error = %v", err)
 	}
@@ -161,7 +161,7 @@ func TestBackupPolicyScheduleDigestRejectsEquivalentNonUTCTimestamp(t *testing.T
 	policy := coordinationTestPolicy(time.Date(
 		2026, 8, 24, 10, 0, 0, 0, time.FixedZone("equivalent-zero-offset", 0),
 	), "*-*-* 03:15:00")
-	if _, err := backupPolicyScheduleDigest(policy); !errors.Is(
+	if _, err := PolicyScheduleDigest(policy); !errors.Is(
 		err,
 		errs.New(errs.KindValidationFailed, ""),
 	) {
@@ -175,7 +175,7 @@ func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 	oldPolicy := coordinationTestPolicy(base, "*-*-* 03:15:00")
-	oldDigest, err := backupPolicyScheduleDigest(oldPolicy)
+	oldDigest, err := PolicyScheduleDigest(oldPolicy)
 	if err != nil {
 		t.Fatalf("backupPolicyScheduleDigest(old) error = %v", err)
 	}
@@ -193,7 +193,7 @@ func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 	tests := []struct {
 		name              string
 		current           EnvironmentCoordinationRecord
-		replacement       BackupPolicyRecord
+		replacement       testbackuppolicy.BackupPolicyRecord
 		now               time.Time
 		wantSchedule      bool
 		wantEnabledAt     time.Time
@@ -202,8 +202,11 @@ func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 	}{
 		{
 			name: "disabled retains maximum floor", current: existing,
-			replacement: BackupPolicyRecord{EnvironmentID: coordinationTestEnvironmentID, UpdatedAt: base},
-			now:         base.Add(-time.Hour), wantSchedule: false,
+			replacement: testbackuppolicy.BackupPolicyRecord{
+				EnvironmentID: coordinationTestEnvironmentID,
+				UpdatedAt:     base,
+			},
+			now: base.Add(-time.Hour), wantSchedule: false,
 		},
 		{
 			name: "enable seeds at boundary",
@@ -240,7 +243,7 @@ func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			next, nextRunAt, err := replaceEnvironmentCoordinationSchedule(
+			next, nextRunAt, err := ReplaceSchedule(
 				test.current,
 				test.replacement,
 				test.now,
@@ -280,7 +283,7 @@ func TestReplaceEnvironmentCoordinationScheduleTransitions(t *testing.T) {
 			if !nextRunAt.Equal(test.wantNextRunAt) {
 				t.Fatalf("nextRunAt = %s, want %s", nextRunAt, test.wantNextRunAt)
 			}
-			digest, digestErr := backupPolicyScheduleDigest(test.replacement)
+			digest, digestErr := PolicyScheduleDigest(test.replacement)
 			if digestErr != nil || state.PolicyDigest != digest {
 				t.Fatalf("PolicyDigest = %q, want %q; error = %v", state.PolicyDigest, digest, digestErr)
 			}
@@ -296,7 +299,7 @@ func TestReplaceEnvironmentCoordinationScheduleRejectsInvalidDisabledFrequency(t
 	current := EnvironmentCoordinationRecord{
 		EnvironmentID: coordinationTestEnvironmentID, ScheduleClockFloor: at,
 	}
-	replacement := BackupPolicyRecord{
+	replacement := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: coordinationTestEnvironmentID,
 		Frequency:     "daily",
 		Keep:          7,
@@ -305,7 +308,7 @@ func TestReplaceEnvironmentCoordinationScheduleRejectsInvalidDisabledFrequency(t
 		SourceIDs:     []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 		UpdatedAt:     at,
 	}
-	if _, _, err := replaceEnvironmentCoordinationSchedule(
+	if _, _, err := ReplaceSchedule(
 		current,
 		replacement,
 		at,
@@ -327,7 +330,7 @@ func TestEnvironmentCoordinationRewritePreservesExactBytes(t *testing.T) {
 		"\"enabled_at\":\"2026-08-24T10:00:00Z\"," +
 		"\"last_evaluated_at\":\"2026-08-24T11:00:00Z\"," +
 		"\"updated_at\":\"2026-08-24T12:00:00Z\"}} }")
-	record, err := decodeEnvironmentCoordinationRecord(raw)
+	record, err := Decode(raw)
 	if err != nil {
 		t.Fatalf("decodeEnvironmentCoordinationRecord() error = %v", err)
 	}
@@ -336,7 +339,7 @@ func TestEnvironmentCoordinationRewritePreservesExactBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rewriteMutation() error = %v", err)
 	}
-	if mutation.Key != environmentCoordinationKey(coordinationTestEnvironmentID) ||
+	if mutation.Key != Key(coordinationTestEnvironmentID) ||
 		!bytes.Equal(mutation.Value, raw) {
 		t.Fatalf("rewrite mutation = %#v, want exact bytes %q", mutation, raw)
 	}
@@ -368,8 +371,8 @@ func TestEnvironmentCoordinationRewritePreservesExactBytes(t *testing.T) {
 	}
 }
 
-func coordinationTestPolicy(at time.Time, frequency string) BackupPolicyRecord {
-	return BackupPolicyRecord{
+func coordinationTestPolicy(at time.Time, frequency string) testbackuppolicy.BackupPolicyRecord {
+	return testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: coordinationTestEnvironmentID,
 		Enabled:       true,
 		Frequency:     frequency,

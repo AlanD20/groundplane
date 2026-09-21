@@ -462,11 +462,14 @@ func decodeReleaseCursor(value string) (releaseCursor, error) {
 		ids.Validate(
 			ids.KindEnvironment,
 			cursor.EnvironmentID,
-		) != nil || cursor.ServiceID != "" && ids.Validate(ids.KindService, cursor.ServiceID) != nil ||
+		) != nil ||
+		cursor.ServiceID != "" && ids.Validate(ids.KindService, cursor.ServiceID) != nil ||
 		ids.Validate(
 			ids.KindDeployment,
 			cursor.LastReleaseID,
-		) != nil || cursor.Direction != "ascending" || cursor.Limit < 1 ||
+		) != nil ||
+		cursor.Direction != "ascending" ||
+		cursor.Limit < 1 ||
 		cursor.Limit > 200 {
 		return releaseCursor{}, errs.New(errs.KindMalformedRequest, "release cursor is invalid")
 	}

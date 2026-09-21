@@ -9,6 +9,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,17 +22,17 @@ func TestBlueprintScriptCheckpointAuthorityRequiresExactPublishedOperation(t *te
 	ctx := context.Background()
 	now := time.Date(2026, 9, 2, 20, 0, 0, 0, time.UTC)
 	store := newMemoryTaskStore()
-	repository := &ScriptRepository{store: store}
+	repository := composeScriptRepository(store)
 	execution := scriptCheckpointTestRecord(now)
 	publicationID := ids.NewULID()
 	task := releaseHookRetryTestTask(execution, execution.CurrentTaskID, now)
-	task.Params[TaskReleasePublicationParam] = publicationID
-	task.Params[TaskMaterializationEnvironmentParam] = execution.EnvironmentID
-	task.Params[EnvironmentDesiredRevisionParam] = task.ID
+	task.Params[testreleaserender.TaskReleasePublicationParam] = publicationID
+	task.Params[testtaskjournal.TaskMaterializationEnvironmentParam] = execution.EnvironmentID
+	task.Params[testblueprints.EnvironmentDesiredRevisionParam] = task.ID
 	tenantID := ids.NewAt(ids.KindTenant, now, 30)
 	projectID := ids.NewAt(ids.KindProject, now, 31)
-	task.Owner = TaskOwner{
-		WorkspaceType: TaskWorkspaceTenant, TenantID: tenantID,
+	task.Owner = testtaskjournal.TaskOwner{
+		WorkspaceType: testtaskjournal.TaskWorkspaceTenant, TenantID: tenantID,
 		ProjectID: projectID, EnvironmentID: execution.EnvironmentID,
 	}
 	intent := domain.Intent{
@@ -50,36 +55,44 @@ func TestBlueprintScriptCheckpointAuthorityRequiresExactPublishedOperation(t *te
 		t.Fatal(err)
 	}
 	intentDigest, _ := domain.Digest(intent)
-	member := ReleaseStagedMemberRef{
+	member := testreleases.ReleaseStagedMemberRef{
 		ReleaseID: execution.ReleaseID, ServiceID: execution.ServiceID,
 		IntentDigest: intentDigest, RenderDigest: strings.Repeat("b", 64),
 		CheckpointDigest: strings.Repeat("c", 64),
 	}
-	manifest := ReleaseStagedManifest{
+	manifest := testreleases.ReleaseStagedManifest{
 		PublicationID: publicationID, OperationID: execution.OperationID,
-		Members: []ReleaseStagedMemberRef{member}, CreatedAt: now,
+		Members: []testreleases.ReleaseStagedMemberRef{member}, CreatedAt: now,
 	}
 	manifest.Digest, _ = blueprintCandidateManifestDigest(manifest)
-	marker := ReleasePublicationMarker{
+	marker := testreleases.ReleasePublicationMarker{
 		PublicationID: publicationID, OperationID: execution.OperationID,
 		ManifestDigest: manifest.Digest, PublishedAt: now,
 	}
-	manifestValue, err := encodeReleaseRecord("release-staged-manifest", manifest)
+	manifestValue, err := testreleases.EncodeReleaseRecord("release-staged-manifest", manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerValue, err := encodeReleaseRecord("release-publication", marker)
+	markerValue, err := testreleases.EncodeReleaseRecord("release-publication", marker)
 	if err != nil {
 		t.Fatal(err)
 	}
-	intentValue, err := encodeReleaseRecord("release-intent", intent)
+	intentValue, err := testreleases.EncodeReleaseRecord("release-intent", intent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	seeded, err := store.Transact(ctx, nil, []Mutation{
-		{Type: MutationPut, Key: releaseManifestStagingKey(publicationID), Value: manifestValue},
-		{Type: MutationPut, Key: releasePublicationKey(publicationID), Value: markerValue},
-		{Type: MutationPut, Key: releaseIntentStagingKey(publicationID, execution.ReleaseID), Value: intentValue},
+	seeded, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleases.ReleaseManifestStagingKey(publicationID),
+			Value: manifestValue,
+		},
+		{Type: testkeyvalue.MutationPut, Key: testreleases.ReleasePublicationKey(publicationID), Value: markerValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleases.ReleaseIntentStagingKey(publicationID, execution.ReleaseID),
+			Value: intentValue,
+		},
 	})
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed Blueprint Script authority = %#v, %v", seeded, err)
@@ -88,7 +101,7 @@ func TestBlueprintScriptCheckpointAuthorityRequiresExactPublishedOperation(t *te
 		t.Fatalf("exact Blueprint Script authority error = %v", err)
 	}
 	ordinary := task
-	ordinary.Params = map[string]string{ReleaseHookStepExecutionParam(execution.StepID): execution.ID}
+	ordinary.Params = map[string]string{testreleaserender.ReleaseHookStepExecutionParam(execution.StepID): execution.ID}
 	if err := repository.validateBlueprintScriptExecutionAuthority(ctx, ordinary, execution, seeded.Revision); err == nil {
 		t.Fatal("ordinary update gained Blueprint Script authority")
 	}
@@ -109,25 +122,25 @@ func TestBlueprintCompensationRequiresExactStrategyPredecessorEvidence(t *testin
 		ServiceID: serviceID, Strategy: domain.StrategyRecreate,
 		PriorServingReleaseID: priorReleaseID, PriorSuccessfulReleaseID: priorReleaseID,
 	}
-	render := ReleaseRenderInput{
+	render := testreleaserender.ReleaseRenderInput{
 		ServiceID: serviceID, Strategy: domain.StrategyRecreate,
 		PriorArtifactID: priorArtifactID, PriorTarget: domain.WorkloadSingleton,
 	}
-	exact := TaskResultRecord{RecreateEvidence: []TaskRecreateEvidence{{
+	exact := testtaskjournal.TaskResultRecord{RecreateEvidence: []testtaskjournal.TaskRecreateEvidence{{
 		ServiceID: serviceID, ReleaseID: priorReleaseID, ArtifactID: priorArtifactID,
 		Target: string(domain.WorkloadSingleton), Compensated: true,
 	}}}
 	if err := validateBlueprintCandidateCompensation(intent, render, exact); err != nil {
 		t.Fatalf("exact recreate compensation error = %v", err)
 	}
-	for name, result := range map[string]TaskResultRecord{
+	for name, result := range map[string]testtaskjournal.TaskResultRecord{
 		"missing": {},
-		"wrong artifact": {RecreateEvidence: []TaskRecreateEvidence{{
+		"wrong artifact": {RecreateEvidence: []testtaskjournal.TaskRecreateEvidence{{
 			ServiceID: serviceID, ReleaseID: priorReleaseID,
 			ArtifactID: ids.NewAt(ids.KindConfig, now, 4),
 			Target:     string(domain.WorkloadSingleton), Compensated: true,
 		}}},
-		"wrong strategy": {ProxyEvidence: []TaskProxyEvidence{{
+		"wrong strategy": {ProxyEvidence: []testtaskjournal.TaskProxyEvidence{{
 			ServiceID: serviceID, ReleaseID: priorReleaseID,
 			Target: string(domain.WorkloadSingleton), Compensated: true,
 		}}},
@@ -144,7 +157,7 @@ func TestBlueprintCompensationRequiresExactStrategyPredecessorEvidence(t *testin
 	render.PriorTarget = domain.WorkloadBlue
 	render.PriorProxyGeneration = 7
 	render.PriorProxyDigest = strings.Repeat("d", 64)
-	blueGreen := TaskResultRecord{ProxyEvidence: []TaskProxyEvidence{{
+	blueGreen := testtaskjournal.TaskResultRecord{ProxyEvidence: []testtaskjournal.TaskProxyEvidence{{
 		ServiceID: serviceID, ReleaseID: priorReleaseID, Target: string(domain.WorkloadBlue),
 		ProxyGeneration: 7, ConfigSHA256: render.PriorProxyDigest, Compensated: true,
 	}}}
@@ -158,13 +171,16 @@ func TestBlueprintCandidateManifestAcceptsDocumentedMemberLimitAndRejectsDrift(t
 	now := time.Date(2026, 9, 2, 21, 0, 0, 0, time.UTC)
 	publicationID := ids.NewULID()
 	operationID := ids.NewAt(ids.KindOperation, now, 1)
-	task := TaskRecord{OperationID: operationID, Params: map[string]string{TaskReleasePublicationParam: publicationID}}
-	manifest := ReleaseStagedManifest{
+	task := TaskRecord{
+		OperationID: operationID,
+		Params:      map[string]string{testreleaserender.TaskReleasePublicationParam: publicationID},
+	}
+	manifest := testreleases.ReleaseStagedManifest{
 		PublicationID: publicationID, OperationID: operationID, CreatedAt: now,
-		Members: make([]ReleaseStagedMemberRef, maximumReleasePublicationMembers),
+		Members: make([]testreleases.ReleaseStagedMemberRef, testreleases.MaximumReleasePublicationMembers),
 	}
 	for index := range manifest.Members {
-		manifest.Members[index] = ReleaseStagedMemberRef{
+		manifest.Members[index] = testreleases.ReleaseStagedMemberRef{
 			ReleaseID:    ids.NewAt(ids.KindDeployment, now, int64(index+10)),
 			ServiceID:    ids.NewAt(ids.KindService, now, int64(index+100)),
 			IntentDigest: strings.Repeat("a", 64), RenderDigest: strings.Repeat("b", 64),
@@ -172,7 +188,7 @@ func TestBlueprintCandidateManifestAcceptsDocumentedMemberLimitAndRejectsDrift(t
 		}
 	}
 	manifest.Digest, _ = blueprintCandidateManifestDigest(manifest)
-	marker := ReleasePublicationMarker{
+	marker := testreleases.ReleasePublicationMarker{
 		PublicationID: publicationID, OperationID: operationID,
 		ManifestDigest: manifest.Digest, PublishedAt: now,
 	}

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,17 +18,17 @@ func TestScriptContextPrimaryFenceAllowsCountsButRejectsContextEdit(t *testing.T
 	store, sources, _, _, _ := manualScriptLifecycleFixture(t)
 	prepared := sources.Script.Record
 	prepared.ActiveReferences++
-	key := scriptSetScriptKey(prepared.EnvironmentID, prepared.ScriptSetGeneration, prepared.Desired.ID)
-	write := func(record ScriptRecord) {
+	key := testscripts.ScriptSetScriptKey(prepared.EnvironmentID, prepared.ScriptSetGeneration, prepared.Desired.ID)
+	write := func(record testscripts.Record) {
 		t.Helper()
-		value, err := encodeScriptRecord(record)
+		value, err := testscripts.EncodeRecord(record)
 		if err != nil {
 			t.Fatal(err)
 		}
 		result, err := store.Transact(
 			context.Background(),
 			nil,
-			[]Mutation{{Type: MutationPut, Key: key, Value: value}},
+			[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}},
 		)
 		if err != nil || !result.Succeeded {
 			t.Fatalf("prepare fixture primary: %v", err)

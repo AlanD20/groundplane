@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -18,7 +18,7 @@ import (
 // operator authority absent from the real stored Script selected for this run.
 func TestScriptContextPublicationRejectsInventedExplicitAuthority(t *testing.T) {
 	fixture := etcd.NewManualScriptAdmissionFixture(t)
-	plan, err := controller.BuildManualScriptPlan(context.Background(), controller.ManualScriptPlanInput{
+	plan, err := testtaskplanning.BuildManualScriptPlan(context.Background(), testtaskplanning.ManualScriptPlanInput{
 		TaskID: fixture.Task.ID, OperationID: fixture.Task.OperationID, PlanID: fixture.Task.PlanID,
 		StepID: fixture.Execution.StepID, ExecutionID: fixture.Execution.ID,
 		SnapshotID: fixture.Execution.SnapshotID, Sources: fixture.Sources,

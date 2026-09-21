@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"google.golang.org/protobuf/proto"
 )
@@ -31,11 +32,13 @@ func TestScriptContextBlueprintPreparationRejectsSubstitutionBeforeWrites(t *tes
 			execution.Snapshot, execution.SnapshotSHA256 = value, scriptSourceReferenceBytesDigest(value)
 			task := TaskRecord{
 				ID: execution.CurrentTaskID, OperationID: execution.OperationID, PlanHash: execution.PlanHash,
-				Params: map[string]string{ReleaseHookStepExecutionParam(execution.StepID): execution.ID},
+				Params: map[string]string{
+					testreleaserender.ReleaseHookStepExecutionParam(execution.StepID): execution.ID,
+				},
 			}
 			store := &releasePlanningTestStore{memoryHierarchyStore: newMemoryHierarchyStore()}
 			before := store.revision
-			_, err = (&ReleaseLedger{store: store}).PrepareBlueprintReleaseHooks(
+			_, err = (releaseLedgerFixture(t, store)).PrepareBlueprintReleaseHooks(
 				context.Background(), task, []ReleaseHookExecutionPublication{{Sources: sources, Execution: execution}},
 			)
 			if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) || store.revision != before {

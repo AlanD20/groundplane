@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -28,16 +31,16 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 	projectTwo := ids.NewAt(ids.KindProject, now, 804)
 	key := "hierarchy-project-delete-key-0002"
 	markerOne := hierarchyReplayTaskMarker(now, tenantOne, projectOne, key, ids.NewAt(ids.KindTask, now, 805))
-	put := func(marker IdempotencyMarker) (string, error) {
-		markerKey, err := idempotencyMarkerKey(marker.Locator)
+	put := func(marker testidempotency.IdempotencyMarker) (string, error) {
+		markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 		if err != nil {
 			return "", err
 		}
-		markerValue, err := encodeIdempotencyMarker(marker)
+		markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 		if err != nil {
 			return "", err
 		}
-		targetKey, err := idempotencyReplayTargetKey(
+		targetKey, err := testidempotency.IdempotencyReplayTargetKey(
 			*marker.ReplayTarget,
 			marker.Locator.Method,
 			marker.Locator.Route,
@@ -46,13 +49,13 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 		if err != nil {
 			return "", err
 		}
-		targetValue, err := encodeReplayTargetReference(markerKey)
+		targetValue, err := testidempotency.EncodeReplayTargetReference(markerKey)
 		if err != nil {
 			return "", err
 		}
-		result, err := store.Transact(ctx, nil, []Mutation{
-			{Type: MutationPut, Key: markerKey, Value: markerValue},
-			{Type: MutationPut, Key: targetKey, Value: targetValue},
+		result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: markerKey, Value: markerValue},
+			{Type: testkeyvalue.MutationPut, Key: targetKey, Value: targetValue},
 		})
 		if err != nil || !result.Succeeded {
 			return "", err
@@ -67,15 +70,15 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 	// Same key under the same Tenant collides at the canonical marker owner,
 	// even though the reverse target index has a different Project id.
 	markerTwo := hierarchyReplayTaskMarker(now, tenantOne, projectTwo, key, ids.NewAt(ids.KindTask, now, 806))
-	markerTwoKey, err := idempotencyMarkerKey(markerTwo.Locator)
+	markerTwoKey, err := testidempotency.IdempotencyMarkerKey(markerTwo.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey(second) error = %v", err)
 	}
-	markerTwoValue, err := encodeIdempotencyMarker(markerTwo)
+	markerTwoValue, err := testidempotency.EncodeIdempotencyMarker(markerTwo)
 	if err != nil {
 		t.Fatalf("encode second marker = %v", err)
 	}
-	markerTwoTargetKey, err := idempotencyReplayTargetKey(
+	markerTwoTargetKey, err := testidempotency.IdempotencyReplayTargetKey(
 		*markerTwo.ReplayTarget,
 		markerTwo.Locator.Method,
 		markerTwo.Locator.Route,
@@ -84,13 +87,13 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey(second) error = %v", err)
 	}
-	markerTwoTargetValue, err := encodeReplayTargetReference(markerTwoKey)
+	markerTwoTargetValue, err := testidempotency.EncodeReplayTargetReference(markerTwoKey)
 	if err != nil {
 		t.Fatalf("encode second target reference = %v", err)
 	}
 	if result, err := store.Transact(ctx,
-		[]Condition{{Key: markerTwoKey}, {Key: markerTwoTargetKey}},
-		[]Mutation{{Type: MutationPut, Key: markerTwoKey, Value: markerTwoValue}, {Type: MutationPut, Key: markerTwoTargetKey, Value: markerTwoTargetValue}},
+		[]testkeyvalue.Condition{{Key: markerTwoKey}, {Key: markerTwoTargetKey}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: markerTwoKey, Value: markerTwoValue}, {Type: testkeyvalue.MutationPut, Key: markerTwoTargetKey, Value: markerTwoTargetValue}},
 	); err != nil || result.Succeeded {
 		t.Fatalf("same-owner replay claim = %#v/%v, want conflict", result, err)
 	}
@@ -107,7 +110,7 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 
 	// Simulate finalization removing the target primary while the retained
 	// reverse locator and marker remain replayable.
-	if result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: projectKey(projectOne)}}); err != nil ||
+	if result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: testhierarchy.ProjectKey(projectOne)}}); err != nil ||
 		!result.Succeeded {
 		t.Fatalf("remove finalized Project primary = %#v/%v", result, err)
 	}
@@ -128,7 +131,7 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 
 	// Repointing the Project-1 index at Project-2's marker is corruption, not
 	// a valid replay or a fallback to the requested target primary.
-	targetKey, err := idempotencyReplayTargetKey(
+	targetKey, err := testidempotency.IdempotencyReplayTargetKey(
 		*markerOne.ReplayTarget,
 		markerOne.Locator.Method,
 		markerOne.Locator.Route,
@@ -137,11 +140,11 @@ func TestHierarchyDeletionRealEtcdProjectReplayIndexOwnerIsolationAndCorruption(
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey(corrupt) error = %v", err)
 	}
-	badReference, err := encodeReplayTargetReference(markerTwoKey)
+	badReference, err := testidempotency.EncodeReplayTargetReference(markerTwoKey)
 	if err != nil {
 		t.Fatalf("encode corrupt target reference = %v", err)
 	}
-	if result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: targetKey, Value: badReference}}); err != nil ||
+	if result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: targetKey, Value: badReference}}); err != nil ||
 		!result.Succeeded {
 		t.Fatalf("write corrupt replay link = %#v/%v", result, err)
 	}

@@ -9,11 +9,15 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/agent"
+	migratedmaterialization "github.com/AlanD20/groundplane/internal/agent/materialization"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/docker/materializerrunner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -33,8 +37,13 @@ func (helper *entryRemovalHelper) Run(ctx context.Context, request materializerr
 	return err
 }
 
-func runEntryRemovalAgent(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
-	plans *controller.TaskPlanResolver, materials *controller.TaskMaterializationResolver, task etcd.TaskRecord) {
+func runEntryRemovalAgent(
+	t *testing.T,
+	fixture *etcd.ExecutedArtifactFixture,
+	plans *testtaskplanning.TaskPlanResolver,
+	materials *testtaskmaterialization.TaskMaterializationResolver,
+	task etcd.TaskRecord,
+) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -49,7 +58,7 @@ func runEntryRemovalAgent(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 		t.Fatal("reconstruct Entry cleanup", err)
 	}
 	helper := &entryRemovalHelper{}
-	runtime, err := agent.NewMaterializationRuntime(helper, nil)
+	runtime, err := migratedmaterialization.New(helper, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +67,7 @@ func runEntryRemovalAgent(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 	done := make(chan struct{})
 	go func() { pool.Run(ctx); close(done) }()
 	defer func() { cancel(); <-done }()
-	if err := pool.Submit(ctx, agent.Assignment{AssignmentID: assigned.AssignmentID, TaskID: task.ID,
+	if err := pool.Submit(ctx, testtaskassignment.Assignment{AssignmentID: assigned.AssignmentID, TaskID: task.ID,
 		OperationID: task.OperationID, Plan: plan, ExecutionEpoch: assigned.ExecutionEpoch,
 		ExecutionMode:   agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 		ForwardDeadline: assigned.Deadline, RecoveryDeadline: assigned.RecoveryDeadline, Deadline: assigned.Deadline}); err != nil {
@@ -77,17 +86,21 @@ func runEntryRemovalAgent(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 		case output := <-pool.Outputs():
 			if output.Progress != nil {
 				progress := output.Progress
-				state, wireState := etcd.TaskEventStateRunning, agentpb.TaskState_TASK_STATE_RUNNING
+				state, wireState := testtaskjournal.TaskEventStateRunning, agentpb.TaskState_TASK_STATE_RUNNING
 				if progress.State == agent.TaskProgressCompleted {
-					state, wireState = etcd.TaskEventStateCompleted, agentpb.TaskState_TASK_STATE_COMPLETED
+					state, wireState = testtaskjournal.TaskEventStateCompleted, agentpb.TaskState_TASK_STATE_COMPLETED
 				}
 				if progress.State != agent.TaskProgressRunning && progress.State != agent.TaskProgressCompleted {
 					t.Fatalf("Entry cleanup step failed: %+v", progress)
 				}
-				_, err := fixture.Tasks.AppendTaskEvent(ctx, etcd.TaskEventInput{Identity: etcd.TaskEventIdentity{
-					AssignmentID: assigned.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID,
-					StepID: progress.StepID, Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal},
-					State: state, Payload: json.RawMessage(`{}`)}, time.Now().UTC())
+				_, err := fixture.Tasks.AppendTaskEvent(
+					ctx,
+					testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
+						AssignmentID: assigned.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID,
+						StepID: progress.StepID, Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal},
+						State: state, Payload: json.RawMessage(`{}`)},
+					time.Now().UTC(),
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -102,12 +115,11 @@ func runEntryRemovalAgent(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 					helper.calls == 0 || helper.calls != len(plan.Steps) {
 					t.Fatalf("Entry cleanup did not complete: %+v / helper calls %d", result, helper.calls)
 				}
-				evidence := etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, ExecutionEpoch: result.ExecutionEpoch,
-					Diagnostic: etcd.TaskResultDiagnosticNone}
+				evidence := testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: result.ExecutionEpoch,
+					Diagnostic: testtaskjournal.TaskResultDiagnosticNone}
 				finished := time.Now().UTC()
 				for range 2 {
-					if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, assigned.AssignmentID,
-						etcd.TaskStatusCompleted, evidence, finished); err != nil {
+					if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, assigned.AssignmentID, testtaskjournal.TaskStatusCompleted, evidence, finished); err != nil {
 						t.Fatal("Entry cleanup terminal acknowledgement/replay", err)
 					}
 				}
@@ -120,7 +132,7 @@ func runEntryRemovalAgent(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 }
 
 func sendEntryRemovalMaterialization(t *testing.T, ctx context.Context, pool *agent.WorkerPool,
-	resolver *controller.TaskMaterializationResolver, task etcd.TaskRecord, assignmentID string,
+	resolver *testtaskmaterialization.TaskMaterializationResolver, task etcd.TaskRecord, assignmentID string,
 	plan *agentpb.ExecutionPlan, step *agentpb.ExecutionStep) {
 	t.Helper()
 	source, err := resolver.ResolveMaterialization(ctx, task, plan, step)

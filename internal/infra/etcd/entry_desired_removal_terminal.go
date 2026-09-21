@@ -34,7 +34,8 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal terminal ownership changed")
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(read.Values[0].Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEntry || tombstone.TargetID != intent.EntryID ||
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEntry ||
+		tombstone.TargetID != intent.EntryID ||
 		tombstone.TaskID != task.ID ||
 		tombstone.TargetRevision != intent.EntryRevision ||
 		tombstone.Phase != entryRemovalTombstonePhase(intent) {

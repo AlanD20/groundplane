@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,7 +28,7 @@ func TestTaskOwnerIndexesPublishRawIdentityAtTheTaskRevision(t *testing.T) {
 	tenantID := ids.NewAt(ids.KindTenant, now, 2101)
 	projectID := ids.NewAt(ids.KindProject, now, 2102)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 2103)
-	owner, err := TenantProjectTaskOwner(tenantID, projectID)
+	owner, err := testtaskjournal.TenantProjectTaskOwner(tenantID, projectID)
 	if err != nil {
 		t.Fatalf("TenantProjectTaskOwner() error = %v", err)
 	}
@@ -34,11 +38,11 @@ func TestTaskOwnerIndexesPublishRawIdentityAtTheTaskRevision(t *testing.T) {
 	createOwnedLifecycleTask(t, repository, task)
 
 	keys := []string{
-		taskKey(task.ID),
-		taskWorkspaceTenantIndexKey(tenantID, task.ID),
-		taskEnvironmentIndexKey(environmentID, task.ID),
+		testtaskjournal.TaskStorageKey(task.ID),
+		testtaskjournal.TaskWorkspaceTenantIndexKey(tenantID, task.ID),
+		testtaskjournal.TaskEnvironmentIndexKey(environmentID, task.ID),
 	}
-	result, err := store.GetMany(ctx, GetManyRequest{Keys: keys})
+	result, err := store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 	if err != nil || len(result.Values) != len(keys) {
 		t.Fatalf("GetMany(owner indexes) = %#v, %v", result, err)
 	}
@@ -69,22 +73,22 @@ func TestTaskPruningRejectsMissingOwnerIndex(t *testing.T) {
 	if _, err := repository.AbortPendingTask(ctx, task.ID, finishedAt); err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
-	pruneAt := finishedAt.Add(TaskRetention).Add(time.Nanosecond)
+	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
 	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
-	key := taskWorkspacePlatformIndexKey(task.ID)
+	key := testtaskjournal.TaskWorkspacePlatformIndexKey(task.ID)
 	indexed, err := store.Get(ctx, key)
 	if err != nil || indexed.Entry == nil {
 		t.Fatalf("Get(owner index) = %#v, %v", indexed, err)
 	}
-	transaction, err := store.Transact(ctx, []Condition{{
+	transaction, err := store.Transact(ctx, []testkeyvalue.Condition{{
 		Key: key, ModRevision: indexed.Entry.ModRevision,
-	}}, []Mutation{{Type: MutationDelete, Key: key}})
+	}}, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}})
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("delete owner index = %#v, %v", transaction, err)
 	}
@@ -105,7 +109,7 @@ func TestTaskPruningStartRetainsVisibleOwnerMemberships(t *testing.T) {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	now := taskJournalTime().Add(2 * time.Minute)
-	owner, err := TenantProjectTaskOwner(
+	owner, err := testtaskjournal.TenantProjectTaskOwner(
 		ids.NewAt(ids.KindTenant, now, 2151),
 		ids.NewAt(ids.KindProject, now, 2152),
 	)
@@ -121,8 +125,8 @@ func TestTaskPruningStartRetainsVisibleOwnerMemberships(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
-	pruneAt := finishedAt.Add(TaskRetention).Add(time.Nanosecond)
-	idempotency, err := newIdempotencyRepository(store)
+	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
@@ -136,11 +140,7 @@ func TestTaskPruningStartRetainsVisibleOwnerMemberships(t *testing.T) {
 	if _, err := repository.GetTask(ctx, task.ID); err != nil {
 		t.Fatalf("GetTask(after prune start) error = %v", err)
 	}
-	for _, key := range []string{
-		taskKey(task.ID),
-		taskWorkspaceTenantIndexKey(owner.TenantID, task.ID),
-		taskEnvironmentIndexKey(owner.EnvironmentID, task.ID),
-	} {
+	for _, key := range []string{testtaskjournal.TaskStorageKey(task.ID), testtaskjournal.TaskWorkspaceTenantIndexKey(owner.TenantID, task.ID), testtaskjournal.TaskEnvironmentIndexKey(owner.EnvironmentID, task.ID)} {
 		result, err := store.Get(ctx, key)
 		if err != nil || result.Entry == nil {
 			t.Fatalf("Get(retained key %q) = %#v, %v", key, result, err)
@@ -162,7 +162,7 @@ func TestGetTaskRejectsMissingTenantAndEnvironmentMemberships(t *testing.T) {
 				t.Fatalf("newTaskRepository() error = %v", err)
 			}
 			now := taskJournalTime()
-			owner, err := TenantProjectTaskOwner(
+			owner, err := testtaskjournal.TenantProjectTaskOwner(
 				ids.NewAt(ids.KindTenant, now, 2201),
 				ids.NewAt(ids.KindProject, now, 2202),
 			)
@@ -173,17 +173,17 @@ func TestGetTaskRejectsMissingTenantAndEnvironmentMemberships(t *testing.T) {
 			task := validTaskRecord(now)
 			task.Owner = owner
 			createOwnedLifecycleTask(t, repository, task)
-			key := taskWorkspaceTenantIndexKey(owner.TenantID, task.ID)
+			key := testtaskjournal.TaskWorkspaceTenantIndexKey(owner.TenantID, task.ID)
 			if missingEnvironment {
-				key = taskEnvironmentIndexKey(owner.EnvironmentID, task.ID)
+				key = testtaskjournal.TaskEnvironmentIndexKey(owner.EnvironmentID, task.ID)
 			}
 			membership, err := store.Get(ctx, key)
 			if err != nil || membership.Entry == nil {
 				t.Fatalf("Get(membership) = %#v, %v", membership, err)
 			}
-			result, err := store.Transact(ctx, []Condition{{
+			result, err := store.Transact(ctx, []testkeyvalue.Condition{{
 				Key: key, ModRevision: membership.Entry.ModRevision,
-			}}, []Mutation{{Type: MutationDelete, Key: key}})
+			}}, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}})
 			if err != nil || !result.Succeeded {
 				t.Fatalf("delete membership = %#v, %v", result, err)
 			}
@@ -203,7 +203,7 @@ func TestTaskPruningDeletesTenantAndEnvironmentMemberships(t *testing.T) {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	now := taskJournalTime()
-	owner, err := TenantProjectTaskOwner(
+	owner, err := testtaskjournal.TenantProjectTaskOwner(
 		ids.NewAt(ids.KindTenant, now, 2251),
 		ids.NewAt(ids.KindProject, now, 2252),
 	)
@@ -218,22 +218,18 @@ func TestTaskPruningDeletesTenantAndEnvironmentMemberships(t *testing.T) {
 	if _, err := repository.AbortPendingTask(ctx, task.ID, finishedAt); err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
-	pruneAt := finishedAt.Add(TaskRetention).Add(time.Nanosecond)
+	pruneAt := finishedAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
 	if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpired(marker) = %d, %v", count, err)
 	}
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks() = %d, %v", count, err)
 	}
-	for _, key := range []string{
-		taskKey(task.ID),
-		taskWorkspaceTenantIndexKey(owner.TenantID, task.ID),
-		taskEnvironmentIndexKey(owner.EnvironmentID, task.ID),
-	} {
+	for _, key := range []string{testtaskjournal.TaskStorageKey(task.ID), testtaskjournal.TaskWorkspaceTenantIndexKey(owner.TenantID, task.ID), testtaskjournal.TaskEnvironmentIndexKey(owner.EnvironmentID, task.ID)} {
 		result, err := store.Get(ctx, key)
 		if err != nil || result.Entry != nil {
 			t.Fatalf("Get(pruned key %q) = %#v, %v", key, result, err)
@@ -252,7 +248,7 @@ func TestSystemInitiatedRetryPreservesSourceOwner(t *testing.T) {
 	}
 	now := taskJournalTime()
 	parent := validTaskRecord(now)
-	parent.Executor = TaskExecutorController
+	parent.Executor = testtaskjournal.TaskExecutorController
 	createLifecycleTask(t, repository, parent)
 	if _, found, err := repository.ClaimNextControllerTask(ctx, now); err != nil || !found {
 		t.Fatalf("ClaimNextControllerTask(parent) found/error = %v/%v", found, err)
@@ -262,7 +258,7 @@ func TestSystemInitiatedRetryPreservesSourceOwner(t *testing.T) {
 		t.Fatalf("GetSystemTaskInitiation() error = %v", err)
 	}
 
-	owner, err := TenantProjectTaskOwner(
+	owner, err := testtaskjournal.TenantProjectTaskOwner(
 		ids.NewAt(ids.KindTenant, now, 2301),
 		ids.NewAt(ids.KindProject, now, 2302),
 	)
@@ -287,13 +283,12 @@ func TestSystemInitiatedRetryPreservesSourceOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask(retry) error = %v", err)
 	}
-	if retry.Record.Owner != source.Owner || retry.Record.Actor != TaskActorSystem {
+	if retry.Record.Owner != source.Owner || retry.Record.Actor != testtaskjournal.TaskActorSystem {
 		t.Fatalf(
 			"system retry owner/actor = %#v/%q, want %#v/%q",
 			retry.Record.Owner,
 			retry.Record.Actor,
-			source.Owner,
-			TaskActorSystem,
+			source.Owner, testtaskjournal.TaskActorSystem,
 		)
 	}
 }
@@ -309,7 +304,7 @@ func TestSystemInitiatedRetryRejectsChangedControllerParent(t *testing.T) {
 	}
 	now := taskJournalTime()
 	parent := validTaskRecord(now)
-	parent.Executor = TaskExecutorController
+	parent.Executor = testtaskjournal.TaskExecutorController
 	createLifecycleTask(t, repository, parent)
 	if _, found, err := repository.ClaimNextControllerTask(ctx, now); err != nil || !found {
 		t.Fatalf("ClaimNextControllerTask(parent) found/error = %v/%v", found, err)
@@ -326,9 +321,7 @@ func TestSystemInitiatedRetryRejectsChangedControllerParent(t *testing.T) {
 	}
 	if _, err := repository.AcknowledgeControllerTask(
 		ctx,
-		parent.ID,
-		TaskStatusCompleted,
-		now.Add(3*time.Second),
+		parent.ID, testtaskjournal.TaskStatusCompleted, now.Add(3*time.Second),
 	); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(parent) error = %v", err)
 	}
@@ -377,7 +370,7 @@ func TestTaskRetryScopeUsesDurableOwnerInsteadOfOriginalMarker(t *testing.T) {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	now := taskJournalTime()
-	owner, err := TenantProjectTaskOwner(
+	owner, err := testtaskjournal.TenantProjectTaskOwner(
 		ids.NewAt(ids.KindTenant, now, 2321),
 		ids.NewAt(ids.KindProject, now, 2322),
 	)
@@ -392,7 +385,7 @@ func TestTaskRetryScopeUsesDurableOwnerInsteadOfOriginalMarker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTaskRetryScope() error = %v", err)
 	}
-	if scope != (TaskRetryScope{Kind: IdempotencyScopeEnvironment, ID: owner.EnvironmentID}) {
+	if scope != (TaskRetryScope{Kind: testidempotency.IdempotencyScopeEnvironment, ID: owner.EnvironmentID}) {
 		t.Fatalf("GetTaskRetryScope() = %#v", scope)
 	}
 }
@@ -404,12 +397,12 @@ func TestEnvironmentTaskInitiationRejectsMissingAndChangedTenant(t *testing.T) {
 	store := newMemoryTaskStore()
 	now := taskJournalTime()
 	tenantID := ids.NewAt(ids.KindTenant, now, 2331)
-	project := Versioned[ProjectRecord]{
-		Record: ProjectRecord{
-			ID: ids.NewAt(ids.KindProject, now, 2332), TenantID: tenantID, Kind: ProjectKindTenant,
+	project := testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
+		Record: testhierarchy.ProjectRecord{
+			ID: ids.NewAt(ids.KindProject, now, 2332), TenantID: tenantID, Kind: testhierarchy.ProjectKindTenant,
 		},
 	}
-	environment := Versioned[EnvironmentRecord]{Record: EnvironmentRecord{
+	environment := testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{Record: testhierarchy.EnvironmentRecord{
 		ID: ids.NewAt(ids.KindEnvironment, now, 2333), ProjectID: project.Record.ID,
 	}}
 	if _, err := loadTaskInitiationTenant(ctx, store, project); !errors.Is(
@@ -419,43 +412,43 @@ func TestEnvironmentTaskInitiationRejectsMissingAndChangedTenant(t *testing.T) {
 		t.Fatalf("loadTaskInitiationTenant(missing) error = %v, want state_conflict", err)
 	}
 
-	seedTaskRepositoryValue(t, store, tenantKey(tenantID), []byte("tenant-v1"))
-	seedTaskRepositoryValue(t, store, projectKey(project.Record.ID), []byte("project-v1"))
-	seedTaskRepositoryValue(t, store, environmentKey(environment.Record.ID), []byte("environment-v1"))
-	tenantRead, err := store.Get(ctx, tenantKey(tenantID))
+	seedTaskRepositoryValue(t, store, testhierarchy.TenantKey(tenantID), []byte("tenant-v1"))
+	seedTaskRepositoryValue(t, store, testhierarchy.ProjectKey(project.Record.ID), []byte("project-v1"))
+	seedTaskRepositoryValue(t, store, testhierarchy.EnvironmentKey(environment.Record.ID), []byte("environment-v1"))
+	tenantRead, err := store.Get(ctx, testhierarchy.TenantKey(tenantID))
 	if err != nil || tenantRead.Entry == nil {
 		t.Fatalf("Get(Tenant) = %#v, %v", tenantRead, err)
 	}
-	projectRead, err := store.Get(ctx, projectKey(project.Record.ID))
+	projectRead, err := store.Get(ctx, testhierarchy.ProjectKey(project.Record.ID))
 	if err != nil || projectRead.Entry == nil {
 		t.Fatalf("Get(Project) = %#v, %v", projectRead, err)
 	}
-	environmentRead, err := store.Get(ctx, environmentKey(environment.Record.ID))
+	environmentRead, err := store.Get(ctx, testhierarchy.EnvironmentKey(environment.Record.ID))
 	if err != nil || environmentRead.Entry == nil {
 		t.Fatalf("Get(Environment) = %#v, %v", environmentRead, err)
 	}
-	tenant := &Versioned[TenantRecord]{
-		Record: TenantRecord{ID: tenantID}, Revision: tenantRead.Entry.ModRevision,
+	tenant := &testkeyvalue.Versioned[testhierarchy.TenantRecord]{
+		Record: testhierarchy.TenantRecord{ID: tenantID}, Revision: tenantRead.Entry.ModRevision,
 	}
 	project.Revision = projectRead.Entry.ModRevision
 	environment.Revision = environmentRead.Entry.ModRevision
-	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, TaskActorOperator)
+	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, testtaskjournal.TaskActorOperator)
 	if err != nil {
 		t.Fatalf("newEnvironmentTaskInitiation() error = %v", err)
 	}
 	task := validTaskRecord(now.Add(time.Second))
-	task.Owner, err = EnvironmentTaskOwner(project.Record, environment.Record)
+	task.Owner, err = testtaskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
 	}
 	marker := pendingTaskMarker(task)
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord() error = %v", err)
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
@@ -463,21 +456,33 @@ func TestEnvironmentTaskInitiationRejectsMissingAndChangedTenant(t *testing.T) {
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
 		initiation,
-		[]Condition{
-			{Key: taskKey(task.ID)},
-			{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-			{Key: taskActiveOperationKey(task.OperationID)},
-			{Key: taskQueueKey(task.Executor, task.ID)},
-			{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-			{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		[]testkeyvalue.Condition{
+			{Key: testtaskjournal.TaskStorageKey(task.ID)},
+			{Key: testtaskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+			{Key: testtaskjournal.TaskActiveOperationKey(task.OperationID)},
+			{Key: testtaskjournal.TaskQueueKey(task.Executor, task.ID)},
+			{Key: testhierarchy.ProjectKey(project.Record.ID), ModRevision: project.Revision},
+			{Key: testhierarchy.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-			{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-			{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-			{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: taskValue},
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testtaskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+				Value: reference,
+			},
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testtaskjournal.TaskActiveOperationKey(task.OperationID),
+				Value: reference,
+			},
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testtaskjournal.TaskQueueKey(task.Executor, task.ID),
+				Value: reference,
+			},
 		},
-		func(int64, []*KeyValue) error {
+		func(int64, []*testkeyvalue.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "base task publication changed")
 		},
 	)
@@ -486,13 +491,15 @@ func TestEnvironmentTaskInitiationRejectsMissingAndChangedTenant(t *testing.T) {
 	}
 	changed, err := store.Transact(
 		ctx,
-		[]Condition{{Key: tenantKey(tenantID), ModRevision: tenant.Revision}},
-		[]Mutation{{Type: MutationPut, Key: tenantKey(tenantID), Value: []byte("tenant-v2")}},
+		[]testkeyvalue.Condition{{Key: testhierarchy.TenantKey(tenantID), ModRevision: tenant.Revision}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantKey(tenantID), Value: []byte("tenant-v2")},
+		},
 	)
 	if err != nil || !changed.Succeeded {
 		t.Fatalf("change Tenant = %#v, %v", changed, err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
@@ -509,20 +516,20 @@ func TestEnvironmentTaskInitiationRejectsMissingAndChangedTenant(t *testing.T) {
 
 func mustEnvironmentTaskOwner(
 	t *testing.T,
-	project ProjectRecord,
-	environment EnvironmentRecord,
-) TaskOwner {
+	project testhierarchy.ProjectRecord,
+	environment testhierarchy.EnvironmentRecord,
+) testtaskjournal.TaskOwner {
 	t.Helper()
-	owner, err := EnvironmentTaskOwner(project, environment)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
 	}
 	return owner
 }
 
-func mustProjectTaskOwner(t *testing.T, project ProjectRecord) TaskOwner {
+func mustProjectTaskOwner(t *testing.T, project testhierarchy.ProjectRecord) testtaskjournal.TaskOwner {
 	t.Helper()
-	owner, err := ProjectTaskOwner(project)
+	owner, err := testtaskjournal.ProjectTaskOwner(project)
 	if err != nil {
 		t.Fatalf("ProjectTaskOwner() error = %v", err)
 	}
@@ -533,25 +540,33 @@ func createOwnedLifecycleTask(t *testing.T, repository *TaskRepository, task Tas
 	t.Helper()
 	marker := pendingTaskMarker(task)
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord() error = %v", err)
 	}
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
-	conditions := []Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+	conditions := []testkeyvalue.Condition{
+		{Key: testtaskjournal.TaskStorageKey(task.ID)},
+		{Key: testtaskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: testtaskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: testtaskjournal.TaskQueueKey(task.Executor, task.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+	mutations := []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskActiveOperationKey(task.OperationID),
+			Value: reference,
+		},
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 	}
 	initiation, err := newTaskInitiation(task.Owner, task.Actor)
 	if err != nil {
@@ -562,12 +577,14 @@ func createOwnedLifecycleTask(t *testing.T, repository *TaskRepository, task Tas
 		initiation,
 		conditions,
 		mutations,
-		func(int64, []*KeyValue) error { return errs.New(errs.KindStateConflict, "test task exists") },
+		func(int64, []*testkeyvalue.KeyValue) error {
+			return errs.New(errs.KindStateConflict, "test task exists")
+		},
 	)
 	if err != nil {
 		t.Fatalf("newTaskIdempotencyMutationPlan() error = %v", err)
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}

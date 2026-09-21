@@ -314,7 +314,8 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 		return routeTaskChange{}, entryrecord.CorruptRecord()
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[1].Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEntry || tombstone.TargetID != intent.EntryID ||
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEntry ||
+		tombstone.TargetID != intent.EntryID ||
 		tombstone.TargetRevision != intent.EntryRevision ||
 		tombstone.TaskID != task.ID ||
 		tombstone.Phase != entryRemovalTombstonePhase(intent) {

@@ -16,6 +16,14 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testhierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -31,9 +39,9 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	tasks, _ := NewTaskRepository(store)
 	begin := hierarchyDeletionAcceptanceBegin(
 		now,
-		HierarchyDeletionTargetTenant,
+		testhierarchydeletion.HierarchyDeletionTargetTenant,
 		tenantID,
-		HierarchyDeletionOperationTenant,
+		testhierarchydeletion.HierarchyDeletionOperationTenant,
 		"1",
 	)
 	created, err := journal.Begin(ctx, begin)
@@ -48,12 +56,12 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	if err != nil {
 		t.Fatalf("FreezeMembership() error = %v", err)
 	}
-	planned := []HierarchyDeletionPlannedAction{{
+	planned := []testhierarchydeletionplanning.HierarchyDeletionPlannedAction{{
 		ID: "act_" + strings.Repeat("1", 32), NodeID: "tenant:root:finalize", Ordinal: 0,
-		ParentOperationID: begin.OperationID, ActionKind: HierarchyDeletionTenantFinalize,
+		ParentOperationID: begin.OperationID, ActionKind: testhierarchydeletion.HierarchyDeletionTenantFinalize,
 		TargetKind: "tenant", TargetID: tenantID, TargetRevision: frozen.RootRevision,
-		ProcedureInput: HierarchyDeletionProcedureInput{
-			Kind: HierarchyDeletionProcedureController, ControllerFinalizer: &frozen.RootProcedureInput,
+		ProcedureInput: testhierarchydeletionplanning.HierarchyDeletionProcedureInput{
+			Kind: testhierarchydeletion.HierarchyDeletionProcedureController, ControllerFinalizer: &frozen.RootProcedureInput,
 		},
 	}}
 	actions, err := journal.BindActions(ctx, created.Operation, planned)
@@ -77,25 +85,34 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	restarted := hierarchyDeletionAcceptanceStore(t, ctx, endpoint, prefix)
 	restartedTasks, _ := NewTaskRepository(restarted)
 	terminalAt := now.Add(3 * time.Second)
-	terminal, err := restartedTasks.AcknowledgeControllerTask(ctx, begin.TaskID, TaskStatusCompleted, terminalAt)
+	terminal, err := restartedTasks.AcknowledgeControllerTask(
+		ctx,
+		begin.TaskID,
+		testtaskjournal.TaskStatusCompleted,
+		terminalAt,
+	)
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 	}
-	if _, err := restartedTasks.AcknowledgeControllerTask(ctx, begin.TaskID, TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := restartedTasks.AcknowledgeControllerTask(ctx, begin.TaskID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
-	if result, err := restarted.Get(ctx, tenantKey(tenantID)); err != nil || result.Entry != nil {
+	if result, err := restarted.Get(ctx, testhierarchy.TenantKey(tenantID)); err != nil || result.Entry != nil {
 		t.Fatalf("Tenant after root ack = %#v/%v", result, err)
 	}
-	lockKey := HierarchyDeletionLockKey(string(HierarchyDeletionTargetTenant), tenantID)
+	lockKey := testhierarchydeletion.HierarchyDeletionLockKey(
+		string(testhierarchydeletion.HierarchyDeletionTargetTenant),
+		tenantID,
+	)
 	if result, err := restarted.Get(ctx, lockKey); err != nil || result.Entry != nil {
 		t.Fatalf("lock after root ack = %#v/%v", result, err)
 	}
 	operation, err = NewHierarchyDeletionRepositoryForTest(t, restarted).OperationByTask(ctx, begin.TaskID)
-	if err != nil || operation.Tombstone.Phase != HierarchyDeletionRetained || operation.Tombstone.Terminal == nil {
+	if err != nil || operation.Tombstone.Phase != testhierarchydeletion.HierarchyDeletionRetained ||
+		operation.Tombstone.Terminal == nil {
 		t.Fatalf("retained operation = %#v/%v", operation, err)
 	}
-	replayKey, err := HierarchyDeletionReplayTargetKey(begin.OperationID)
+	replayKey, err := testhierarchydeletion.HierarchyDeletionReplayTargetKey(begin.OperationID)
 	if err != nil {
 		t.Fatalf("HierarchyDeletionReplayTargetKey() error = %v", err)
 	}
@@ -104,17 +121,20 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 		t.Fatalf("retained replay locator = %#v/%v", replayValue, err)
 	}
 	var replayLocator HierarchyDeletionReplayLocator
-	if err := decodeHierarchyDeletionRecord(replayValue.Entry.Value, hierarchyDeletionSmallRecordBytes, &replayLocator); err != nil {
+	if err := testhierarchydeletion.DecodeHierarchyDeletionRecord(replayValue.Entry.Value, testhierarchydeletion.HierarchyDeletionSmallRecordBytes, &replayLocator); err != nil {
 		t.Fatalf("decode retained replay locator = %v", err)
 	}
-	replayLocator.OperationKind = HierarchyDeletionOperationProject
-	corruptReplay, err := encodeHierarchyDeletionRecord(replayLocator, hierarchyDeletionSmallRecordBytes)
+	replayLocator.OperationKind = testhierarchydeletion.HierarchyDeletionOperationProject
+	corruptReplay, err := testhierarchydeletion.EncodeHierarchyDeletionRecord(
+		replayLocator,
+		testhierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		t.Fatalf("encode corrupt replay locator = %v", err)
 	}
 	corruptResult, err := restarted.Transact(ctx,
-		[]Condition{{Key: replayKey, ModRevision: replayValue.Entry.ModRevision}},
-		[]Mutation{{Type: MutationPut, Key: replayKey, Value: corruptReplay}},
+		[]testkeyvalue.Condition{{Key: replayKey, ModRevision: replayValue.Entry.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: replayKey, Value: corruptReplay}},
 	)
 	if err != nil || !corruptResult.Succeeded {
 		t.Fatalf("corrupt replay locator write = %#v/%v", corruptResult, err)
@@ -125,11 +145,11 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	) {
 		t.Fatalf("corrupt hierarchy replay locator read error = %v, want internal", err)
 	}
-	completionSummaryKey, _ := HierarchyDeletionCompletionSummaryKey(begin.OperationID)
+	completionSummaryKey, _ := testhierarchydeletion.HierarchyDeletionCompletionSummaryKey(begin.OperationID)
 	if result, err := restarted.Get(ctx, completionSummaryKey); err != nil || result.Entry == nil {
 		t.Fatalf("completion summary = %#v/%v", result, err)
 	}
-	markerKey, err := idempotencyMarkerKey(*terminal.Record.idempotencyMarker)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(*terminal.Record.idempotencyMarker)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", err)
 	}
@@ -138,8 +158,8 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 		t.Fatalf("retained marker = %#v/%v", marker, err)
 	}
 	deleted, err := restarted.Transact(ctx,
-		[]Condition{{Key: markerKey, ModRevision: marker.Entry.ModRevision}},
-		[]Mutation{{Type: MutationDelete, Key: markerKey}},
+		[]testkeyvalue.Condition{{Key: markerKey, ModRevision: marker.Entry.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: markerKey}},
 	)
 	if err != nil || !deleted.Succeeded {
 		t.Fatalf("expire marker = %#v/%v", deleted, err)
@@ -162,10 +182,8 @@ func TestHierarchyDeletionRealEtcdRootAckIsParentLastAndReplaySafe(t *testing.T)
 	if !pruned {
 		t.Fatal("retained hierarchy deletion journal did not finish bounded pruning")
 	}
-	intentKey, _ := HierarchyDeletionIntentKey(begin.OperationID)
-	for _, key := range []string{
-		HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetTenant), tenantID),
-		intentKey,
+	intentKey, _ := testhierarchydeletion.HierarchyDeletionIntentKey(begin.OperationID)
+	for _, key := range []string{testhierarchydeletion.HierarchyDeletionTombstoneKey(string(testhierarchydeletion.HierarchyDeletionTargetTenant), tenantID), intentKey,
 		completionSummaryKey,
 	} {
 		persisted, err := restarted.Get(ctx, key)
@@ -187,9 +205,9 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 	tasks, _ := NewTaskRepository(store)
 	begin := hierarchyDeletionAcceptanceBegin(
 		now,
-		HierarchyDeletionTargetTenant,
+		testhierarchydeletion.HierarchyDeletionTargetTenant,
 		tenantID,
-		HierarchyDeletionOperationTenant,
+		testhierarchydeletion.HierarchyDeletionOperationTenant,
 		"6",
 	)
 	if _, err := journal.Begin(ctx, begin); err != nil {
@@ -199,7 +217,12 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 	if err != nil || !found || claim.Task.Record.ID != begin.TaskID {
 		t.Fatalf("ClaimNextControllerTask() = %#v/%t/%v", claim, found, err)
 	}
-	failed, err := tasks.AcknowledgeControllerTask(ctx, begin.TaskID, TaskStatusFailed, now.Add(2*time.Second))
+	failed, err := tasks.AcknowledgeControllerTask(
+		ctx,
+		begin.TaskID,
+		testtaskjournal.TaskStatusFailed,
+		now.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatalf("AcknowledgeControllerTask(failed) error = %v", err)
 	}
@@ -215,7 +238,7 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 		peerTasks, _ := NewTaskRepository(peerStore)
 		go func(repository *TaskRepository) {
 			marker := pendingRetryMarker(failed.Record, retryID, retryAt, "hierarchy-retry-key-0001")
-			result, err := repository.RetryTask(ctx, begin.TaskID, retryID, TaskActorOperator, marker)
+			result, err := repository.RetryTask(ctx, begin.TaskID, retryID, testtaskjournal.TaskActorOperator, marker)
 			results <- retryOutcome{result: result, err: err}
 		}(peerTasks)
 	}
@@ -248,7 +271,7 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 	restarted := hierarchyDeletionAcceptanceStore(t, ctx, endpoint, prefix)
 	restartedTasks, _ := NewTaskRepository(restarted)
 	replayMarker := pendingRetryMarker(failed.Record, retryID, retryAt, "hierarchy-retry-key-0001")
-	replay, err := restartedTasks.RetryTask(ctx, begin.TaskID, retryID, TaskActorOperator, replayMarker)
+	replay, err := restartedTasks.RetryTask(ctx, begin.TaskID, retryID, testtaskjournal.TaskActorOperator, replayMarker)
 	if err != nil {
 		t.Fatalf("RetryTask(restart replay) error = %v", err)
 	}
@@ -283,11 +306,11 @@ func TestHierarchyDeletionRealEtcdFailedAttemptConcurrentRetryTransfersOwnership
 		operation.Intent.TaskOperationID != begin.TaskOperationID {
 		t.Fatalf("retry operation ownership = %#v/%v", operation, err)
 	}
-	tenant, err := restarted.Get(ctx, tenantKey(tenantID))
+	tenant, err := restarted.Get(ctx, testhierarchy.TenantKey(tenantID))
 	if err != nil || tenant.Entry == nil {
 		t.Fatalf("retry Tenant = %#v/%v", tenant, err)
 	}
-	tenantRecord, err := decodeTenant(tenant.Entry.Value)
+	tenantRecord, err := testhierarchy.DecodeTenant(tenant.Entry.Value)
 	if err != nil || tenantRecord.DeletionTaskID != retryID {
 		t.Fatalf("retry Tenant deletion_task_id = %#v/%v", tenantRecord, err)
 	}
@@ -308,9 +331,9 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 	tasks, _ := NewTaskRepository(store)
 	begin := hierarchyDeletionAcceptanceBegin(
 		now,
-		HierarchyDeletionTargetEnvironment,
+		testhierarchydeletion.HierarchyDeletionTargetEnvironment,
 		environmentID,
-		HierarchyDeletionOperationEnvironment,
+		testhierarchydeletion.HierarchyDeletionOperationEnvironment,
 		"2",
 	)
 	created, err := journal.Begin(ctx, begin)
@@ -325,13 +348,13 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 	if err != nil {
 		t.Fatalf("FreezeMembership() error = %v", err)
 	}
-	planned := make([]HierarchyDeletionPlannedAction, 0, 3)
+	planned := make([]testhierarchydeletionplanning.HierarchyDeletionPlannedAction, 0, 3)
 	rootPrerequisites := make([]int64, 0, 2)
 	for index, componentID := range componentIDs {
-		var node *HierarchyDeletionMembershipNode
+		var node *testhierarchydeletionplanning.HierarchyDeletionMembershipNode
 		for nodeIndex := range frozen.Nodes {
 			if frozen.Nodes[nodeIndex].TargetID == componentID &&
-				frozen.Nodes[nodeIndex].ActionKind == HierarchyDeletionComponentRemove {
+				frozen.Nodes[nodeIndex].ActionKind == testhierarchydeletion.HierarchyDeletionComponentRemove {
 				node = &frozen.Nodes[nodeIndex]
 				break
 			}
@@ -339,7 +362,7 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 		if node == nil {
 			t.Fatalf("component %s missing from frozen membership", componentID)
 		}
-		planned = append(planned, HierarchyDeletionPlannedAction{
+		planned = append(planned, testhierarchydeletionplanning.HierarchyDeletionPlannedAction{
 			ID: "act_" + strings.Repeat(string(rune('3'+index)), 32), NodeID: node.NodeID,
 			Ordinal: int64(index), ParentOperationID: begin.OperationID,
 			ActionKind: node.ActionKind, TargetKind: node.TargetKind, TargetID: node.TargetID,
@@ -347,13 +370,13 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 		})
 		rootPrerequisites = append(rootPrerequisites, int64(index))
 	}
-	planned = append(planned, HierarchyDeletionPlannedAction{
+	planned = append(planned, testhierarchydeletionplanning.HierarchyDeletionPlannedAction{
 		ID: "act_" + strings.Repeat("5", 32), NodeID: "environment:root:finalize", Ordinal: 2,
-		ParentOperationID: begin.OperationID, ActionKind: HierarchyDeletionEnvironmentFinalize,
+		ParentOperationID: begin.OperationID, ActionKind: testhierarchydeletion.HierarchyDeletionEnvironmentFinalize,
 		TargetKind: "environment", TargetID: environmentID, TargetRevision: frozen.RootRevision,
 		PrerequisiteOrdinals: rootPrerequisites,
-		ProcedureInput: HierarchyDeletionProcedureInput{
-			Kind: HierarchyDeletionProcedureController, ControllerFinalizer: &frozen.RootProcedureInput,
+		ProcedureInput: testhierarchydeletionplanning.HierarchyDeletionProcedureInput{
+			Kind: testhierarchydeletion.HierarchyDeletionProcedureController, ControllerFinalizer: &frozen.RootProcedureInput,
 		},
 	})
 	actions, err := journal.BindActions(ctx, created.Operation, planned)
@@ -377,12 +400,12 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 		1,
 		now.Add(time.Second),
 	)
-	firstCompletionKey, _ := HierarchyDeletionCompletionKey(begin.OperationID, 0)
+	firstCompletionKey, _ := testhierarchydeletion.HierarchyDeletionCompletionKey(begin.OperationID, 0)
 	firstCompletion, err := store.Get(ctx, firstCompletionKey)
 	if err != nil || firstCompletion.Entry == nil {
 		t.Fatalf("first component completion = %#v/%v", firstCompletion, err)
 	}
-	firstDigest := hierarchyDeletionBytesDigest(firstCompletion.Entry.Value)
+	firstDigest := testhierarchydeletion.HierarchyDeletionBytesDigest(firstCompletion.Entry.Value)
 	if err := store.Close(); err != nil {
 		t.Fatalf("Close(before component restart) error = %v", err)
 	}
@@ -411,7 +434,7 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 	)
 	firstCompletion, err = restarted.Get(ctx, firstCompletionKey)
 	if err != nil || firstCompletion.Entry == nil ||
-		hierarchyDeletionBytesDigest(firstCompletion.Entry.Value) != firstDigest {
+		testhierarchydeletion.HierarchyDeletionBytesDigest(firstCompletion.Entry.Value) != firstDigest {
 		t.Fatalf("first receipt changed across retry = %#v/%v", firstCompletion, err)
 	}
 	root, operation, err := journal.ReadyAction(ctx, operation)
@@ -425,7 +448,7 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 		if primary, err := restarted.Get(ctx, componentKey(componentID)); err != nil || primary.Entry != nil {
 			t.Fatalf("component %s survived: %#v/%v", componentID, primary, err)
 		}
-		if owner, err := restarted.Get(ctx, componentEnvironmentOwnerKey(environmentID, componentID)); err != nil ||
+		if owner, err := restarted.Get(ctx, testcomponents.EnvironmentOwnerKey(environmentID, componentID)); err != nil ||
 			owner.Entry != nil {
 			t.Fatalf("component owner %s survived: %#v/%v", componentID, owner, err)
 		}
@@ -435,15 +458,15 @@ func TestHierarchyDeletionRealEtcdComponentReceiptsResumeAfterRestart(t *testing
 func consumeHierarchyDeletionComponent(
 	t *testing.T,
 	ctx context.Context,
-	store Store,
+	store testkeyvalue.Store,
 	journal *HierarchyDeletionRepository,
 	tasks *TaskRepository,
-	operation HierarchyDeletionOperation,
-	action HierarchyDeletionAction,
+	operation testhierarchydeletion.HierarchyDeletionOperation,
+	action testhierarchydeletion.HierarchyDeletionAction,
 	agentID string,
 	generation uint64,
 	at time.Time,
-) HierarchyDeletionOperation {
+) testhierarchydeletion.HierarchyDeletionOperation {
 	t.Helper()
 	ready, selected, err := journal.ReadyAction(ctx, operation)
 	if err != nil || ready == nil || ready.Ordinal != action.Ordinal {
@@ -469,15 +492,15 @@ func consumeHierarchyDeletionComponent(
 func consumePublishedHierarchyDeletionComponent(
 	t *testing.T,
 	ctx context.Context,
-	store Store,
+	store testkeyvalue.Store,
 	journal *HierarchyDeletionRepository,
 	tasks *TaskRepository,
-	operation HierarchyDeletionOperation,
-	action HierarchyDeletionAction,
+	operation testhierarchydeletion.HierarchyDeletionOperation,
+	action testhierarchydeletion.HierarchyDeletionAction,
 	agentID string,
 	generation uint64,
 	at time.Time,
-) HierarchyDeletionOperation {
+) testhierarchydeletion.HierarchyDeletionOperation {
 	t.Helper()
 	claim, found, err := tasks.ClaimNextTask(ctx, agentID, generation, at)
 	if err != nil || !found {
@@ -487,34 +510,36 @@ func consumePublishedHierarchyDeletionComponent(
 	if err != nil || component.Entry == nil {
 		t.Fatalf("component effect authority = %#v/%v", component, err)
 	}
-	record, err := decodeComponentRecord(component.Entry.Value)
+	record, err := testcomponents.DecodeRecord(component.Entry.Value)
 	if err != nil {
 		t.Fatalf("decodeComponentRecord() error = %v", err)
 	}
-	ownerKey := componentEnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID)
-	kindKey := componentEnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind)
-	indexes, err := store.GetMany(ctx, GetManyRequest{Keys: []string{ownerKey, kindKey}})
+	ownerKey := testcomponents.EnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID)
+	kindKey := testcomponents.EnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind)
+	indexes, err := store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{ownerKey, kindKey}})
 	if err != nil || indexes.Values[0] == nil || indexes.Values[1] == nil {
 		t.Fatalf("component indexes = %#v/%v", indexes, err)
 	}
 	transaction, err := store.Transact(ctx,
-		[]Condition{
+		[]testkeyvalue.Condition{
 			{Key: componentKey(record.Desired.ID), ModRevision: component.Entry.ModRevision},
 			{Key: ownerKey, ModRevision: indexes.Values[0].ModRevision},
 			{Key: kindKey, ModRevision: indexes.Values[1].ModRevision},
 		},
-		[]Mutation{
-			{Type: MutationDelete, Key: componentKey(record.Desired.ID)},
-			{Type: MutationDelete, Key: ownerKey}, {Type: MutationDelete, Key: kindKey},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationDelete, Key: componentKey(record.Desired.ID)},
+			{Type: testkeyvalue.MutationDelete, Key: ownerKey}, {Type: testkeyvalue.MutationDelete, Key: kindKey},
 		},
 	)
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("component Agent effect = %#v/%v", transaction, err)
 	}
-	result := TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone}
+	result := testtaskjournal.TaskResultRecord{
+		Kind:       testtaskjournal.TaskResultCompose,
+		Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+	}
 	if _, err := tasks.AcknowledgeTask(
-		ctx, agentID, generation, claim.Task.Record.ID, claim.Assignment.Record.AssignmentID,
-		TaskStatusCompleted, result, at.Add(time.Second),
+		ctx, agentID, generation, claim.Task.Record.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result, at.Add(time.Second),
 	); err != nil {
 		t.Fatalf("AcknowledgeAgentTask(%d) error = %v", action.Ordinal, err)
 	}
@@ -546,7 +571,7 @@ func hierarchyDeletionAcceptancePrefix(t *testing.T, suffix string) string {
 		"/"
 }
 
-func hierarchyDeletionAcceptanceStore(t *testing.T, ctx context.Context, endpoint, prefix string) Store {
+func hierarchyDeletionAcceptanceStore(t *testing.T, ctx context.Context, endpoint, prefix string) testkeyvalue.Store {
 	t.Helper()
 	store, err := New(ctx, []string{endpoint}, prefix)
 	if err != nil {
@@ -556,7 +581,7 @@ func hierarchyDeletionAcceptanceStore(t *testing.T, ctx context.Context, endpoin
 	return store
 }
 
-func NewHierarchyDeletionRepositoryForTest(t *testing.T, store Store) *HierarchyDeletionRepository {
+func NewHierarchyDeletionRepositoryForTest(t *testing.T, store testkeyvalue.Store) *HierarchyDeletionRepository {
 	t.Helper()
 	repository, err := NewHierarchyDeletionRepository(store)
 	if err != nil {
@@ -567,9 +592,9 @@ func NewHierarchyDeletionRepositoryForTest(t *testing.T, store Store) *Hierarchy
 
 func hierarchyDeletionAcceptanceBegin(
 	now time.Time,
-	targetKind HierarchyDeletionTargetKind,
+	targetKind testhierarchydeletion.HierarchyDeletionTargetKind,
 	targetID string,
-	operationKind HierarchyDeletionOperationKind,
+	operationKind testhierarchydeletion.HierarchyDeletionOperationKind,
 	digestDigit string,
 ) HierarchyDeletionBegin {
 	taskID := ids.NewAt(ids.KindTask, now, 100)
@@ -580,31 +605,35 @@ func hierarchyDeletionAcceptanceBegin(
 	body, _ := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: taskID})
-	marker := IdempotencyMarker{
-		Kind: IdempotencyMarkerTask, State: IdempotencyMarkerPending,
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeKind(targetKind), ScopeID: targetID,
+	marker := testidempotency.IdempotencyMarker{
+		Kind: testidempotency.IdempotencyMarkerTask, State: testidempotency.IdempotencyMarkerPending,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeKind(targetKind), ScopeID: targetID,
 			Method: http.MethodDelete, Route: "/" + string(targetKind) + "/{id}", Key: key,
 		},
-		Intent: ProtectedIntentRecord{
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
 		},
-		Response: IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		TaskID:   taskID, CreatedAt: now, UpdatedAt: now,
+		Response: testidempotency.IdempotencyResponse{
+			Status:      http.StatusAccepted,
+			ContentKind: "application/json",
+			Body:        body,
+		},
+		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 	}
 	var replayKind IdempotencyReplayTargetKind
 	switch targetKind {
-	case HierarchyDeletionTargetTenant:
-		replayKind = IdempotencyReplayTargetTenant
-	case HierarchyDeletionTargetProject:
-		replayKind = IdempotencyReplayTargetProject
-	case HierarchyDeletionTargetEnvironment:
-		replayKind = IdempotencyReplayTargetEnvironment
-	case HierarchyDeletionTargetBacking:
-		replayKind = IdempotencyReplayTargetBacking
+	case testhierarchydeletion.HierarchyDeletionTargetTenant:
+		replayKind = testidempotency.IdempotencyReplayTargetTenant
+	case testhierarchydeletion.HierarchyDeletionTargetProject:
+		replayKind = testidempotency.IdempotencyReplayTargetProject
+	case testhierarchydeletion.HierarchyDeletionTargetEnvironment:
+		replayKind = testidempotency.IdempotencyReplayTargetEnvironment
+	case testhierarchydeletion.HierarchyDeletionTargetBacking:
+		replayKind = testidempotency.IdempotencyReplayTargetBacking
 	}
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: replayKind, ID: targetID}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{Kind: replayKind, ID: targetID}
 	idempotencyDigest := sha256.Sum256([]byte(key))
 	return HierarchyDeletionBegin{
 		OperationID: "del_" + strings.Repeat(digestDigit, 32), TaskOperationID: taskOperationID,
@@ -614,24 +643,30 @@ func hierarchyDeletionAcceptanceBegin(
 	}
 }
 
-func seedHierarchyDeletionTenant(t *testing.T, ctx context.Context, store Store, tenantID, slug string) {
+func seedHierarchyDeletionTenant(t *testing.T, ctx context.Context, store testkeyvalue.Store, tenantID, slug string) {
 	t.Helper()
-	record := TenantRecord{ID: tenantID, Slug: slug, Name: slug}
-	value, _ := encodeTenant(record)
-	coordination, _ := encodeHierarchyCoordination(HierarchyCoordinationRecord{
-		Schema: 1, TargetKind: HierarchyDeletionTargetTenant, TargetID: tenantID, MutationEpoch: 1,
-	})
+	record := testhierarchy.TenantRecord{ID: tenantID, Slug: slug, Name: slug}
+	value, _ := testhierarchy.EncodeTenant(record)
+	coordination, _ := testhierarchydeletion.EncodeHierarchyCoordination(
+		testhierarchydeletion.HierarchyCoordinationRecord{
+			Schema: 1, TargetKind: testhierarchydeletion.HierarchyDeletionTargetTenant, TargetID: tenantID, MutationEpoch: 1,
+		},
+	)
 	transaction, err := store.Transact(
 		ctx,
-		[]Condition{
-			{Key: tenantKey(tenantID)},
-			{Key: tenantSlugKey(slug)},
-			{Key: HierarchyCoordinationKey("tenant", tenantID)},
+		[]testkeyvalue.Condition{
+			{Key: testhierarchy.TenantKey(tenantID)},
+			{Key: testhierarchy.TenantSlugKey(slug)},
+			{Key: testhierarchydeletion.HierarchyCoordinationKey("tenant", tenantID)},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: tenantKey(tenantID), Value: value},
-			{Type: MutationPut, Key: tenantSlugKey(slug), Value: []byte(tenantID)},
-			{Type: MutationPut, Key: HierarchyCoordinationKey("tenant", tenantID), Value: coordination},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantKey(tenantID), Value: value},
+			{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantSlugKey(slug), Value: []byte(tenantID)},
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testhierarchydeletion.HierarchyCoordinationKey("tenant", tenantID),
+				Value: coordination,
+			},
 		},
 	)
 	if err != nil || !transaction.Succeeded {
@@ -642,54 +677,64 @@ func seedHierarchyDeletionTenant(t *testing.T, ctx context.Context, store Store,
 func seedHierarchyDeletionEnvironment(
 	t *testing.T,
 	ctx context.Context,
-	store Store,
+	store testkeyvalue.Store,
 	now time.Time,
 	tenantID, projectID, environmentID string,
 	componentIDs []string,
 ) {
 	t.Helper()
-	tenant := TenantRecord{ID: tenantID, Slug: "tenant", Name: "Tenant"}
-	project := ProjectRecord{
+	tenant := testhierarchy.TenantRecord{ID: tenantID, Slug: "tenant", Name: "Tenant"}
+	project := testhierarchy.ProjectRecord{
 		ID:       projectID,
 		TenantID: tenantID,
 		Slug:     "project",
 		Name:     "Project",
-		Kind:     ProjectKindTenant,
+		Kind:     testhierarchy.ProjectKindTenant,
 	}
-	environment := EnvironmentRecord{
+	environment := testhierarchy.EnvironmentRecord{
 		ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.50.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
-		ProvisioningState: EnvironmentProvisioningReady,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      ids.NewAt(ids.KindTask, now, 15), CreatedAt: now,
 	}
-	tenantValue, _ := encodeTenant(tenant)
-	projectValue, _ := encodeProject(project)
-	environmentValue, _ := encodeEnvironment(environment)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: tenantKey(tenantID), Value: tenantValue},
-		{Type: MutationPut, Key: tenantSlugKey(tenant.Slug), Value: []byte(tenantID)},
-		{Type: MutationPut, Key: projectKey(projectID), Value: projectValue},
-		{Type: MutationPut, Key: projectSlugKey(project), Value: []byte(projectID)},
-		{Type: MutationPut, Key: projectOwnerKey(project), Value: []byte(projectID)},
-		{Type: MutationPut, Key: environmentKey(environmentID), Value: environmentValue},
-		{Type: MutationPut, Key: environmentNameKey(projectID, environment.Name), Value: []byte(environmentID)},
-		{Type: MutationPut, Key: environmentOwnerKey(projectID, environmentID), Value: []byte(environmentID)},
+	tenantValue, _ := testhierarchy.EncodeTenant(tenant)
+	projectValue, _ := testhierarchy.EncodeProject(project)
+	environmentValue, _ := testhierarchy.EncodeEnvironment(environment)
+	mutations := []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantKey(tenantID), Value: tenantValue},
+		{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantSlugKey(tenant.Slug), Value: []byte(tenantID)},
+		{Type: testkeyvalue.MutationPut, Key: testhierarchy.ProjectKey(projectID), Value: projectValue},
+		{Type: testkeyvalue.MutationPut, Key: testhierarchy.ProjectSlugKey(project), Value: []byte(projectID)},
+		{Type: testkeyvalue.MutationPut, Key: testhierarchy.ProjectOwnerKey(project), Value: []byte(projectID)},
+		{Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentKey(environmentID), Value: environmentValue},
 		{
-			Type: MutationPut, Key: environmentBlueprintHeadKey(environmentID),
+			Type:  testkeyvalue.MutationPut,
+			Key:   testhierarchy.EnvironmentNameKey(projectID, environment.Name),
+			Value: []byte(environmentID),
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   environmentOwnerKey(projectID, environmentID),
+			Value: []byte(environmentID),
+		},
+		{
+			Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environmentID),
 			Value: []byte(`{"schema":1,"record_id":"` + environment.CreateTaskID + `"}`),
 		},
 	}
-	for _, coordination := range []HierarchyCoordinationRecord{
-		{Schema: 1, TargetKind: HierarchyDeletionTargetTenant, TargetID: tenantID, MutationEpoch: 1},
-		{Schema: 1, TargetKind: HierarchyDeletionTargetProject, TargetID: projectID, MutationEpoch: 1},
-		{Schema: 1, TargetKind: HierarchyDeletionTargetEnvironment, TargetID: environmentID, MutationEpoch: 1},
+	for _, coordination := range []testhierarchydeletion.HierarchyCoordinationRecord{
+		{Schema: 1, TargetKind: testhierarchydeletion.HierarchyDeletionTargetTenant, TargetID: tenantID, MutationEpoch: 1},
+		{Schema: 1, TargetKind: testhierarchydeletion.HierarchyDeletionTargetProject, TargetID: projectID, MutationEpoch: 1},
+		{Schema: 1, TargetKind: testhierarchydeletion.HierarchyDeletionTargetEnvironment, TargetID: environmentID, MutationEpoch: 1},
 	} {
-		value, _ := encodeHierarchyCoordination(coordination)
+		value, _ := testhierarchydeletion.EncodeHierarchyCoordination(coordination)
 		mutations = append(
-			mutations,
-			Mutation{
-				Type:  MutationPut,
-				Key:   HierarchyCoordinationKey(string(coordination.TargetKind), coordination.TargetID),
+			mutations, testkeyvalue.Mutation{
+				Type: testkeyvalue.MutationPut,
+				Key: testhierarchydeletion.HierarchyCoordinationKey(
+					string(coordination.TargetKind),
+					coordination.TargetID,
+				),
 				Value: value,
 			},
 		)
@@ -699,21 +744,21 @@ func seedHierarchyDeletionEnvironment(
 		if index == 1 {
 			kind = core.ComponentKindEdgeCloudflare
 		}
-		record := ComponentRecord{Desired: ComponentDesiredRecord{
+		record := testcomponents.Record{Desired: testcomponents.DesiredRecord{
 			ID: componentID, Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID, Kind: kind, Enabled: true,
 		}}
-		value, _ := encodeComponentRecord(record)
+		value, _ := testcomponents.EncodeRecord(record)
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationPut, Key: componentKey(componentID), Value: value},
-			Mutation{
-				Type:  MutationPut,
-				Key:   componentEnvironmentOwnerKey(environmentID, componentID),
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: componentKey(componentID), Value: value},
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testcomponents.EnvironmentOwnerKey(environmentID, componentID),
 				Value: []byte(componentID),
 			},
-			Mutation{
-				Type:  MutationPut,
-				Key:   componentEnvironmentKindKey(environmentID, kind),
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testcomponents.EnvironmentKindKey(environmentID, kind),
 				Value: []byte(componentID),
 			},
 		)

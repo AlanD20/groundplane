@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -22,8 +24,8 @@ func TestTaskMaterializationEnvironmentAcceptsClosedRemovalTargets(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			task := TaskRecord{
-				Executor: TaskExecutorAgent, Type: TaskRemove, Target: target,
-				Params: map[string]string{TaskMaterializationEnvironmentParam: environmentID},
+				Executor: testtaskjournal.TaskExecutorAgent, Type: testtaskjournal.TaskRemove, Target: target,
+				Params: map[string]string{testtaskjournal.TaskMaterializationEnvironmentParam: environmentID},
 			}
 			got, materializes, err := taskMaterializationEnvironment(task)
 			if err != nil || !materializes || got != environmentID {
@@ -31,16 +33,16 @@ func TestTaskMaterializationEnvironmentAcceptsClosedRemovalTargets(t *testing.T)
 			}
 		})
 	}
-	for name, taskType := range map[string]TaskType{
-		"volume add": TaskCreate, "volume edit": TaskUpdate, "volume remove": TaskRemove,
+	for name, taskType := range map[string]testtaskjournal.TaskType{
+		"volume add": testtaskjournal.TaskCreate, "volume edit": testtaskjournal.TaskUpdate, "volume remove": testtaskjournal.TaskRemove,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			task := TaskRecord{
-				Executor: TaskExecutorAgent, Type: taskType, Target: ids.NewAt(ids.KindVolume, now, 4),
+				Executor: testtaskjournal.TaskExecutorAgent, Type: taskType, Target: ids.NewAt(ids.KindVolume, now, 4),
 				Params: map[string]string{
-					TaskMaterializationEnvironmentParam: environmentID,
-					TaskResourceKindParam:               TaskResourceVolume,
+					testtaskjournal.TaskMaterializationEnvironmentParam: environmentID,
+					testtaskjournal.TaskResourceKindParam:               testtaskjournal.TaskResourceVolume,
 				},
 			}
 			got, materializes, err := taskMaterializationEnvironment(task)
@@ -50,8 +52,8 @@ func TestTaskMaterializationEnvironmentAcceptsClosedRemovalTargets(t *testing.T)
 		})
 	}
 	serviceTask := TaskRecord{
-		Executor: TaskExecutorAgent, Type: TaskRemove, Target: ids.NewAt(ids.KindService, now, 5),
-		Params: map[string]string{TaskMaterializationEnvironmentParam: environmentID},
+		Executor: testtaskjournal.TaskExecutorAgent, Type: testtaskjournal.TaskRemove, Target: ids.NewAt(ids.KindService, now, 5),
+		Params: map[string]string{testtaskjournal.TaskMaterializationEnvironmentParam: environmentID},
 	}
 	if _, _, err := taskMaterializationEnvironment(serviceTask); !isKind(err, errs.KindValidationFailed) {
 		t.Fatalf("taskMaterializationEnvironment(Service removal) error = %v", err)
@@ -70,11 +72,11 @@ func TestAttachDetachWriterClaimHasNoBlueprintAppliedAuthority(t *testing.T) {
 	}
 	now := time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 10)
-	for index, taskType := range []TaskType{TaskAttach, TaskDetach} {
+	for index, taskType := range []testtaskjournal.TaskType{testtaskjournal.TaskAttach, testtaskjournal.TaskDetach} {
 		task := TaskRecord{
-			ID: ids.NewAt(ids.KindTask, now, int64(index+11)), Executor: TaskExecutorAgent,
+			ID: ids.NewAt(ids.KindTask, now, int64(index+11)), Executor: testtaskjournal.TaskExecutorAgent,
 			Type: taskType, RenderGeneration: 7,
-			Params: map[string]string{TaskMutationEnvironmentParam: environmentID},
+			Params: map[string]string{testtaskjournal.TaskMutationEnvironmentParam: environmentID},
 		}
 		writer, conditions, err := repository.prepareTaskMaterializationWriter(ctx, task, environmentID, 0)
 		if err != nil || len(conditions) != 0 || writer.BlueprintAppliedPredecessor != nil {
@@ -89,10 +91,10 @@ func TestAttachDetachWriterClaimHasNoBlueprintAppliedAuthority(t *testing.T) {
 		}
 	}
 	blueprint := TaskRecord{
-		ID: ids.NewAt(ids.KindTask, now, 13), Executor: TaskExecutorAgent,
-		Type: TaskUpdate, RenderGeneration: 1,
-		Owner:  TaskOwner{EnvironmentID: environmentID},
-		Params: map[string]string{TaskReleasePublicationParam: ids.NewULID()},
+		ID: ids.NewAt(ids.KindTask, now, 13), Executor: testtaskjournal.TaskExecutorAgent,
+		Type: testtaskjournal.TaskUpdate, RenderGeneration: 1,
+		Owner:  testtaskjournal.TaskOwner{EnvironmentID: environmentID},
+		Params: map[string]string{testreleaserender.TaskReleasePublicationParam: ids.NewULID()},
 	}
 	if validateTaskMaterializationWriterForTask(
 		taskMaterializationWriter(blueprint, environmentID, nil), blueprint, environmentID,

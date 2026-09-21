@@ -101,7 +101,8 @@ func (repository *TaskRepository) retryTask(
 			return IdempotencyTransactionResult{}, err
 		}
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != retry.ID ||
 		!marker.CreatedAt.Equal(retry.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {

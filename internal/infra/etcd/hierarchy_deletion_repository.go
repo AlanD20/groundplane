@@ -362,8 +362,10 @@ func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
 		!begin.DeadlineAt.Equal(begin.CreatedAt.Add(hierarchydeletion.AttemptTimeout)) {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion publication is invalid")
 	}
-	if begin.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || begin.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		begin.Marker.TaskID != begin.TaskID || !begin.Marker.CreatedAt.Equal(begin.CreatedAt) ||
+	if begin.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		begin.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		begin.Marker.TaskID != begin.TaskID ||
+		!begin.Marker.CreatedAt.Equal(begin.CreatedAt) ||
 		!begin.Marker.UpdatedAt.Equal(begin.CreatedAt) ||
 		idempotencyrecord.ValidateIdempotencyMarker(begin.Marker) != nil {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion idempotency evidence is invalid")

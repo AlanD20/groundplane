@@ -7,13 +7,16 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func TestConnectorRecordNormalizesCompleteS3Decision(t *testing.T) {
 	// Rationale: persistence must not leave endpoint addressing or object-key
 	// prefix behavior to an SDK default.
-	record, err := NewConnectorRecord(core.Connector{
+	record, err := testconnectors.NewRecord(core.Connector{
 		ID: ids.NewAt(
 			ids.KindConnector,
 			time.Date(2026, 8, 23, 13, 0, 0, 0, time.UTC),
@@ -47,7 +50,7 @@ func TestConnectorRecordNormalizesCompleteS3Decision(t *testing.T) {
 	record.Connector.Credentials[core.ConnectorCredentialAccessKey] = core.ConnectorCredential{
 		Kind: core.ConnectorCredentialSecretRef,
 	}
-	if _, err := encodeConnectorRecord(record); func() bool {
+	if _, err := testconnectors.EncodeRecord(record); func() bool {
 		kind, ok := errs.KindOf(err)
 		return !ok || kind != errs.KindValidationFailed
 	}() {
@@ -65,7 +68,7 @@ func TestConnectorRepositoryCreatesListsAndReadsEncryptedCredentialsAtomically(t
 	}
 	now := time.Date(2026, 8, 23, 14, 0, 0, 0, time.UTC)
 	record := testConnectorRecord(t, environment.Record.ID, now, 10, "primary-backups")
-	credentials, err := NewConnectorEncryptedCredentials(
+	credentials, err := testconnectors.NewEncryptedCredentials(
 		record.Connector.ID,
 		[]byte("age-ciphertext"),
 	)
@@ -92,7 +95,7 @@ func TestConnectorRepositoryCreatesListsAndReadsEncryptedCredentialsAtomically(t
 	}
 	clear(storedCredentials.Ciphertext)
 	page, err := repository.ListConnectors(
-		context.Background(), environment.Record.ID, PageRequest{Limit: 10},
+		context.Background(), environment.Record.ID, testkeyvalue.PageRequest{Limit: 10},
 	)
 	if err != nil || len(page.Items) != 1 ||
 		page.Items[0].Record.Connector.ID != record.Connector.ID {
@@ -106,7 +109,7 @@ func TestConnectorRepositoryCreatesListsAndReadsEncryptedCredentialsAtomically(t
 		11,
 		"primary-backups",
 	)
-	duplicateCredentials, err := NewConnectorEncryptedCredentials(
+	duplicateCredentials, err := testconnectors.NewEncryptedCredentials(
 		duplicate.Connector.ID, []byte("other-ciphertext"),
 	)
 	if err != nil {
@@ -118,10 +121,7 @@ func TestConnectorRepositoryCreatesListsAndReadsEncryptedCredentialsAtomically(t
 	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindStateConflict {
 		t.Fatalf("CreateConnector(duplicate name) error = %v", err)
 	}
-	for _, key := range []string{
-		connectorRecordKey(duplicate.Connector.ID),
-		connectorCredentialValueKey(duplicate.Connector.ID),
-	} {
+	for _, key := range []string{testconnectors.RecordKey(duplicate.Connector.ID), testconnectors.CredentialValueKey(duplicate.Connector.ID)} {
 		value, getErr := store.Get(context.Background(), key)
 		if getErr != nil || value.Entry != nil {
 			t.Fatalf("duplicate artifact %q = %#v, %v", key, value, getErr)
@@ -142,7 +142,7 @@ func TestConnectorRepositoryRejectsCrossEnvironmentOwnership(t *testing.T) {
 		31,
 		"wrong-owner",
 	)
-	credentials, err := NewConnectorEncryptedCredentials(record.Connector.ID, []byte("ciphertext"))
+	credentials, err := testconnectors.NewEncryptedCredentials(record.Connector.ID, []byte("ciphertext"))
 	if err != nil {
 		t.Fatalf("NewConnectorEncryptedCredentials() error = %v", err)
 	}
@@ -156,7 +156,7 @@ func TestConnectorRepositoryRejectsCrossEnvironmentOwnership(t *testing.T) {
 
 func testConnectorHierarchy(
 	t *testing.T,
-) (*memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {
+) (*memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], testkeyvalue.Versioned[testhierarchy.ProjectRecord]) {
 	t.Helper()
 	_, store, environment, project, _ := routeRepositoryTestHierarchy(t)
 	return store, environment, project
@@ -168,9 +168,9 @@ func testConnectorRecord(
 	now time.Time,
 	seed int64,
 	name string,
-) ConnectorRecord {
+) testconnectors.Record {
 	t.Helper()
-	record, err := NewConnectorRecord(core.Connector{
+	record, err := testconnectors.NewRecord(core.Connector{
 		ID:            ids.NewAt(ids.KindConnector, now, seed),
 		EnvironmentID: environmentID,
 		Name:          name,

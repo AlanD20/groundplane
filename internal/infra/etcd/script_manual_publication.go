@@ -39,15 +39,18 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err := validateScriptExecutionSources(sources, execution); err != nil {
 		return result, err
 	}
-	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+		execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 		!execution.ActiveReference ||
 		execution.SourceMembershipCount != 0 {
 		return result, errs.New(errs.KindValidationFailed, "new Script execution record is invalid")
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || task.ID != execution.CurrentTaskID ||
-		task.OperationID != execution.OperationID || len(task.Steps) != 1 ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
+		task.ID != execution.CurrentTaskID ||
+		task.OperationID != execution.OperationID ||
+		len(task.Steps) != 1 ||
 		task.Steps[0].ID != execution.StepID {
 		return result, errs.New(errs.KindValidationFailed, "Script execution marker does not match its Task")
 	}

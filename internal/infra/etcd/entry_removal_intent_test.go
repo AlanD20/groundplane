@@ -7,6 +7,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: an Entry removal retry must retain the exact immutable value
@@ -16,7 +21,7 @@ func TestEntryRemovalIntentCodecPinsGenerationCandidate(t *testing.T) {
 	now := time.Date(2026, 8, 23, 10, 30, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
 	entryID := ids.NewAt(ids.KindEnvEntry, now, 2)
-	record, err := NewEntryRecord(environmentID, core.EnvEntry{
+	record, err := testentries.NewRecord(environmentID, core.EnvEntry{
 		ID: entryID, Kind: core.EntryKindEnv, Key: "APP_ENV",
 		Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: "production"},
 		Exposure: []string{"all"},
@@ -24,37 +29,41 @@ func TestEntryRemovalIntentCodecPinsGenerationCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEntryRecord() error = %v", err)
 	}
-	projection := Versioned[EnvironmentComposeProjection]{
-		Record: EnvironmentComposeProjection{
+	projection := testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+		Record: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 4),
-			RenderGeneration: 4, Entries: []EntryRecord{record},
+			RenderGeneration: 4, Entries: []testentries.Record{record},
 		},
 		Revision: 9, ReadRevision: 10,
 	}
 	projection.Record = withTestEnvironmentComposeArtifact(projection.Record)
-	intent, err := NewEntryRemovalIntent(
+	intent, err := testenvironmentchanges.NewEntryRemovalIntent(
 		ids.NewAt(ids.KindTask, now, 5), environmentID, entryID, 8, &projection, now,
 	)
 	if err != nil {
 		t.Fatalf("NewEntryRemovalIntent() error = %v", err)
 	}
-	encoded, err := encodeEntryRemovalIntent(intent)
+	encoded, err := testenvironmentchanges.EncodeEntryRemovalIntent(intent)
 	if err != nil {
 		t.Fatalf("encodeEntryRemovalIntent() error = %v", err)
 	}
-	decoded, err := decodeEntryRemovalIntent(encoded)
+	decoded, err := testenvironmentchanges.DecodeEntryRemovalIntent(encoded)
 	if err != nil || decoded.CurrentProjectionRevision != 9 || decoded.CurrentProjection == nil ||
 		decoded.CandidateProjection == nil || decoded.CandidateProjection.RenderGeneration != 5 ||
 		len(decoded.CurrentProjection.Entries) != 1 || len(decoded.CandidateProjection.Entries) != 0 {
 		t.Fatalf("decodeEntryRemovalIntent() = %#v, %v", decoded, err)
 	}
 	terminalAt := now.Add(time.Minute)
-	terminal, err := terminalEntryRemovalIntent(decoded, TaskStatusCompleted, terminalAt)
+	terminal, err := testenvironmentchanges.TerminalEntryRemovalIntent(
+		decoded,
+		testtaskjournal.TaskStatusCompleted,
+		terminalAt,
+	)
 	if err != nil || terminal.TerminalAt == nil || !terminal.TerminalAt.Equal(terminalAt) {
 		t.Fatalf("terminalEntryRemovalIntent() = %#v, %v", terminal, err)
 	}
 	corrupt := bytes.Replace(encoded, []byte(`"render_generation":5`), []byte(`"render_generation":6`), 1)
-	if _, err := decodeEntryRemovalIntent(corrupt); err == nil {
+	if _, err := testenvironmentchanges.DecodeEntryRemovalIntent(corrupt); err == nil {
 		t.Fatal("decodeEntryRemovalIntent(corrupt candidate) error = nil")
 	}
 }
@@ -65,15 +74,15 @@ func TestEntryRemovalIntentWithoutAppliedEntryHasNoProjectionCandidate(t *testin
 	t.Parallel()
 	now := time.Date(2026, 8, 23, 11, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
-	projection := Versioned[EnvironmentComposeProjection]{
-		Record: EnvironmentComposeProjection{
+	projection := testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+		Record: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 2),
 			RenderGeneration: 3,
 		},
 		Revision: 7, ReadRevision: 7,
 	}
 	projection.Record = withTestEnvironmentComposeArtifact(projection.Record)
-	intent, err := NewEntryRemovalIntent(
+	intent, err := testenvironmentchanges.NewEntryRemovalIntent(
 		ids.NewAt(ids.KindTask, now, 3), environmentID, ids.NewAt(ids.KindEnvEntry, now, 4), 6, &projection, now,
 	)
 	if err != nil {

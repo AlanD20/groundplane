@@ -79,8 +79,10 @@ func DecodeRunnerRemovalIntent(value []byte) (RunnerRemovalIntent, error) {
 
 func ValidateRunnerDeletionTombstone(record deletionrecord.DeletionTombstoneRecord) error {
 	if record.TargetKind != deletionrecord.DeletionTargetRunner || ids.Validate(ids.KindRunner, record.TargetID) != nil ||
-		record.TargetRevision <= 0 || ids.Validate(ids.KindTask, record.TaskID) != nil ||
-		record.Phase != deletionrecord.DeletionPhaseFinalizing || record.Checkpoint != (deletionrecord.DeletionCheckpoint{}) ||
+		record.TargetRevision <= 0 ||
+		ids.Validate(ids.KindTask, record.TaskID) != nil ||
+		record.Phase != deletionrecord.DeletionPhaseFinalizing ||
+		record.Checkpoint != (deletionrecord.DeletionCheckpoint{}) ||
 		!recordcodec.IsCanonicalUTC(record.CreatedAt) ||
 		!recordcodec.IsCanonicalUTC(record.UpdatedAt) ||
 		record.UpdatedAt.Before(record.CreatedAt) {

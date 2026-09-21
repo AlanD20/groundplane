@@ -5,23 +5,24 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: retry and repository copies must preserve immutable Script evidence
 // on its exact Task step while ordinary steps remain unannotated.
 func TestTaskStepScriptIdentityValidatesAndClones(t *testing.T) {
 	at := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
-	steps := []TaskStepRecord{
-		{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, 1)},
-		{Kind: TaskStepScript, ID: ids.NewAt(ids.KindStep, at, 2),
+	steps := []testtaskjournal.TaskStepRecord{
+		{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, 1)},
+		{Kind: testtaskjournal.TaskStepScript, ID: ids.NewAt(ids.KindStep, at, 2),
 			ScriptID:   ids.NewAt(ids.KindScript, at, 3),
 			ScriptSlug: "migrate-schema",
 		},
 	}
-	if err := validateTaskSteps(steps); err != nil {
+	if err := testtaskjournal.ValidateTaskSteps(steps); err != nil {
 		t.Fatalf("validateTaskSteps() error = %v", err)
 	}
-	cloned := cloneTaskSteps(steps)
+	cloned := testtaskjournal.CloneTaskSteps(steps)
 	steps[1].ScriptID = ""
 	steps[1].ScriptSlug = ""
 	if cloned[0].ScriptID != "" || cloned[0].ScriptSlug != "" ||
@@ -36,7 +37,7 @@ func TestTaskStepScriptIdentityRejectsPartialOrInvalidMetadata(t *testing.T) {
 	at := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
 	stepID := ids.NewAt(ids.KindStep, at, 10)
 	scriptID := ids.NewAt(ids.KindScript, at, 11)
-	tests := map[string]TaskStepRecord{
+	tests := map[string]testtaskjournal.TaskStepRecord{
 		"missing Script slug": {ID: stepID, ScriptID: scriptID},
 		"missing Script id":   {ID: stepID, ScriptSlug: "migrate-schema"},
 		"invalid Script id":   {ID: stepID, ScriptID: "scr_invalid", ScriptSlug: "migrate-schema"},
@@ -44,7 +45,7 @@ func TestTaskStepScriptIdentityRejectsPartialOrInvalidMetadata(t *testing.T) {
 	}
 	for name, step := range tests {
 		t.Run(name, func(t *testing.T) {
-			if err := validateTaskSteps([]TaskStepRecord{step}); err == nil {
+			if err := testtaskjournal.ValidateTaskSteps([]testtaskjournal.TaskStepRecord{step}); err == nil {
 				t.Fatalf("validateTaskSteps(%#v) succeeded", step)
 			}
 		})
@@ -59,7 +60,7 @@ func TestTaskStepScriptIdentityRejectsAmbiguousDuplicates(t *testing.T) {
 	stepB := ids.NewAt(ids.KindStep, at, 21)
 	scriptA := ids.NewAt(ids.KindScript, at, 22)
 	scriptB := ids.NewAt(ids.KindScript, at, 23)
-	tests := map[string][]TaskStepRecord{
+	tests := map[string][]testtaskjournal.TaskStepRecord{
 		"duplicate Script id": {
 			{ID: stepA, ScriptID: scriptA, ScriptSlug: "migrate-schema"},
 			{ID: stepB, ScriptID: scriptA, ScriptSlug: "seed-database"},
@@ -71,7 +72,7 @@ func TestTaskStepScriptIdentityRejectsAmbiguousDuplicates(t *testing.T) {
 	}
 	for name, steps := range tests {
 		t.Run(name, func(t *testing.T) {
-			if err := validateTaskSteps(steps); err == nil {
+			if err := testtaskjournal.ValidateTaskSteps(steps); err == nil {
 				t.Fatalf("validateTaskSteps(%#v) succeeded", steps)
 			}
 		})

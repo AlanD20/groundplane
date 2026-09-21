@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,26 +24,26 @@ func TestHierarchyCreationPublishesDeletionCoordination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 191), Slug: "deletion", Name: "Deletion"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 191), Slug: "deletion", Name: "Deletion"}
 	if _, err := hierarchy.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	project := ProjectRecord{
+	project := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 192), TenantID: tenant.ID,
-		Slug: "deletion", Name: "Deletion", Kind: ProjectKindTenant,
+		Slug: "deletion", Name: "Deletion", Kind: testhierarchy.ProjectKindTenant,
 	}
 	if _, err := hierarchy.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 	now := time.Date(2026, 8, 28, 17, 30, 0, 0, time.UTC)
-	environment := EnvironmentRecord{
+	environment := testhierarchy.EnvironmentRecord{
 		ID: hierarchyTestID(ids.KindEnvironment, 193), ProjectID: project.ID,
 		Name: "deletion", NetworkPool: "10.120.253.0/24",
 		VolumeDir: "/var/lib/groundplane/vol/" + tenant.ID + "/" + project.ID + "/" + hierarchyTestID(
 			ids.KindEnvironment,
 			193,
 		),
-		ProvisioningState: EnvironmentProvisioningReady,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      ids.NewAt(ids.KindTask, now, 194),
 		CreatedAt:         now,
 	}
@@ -53,9 +56,9 @@ func TestHierarchyCreationPublishesDeletionCoordination(t *testing.T) {
 	}
 	begin := hierarchyDeletionCreationTestBegin(
 		now,
-		HierarchyDeletionTargetEnvironment,
+		testhierarchydeletion.HierarchyDeletionTargetEnvironment,
 		environment.ID,
-		HierarchyDeletionOperationEnvironment,
+		testhierarchydeletion.HierarchyDeletionOperationEnvironment,
 		"e",
 	)
 	result, err := journal.Begin(ctx, begin)
@@ -69,9 +72,9 @@ func TestHierarchyCreationPublishesDeletionCoordination(t *testing.T) {
 
 func hierarchyDeletionCreationTestBegin(
 	now time.Time,
-	targetKind HierarchyDeletionTargetKind,
+	targetKind testhierarchydeletion.HierarchyDeletionTargetKind,
 	targetID string,
-	operationKind HierarchyDeletionOperationKind,
+	operationKind testhierarchydeletion.HierarchyDeletionOperationKind,
 	digestDigit string,
 ) HierarchyDeletionBegin {
 	taskID := ids.NewAt(ids.KindTask, now, 195)
@@ -80,25 +83,29 @@ func hierarchyDeletionCreationTestBegin(
 	ciphertext := []byte("protected-" + key)
 	digest := sha256.Sum256(ciphertext)
 	body := []byte(`{"task_id":"` + taskID + `"}`)
-	marker := IdempotencyMarker{
-		Kind: IdempotencyMarkerTask, State: IdempotencyMarkerPending,
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeKind(targetKind), ScopeID: targetID,
+	marker := testidempotency.IdempotencyMarker{
+		Kind: testidempotency.IdempotencyMarkerTask, State: testidempotency.IdempotencyMarkerPending,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeKind(targetKind), ScopeID: targetID,
 			Method: http.MethodDelete, Route: "/" + string(targetKind) + "/{id}", Key: key,
 		},
-		Intent: ProtectedIntentRecord{
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
 		},
-		Response: IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		TaskID:   taskID, CreatedAt: now, UpdatedAt: now,
+		Response: testidempotency.IdempotencyResponse{
+			Status:      http.StatusAccepted,
+			ContentKind: "application/json",
+			Body:        body,
+		},
+		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 	}
 	idempotencyDigest := sha256.Sum256([]byte(key))
 	return HierarchyDeletionBegin{
 		OperationID: "del_" + strings.Repeat(digestDigit, 32), TaskOperationID: taskOperationID,
 		OperationKind: operationKind, TargetKind: targetKind, TargetID: targetID,
 		TaskID: taskID, IdempotencyHash: hex.EncodeToString(idempotencyDigest[:]), Marker: marker,
-		CreatedAt: now, DeadlineAt: now.Add(hierarchyDeletionAttemptTimeout),
+		CreatedAt: now, DeadlineAt: now.Add(testhierarchydeletion.AttemptTimeout),
 	}
 }
 
@@ -109,16 +116,16 @@ func TestHierarchyCreateTenantIdempotentCommitsResourceIndexesAndMarker(t *testi
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	record := TenantRecord{
+	record := testhierarchy.TenantRecord{
 		ID: hierarchyTestID(ids.KindTenant, 201), Slug: "acme", Name: "Acme",
 		Description: "Production workloads",
 	}
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPost,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPost,
 		Route: "/tenants", Key: "tenant-create-key-0001",
 	}
-	marker.Response = IdempotencyResponse{
+	marker.Response = testidempotency.IdempotencyResponse{
 		Status: http.StatusCreated, ContentKind: "application/json", Body: []byte(`{"id":"tenant"}`),
 	}
 
@@ -132,9 +139,7 @@ func TestHierarchyCreateTenantIdempotentCommitsResourceIndexesAndMarker(t *testi
 	}
 	assertHierarchyCoordinationRecord(
 		t,
-		repository.store.(*memoryHierarchyStore),
-		HierarchyDeletionTargetTenant,
-		record.ID,
+		repository.store.(*memoryHierarchyStore), testhierarchydeletion.HierarchyDeletionTargetTenant, record.ID,
 		stored.Revision,
 	)
 	replayed, err := repository.CreateTenantIdempotent(context.Background(), record, marker)
@@ -171,7 +176,7 @@ func TestHierarchyMutateTenantIdempotentCommitsEditsAndSlugMoves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	record := TenantRecord{
+	record := testhierarchy.TenantRecord{
 		ID: hierarchyTestID(ids.KindTenant, 211), Slug: "acme", Name: "Acme",
 	}
 	created, err := repository.CreateTenant(context.Background(), record)
@@ -179,11 +184,11 @@ func TestHierarchyMutateTenantIdempotentCommitsEditsAndSlugMoves(t *testing.T) {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
 	editMarker := testDirectMarker()
-	editMarker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPatch,
+	editMarker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPatch,
 		Route: "/tenants/{id}", Key: "tenant-edit-key-0001",
 	}
-	editMarker.Response = IdempotencyResponse{
+	editMarker.Response = testidempotency.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"name":"Acme Inc"}`),
 	}
 	editedRecord := record
@@ -198,11 +203,11 @@ func TestHierarchyMutateTenantIdempotentCommitsEditsAndSlugMoves(t *testing.T) {
 	}
 
 	renameMarker := testDirectMarker()
-	renameMarker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPost,
+	renameMarker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPost,
 		Route: "/tenants/{id}/rename", Key: "tenant-rename-key-0001",
 	}
-	renameMarker.Response = IdempotencyResponse{
+	renameMarker.Response = testidempotency.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"slug":"acme-inc"}`),
 	}
 	renamedRecord := editedRecord

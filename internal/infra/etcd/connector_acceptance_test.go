@@ -3,12 +3,16 @@ package etcd
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -23,10 +27,10 @@ func TestC15ConnectorRestartPaginationOwnershipAndNameUniqueness(t *testing.T) {
 		t.Fatalf("newConnectorRepository() error = %v", err)
 	}
 	now := time.Date(2026, 8, 26, 8, 0, 0, 0, time.UTC)
-	create := func(seed int64, name string) Versioned[ConnectorRecord] {
+	create := func(seed int64, name string) testkeyvalue.Versioned[testconnectors.Record] {
 		t.Helper()
 		record := testConnectorRecord(t, environment.Record.ID, now, seed, name)
-		credentials, createErr := NewConnectorEncryptedCredentials(record.Connector.ID, []byte("age-ciphertext"))
+		credentials, createErr := testconnectors.NewEncryptedCredentials(record.Connector.ID, []byte("age-ciphertext"))
 		if createErr != nil {
 			t.Fatalf("NewConnectorEncryptedCredentials() error = %v", createErr)
 		}
@@ -40,7 +44,7 @@ func TestC15ConnectorRestartPaginationOwnershipAndNameUniqueness(t *testing.T) {
 
 	first := create(1, "first")
 	second := create(2, "second")
-	page, err := repository.ListConnectors(ctx, environment.Record.ID, PageRequest{Limit: 1})
+	page, err := repository.ListConnectors(ctx, environment.Record.ID, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil || len(page.Items) != 1 || page.NextCursor == "" {
 		t.Fatalf("ListConnectors(first page) = %#v, %v", page, err)
 	}
@@ -50,7 +54,7 @@ func TestC15ConnectorRestartPaginationOwnershipAndNameUniqueness(t *testing.T) {
 		t.Fatalf("newConnectorRepository(restart) error = %v", err)
 	}
 	continued, err := restarted.ListConnectors(
-		ctx, environment.Record.ID, PageRequest{Limit: 1, Cursor: page.NextCursor},
+		ctx, environment.Record.ID, testkeyvalue.PageRequest{Limit: 1, Cursor: page.NextCursor},
 	)
 	if err != nil || continued.Revision != page.Revision || len(continued.Items) != 1 ||
 		continued.Items[0].Record.Connector.ID != second.Record.Connector.ID ||
@@ -63,13 +67,16 @@ func TestC15ConnectorRestartPaginationOwnershipAndNameUniqueness(t *testing.T) {
 		t.Fatalf("GetConnector(after restart) = %#v, %v", shown, err)
 	}
 	otherEnvironmentID := ids.NewAt(ids.KindEnvironment, now, 20)
-	isolated, err := restarted.ListConnectors(ctx, otherEnvironmentID, PageRequest{Limit: 10})
+	isolated, err := restarted.ListConnectors(ctx, otherEnvironmentID, testkeyvalue.PageRequest{Limit: 10})
 	if err != nil || len(isolated.Items) != 0 {
 		t.Fatalf("ListConnectors(other Environment) = %#v, %v", isolated, err)
 	}
 
 	duplicate := testConnectorRecord(t, environment.Record.ID, now, 21, "first")
-	duplicateCredentials, err := NewConnectorEncryptedCredentials(duplicate.Connector.ID, []byte("other-ciphertext"))
+	duplicateCredentials, err := testconnectors.NewEncryptedCredentials(
+		duplicate.Connector.ID,
+		[]byte("other-ciphertext"),
+	)
 	if err != nil {
 		t.Fatalf("NewConnectorEncryptedCredentials(duplicate) error = %v", err)
 	}
@@ -94,7 +101,7 @@ func TestC15ConnectorRemovalDistinguishesDisabledAndEnabledPolicyReferences(t *t
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newConnectorDeletionFixture(t)
-			policy := BackupPolicyRecord{
+			policy := testbackuppolicy.BackupPolicyRecord{
 				EnvironmentID: fixture.environment.Record.ID,
 				Enabled:       test.enabled,
 				Frequency:     "*-*-* 03:00:00",
@@ -104,21 +111,24 @@ func TestC15ConnectorRemovalDistinguishesDisabledAndEnabledPolicyReferences(t *t
 				SourceIDs:     []string{fixture.source.Record.ID},
 				UpdatedAt:     fixture.now,
 			}
-			value, err := encodeBackupPolicyRecord(policy)
+			value, err := testbackuppolicy.EncodeBackupPolicyRecord(policy)
 			if err != nil {
 				t.Fatalf("encodeBackupPolicyRecord() error = %v", err)
 			}
 			defer clear(value)
-			connectorDeletionPutKey(t, fixture.store, backupPolicyKey(fixture.environment.Record.ID), value)
+			connectorDeletionPutKey(
+				t,
+				fixture.store,
+				testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID),
+				value,
+			)
 			if test.enabled {
 				connectorDeletionPutKey(
 					t,
-					fixture.store,
-					backupPolicyConnectorReferenceKey(
+					fixture.store, testbackuppolicy.BackupPolicyConnectorReferenceKey(
 						fixture.connector.Record.Connector.ID,
 						fixture.environment.Record.ID,
-					),
-					[]byte(fixture.environment.Record.ID),
+					), []byte(fixture.environment.Record.ID),
 				)
 			}
 			repository, err := newConnectorRepository(fixture.store)
@@ -160,23 +170,26 @@ func TestC15ConnectorRemovalDistinguishesDisabledAndEnabledPolicyReferences(t *t
 func TestC15ConnectorDurableValidationMatchesExecutionAuthority(t *testing.T) {
 	now := time.Date(2026, 8, 26, 9, 0, 0, 0, time.UTC)
 	base := testConnectorRecord(t, ids.NewAt(ids.KindEnvironment, now, 1), now, 2, "strict")
-	for name, mutate := range map[string]func(*ConnectorRecord){
-		"endpoint bound": func(record *ConnectorRecord) {
+	for name, mutate := range map[string]func(*testconnectors.Record){
+		"endpoint bound": func(record *testconnectors.Record) {
 			record.Connector.Endpoint = "https://" + strings.Repeat("a", 2041)
 		},
-		"numeric bucket":  func(record *ConnectorRecord) { record.Connector.Bucket = "999.999.999.999" },
-		"reserved bucket": func(record *ConnectorRecord) { record.Connector.Bucket = "xn--groundplane" },
-		"prefix bound": func(record *ConnectorRecord) {
+		"numeric bucket":  func(record *testconnectors.Record) { record.Connector.Bucket = "999.999.999.999" },
+		"reserved bucket": func(record *testconnectors.Record) { record.Connector.Bucket = "xn--groundplane" },
+		"prefix bound": func(record *testconnectors.Record) {
 			record.Connector.Prefix = strings.Repeat("a", 1024) + "/"
 		},
-		"region bound":      func(record *ConnectorRecord) { record.Connector.Region = strings.Repeat("r", 65) },
-		"region whitespace": func(record *ConnectorRecord) { record.Connector.Region = "eu west 1" },
+		"region bound":      func(record *testconnectors.Record) { record.Connector.Region = strings.Repeat("r", 65) },
+		"region whitespace": func(record *testconnectors.Record) { record.Connector.Region = "eu west 1" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := base
-			candidate.Connector.Credentials = cloneConnectorCredentials(base.Connector.Credentials)
+			candidate.Connector.Credentials = maps.Clone(base.Connector.Credentials)
 			mutate(&candidate)
-			if err := validateConnectorRecord(candidate); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+			if err := testconnectors.ValidateRecord(candidate); !errors.Is(
+				err,
+				errs.New(errs.KindValidationFailed, ""),
+			) {
 				t.Fatalf("validateConnectorRecord() error = %v", err)
 			}
 		})

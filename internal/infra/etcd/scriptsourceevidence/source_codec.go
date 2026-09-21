@@ -213,8 +213,10 @@ func decodeScriptRunnerSnapshotSource(
 	digest := sha256.Sum256(snapshot.Payload)
 	var payload agentpb.ResolvedRunnerSnapshot
 	if err != nil || snapshot.SnapshotID == "" || key != scriptexecutions.ScriptRunnerSnapshotKey(snapshot.SnapshotID) ||
-		snapshot.ExecutionID != reference.ScriptExecutionID || snapshot.SHA256 != reference.SourceDigest ||
-		hex.EncodeToString(digest[:]) != reference.SourceDigest || proto.Unmarshal(snapshot.Payload, &payload) != nil ||
+		snapshot.ExecutionID != reference.ScriptExecutionID ||
+		snapshot.SHA256 != reference.SourceDigest ||
+		hex.EncodeToString(digest[:]) != reference.SourceDigest ||
+		proto.Unmarshal(snapshot.Payload, &payload) != nil ||
 		payload.SnapshotId != snapshot.SnapshotID ||
 		payload.ScriptExecutionId != snapshot.ExecutionID ||
 		!scriptRunnerSnapshotSourceOwnerMatches(&payload, reference) {

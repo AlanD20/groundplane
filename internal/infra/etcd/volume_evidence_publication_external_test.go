@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 )
@@ -175,7 +176,7 @@ func stageRealVolumePublicationEvidence(t *testing.T, fixture *etcd.VolumePolicy
 	}
 	// Remove only this hermetic fixture's preseeded snapshot, then exercise the
 	// actual bounded producer. This is not a production cleanup implementation.
-	if _, err := fixture.Store.Transact(ctx, nil, []etcd.Mutation{{Type: etcd.MutationDelete, Key: removal.EvidenceRoot(runtime.OperationID), Prefix: true}}); err != nil {
+	if _, err := fixture.Store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: removal.EvidenceRoot(runtime.OperationID), Prefix: true}}); err != nil {
 		t.Fatal(err)
 	}
 	switch changed {

@@ -9,6 +9,16 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testenvironmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -34,10 +44,10 @@ func TestServiceMutationUsesFixedRevisionAndAdvancesEpoch(t *testing.T) {
 		context.Background(),
 		EnvironmentServiceDesiredPublication{
 			Project: project, Environment: environment, ExpectedHeadRevision: 0,
-			Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
+			Claim: claim, Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
 			}, Projection: fixture.Projection.Record,
-			Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
+			Change: testblueprints.EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
 		},
 	)
 	if err != nil {
@@ -83,7 +93,7 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 	_, store, environment, project := serviceRepositoryTestHierarchy(t)
 	environment = readyServiceMutationEnvironment(t, ctx, store, environment)
 	zoneID := ids.NewAt(ids.KindNetwork, testAttachTime, 950)
-	zone, err := NewZoneRecord(environment.Record.ID, core.Zone{
+	zone, err := testzones.NewRecord(environment.Record.ID, core.Zone{
 		ID: zoneID, Name: "frontend", Subnet: "10.40.10.0/29", Internal: true,
 		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environment.Record.ID,
 	})
@@ -95,10 +105,10 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 		Strategy: core.StrategyRecreate, Zones: []string{zone.Desired.Name},
 	}
 	fixture := seedDesiredServiceFixture(t, ctx, store, environment.Record.ID, desired, "", 952, false, false)
-	fixture.Projection.Record.DesiredZones = []EnvironmentZoneProjection{{
+	fixture.Projection.Record.DesiredZones = []testenvironmentprojection.EnvironmentZoneProjection{{
 		EnvironmentID: environment.Record.ID, Desired: zone.Desired,
 	}}
-	selectedZone, err := joinEnvironmentZone(fixture.Projection, fixture.Projection.Record.DesiredZones[0])
+	selectedZone, err := testenvironmentqueries.JoinZone(fixture.Projection, fixture.Projection.Record.DesiredZones[0])
 	if err != nil {
 		t.Fatalf("joinEnvironmentZone() error = %v", err)
 	}
@@ -111,11 +121,13 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 	}
 	result, err := repository.PublishEnvironmentServiceDesiredRevisionDirect(ctx, EnvironmentServiceDesiredPublication{
 		Project: project, Environment: environment, ExpectedHeadRevision: 0,
-		Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
+		Claim: claim, Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
 		}, Projection: fixture.Projection.Record,
-		Change:     EnvironmentBlueprintServiceChange{Record: record},
-		References: ServiceMutationReferences{Zones: []Versioned[ZoneRecord]{selectedZone}}, Marker: marker,
+		Change: testblueprints.EnvironmentBlueprintServiceChange{Record: record},
+		References: testservices.ServiceMutationReferences{
+			Zones: []testkeyvalue.Versioned[testzones.Record]{selectedZone},
+		}, Marker: marker,
 	})
 	if err != nil {
 		t.Fatalf("PublishEnvironmentServiceDesiredRevisionDirect(selected-head Zone) error = %v", err)
@@ -140,7 +152,7 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 	}
 	replacementDesired := current.Record.Desired
 	replacementDesired.Image = "app:v2"
-	replacement, err := ReplaceServiceDesired(current.Record, replacementDesired)
+	replacement, err := testservices.ReplaceServiceDesired(current.Record, replacementDesired)
 	if err != nil {
 		t.Fatalf("ReplaceServiceDesired() error = %v", err)
 	}
@@ -158,7 +170,7 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 	secondFixture.Projection.Record.RenderGeneration = published.Record.RenderGeneration + 1
 	secondFixture.Claim.RenderGeneration = secondFixture.Projection.Record.RenderGeneration
 	secondFixture.Projection.Record.DesiredZones = append(
-		[]EnvironmentZoneProjection(nil),
+		[]testenvironmentprojection.EnvironmentZoneProjection(nil),
 		fixture.Projection.Record.DesiredZones...)
 	secondMarker := directServiceMutationMarker(
 		environment.Record.ID,
@@ -168,8 +180,8 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 	secondClaim := stageDirectServicePublicationForTest(t, ctx, store, secondFixture, secondMarker, published.Revision)
 	tombstoneValue := []byte("zone-removal-in-progress")
 	defer clear(tombstoneValue)
-	tombstoneResult, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: deletionTombstoneKey("zone", zoneID), Value: tombstoneValue,
+	tombstoneResult, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testdeletions.TombstoneKey("zone", zoneID), Value: tombstoneValue,
 	}})
 	if err != nil || !tombstoneResult.Succeeded {
 		t.Fatalf("seed Zone deletion tombstone = %#v/%v", tombstoneResult, err)
@@ -178,11 +190,13 @@ func TestServiceMutationSelectedHeadZoneUsesTombstoneFence(t *testing.T) {
 		ctx,
 		EnvironmentServiceDesiredPublication{
 			Project: project, Environment: environment, ExpectedHeadRevision: published.Revision,
-			Claim: secondClaim, Revision: EnvironmentDesiredRevisionIdentity{
+			Claim: secondClaim, Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: environment.Record.ID, RevisionID: secondFixture.Projection.Record.RevisionID,
 			}, Projection: secondFixture.Projection.Record,
-			Change:     EnvironmentBlueprintServiceChange{Current: &current, Record: replacement},
-			References: ServiceMutationReferences{Zones: []Versioned[ZoneRecord]{selectedZone}}, Marker: secondMarker,
+			Change: testblueprints.EnvironmentBlueprintServiceChange{Current: &current, Record: replacement},
+			References: testservices.ServiceMutationReferences{
+				Zones: []testkeyvalue.Versioned[testzones.Record]{selectedZone},
+			}, Marker: secondMarker,
 		},
 	)
 	if err != nil {
@@ -211,9 +225,11 @@ func TestServiceMutationEpochRaceAndHeldLockPerformNoDomainWrite(t *testing.T) {
 	record := fixture.Service.Record
 	marker := directServiceMutationMarker(environment.Record.ID, record.Desired.ID, "epoch-race")
 	claim := stageDirectServicePublicationForTest(t, context.Background(), store, fixture, marker, 0)
-	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
-		EnvironmentID: environment.Record.ID,
-	})
+	epochValue, err := testbackupruntime.EncodeEnvironmentMutationEpochRecord(
+		testbackupruntime.EnvironmentMutationEpochRecord{
+			EnvironmentID: environment.Record.ID,
+		},
+	)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentMutationEpochRecord() error = %v", err)
 	}
@@ -231,10 +247,10 @@ func TestServiceMutationEpochRaceAndHeldLockPerformNoDomainWrite(t *testing.T) {
 		context.Background(),
 		EnvironmentServiceDesiredPublication{
 			Project: project, Environment: environment, ExpectedHeadRevision: 0,
-			Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
+			Claim: claim, Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
 			}, Projection: fixture.Projection.Record,
-			Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
+			Change: testblueprints.EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
 		},
 	)
 	if err != nil {
@@ -244,9 +260,7 @@ func TestServiceMutationEpochRaceAndHeldLockPerformNoDomainWrite(t *testing.T) {
 		outcome != IdempotencyKnownConflict || !isKind(conflict, errs.KindStateConflict) {
 		t.Fatalf("direct Service epoch race = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	for _, key := range []string{
-		environmentBlueprintHeadKey(environment.Record.ID), serviceRuntimeKey(record.Desired.ID),
-	} {
+	for _, key := range []string{testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), testservices.ServiceRuntimeKey(record.Desired.ID)} {
 		stored, getErr := store.Get(context.Background(), key)
 		if getErr != nil || stored.Entry != nil {
 			t.Fatalf("failed direct Service publication key %q = %#v, %v", key, stored, getErr)
@@ -287,10 +301,13 @@ func TestServiceMutationEpochRaceAndHeldLockPerformNoDomainWrite(t *testing.T) {
 		context.Background(),
 		EnvironmentServiceDesiredPublication{
 			Project: project, Environment: environment, ExpectedHeadRevision: projection.Revision,
-			Claim: lockedClaim, Revision: EnvironmentDesiredRevisionIdentity{
+			Claim: lockedClaim, Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: environment.Record.ID, RevisionID: lockedClaim.RevisionID,
 			}, Projection: projection.Record,
-			Change: EnvironmentBlueprintServiceChange{Current: &joined, Record: joined.Record}, Marker: lockedMarker,
+			Change: testblueprints.EnvironmentBlueprintServiceChange{
+				Current: &joined,
+				Record:  joined.Record,
+			}, Marker: lockedMarker,
 		},
 	)
 	if !isKind(err, errs.KindResourceInUse) || store.revision != storeRevisionBefore {
@@ -308,15 +325,15 @@ func TestServiceMutationRejectsCrossTenantHierarchySpoof(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant, err := hierarchy.CreateTenant(context.Background(), TenantRecord{
+	tenant, err := hierarchy.CreateTenant(context.Background(), testhierarchy.TenantRecord{
 		ID: ids.NewAt(ids.KindTenant, serviceRecordTestTime(), 930), Slug: "other", Name: "Other",
 	})
 	if err != nil {
 		t.Fatalf("CreateTenant(other) error = %v", err)
 	}
-	otherProject, err := hierarchy.CreateProject(context.Background(), ProjectRecord{
+	otherProject, err := hierarchy.CreateProject(context.Background(), testhierarchy.ProjectRecord{
 		ID: ids.NewAt(ids.KindProject, serviceRecordTestTime(), 931), TenantID: tenant.Record.ID,
-		Slug: "other", Name: "Other", Kind: ProjectKindTenant,
+		Slug: "other", Name: "Other", Kind: testhierarchy.ProjectKindTenant,
 	})
 	if err != nil {
 		t.Fatalf("CreateProject(other) error = %v", err)
@@ -341,10 +358,10 @@ func TestServiceMutationRejectsCrossTenantHierarchySpoof(t *testing.T) {
 		context.Background(),
 		EnvironmentServiceDesiredPublication{
 			Project: otherProject, Environment: forgedEnvironment, ExpectedHeadRevision: 0,
-			Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
+			Claim: claim, Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
 			}, Projection: fixture.Projection.Record,
-			Change: EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
+			Change: testblueprints.EnvironmentBlueprintServiceChange{Record: record}, Marker: marker,
 		},
 	)
 	if err == nil {
@@ -357,16 +374,16 @@ func TestServiceMutationRejectsCrossTenantHierarchySpoof(t *testing.T) {
 	}
 }
 
-func directServiceMutationMarker(environmentID string, serviceID string, key string) IdempotencyMarker {
+func directServiceMutationMarker(environmentID string, serviceID string, key string) testidempotency.IdempotencyMarker {
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment, ScopeID: environmentID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: http.MethodPatch, Route: "/services/{id}", Key: "service-fixture-" + key,
 	}
 	marker.CreatedAt = testAttachTime
 	marker.UpdatedAt = testAttachTime
 	marker.TerminalAt = testAttachTime
-	marker.RetainUntil = testAttachTime.Add(markerRetention)
+	marker.RetainUntil = testAttachTime.Add(testidempotency.MarkerRetention)
 	marker.Response.Body = []byte(`{"id":"` + serviceID + `"}`)
 	return marker
 }
@@ -376,29 +393,31 @@ func stageDirectServicePublicationForTest(
 	ctx context.Context,
 	store hierarchyStore,
 	fixture desiredServiceFixture,
-	marker IdempotencyMarker,
+	marker testidempotency.IdempotencyMarker,
 	expectedHeadRevision int64,
-) EnvironmentBlueprintStageClaim {
+) testblueprints.EnvironmentBlueprintStageClaim {
 	t.Helper()
 	claim := fixture.Claim
 	claim.Locator = marker.Locator
 	claim.Intent = marker.Intent
 	claim.TaskID = fixture.Projection.Record.RevisionID
-	claim.SourceKind = EnvironmentBlueprintSourceMutation
+	claim.SourceKind = testblueprints.EnvironmentBlueprintSourceMutation
 	claim.BaselineHeadRevision = expectedHeadRevision
 	claim.CreatedAt = marker.CreatedAt
 	desired := fixture.Service.Record.Desired
-	streams, err := buildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
+	streams, err := testblueprints.BuildEnvironmentBlueprintStreams(testblueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
-		Mutation: &EnvironmentDesiredMutationAudit{Service: &EnvironmentServiceMutationAudit{
-			Action: EnvironmentServiceMutationCreate, ServiceID: desired.ID,
-			Request: &EnvironmentServiceMutationRequest{
-				EnvironmentID: fixture.Service.Record.EnvironmentID, Name: desired.Name, Image: desired.Image,
-				Zones: desired.Zones, Strategy: desired.Strategy, OnFailure: desired.OnFailure,
-				Healthcheck: desired.Healthcheck, Resources: desired.Resources, Expose: desired.Expose,
-				Restart: desired.Restart, Replicas: desired.Replicas,
+		Mutation: &testblueprints.EnvironmentDesiredMutationAudit{
+			Service: &testblueprints.EnvironmentServiceMutationAudit{
+				Action: testblueprints.EnvironmentServiceMutationCreate, ServiceID: desired.ID,
+				Request: &testblueprints.EnvironmentServiceMutationRequest{
+					EnvironmentID: fixture.Service.Record.EnvironmentID, Name: desired.Name, Image: desired.Image,
+					Zones: desired.Zones, Strategy: desired.Strategy, OnFailure: desired.OnFailure,
+					Healthcheck: desired.Healthcheck, Resources: desired.Resources, Expose: desired.Expose,
+					Restart: desired.Restart, Replicas: desired.Replicas,
+				},
 			},
-		}},
+		},
 		Projection:       fixture.Projection.Record,
 		DependencyDigest: mustEnvironmentBlueprintDependencyDigest(t, fixture.Projection.Record),
 	})
@@ -408,63 +427,80 @@ func stageDirectServicePublicationForTest(
 	defer clear(streams.Audit)
 	defer clear(streams.Projection)
 	descriptor := streams.Descriptor
-	descriptor.State = EnvironmentBlueprintStageSealed
+	descriptor.State = testblueprints.EnvironmentBlueprintStageSealed
 	descriptor.NextAuditChunk = descriptor.AuditChunks
 	descriptor.NextProjectionChunk = descriptor.ProjectionChunks
-	descriptorValue, err := encodeEnvironmentBlueprintStageDescriptor(descriptor)
+	descriptorValue, err := testblueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)
 	if err != nil {
 		t.Fatalf("encode direct Service descriptor: %v", err)
 	}
 	defer clear(descriptorValue)
-	intentDigest, err := protectedBlueprintIntentDigest(claim.Intent)
+	intentDigest, err := testblueprints.ProtectedBlueprintIntentDigest(claim.Intent)
 	if err != nil {
 		t.Fatalf("direct Service intent digest: %v", err)
 	}
-	locatorValue, err := encodeEnvironmentBlueprintStageLocator(claim.DescriptorID, intentDigest)
+	locatorValue, err := testblueprints.EncodeEnvironmentBlueprintStageLocator(claim.DescriptorID, intentDigest)
 	if err != nil {
 		t.Fatalf("encode direct Service locator: %v", err)
 	}
 	defer clear(locatorValue)
-	locatorKey, _, err := environmentBlueprintLocatorKey(claim.Locator)
+	locatorKey, _, err := testblueprints.EnvironmentBlueprintLocatorKey(claim.Locator)
 	if err != nil {
 		t.Fatalf("direct Service locator key: %v", err)
 	}
-	rootValue, err := encodeEnvironmentBlueprintSeal(environmentBlueprintSealFromDescriptor(descriptor))
+	rootValue, err := testblueprints.EncodeEnvironmentBlueprintSeal(
+		testblueprints.EnvironmentBlueprintSealFromDescriptor(descriptor),
+	)
 	if err != nil {
 		t.Fatalf("encode direct Service seal: %v", err)
 	}
 	defer clear(rootValue)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue},
-		{Type: MutationPut, Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID), Value: rootValue},
-		{Type: MutationPut, Key: locatorKey, Value: locatorValue},
+	mutations := []testkeyvalue.Mutation{
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID),
+			Value: descriptorValue,
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID),
+			Value: rootValue,
+		},
+		{Type: testkeyvalue.MutationPut, Key: locatorKey, Value: locatorValue},
 	}
 	for _, family := range []struct {
 		id    uint8
 		value []byte
 	}{
-		{id: EnvironmentBlueprintChunkAudit, value: streams.Audit},
-		{id: EnvironmentBlueprintChunkProjection, value: streams.Projection},
+		{id: testblueprints.EnvironmentBlueprintChunkAudit, value: streams.Audit},
+		{id: testblueprints.EnvironmentBlueprintChunkProjection, value: streams.Projection},
 	} {
-		for index := uint32(0); index < chunkCount32(len(family.value)); index++ {
-			from := int(index) * EnvironmentBlueprintChunkBytes
-			to := min(from+EnvironmentBlueprintChunkBytes, len(family.value))
+		for index := uint32(0); index < testblueprints.ChunkCount32(len(family.value)); index++ {
+			from := int(index) * testblueprints.EnvironmentBlueprintChunkBytes
+			to := min(from+testblueprints.EnvironmentBlueprintChunkBytes, len(family.value))
 			data := family.value[from:to]
-			chunkValue, encodeErr := encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
-				Family: family.id, Sequence: index, LogicalOffset: uint64(from),
-				LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data,
-			})
+			chunkValue, encodeErr := testblueprints.EncodeEnvironmentBlueprintChunk(
+				testblueprints.EnvironmentBlueprintChunk{
+					Family: family.id, Sequence: index, LogicalOffset: uint64(from),
+					LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data,
+				},
+			)
 			if encodeErr != nil {
 				t.Fatalf("encode direct Service chunk: %v", encodeErr)
 			}
-			mutations = append(mutations, Mutation{
-				Type:  MutationPut,
-				Key:   environmentBlueprintChunkKeyFor(claim.EnvironmentID, claim.RevisionID, family.id, index),
+			mutations = append(mutations, testkeyvalue.Mutation{
+				Type: testkeyvalue.MutationPut,
+				Key: testblueprints.EnvironmentBlueprintChunkKeyFor(
+					claim.EnvironmentID,
+					claim.RevisionID,
+					family.id,
+					index,
+				),
 				Value: chunkValue,
 			})
 		}
 	}
-	defer clearMutationValues(mutations)
+	defer testkeyvalue.ClearMutationValues(mutations)
 	result, err := store.Transact(ctx, nil, mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("stage direct Service publication = %#v, %v", result, err)
@@ -474,10 +510,10 @@ func stageDirectServicePublicationForTest(
 
 func mustEnvironmentBlueprintDependencyDigest(
 	t *testing.T,
-	projection EnvironmentComposeProjection,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 ) [sha256.Size]byte {
 	t.Helper()
-	digest, err := EnvironmentBlueprintDependencyDigest(projection)
+	digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		t.Fatalf("EnvironmentBlueprintDependencyDigest() error = %v", err)
 	}
@@ -485,15 +521,15 @@ func mustEnvironmentBlueprintDependencyDigest(
 }
 
 func joinedServiceMutationClaim(
-	service ServiceRecord,
-	projection EnvironmentComposeProjection,
-	marker IdempotencyMarker,
-) EnvironmentBlueprintStageClaim {
-	return EnvironmentBlueprintStageClaim{
+	service testservices.ServiceRecord,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+	marker testidempotency.IdempotencyMarker,
+) testblueprints.EnvironmentBlueprintStageClaim {
+	return testblueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID:  strings.TrimPrefix(projection.RevisionID, "task_"),
 		EnvironmentID: service.EnvironmentID, RevisionID: projection.RevisionID, TaskID: projection.RevisionID,
 		Locator: marker.Locator, Intent: marker.Intent, BaselineHeadRevision: 0,
-		SourceKind: EnvironmentBlueprintSourceMutation, RenderGeneration: projection.RenderGeneration,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: projection.RenderGeneration,
 		ProjectionSchema: 1, CreatedAt: marker.CreatedAt,
 	}
 }
@@ -512,17 +548,20 @@ func TestAttachRenameNoOpPersistsMarkerWithoutEpochAdvance(t *testing.T) {
 	record, facts := testPendingAttach(t, scope, 940, "no-op-rename", nil)
 	current := createTestAttach(t, ctx, repository, scope, record, &facts)
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 		ScopeID:   record.EnvironmentID,
 		Method:    http.MethodPatch,
 		Route:     "/attaches/{id}",
 		Key:       "attach-no-op-rename-key-0001",
 	}
-	marker.Response = IdempotencyResponse{
+	marker.Response = testidempotency.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"id":"` + record.ID + `"}`),
 	}
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetAttach, ID: record.ID}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetAttach,
+		ID:   record.ID,
+	}
 	epochBefore := mustEnvironmentMutationEpochRevision(t, store, record.EnvironmentID)
 	result, err := repository.RenameAttachIdempotent(
 		ctx, scope.Environment, scope.Project, current, current.Record.Name, marker,
@@ -567,8 +606,8 @@ type ordinaryServiceMutationAuditStore struct {
 
 func (store *ordinaryServiceMutationAuditStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	result, err := store.memoryHierarchyStore.GetMany(ctx, request)
 	revision := request.Revision
 	if revision == 0 && result != nil {
@@ -580,15 +619,15 @@ func (store *ordinaryServiceMutationAuditStore) GetMany(
 
 func (store *ordinaryServiceMutationAuditStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.raceEnvironmentID != "" && !store.raced {
 		store.raced = true
-		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
-			Type: MutationPut, Key: environmentMutationEpochKey(store.raceEnvironmentID), Value: store.raceEpochValue,
+		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentMutationEpochKey(store.raceEnvironmentID), Value: store.raceEpochValue,
 		}}); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 	}
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
@@ -597,16 +636,16 @@ func (store *ordinaryServiceMutationAuditStore) Transact(
 func mustEnvironmentMutationEpochRevision(
 	t *testing.T,
 	store interface {
-		Get(context.Context, string) (*GetResult, error)
+		Get(context.Context, string) (*testkeyvalue.GetResult, error)
 	},
 	environmentID string,
 ) int64 {
 	t.Helper()
-	result, err := store.Get(context.Background(), environmentMutationEpochKey(environmentID))
+	result, err := store.Get(context.Background(), testhierarchy.EnvironmentMutationEpochKey(environmentID))
 	if err != nil || result == nil || result.Entry == nil {
 		t.Fatalf("get mutation epoch = %#v, %v", result, err)
 	}
-	if _, err := decodeEnvironmentMutationEpochRecord(result.Entry.Value); err != nil {
+	if _, err := testbackupruntime.DecodeEnvironmentMutationEpochRecord(result.Entry.Value); err != nil {
 		t.Fatalf("decodeEnvironmentMutationEpochRecord() error = %v", err)
 	}
 	return result.Entry.ModRevision
@@ -616,28 +655,31 @@ func readyServiceMutationEnvironment(
 	t *testing.T,
 	ctx context.Context,
 	store hierarchyStore,
-	environment Versioned[EnvironmentRecord],
-) Versioned[EnvironmentRecord] {
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+) testkeyvalue.Versioned[testhierarchy.EnvironmentRecord] {
 	t.Helper()
-	ready, err := CompleteEnvironmentProvisioning(
+	ready, err := testhierarchy.CompleteEnvironmentProvisioning(
 		environment.Record, environment.Record.CreateTaskID, true,
 	)
 	if err != nil {
 		t.Fatalf("CompleteEnvironmentProvisioning() error = %v", err)
 	}
-	value, err := encodeEnvironment(ready)
+	value, err := testhierarchy.EncodeEnvironment(ready)
 	if err != nil {
 		t.Fatalf("encode ready Environment = %v", err)
 	}
 	defer clear(value)
-	result, err := store.Transact(ctx,
-		[]Condition{{Key: environmentKey(ready.ID), ModRevision: environment.Revision}},
-		[]Mutation{{Type: MutationPut, Key: environmentKey(ready.ID), Value: value}},
+	result, err := store.Transact(
+		ctx,
+		[]testkeyvalue.Condition{{Key: testhierarchy.EnvironmentKey(ready.ID), ModRevision: environment.Revision}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentKey(ready.ID), Value: value},
+		},
 	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("persist ready Environment = %#v, %v", result, err)
 	}
-	return Versioned[EnvironmentRecord]{
+	return testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
 		Record: ready, Revision: result.Revision, ReadRevision: result.Revision,
 	}
 }

@@ -6,6 +6,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,24 +20,24 @@ import (
 func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 	for _, target := range []struct {
 		name       string
-		kind       HierarchyDeletionTargetKind
-		op         HierarchyDeletionOperationKind
+		kind       testhierarchydeletion.HierarchyDeletionTargetKind
+		op         testhierarchydeletion.HierarchyDeletionOperationKind
 		project    bool
 		concurrent bool
 		available  bool
 	}{
-		{name: "project", kind: HierarchyDeletionTargetProject, op: HierarchyDeletionOperationProject},
-		{name: "tenant", kind: HierarchyDeletionTargetTenant, op: HierarchyDeletionOperationTenant},
-		{name: "tenant_with_deleting_project", kind: HierarchyDeletionTargetTenant,
-			op: HierarchyDeletionOperationTenant, project: true},
-		{name: "project_race", kind: HierarchyDeletionTargetProject,
-			op: HierarchyDeletionOperationProject, concurrent: true},
-		{name: "tenant_race", kind: HierarchyDeletionTargetTenant,
-			op: HierarchyDeletionOperationTenant, concurrent: true},
-		{name: "available_project", kind: HierarchyDeletionTargetProject,
-			op: HierarchyDeletionOperationProject, available: true},
-		{name: "available_tenant", kind: HierarchyDeletionTargetTenant,
-			op: HierarchyDeletionOperationTenant, available: true},
+		{name: "project", kind: testhierarchydeletion.HierarchyDeletionTargetProject, op: testhierarchydeletion.HierarchyDeletionOperationProject},
+		{name: "tenant", kind: testhierarchydeletion.HierarchyDeletionTargetTenant, op: testhierarchydeletion.HierarchyDeletionOperationTenant},
+		{name: "tenant_with_deleting_project", kind: testhierarchydeletion.HierarchyDeletionTargetTenant,
+			op: testhierarchydeletion.HierarchyDeletionOperationTenant, project: true},
+		{name: "project_race", kind: testhierarchydeletion.HierarchyDeletionTargetProject,
+			op: testhierarchydeletion.HierarchyDeletionOperationProject, concurrent: true},
+		{name: "tenant_race", kind: testhierarchydeletion.HierarchyDeletionTargetTenant,
+			op: testhierarchydeletion.HierarchyDeletionOperationTenant, concurrent: true},
+		{name: "available_project", kind: testhierarchydeletion.HierarchyDeletionTargetProject,
+			op: testhierarchydeletion.HierarchyDeletionOperationProject, available: true},
+		{name: "available_tenant", kind: testhierarchydeletion.HierarchyDeletionTargetTenant,
+			op: testhierarchydeletion.HierarchyDeletionOperationTenant, available: true},
 	} {
 		t.Run(target.name, func(t *testing.T) {
 			t.Parallel()
@@ -44,23 +48,23 @@ func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 				t.Fatalf("newHierarchyRepository() error = %v", err)
 			}
 			now := time.Date(2026, 9, 20, 19, 0, 0, 0, time.UTC)
-			tenant := TenantRecord{ID: ids.NewAt(ids.KindTenant, now, 1), Slug: "tenant", Name: "Tenant"}
+			tenant := testhierarchy.TenantRecord{ID: ids.NewAt(ids.KindTenant, now, 1), Slug: "tenant", Name: "Tenant"}
 			if _, err = hierarchy.CreateTenant(ctx, tenant); err != nil {
 				t.Fatalf("CreateTenant() error = %v", err)
 			}
-			project := ProjectRecord{
+			project := testhierarchy.ProjectRecord{
 				ID: ids.NewAt(ids.KindProject, now, 2), TenantID: tenant.ID,
-				Slug: "project", Name: "Project", Kind: ProjectKindTenant,
+				Slug: "project", Name: "Project", Kind: testhierarchy.ProjectKindTenant,
 			}
 			if _, err = hierarchy.CreateProject(ctx, project); err != nil {
 				t.Fatalf("CreateProject() error = %v", err)
 			}
-			environment := EnvironmentRecord{
+			environment := testhierarchy.EnvironmentRecord{
 				ID: ids.NewAt(ids.KindEnvironment, now, 3), ProjectID: project.ID,
 				Name: "production", NetworkPool: "10.120.254.0/24",
 				VolumeDir: "/var/lib/groundplane/vol/" + tenant.ID + "/" + project.ID + "/" +
 					ids.NewAt(ids.KindEnvironment, now, 3),
-				ProvisioningState: EnvironmentProvisioningReady,
+				ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 				CreateTaskID:      ids.NewAt(ids.KindTask, now, 4), CreatedAt: now,
 			}
 			if _, err = hierarchy.CreateEnvironment(ctx, environment); err != nil {
@@ -70,11 +74,21 @@ func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newHierarchyDeletionRepository() error = %v", err)
 			}
-			child := hierarchyDeletionCreationTestBegin(now, HierarchyDeletionTargetEnvironment,
-				environment.ID, HierarchyDeletionOperationEnvironment, "d")
+			child := hierarchyDeletionCreationTestBegin(
+				now,
+				testhierarchydeletion.HierarchyDeletionTargetEnvironment,
+				environment.ID,
+				testhierarchydeletion.HierarchyDeletionOperationEnvironment,
+				"d",
+			)
 			if target.project {
-				child = hierarchyDeletionCreationTestBegin(now, HierarchyDeletionTargetProject,
-					project.ID, HierarchyDeletionOperationProject, "d")
+				child = hierarchyDeletionCreationTestBegin(
+					now,
+					testhierarchydeletion.HierarchyDeletionTargetProject,
+					project.ID,
+					testhierarchydeletion.HierarchyDeletionOperationProject,
+					"d",
+				)
 			}
 			startChild := func() error {
 				_, childErr := journal.Begin(ctx, child)
@@ -94,7 +108,7 @@ func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 			}
 
 			targetID := project.ID
-			if target.kind == HierarchyDeletionTargetTenant {
+			if target.kind == testhierarchydeletion.HierarchyDeletionTargetTenant {
 				targetID = tenant.ID
 			}
 			begin := hierarchyDeletionCreationTestBegin(now.Add(time.Second), target.kind, targetID, target.op, "a")
@@ -112,9 +126,7 @@ func TestHierarchyDeletionRejectsDescendantDeletionAuthority(t *testing.T) {
 			} else if !isKind(err, errs.KindResourceInUse) {
 				t.Fatalf("Begin(%s deletion) error = %v, want resource.in_use", target.name, err)
 			}
-			for _, key := range []string{
-				HierarchyDeletionTombstoneKey(string(target.kind), targetID), taskKey(begin.TaskID),
-			} {
+			for _, key := range []string{testhierarchydeletion.HierarchyDeletionTombstoneKey(string(target.kind), targetID), testtaskjournal.TaskStorageKey(begin.TaskID)} {
 				if result, getErr := store.Get(ctx, key); getErr != nil || result.Entry != nil {
 					t.Fatalf("blocked %s deletion wrote %s = %#v/%v", target.name, key, result, getErr)
 				}
@@ -132,12 +144,12 @@ type descendantDeletionRaceStore struct {
 }
 
 func (store *descendantDeletionRaceStore) Transact(
-	ctx context.Context, conditions []Condition, mutations []Mutation,
-) (TransactionResult, error) {
+	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if before := store.before; before != nil {
 		store.before = nil
 		if err := before(); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 	}
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)

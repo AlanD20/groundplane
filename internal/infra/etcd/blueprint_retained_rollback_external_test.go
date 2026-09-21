@@ -5,10 +5,16 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	migratedagentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	migratedscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -20,7 +26,7 @@ func TestComponentOnlyPreflightAfterNativeRollback(t *testing.T) {
 		t,
 		true,
 		false,
-		func(f *etcd.ExecutedArtifactFixture, plans *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, intent domain.Intent, _ *agentpb.ComposeArtifact) {
+		func(f *etcd.ExecutedArtifactFixture, plans *testtaskplanning.TaskPlanResolver, original testreleaserender.ReleaseRenderInput, intent domain.Intent, _ *agentpb.ComposeArtifact) {
 			current, _ := f.SeedRetainedRollback(t, original, intent)
 			scope, err := f.Ledger.LoadPlanningScope(t.Context(), original.EnvironmentID)
 			if err != nil {
@@ -34,15 +40,15 @@ func TestComponentOnlyPreflightAfterNativeRollback(t *testing.T) {
 				f.Ledger,
 				&etcd.ScriptRepository{},
 				plans,
-				&controller.ScriptArtifactService{},
-				&etcd.ScriptSourceReferenceAuthority{},
-				&etcd.LocalAgentRepository{},
+				&testtaskplanning.ScriptArtifactService{},
+				&migratedscriptsourcepublication.Authority{},
+				&migratedagentregistration.Repository{},
 				retainedUnexpectedImageResolver{t},
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			changes := []etcd.EnvironmentBlueprintServiceChange{
+			changes := []testblueprints.EnvironmentBlueprintServiceChange{
 				{Current: &planning[0].Service, Record: planning[0].Service.Record},
 			}
 			project := &composetypes.Project{
@@ -63,23 +69,22 @@ func TestComponentOnlyPreflightAfterNativeRollback(t *testing.T) {
 			if err != nil {
 				t.Fatalf("component-only rollback preflight rejected: %v", err)
 			}
-			artifact, err := controller.RenderCompose(
-				controller.ComposeRenderInput{
-					Project:             project,
-					ArtifactID:          ids.New(ids.KindConfig),
-					ProjectOwnerKind:    controller.ComposeProjectOwnerTenant,
-					TenantID:            current.TenantID,
-					ProjectID:           current.ProjectID,
-					EnvironmentID:       current.EnvironmentID,
-					PlanID:              ids.New(ids.KindPlan),
-					RenderGeneration:    5,
-					AuthorizedVolumeDir: current.AuthorizedVolumeDir,
-					Identities: controller.ComposeIdentitySnapshot{
-						Services: []controller.ComposeResourceIdentity{
-							{ID: current.ServiceID, Name: current.ServiceName},
-						},
+			artifact, err := testcomposerender.RenderCompose(testcomposerender.ComposeRenderInput{
+				Project:             project,
+				ArtifactID:          ids.New(ids.KindConfig),
+				ProjectOwnerKind:    testcomposerender.ComposeProjectOwnerTenant,
+				TenantID:            current.TenantID,
+				ProjectID:           current.ProjectID,
+				EnvironmentID:       current.EnvironmentID,
+				PlanID:              ids.New(ids.KindPlan),
+				RenderGeneration:    5,
+				AuthorizedVolumeDir: current.AuthorizedVolumeDir,
+				Identities: testcomposeidentity.Snapshot{
+					Services: []testcomposeidentity.Resource{
+						{ID: current.ServiceID, Name: current.ServiceName},
 					},
 				},
+			},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -122,9 +127,9 @@ func TestComponentOnlyPreflightAfterNativeRollback(t *testing.T) {
 
 func assertRetainedBlueGreenRendering(
 	t *testing.T,
-	plans *controller.TaskPlanResolver,
+	plans *testtaskplanning.TaskPlanResolver,
 	desired *agentpb.ComposeArtifact,
-	prior, current etcd.ReleaseRenderInput,
+	prior, current testreleaserender.ReleaseRenderInput,
 	fixture *etcd.ExecutedArtifactFixture,
 ) {
 	t.Helper()
@@ -137,7 +142,7 @@ func assertRetainedBlueGreenRendering(
 	current.PriorStrategy, current.PriorSlot, current.PriorTarget = domain.StrategyBlueGreen, domain.SlotBlue, domain.WorkloadBlue
 	current.PriorArtifactID = ""
 	current.PriorWorkload = nil
-	for _, source := range []*etcd.ReleaseRenderInput{&prior, &current} {
+	for _, source := range []*testreleaserender.ReleaseRenderInput{&prior, &current} {
 		source.Projection.NormalizedCompose = bytes.ReplaceAll(
 			source.Projection.NormalizedCompose,
 			[]byte("replicas: 2"),
@@ -150,8 +155,7 @@ func assertRetainedBlueGreenRendering(
 		)
 	}
 	fragments, err := plans.RenderRetainedServiceRuntime(
-		t.Context(),
-		etcd.ServiceLifecycleRelease{
+		t.Context(), testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID:      current.ReleaseID,
 			Current:               current,
 			PriorServingReleaseID: prior.ReleaseID,
@@ -164,7 +168,7 @@ func assertRetainedBlueGreenRendering(
 	if len(fragments) != 2 || len(fragments[0].Services) != 2 || len(fragments[1].Services) != 1 {
 		t.Fatal("sealed lifecycle renderer did not select current, inactive and one proxy")
 	}
-	mixed, err := controller.RetainBlueprintNativeRuntimeSources(desired, fragments, []string{current.ServiceID})
+	mixed, err := testtaskplanning.RetainBlueprintNativeRuntimeSources(desired, fragments, []string{current.ServiceID})
 	if err != nil {
 		t.Fatal(err)
 	}

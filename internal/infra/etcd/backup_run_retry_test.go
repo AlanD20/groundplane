@@ -6,11 +6,14 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
 	_, _, run := newBackupRuntimeBareFixture(t)
-	makeAttempt := func(ordinal uint32, state BackupSourceAttemptState) BackupRunSourceAttemptRecord {
+	makeAttempt := func(ordinal uint32, state testbackupruntime.BackupSourceAttemptState) testbackupruntime.BackupRunSourceAttemptRecord {
 		attempt := run.Sources[0]
 		attempt.Ordinal = ordinal
 		attempt.SourceID = ids.NewAt(ids.KindBackupSource, run.CreatedAt, int64(5000+ordinal))
@@ -19,21 +22,21 @@ func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
 		attempt.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + attempt.SourceID + "/" +
 			attempt.RecoveryPointID + "/artifact.bin"
 		attempt.State = state
-		attempt.Phase = BackupSourcePhaseCapture
+		attempt.Phase = testbackupruntime.BackupSourcePhaseCapture
 		attempt.SizeBytes = 0
 		attempt.SHA256 = ""
 		attempt.FailureCode = ""
 		return attempt
 	}
-	succeeded := makeAttempt(0, BackupSourceAttemptSucceeded)
-	succeeded.Phase = BackupSourcePhaseRetention
+	succeeded := makeAttempt(0, testbackupruntime.BackupSourceAttemptSucceeded)
+	succeeded.Phase = testbackupruntime.BackupSourcePhaseRetention
 	succeeded.SizeBytes = 1
 	succeeded.SHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	failed := makeAttempt(1, BackupSourceAttemptFailed)
-	failed.FailureCode = BackupFailureCapture
-	unstarted := makeAttempt(2, BackupSourceAttemptUnstarted)
-	run.Sources = []BackupRunSourceAttemptRecord{succeeded, failed, unstarted}
-	run.State = BackupRunFailed
+	failed := makeAttempt(1, testbackupruntime.BackupSourceAttemptFailed)
+	failed.FailureCode = testbackupruntime.BackupFailureCapture
+	unstarted := makeAttempt(2, testbackupruntime.BackupSourceAttemptUnstarted)
+	run.Sources = []testbackupruntime.BackupRunSourceAttemptRecord{succeeded, failed, unstarted}
+	run.State = testbackupruntime.BackupRunFailed
 	retryAt := run.CreatedAt.Add(time.Second)
 	retryTaskID := ids.NewAt(ids.KindTask, retryAt, 5200)
 
@@ -42,7 +45,7 @@ func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	if retry.TaskID != retryTaskID || retry.RetryOfTaskID != run.TaskID ||
-		retry.OperationID != run.OperationID || retry.State != BackupRunQueued ||
+		retry.OperationID != run.OperationID || retry.State != testbackupruntime.BackupRunQueued ||
 		len(retry.Sources) != 2 {
 		t.Fatalf("retry identity/checkpoint selection = %#v", retry)
 	}
@@ -51,7 +54,7 @@ func TestNewBackupRunRetryRecordPreservesOnlyIncompleteSnapshots(t *testing.T) {
 		if source.Ordinal != uint32(index) || source.SourceID != prior.SourceID ||
 			source.TargetID != prior.TargetID || source.SourceRevision != prior.SourceRevision ||
 			source.TargetRevision != prior.TargetRevision || source.RecoveryPointID == prior.RecoveryPointID ||
-			source.State != BackupSourceAttemptPending || source.Phase != BackupSourcePhaseCapture ||
+			source.State != testbackupruntime.BackupSourceAttemptPending || source.Phase != testbackupruntime.BackupSourcePhaseCapture ||
 			source.SizeBytes != 0 || source.SHA256 != "" || source.FailureCode != "" {
 			t.Fatalf("retry source %d = %#v, prior = %#v", index, source, prior)
 		}
@@ -68,9 +71,7 @@ func TestPrepareBackupRunRetryPublishesAtomicAttempt(t *testing.T) {
 		claim.Assignment.Record.AgentID,
 		claim.Assignment.Record.AgentGeneration,
 		run.TaskID,
-		claim.Assignment.Record.AssignmentID,
-		TaskStatusFailed,
-		result,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, result,
 		terminalAt,
 	)
 	if err != nil {
@@ -102,21 +103,21 @@ func TestPrepareBackupRunRetryPublishesAtomicAttempt(t *testing.T) {
 	}
 
 	storedRetry, err := tasks.GetTask(context.Background(), retryTaskID)
-	if err != nil || storedRetry.Record.Status != TaskStatusPending ||
+	if err != nil || storedRetry.Record.Status != testtaskjournal.TaskStatusPending ||
 		storedRetry.Record.RetryOf != run.TaskID || storedRetry.Record.OperationID != run.OperationID {
 		t.Fatalf("stored retry Task = %#v, %v", storedRetry, err)
 	}
 	storedRun, err := runtime.GetBackupRun(context.Background(), retryTaskID)
-	if err != nil || storedRun.Record.State != BackupRunQueued ||
+	if err != nil || storedRun.Record.State != testbackupruntime.BackupRunQueued ||
 		storedRun.Record.RetryOfTaskID != run.TaskID {
 		t.Fatalf("stored retry run = %#v, %v", storedRun, err)
 	}
 	storedSource, err := tasks.GetTask(context.Background(), run.TaskID)
-	if err != nil || storedSource.Record.Status != TaskStatusFailed {
+	if err != nil || storedSource.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("stored source Task = %#v, %v", storedSource, err)
 	}
-	lockEntry := mustOptionalKey(t, store, environmentOperationLockKey(run.EnvironmentID))
-	lock, err := decodeBackupOperationLockRecord(lockEntry.Value)
+	lockEntry := mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID))
+	lock, err := testbackupruntime.DecodeBackupOperationLockRecord(lockEntry.Value)
 	if err != nil || lock.TaskID != retryTaskID || lock.OperationID != run.OperationID {
 		t.Fatalf("retry Environment lock = %#v, %v", lock, err)
 	}

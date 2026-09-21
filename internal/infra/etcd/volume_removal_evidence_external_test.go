@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 )
@@ -65,7 +66,7 @@ func TestVolumeEvidenceStagingResumesExactPrefix(t *testing.T) {
 	for index, row := range rows {
 		keys[index] = removal.EvidenceRowKey(manifest.OperationID, row.Ordinal)
 	}
-	stored, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: keys})
+	stored, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 	if err != nil || len(stored.Values) != len(rows) {
 		t.Fatal("read staged rows", err)
 	}
@@ -157,8 +158,7 @@ func TestVolumeEvidenceStagingRejectsRacingAuthorities(t *testing.T) {
 				t.Fatal("losing staging transaction wrote evidence", err)
 			}
 			read, err := fixture.Store.GetMany(
-				ctx,
-				etcd.GetManyRequest{Keys: []string{removal.EvidenceCursorKey(manifest.OperationID)}},
+				ctx, testkeyvalue.GetManyRequest{Keys: []string{removal.EvidenceCursorKey(manifest.OperationID)}},
 			)
 			if err != nil || read.Values[0] == nil {
 				t.Fatal("read cursor", err)
@@ -220,7 +220,7 @@ func TestVolumeEvidenceStagingValidatesExistingRows(t *testing.T) {
 			if err != nil || result.AcceptedRows != 44 || audit.Mutations != 44 {
 				t.Fatal("did not reuse identical row", err)
 			}
-			read, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{key}})
+			read, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{key}})
 			if err != nil || read.Values[0] == nil || read.Values[0].ModRevision != revision {
 				t.Fatal("rewrote immutable row", err)
 			}

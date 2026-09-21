@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 )
 
 func TestReleasePlanningAppliedProjectionUsesCapturedRevisionNotDesiredHead(t *testing.T) {
@@ -17,11 +20,15 @@ func TestReleasePlanningAppliedProjectionUsesCapturedRevisionNotDesiredHead(t *t
 	project, environment := createEnvironmentBlueprintOwners(t, hierarchy)
 	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 901)
 	initial := releasePlanningTestProjection(environment.Record.ID, task)
-	value, err := encodeEnvironmentComposeProjection(initial)
+	value, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(initial)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.Put(ctx, environmentComposeProjectionKey(environment.Record.ID), value)
+	first, err := store.Put(
+		ctx,
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+		value,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,21 +40,25 @@ func TestReleasePlanningAppliedProjectionUsesCapturedRevisionNotDesiredHead(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	scope := ReleasePlanningScope{
+	scope := testreleasequeries.ReleasePlanningScope{
 		Environment:  environment,
 		ReadRevision: first,
-		Compose:      Versioned[EnvironmentComposeProjection]{Record: initial},
+		Compose:      testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{Record: initial},
 	}
 	// Intervening no-candidate Apply advances the acknowledged projection while
 	// the caller's captured predecessor revision must stay fixed.
 	nextTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 902)
 	next := releasePlanningTestProjection(environment.Record.ID, nextTask)
 	next.RevisionID = ids.New(ids.KindTask)
-	nextValue, err := encodeEnvironmentComposeProjection(next)
+	nextValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(next)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := store.Put(ctx, environmentComposeProjectionKey(environment.Record.ID), nextValue)
+	second, err := store.Put(
+		ctx,
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+		nextValue,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

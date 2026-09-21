@@ -104,7 +104,8 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		return routeTaskChange{}, environmentchanges.CorruptServiceRemovalIntent()
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[1].Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetService || tombstone.TargetID != intent.ServiceID ||
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetService ||
+		tombstone.TargetID != intent.ServiceID ||
 		tombstone.TargetRevision != intent.ServiceRevision ||
 		tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects {

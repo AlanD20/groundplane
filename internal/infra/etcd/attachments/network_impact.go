@@ -24,7 +24,8 @@ func (repository *Reader) ListAttachesByBackingNetworkAtRevision(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
-	if repository == nil || repository.store == nil || recordcodec.ValidateID(ids.KindProject, backingProjectID) != nil ||
+	if repository == nil || repository.store == nil ||
+		recordcodec.ValidateID(ids.KindProject, backingProjectID) != nil ||
 		recordcodec.ValidateID(ids.KindNetwork, networkID) != nil ||
 		revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "backing Zone impact scope is invalid")

@@ -8,6 +8,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,7 +24,7 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 			t.Run(checkpoint+"/"+mode, func(t *testing.T) {
 				ctx := context.Background()
 				fixture, tasks, assignment, runtime := prepareVolumeRemovalAttemptTerminal(t, checkpoint)
-				markerKey, err := etcd.CapabilityIdempotencyMarkerKey(fixture.Marker.Locator)
+				markerKey, err := testidempotency.IdempotencyMarkerKey(fixture.Marker.Locator)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -36,15 +39,15 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 					removalrecord.EnvironmentLockKey(runtime.EnvironmentID),
 					markerKey,
 				}
-				before, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: keys})
+				before, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 				if err != nil {
 					t.Fatal(err)
 				}
-				status := etcd.TaskStatusFailed
+				status := testtaskjournal.TaskStatusFailed
 				terminalAt := runtime.CreatedAt.Add(10 * time.Second)
-				result := etcd.TaskResultRecord{
-					Kind:       etcd.TaskResultEnvironmentDirectory,
-					Diagnostic: etcd.TaskResultDiagnosticNone,
+				result := testtaskjournal.TaskResultRecord{
+					Kind:       testtaskjournal.TaskResultEnvironmentDirectory,
+					Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 				}
 				if mode == "failed" {
 					_, err = tasks.AcknowledgeTask(
@@ -58,7 +61,7 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 						terminalAt,
 					)
 				} else {
-					status = etcd.TaskStatusTimedOut
+					status = testtaskjournal.TaskStatusTimedOut
 					terminalAt = runtime.CreatedAt.Add(time.Second + 6*time.Hour)
 					var count int
 					if mode == "timeout" {
@@ -76,10 +79,10 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 				fixture.AssertRemovalAttemptBudget(t, status)
 				current, err := tasks.GetTask(ctx, assignment.TaskID)
 				if err != nil || current.Record.Status != status || current.Record.Result == nil ||
-					current.Record.Result.Kind != etcd.TaskResultEnvironmentDirectory {
+					current.Record.Result.Kind != testtaskjournal.TaskResultEnvironmentDirectory {
 					t.Fatalf("terminal attempt: %v/%v", current.Record.Status, err)
 				}
-				after, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: keys})
+				after, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -95,11 +98,12 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 						t.Fatalf("attempt terminalization changed retained authority %s", keys[index])
 					}
 				}
-				marker, err := etcd.DecodeCapabilityIdempotencyMarker(
+				marker, err := testidempotency.DecodeIdempotencyMarker(
 					after.Values[len(keys)-1].Value,
 					fixture.Marker.Locator,
 				)
-				if err != nil || marker.State != etcd.IdempotencyMarkerPending || !marker.RetainUntil.IsZero() ||
+				if err != nil || marker.State != testidempotency.IdempotencyMarkerPending ||
+					!marker.RetainUntil.IsZero() ||
 					!marker.TerminalAt.IsZero() {
 					t.Fatalf("root response became expirable: %v", err)
 				}
@@ -109,25 +113,25 @@ func TestVolumeRemovalAttemptTerminalRetainsOperation(t *testing.T) {
 				}
 				pruneAt := current.Record.RetainUntil.Add(time.Hour)
 				// The fixture's initial policy PUT has its own expired marker.
-				seedKey, err := etcd.CapabilityIdempotencyMarkerKey(etcd.IdempotencyLocator{
-					ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: runtime.EnvironmentID,
+				seedKey, err := testidempotency.IdempotencyMarkerKey(testidempotency.IdempotencyLocator{
+					ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: runtime.EnvironmentID,
 					Method: "PUT", Route: "/environments/{id}/backup-policy", Key: "volume-policy-desired-seed-0001",
 				})
 				if err != nil {
 					t.Fatal(err)
 				}
-				seed, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{seedKey}})
+				seed, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{seedKey}})
 				if err != nil || seed.Values[0] == nil {
 					t.Fatalf("missing seed marker: %v", err)
 				}
 				if count, err := idempotency.PruneExpired(ctx, pruneAt); err != nil || count != 1 {
 					t.Fatalf("expired seed collection: %d/%v", count, err)
 				}
-				seed, err = fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{seedKey}})
+				seed, err = fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{seedKey}})
 				if err != nil || seed.Values[0] != nil {
 					t.Fatalf("expired seed marker survived: %v", err)
 				}
-				retained, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: keys})
+				retained, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -200,9 +204,17 @@ func TestVolumeRemovalAttemptTerminalRejectsChangedOwner(t *testing.T) {
 					t.Fatal(err)
 				}
 				before := fixture.Revision()
-				_, err = tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, assignment.TaskID, assignment.AssignmentID,
-					etcd.TaskStatusFailed, etcd.TaskResultRecord{Kind: etcd.TaskResultEnvironmentDirectory,
-						Diagnostic: etcd.TaskResultDiagnosticNone}, runtime.CreatedAt.Add(10*time.Second))
+				_, err = tasks.AcknowledgeTask(
+					ctx,
+					assignment.AgentID,
+					1,
+					assignment.TaskID,
+					assignment.AssignmentID,
+					testtaskjournal.TaskStatusFailed,
+					testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultEnvironmentDirectory,
+						Diagnostic: testtaskjournal.TaskResultDiagnosticNone},
+					runtime.CreatedAt.Add(10*time.Second),
+				)
 				writes := int64(0)
 				if mode == "late" {
 					writes = 1
@@ -211,7 +223,7 @@ func TestVolumeRemovalAttemptTerminalRejectsChangedOwner(t *testing.T) {
 					t.Fatalf("attempt ignored changed owner: %v; revision delta %d", err, fixture.Revision()-before)
 				}
 				current, err := tasks.GetTask(ctx, assignment.TaskID)
-				if err != nil || current.Record.Status != etcd.TaskStatusRunning {
+				if err != nil || current.Record.Status != testtaskjournal.TaskStatusRunning {
 					t.Fatal("losing attempt terminalized Task", err)
 				}
 			})
@@ -220,12 +232,13 @@ func TestVolumeRemovalAttemptTerminalRejectsChangedOwner(t *testing.T) {
 }
 
 type volumeAttemptTerminalRaceStore struct {
-	etcd.Store
+	testkeyvalue.Store
+
 	before func()
 }
 
-func (store *volumeAttemptTerminalRaceStore) Transact(ctx context.Context, conditions []etcd.Condition,
-	mutations []etcd.Mutation) (etcd.TransactionResult, error) {
+func (store *volumeAttemptTerminalRaceStore) Transact(ctx context.Context, conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation) (testkeyvalue.TransactionResult, error) {
 	if store.before != nil {
 		before := store.before
 		store.before = nil
@@ -244,8 +257,8 @@ func (*volumeAttemptTerminalRaceStore) ValidateBlueprintTaskTerminal(
 func (*volumeAttemptTerminalRaceStore) TransactBlueprintTaskTerminal(
 	context.Context,
 	etcd.BlueprintTaskTerminalTransaction,
-) (etcd.TransactionResult, error) {
-	return etcd.TransactionResult{}, errs.New(
+) (testkeyvalue.TransactionResult, error) {
+	return testkeyvalue.TransactionResult{}, errs.New(
 		errs.KindInternal,
 		"Blueprint terminalization is outside the Volume race fixture",
 	)

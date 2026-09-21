@@ -4,6 +4,12 @@ import (
 	"context"
 	"testing"
 
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testhierarchydeletionfinalization "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -32,7 +38,7 @@ func TestEntryRemovalFencesScriptReservationAfterRead(t *testing.T) {
 				if err != nil || !isKind(result.conflict, errs.KindResourceInUse) {
 					t.Fatalf("dispatch lost reservation race: %v / %v", err, result.conflict)
 				}
-				if memory.valueAt(taskKey(task.ID), memory.revision) != nil {
+				if memory.valueAt(testtaskjournal.TaskStorageKey(task.ID), memory.revision) != nil {
 					t.Fatal("losing deletion published a Task")
 				}
 			case "direct-finalizer":
@@ -43,17 +49,17 @@ func TestEntryRemovalFencesScriptReservationAfterRead(t *testing.T) {
 					t.Fatalf("direct finalizer lost reservation race: %v", err)
 				}
 			case "parent-finalizer":
-				hierarchy, err := newHierarchyDeletionRepository(store)
+				effects, err := testhierarchydeletionfinalization.NewPreparer(store).Prepare(
+					ctx, testhierarchydeletion.HierarchyDeletionOperation{}, testhierarchydeletion.HierarchyDeletionAction{
+						ActionKind: testhierarchydeletion.HierarchyDeletionEntryRemove,
+						TargetID:   current.Record.Entry.ID, TargetRevision: current.Revision,
+					},
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
-				effects, err := hierarchy.prepareHierarchyDeletionEntryFinalizer(ctx, HierarchyDeletionAction{
-					TargetID: current.Record.Entry.ID, TargetRevision: current.Revision,
-				})
-				if err != nil {
-					t.Fatal(err)
-				}
-				result, err := store.Transact(ctx, effects.conditions, effects.mutations)
+				defer testkeyvalue.ClearByteSlices(effects.Values())
+				result, err := store.Transact(ctx, effects.Conditions(), effects.Mutations())
 				if err != nil || result.Succeeded {
 					t.Fatalf("parent finalizer lost reservation race: %v", err)
 				}
@@ -62,8 +68,14 @@ func TestEntryRemovalFencesScriptReservationAfterRead(t *testing.T) {
 				t.Fatal("final transaction did not compare Entry source absence")
 			}
 			assertEntryRemovalRetained(t, entries, memory, current, generationIDs)
-			if memory.valueAt(scriptSourceCountKey(member.Reference.Source), memory.revision) == nil ||
-				memory.valueAt(scriptSourceForwardReferenceKey(member.Reference), memory.revision) == nil {
+			if memory.valueAt(
+				testscriptsourceevidence.ScriptSourceCountKey(member.Reference.Source),
+				memory.revision,
+			) == nil ||
+				memory.valueAt(
+					testscriptsourceevidence.ScriptSourceForwardReferenceKey(member.Reference),
+					memory.revision,
+				) == nil {
 				t.Fatal("losing deletion damaged the winning Script reservation")
 			}
 		})
@@ -72,22 +84,25 @@ func TestEntryRemovalFencesScriptReservationAfterRead(t *testing.T) {
 
 type entryScriptReservationRaceStore struct {
 	*connectorReferenceRaceStore
-	member   ScriptSourcePreparationMember
+	member   testscriptsourceevidence.ScriptSourcePreparationMember
 	reserved bool
 }
 
 func (store *entryScriptReservationRaceStore) Transact(
-	ctx context.Context, conditions []Condition, mutations []Mutation,
-) (TransactionResult, error) {
+	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if !store.reserved &&
-		connectorReferenceConditionContains(conditions, scriptSourceForwardReferenceKey(store.member.Reference)) {
-		authority, err := newScriptSourceReferenceAuthority(store.memoryHierarchyStore)
+		connectorReferenceConditionContains(
+			conditions,
+			testscriptsourceevidence.ScriptSourceForwardReferenceKey(store.member.Reference),
+		) {
+		authority, err := testscriptsourcepublication.NewAuthority(store.memoryHierarchyStore)
 		if err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		if _, err := authority.Prepare(ctx, store.member.Reference.OperationID,
-			[]ScriptSourcePreparationMember{store.member}); err != nil {
-			return TransactionResult{}, err
+			[]testscriptsourceevidence.ScriptSourcePreparationMember{store.member}); err != nil {
+			return testkeyvalue.TransactionResult{}, err
 		}
 		store.reserved = true
 	}

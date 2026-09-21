@@ -1,6 +1,9 @@
 package etcd
 
-import "testing"
+import (
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"testing"
+)
 
 // Rationale: only a Controller-authored marker with the bounded system actor
 // may authorize automatic reconciliation; an operator task is never automatic.
@@ -9,13 +12,13 @@ func TestIsAutomaticReconcileTaskRequiresSystemActor(t *testing.T) {
 
 	for _, test := range []struct {
 		name   string
-		actor  TaskActor
+		actor  testtaskjournal.TaskActor
 		params map[string]string
 		want   bool
 	}{
 		{
 			name:  "system marker",
-			actor: TaskActorSystem,
+			actor: testtaskjournal.TaskActorSystem,
 			params: map[string]string{
 				TaskAutomaticReconcileParam: "true",
 			},
@@ -23,18 +26,18 @@ func TestIsAutomaticReconcileTaskRequiresSystemActor(t *testing.T) {
 		},
 		{
 			name:  "operator marker",
-			actor: TaskActorOperator,
+			actor: testtaskjournal.TaskActorOperator,
 			params: map[string]string{
 				TaskAutomaticReconcileParam: "true",
 			},
 		},
 		{
 			name:  "system without marker",
-			actor: TaskActorSystem,
+			actor: testtaskjournal.TaskActorSystem,
 		},
 		{
 			name:  "system false marker",
-			actor: TaskActorSystem,
+			actor: testtaskjournal.TaskActorSystem,
 			params: map[string]string{
 				TaskAutomaticReconcileParam: "false",
 			},

@@ -10,6 +10,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -34,7 +36,7 @@ func TestReleasePreparedArtifactRejectsUnsealedOrMismatchedAuthorityBeforePublic
 		"Task target": func(value *ReleasePublicationEvidence) {
 			value.Task.Target = "svc_01ARZ3NDEKTSV4RRFFQ69G5FB1"
 		},
-		"Task operation": func(value *ReleasePublicationEvidence) { value.Task.Type = TaskRollback },
+		"Task operation": func(value *ReleasePublicationEvidence) { value.Task.Type = testtaskjournal.TaskRollback },
 		"Task step count": func(value *ReleasePublicationEvidence) {
 			value.Task.Steps = value.Task.Steps[:len(value.Task.Steps)-1]
 		},
@@ -42,7 +44,7 @@ func TestReleasePreparedArtifactRejectsUnsealedOrMismatchedAuthorityBeforePublic
 			value.Task.Steps[0].ID = "step_01ARZ3NDEKTSV4RRFFQ69G5FB2"
 		},
 		"candidate artifact": func(value *ReleasePublicationEvidence) {
-			value.Task.Params[TaskComposeArtifactParam] = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FB3"
+			value.Task.Params[testtaskjournal.TaskComposeArtifactParam] = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FB3"
 		},
 		"artifact owner": func(value *ReleasePublicationEvidence) {
 			value.EnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FB4"
@@ -72,7 +74,7 @@ func TestReleasePreparedArtifactPreservesPublicationRecordSizeLimit(t *testing.T
 	if err != nil {
 		t.Fatalf("releasePreparedArtifact() error = %v", err)
 	}
-	_, err = encodeReleaseRecord("release-publication", ReleasePublicationMarker{
+	_, err = testreleases.EncodeReleaseRecord("release-publication", testreleases.ReleasePublicationMarker{
 		CandidateReleaseDescriptor: evidence.CandidateReleaseDescriptor,
 		ExecutedComposeArtifact:    artifact,
 	})
@@ -195,16 +197,16 @@ func releasePreparedArtifactFixture(t *testing.T, yaml []byte) ReleasePublicatio
 	if err != nil {
 		t.Fatal(err)
 	}
-	steps := make([]TaskStepRecord, len(plan.GetSteps()))
+	steps := make([]testtaskjournal.TaskStepRecord, len(plan.GetSteps()))
 	for index, step := range plan.GetSteps() {
-		steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: step.GetStepId()}
+		steps[index] = testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: step.GetStepId()}
 	}
 	return ReleasePublicationEvidence{
 		EnvironmentID: environmentID,
 		Task: TaskRecord{
 			PlanID: planID, PlanHash: hex.EncodeToString(plan.GetPlanHash()),
-			RenderGeneration: 1, Type: TaskDeploy, Target: serviceID,
-			Params: map[string]string{TaskComposeArtifactParam: artifactID}, Steps: steps,
+			RenderGeneration: 1, Type: testtaskjournal.TaskDeploy, Target: serviceID,
+			Params: map[string]string{testtaskjournal.TaskComposeArtifactParam: artifactID}, Steps: steps,
 		},
 		CandidateReleaseDescriptor: descriptor,
 		Plan:                       plan,
@@ -214,7 +216,9 @@ func releasePreparedArtifactFixture(t *testing.T, yaml []byte) ReleasePublicatio
 func cloneReleasePreparedArtifactEvidence(value ReleasePublicationEvidence) ReleasePublicationEvidence {
 	value.Plan = proto.CloneOf(value.Plan)
 	value.CandidateReleaseDescriptor = executionplan.CloneCandidateReleaseDescriptor(value.CandidateReleaseDescriptor)
-	value.Task.Params = map[string]string{TaskComposeArtifactParam: value.Task.Params[TaskComposeArtifactParam]}
-	value.Task.Steps = cloneTaskSteps(value.Task.Steps)
+	value.Task.Params = map[string]string{
+		testtaskjournal.TaskComposeArtifactParam: value.Task.Params[testtaskjournal.TaskComposeArtifactParam],
+	}
+	value.Task.Steps = testtaskjournal.CloneTaskSteps(value.Task.Steps)
 	return value
 }

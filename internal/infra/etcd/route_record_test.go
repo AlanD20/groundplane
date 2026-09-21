@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 )
 
 func TestRouteRecordPreservesTypedMatchAndTarget(t *testing.T) {
@@ -15,7 +16,7 @@ func TestRouteRecordPreservesTypedMatchAndTarget(t *testing.T) {
 	record := routeRecordTestRecord(t, 1001)
 	desired := record.Desired
 	desired.Exposure = "internal"
-	replacement, err := ReplaceRouteDesired(record, desired)
+	replacement, err := testroutes.ReplaceDesired(record, desired)
 	if err != nil {
 		t.Fatalf("ReplaceRouteDesired() error = %v", err)
 	}
@@ -26,7 +27,7 @@ func TestRouteRecordPreservesTypedMatchAndTarget(t *testing.T) {
 		t.Fatalf("replacement = %#v, want immutable fields from %#v", replacement, record)
 	}
 	desired.Path = "/changed/*"
-	if _, err := ReplaceRouteDesired(record, desired); err == nil {
+	if _, err := testroutes.ReplaceDesired(record, desired); err == nil {
 		t.Fatal("ReplaceRouteDesired() accepted a match change")
 	}
 }
@@ -36,11 +37,11 @@ func TestRouteRecordEnvelopeRoundTripsStrictly(t *testing.T) {
 	// an ingress renderer.
 	t.Parallel()
 	record := routeRecordTestRecord(t, 1002)
-	encoded, err := encodeRouteRecord(record)
+	encoded, err := testroutes.EncodeRecord(record)
 	if err != nil {
 		t.Fatalf("encodeRouteRecord() error = %v", err)
 	}
-	decoded, err := decodeRouteRecord(encoded)
+	decoded, err := testroutes.DecodeRecord(encoded)
 	if err != nil || decoded != record {
 		t.Fatalf("decodeRouteRecord() = %#v, %v, want %#v", decoded, err, record)
 	}
@@ -49,7 +50,7 @@ func TestRouteRecordEnvelopeRoundTripsStrictly(t *testing.T) {
 		"duplicate": bytes.Replace(encoded, []byte(`"desired":`), []byte(`"environment_id":"x","desired":`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeRouteRecord(corrupt); err == nil {
+			if _, err := testroutes.DecodeRecord(corrupt); err == nil {
 				t.Fatal("decodeRouteRecord() accepted corrupt record")
 			}
 		})
@@ -59,24 +60,24 @@ func TestRouteRecordEnvelopeRoundTripsStrictly(t *testing.T) {
 func TestRouteRecordObservedStateIsClosedAndGenerationBound(t *testing.T) {
 	t.Parallel()
 	record := routeRecordTestRecord(t, 1010)
-	if record.Observed.Status != RouteObservedUnserved || record.DesiredGeneration != 1 {
+	if record.Observed.Status != testroutes.ObservedUnserved || record.DesiredGeneration != 1 {
 		t.Fatalf("new Route observation = %#v generation=%d", record.Observed, record.DesiredGeneration)
 	}
-	served, err := SetRouteObservation(record, RouteObservation{
-		Status: RouteObservedServed, DesiredGeneration: 1,
-		Provider: RouteProviderObservation{
+	served, err := testroutes.SetObservation(record, testroutes.Observation{
+		Status: testroutes.ObservedServed, DesiredGeneration: 1,
+		Provider: testroutes.ProviderObservation{
 			ComponentID:      ids.New(ids.KindComponent),
 			DefinitionDigest: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			CatalogDigest:    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			InputRevision:    7, InputGeneration: 1,
 		},
 	})
-	if err != nil || served.Observed.Status != RouteObservedServed {
+	if err != nil || served.Observed.Status != testroutes.ObservedServed {
 		t.Fatalf("SetRouteObservation(served) = %#v, %v", served, err)
 	}
 	stale := served.Observed
 	stale.DesiredGeneration = 2
-	if _, err := SetRouteObservation(served, stale); err == nil {
+	if _, err := testroutes.SetObservation(served, stale); err == nil {
 		t.Fatal("SetRouteObservation() accepted a mismatched desired generation")
 	}
 }
@@ -86,18 +87,18 @@ func TestRouteRecordKeysUseStableEnvironmentScope(t *testing.T) {
 	// ids, never mutable presentation paths.
 	t.Parallel()
 	record := routeRecordTestRecord(t, 1003)
-	if got := routeKey(record.Desired.ID); got != "/v1/records/routes/"+record.Desired.ID {
+	if got := testroutes.RecordKey(record.Desired.ID); got != "/v1/records/routes/"+record.Desired.ID {
 		t.Fatalf("routeKey() = %q", got)
 	}
-	if got := routeOwnerKey(record.EnvironmentID, record.Desired.ID); got !=
+	if got := testroutes.OwnerKey(record.EnvironmentID, record.Desired.ID); got !=
 		"/v1/indexes/routes/by-owner/environment/"+record.EnvironmentID+"/"+record.Desired.ID {
 		t.Fatalf("routeOwnerKey() = %q", got)
 	}
 }
 
-func routeRecordTestRecord(t *testing.T, offset int64) RouteRecord {
+func routeRecordTestRecord(t *testing.T, offset int64) testroutes.Record {
 	t.Helper()
-	record, err := NewRouteRecord(
+	record, err := testroutes.NewRecord(
 		ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1000),
 		core.Route{
 			ID: ids.NewAt(ids.KindRoute, serviceRecordTestTime(), offset), Host: "app.example.com",

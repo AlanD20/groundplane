@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -82,8 +82,8 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 						if err != nil {
 							t.Fatal(err)
 						}
-						mutation := etcd.Mutation{
-							Type:  etcd.MutationPut,
+						mutation := testkeyvalue.Mutation{
+							Type:  testkeyvalue.MutationPut,
 							Key:   removalrecord.OwnerKey(runtime.VolumeID),
 							Value: value,
 						}
@@ -91,14 +91,14 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 							mutation.Key = removalrecord.EnvironmentLockKey(runtime.EnvironmentID)
 						}
 						if change == "missing" {
-							mutation.Type, mutation.Value = etcd.MutationDelete, nil
+							mutation.Type, mutation.Value = testkeyvalue.MutationDelete, nil
 						} else if change == "corrupt" {
 							mutation.Value = []byte("corrupt")
 						}
 						if change == "late" {
 							repository.store = &ownerRaceStore{memoryHierarchyStore: store, mutation: mutation}
 						} else if change != "none" {
-							if _, err := store.Transact(ctx, nil, []etcd.Mutation{mutation}); err != nil {
+							if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{mutation}); err != nil {
 								t.Fatal(err)
 							}
 						}
@@ -145,16 +145,16 @@ func TestVolumeRemovalExecutionRequiresExactOwner(t *testing.T) {
 
 type ownerRaceStore struct {
 	*memoryHierarchyStore
-	mutation etcd.Mutation
+	mutation testkeyvalue.Mutation
 }
 
 func (store *ownerRaceStore) Transact(
 	ctx context.Context,
-	conditions []etcd.Condition,
-	mutations []etcd.Mutation,
-) (etcd.TransactionResult, error) {
-	if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []etcd.Mutation{store.mutation}); err != nil {
-		return etcd.TransactionResult{}, err
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
+	if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{store.mutation}); err != nil {
+		return testkeyvalue.TransactionResult{}, err
 	}
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 }

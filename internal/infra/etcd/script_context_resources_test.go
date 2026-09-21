@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -13,39 +16,43 @@ import (
 func TestScriptContextSourcesRejectResourceSubstitutions(t *testing.T) {
 	for _, test := range []struct {
 		name string
-		edit func(*ScriptExecutionSources, *agentpb.ResolvedRunnerSnapshot)
+		edit func(*testscriptsourcequeries.ScriptExecutionSources, *agentpb.ResolvedRunnerSnapshot)
 	}{
-		{"foreign projection", func(s *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+		{"foreign projection", func(s *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
 			s.DesiredProjection.Record.EnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 		}},
-		{"another projection read", func(s *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) { s.DesiredProjection.ReadRevision++ }},
-		{"missing Volume", func(s *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+		{"another projection read", func(s *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+			s.DesiredProjection.ReadRevision++
+		}},
+		{"missing Volume", func(s *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
 			s.DesiredProjection.Record.Volumes = nil
 		}},
-		{"duplicate Volume", func(s *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+		{"duplicate Volume", func(s *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
 			s.DesiredProjection.Record.Volumes = append(s.DesiredProjection.Record.Volumes, s.DesiredProjection.Record.Volumes[0])
 		}},
-		{"missing Entry", func(s *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+		{"missing Entry", func(s *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
 			s.DesiredProjection.Record.Entries = nil
 		}},
-		{"foreign Entry", func(s *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+		{"foreign Entry", func(s *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
 			s.DesiredProjection.Record.Entries[0].EnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 		}},
-		{"unexposed Entry", func(s *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+		{"unexposed Entry", func(s *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
 			s.DesiredProjection.Record.Entries[0].Entry.Exposure = []string{"other"}
 		}},
-		{"another Entry generation", func(_ *ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
+		{"another Entry generation", func(_ *testscriptsourcequeries.ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
 			p.EntryBindings[0].ValueGenerationId = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 		}},
-		{"another Entry destination", func(_ *ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
+		{"another Entry destination", func(_ *testscriptsourcequeries.ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
 			p.EntryBindings[0].FileTarget = "/etc/tls/another.conf"
 		}},
-		{"another Entry owner", func(_ *ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) { p.EntryBindings[0].Uid++ }},
-		{"another Entry storage class", func(_ *ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
+		{"another Entry owner", func(_ *testscriptsourcequeries.ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
+			p.EntryBindings[0].Uid++
+		}},
+		{"another Entry storage class", func(_ *testscriptsourcequeries.ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
 			p.EntryBindings[0].Secret = true
 			p.EntryBindings[0].Mode = 0o600
 		}},
-		{"another Entry kind", func(_ *ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
+		{"another Entry kind", func(_ *testscriptsourcequeries.ScriptExecutionSources, p *agentpb.ResolvedRunnerSnapshot) {
 			p.EntryBindings[0].Kind = agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV
 			p.EntryBindings[0].FileTarget = ""
 			p.EntryBindings[0].Uid, p.EntryBindings[0].Gid, p.EntryBindings[0].Mode = 0, 0, 0
@@ -54,11 +61,11 @@ func TestScriptContextSourcesRejectResourceSubstitutions(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			sources, snapshot := scriptContextSourcesForTest(t)
-			if err := validateScriptContextSources(sources, snapshot); err != nil {
+			if err := testscriptsourcequeries.ValidateScriptContextSources(sources, snapshot); err != nil {
 				t.Fatalf("valid exact resources rejected: %v", err)
 			}
 			test.edit(&sources, snapshot)
-			if err := validateScriptContextSources(sources, snapshot); err == nil {
+			if err := testscriptsourcequeries.ValidateScriptContextSources(sources, snapshot); err == nil {
 				t.Fatal("substituted explicit resource source was accepted")
 			}
 		})
@@ -66,8 +73,8 @@ func TestScriptContextSourcesRejectResourceSubstitutions(t *testing.T) {
 }
 
 func withScriptContextResourceSources(
-	sources ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot,
-) (ScriptExecutionSources, *agentpb.ResolvedRunnerSnapshot) {
+	sources testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot,
+) (testscriptsourcequeries.ScriptExecutionSources, *agentpb.ResolvedRunnerSnapshot) {
 	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	const serviceID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	sources.Environment.Record.ID = environmentID
@@ -78,8 +85,7 @@ func withScriptContextResourceSources(
 	sources.DesiredProjection.Record.EnvironmentID = environmentID
 	for _, grant := range snapshot.ExplicitExecution.Context.Volumes {
 		sources.DesiredProjection.Record.Volumes = append(
-			sources.DesiredProjection.Record.Volumes,
-			EnvironmentVolumeIdentity{
+			sources.DesiredProjection.Record.Volumes, testenvironmentprojection.EnvironmentVolumeIdentity{
 				ID: grant.VolumeId, Key: grant.VolumeId, Slug: grant.VolumeId,
 			},
 		)
@@ -88,7 +94,7 @@ func withScriptContextResourceSources(
 		uid, gid := uint32(1001), uint32(1002)
 		generation := "cfg_" + strings.TrimPrefix(id, "ev_")
 		destination := "etc/tls/" + id
-		sources.DesiredProjection.Record.Entries = append(sources.DesiredProjection.Record.Entries, EntryRecord{
+		sources.DesiredProjection.Record.Entries = append(sources.DesiredProjection.Record.Entries, testentries.Record{
 			EnvironmentID: environmentID, CurrentValueGenerationID: generation,
 			Entry: core.EnvEntry{ID: id, Kind: core.EntryKindFile, Path: destination, UID: &uid, GID: &gid,
 				Source: core.EntrySource{Kind: core.SourceLiteral, Literal: "fixture"}, Exposure: []string{"worker"}},

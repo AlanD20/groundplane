@@ -34,9 +34,11 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 		environment.Revision <= 0 || project.Revision <= 0 {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindScopeUnauthorized, "Attach rename scope is invalid")
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != current.Record.EnvironmentID || marker.ReplayTarget == nil ||
+		marker.Locator.ScopeID != current.Record.EnvironmentID ||
+		marker.ReplayTarget == nil ||
 		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetAttach ||
 		marker.ReplayTarget.ID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(

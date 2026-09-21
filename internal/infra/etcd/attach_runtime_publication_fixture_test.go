@@ -12,19 +12,25 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
-type attachRuntimeTestPreparation func(AttachTaskRenderInput, TaskRecord, IdempotencyMarker) (AttachTaskRenderInput, TaskRecord)
+type attachRuntimeTestPreparation func(testattachrender.AttachTaskRenderInput, TaskRecord, testidempotency.IdempotencyMarker) (testattachrender.AttachTaskRenderInput, TaskRecord)
 
 func createTestAttach(
 	t *testing.T,
 	ctx context.Context,
 	repository *AttachRepository,
 	scope AttachCreateScope,
-	record AttachRecord,
-	facts *AttachEncryptedFacts,
+	record testattachments.Record,
+	facts *testattachments.EncryptedFacts,
 	prepareRuntime ...attachRuntimeTestPreparation,
-) Versioned[AttachRecord] {
+) testkeyvalue.Versioned[testattachments.Record] {
 	t.Helper()
 	hierarchy, err := NewHierarchyRepository(repository.store)
 	if err != nil {
@@ -42,14 +48,14 @@ func createTestAttach(
 		scope.BackingService.Record.Desired.Authentication == core.BackingAuthenticationNone {
 		stepCount = 1
 	}
-	steps := make([]TaskStepRecord, stepCount)
+	steps := make([]testtaskjournal.TaskStepRecord, stepCount)
 	for index := range steps {
-		steps[index] = TaskStepRecord{
-			Kind: TaskStepOperation,
+		steps[index] = testtaskjournal.TaskStepRecord{
+			Kind: testtaskjournal.TaskStepOperation,
 			ID:   ids.NewAt(ids.KindStep, record.CreatedAt, seed+2+int64(index)),
 		}
 	}
-	owner, err := EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {
 		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
 	}
@@ -58,19 +64,19 @@ func createTestAttach(
 		OperationID:    ids.NewAt(ids.KindOperation, record.CreatedAt, seed),
 		IdempotencyKey: "attach-create-key-" + record.ID,
 		Owner:          owner,
-		Actor:          TaskActorOperator,
-		Executor:       TaskExecutorAgent,
+		Actor:          testtaskjournal.TaskActorOperator,
+		Executor:       testtaskjournal.TaskExecutorAgent,
 		PlanID:         ids.NewAt(ids.KindPlan, record.CreatedAt, seed+1),
 		PlanHash: hex.EncodeToString(
 			planDigest[:],
 		),
 		RenderGeneration:  int32(scope.ComposeProjection.Record.RenderGeneration),
-		Type:              TaskAttach,
+		Type:              testtaskjournal.TaskAttach,
 		Target:            record.ID,
-		Params:            map[string]string{TaskMutationEnvironmentParam: record.EnvironmentID},
+		Params:            map[string]string{testtaskjournal.TaskMutationEnvironmentParam: record.EnvironmentID},
 		Steps:             steps,
 		TimeoutSeconds:    120,
-		Status:            TaskStatusPending,
+		Status:            testtaskjournal.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         record.CreatedAt,
 		UpdatedAt:         record.CreatedAt,
@@ -83,22 +89,22 @@ func createTestAttach(
 	}
 	intentCiphertext := []byte("protected-attach-intent-" + record.ID)
 	intentDigest := sha256.Sum256(intentCiphertext)
-	marker := IdempotencyMarker{
-		Kind: IdempotencyMarkerTask, State: IdempotencyMarkerPending,
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment, ScopeID: record.EnvironmentID,
+	marker := testidempotency.IdempotencyMarker{
+		Kind: testidempotency.IdempotencyMarkerTask, State: testidempotency.IdempotencyMarkerPending,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: record.EnvironmentID,
 			Method: http.MethodPost, Route: "/attaches", Key: task.IdempotencyKey,
 		},
-		Intent: ProtectedIntentRecord{
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: intentCiphertext,
 		},
-		Response: IdempotencyResponse{
+		Response: testidempotency.IdempotencyResponse{
 			Status: http.StatusAccepted, ContentKind: "application/json", Body: responseBody,
 		},
 		TaskID: task.ID, CreatedAt: record.CreatedAt, UpdatedAt: record.CreatedAt,
 	}
-	renderInput := AttachTaskRenderInput{
+	renderInput := testattachrender.AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: record.ID, AttachName: record.Name,
 		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
@@ -114,13 +120,19 @@ func createTestAttach(
 		EnvironmentEpochRevision: attachTestEpochRevision(t, ctx, repository.store, record.EnvironmentID),
 		RuntimeProjection:        scope.ComposeProjection.Record,
 		RuntimePreparation:       configuredAttachRuntimePreparation(task, record.EnvironmentID),
-		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
-		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
-		Volumes:                  append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		Services: testattachrender.AttachTaskServiceSnapshots(
+			scope.ComposeProjection.Record.DesiredServices,
+		),
+		Networks: testattachrender.AttachTaskOwnedNetworkSnapshots(
+			scope.ComposeProjection.Record.DesiredZones,
+		),
+		Volumes: append(
+			[]testenvironmentprojection.EnvironmentVolumeIdentity(nil),
+			scope.ComposeProjection.Record.Volumes...),
 		VolumeMounts: append(
-			[]EnvironmentServiceVolumeMount(nil),
+			[]testenvironmentprojection.EnvironmentServiceVolumeMount(nil),
 			scope.ComposeProjection.Record.VolumeMounts...),
-		NetworkJoins: []AttachTaskNetworkJoin{{
+		NetworkJoins: []testattachrender.AttachTaskNetworkJoin{{
 			NetworkID: record.BackingNetworkID, ServiceIDs: []string{record.ServiceID},
 		}},
 		ConsumerServiceIDs: []string{record.ServiceID},
@@ -146,7 +158,7 @@ func createTestAttach(
 	if err != nil {
 		t.Fatalf("GetAttach(created) error = %v", err)
 	}
-	queued, err := repository.store.Get(ctx, taskQueueKey(TaskExecutorAgent, task.ID))
+	queued, err := repository.store.Get(ctx, testtaskjournal.TaskQueueKey(testtaskjournal.TaskExecutorAgent, task.ID))
 	if err != nil || queued == nil || queued.Entry == nil || queued.Entry.ModRevision != created.Revision {
 		t.Fatalf("Attach Task queue = %#v, error = %v", queued, err)
 	}
@@ -163,7 +175,7 @@ func publishTestDetach(
 	ctx context.Context,
 	repository *AttachRepository,
 	scope AttachCreateScope,
-	current Versioned[AttachRecord],
+	current testkeyvalue.Versioned[testattachments.Record],
 	createdAt time.Time,
 	prepareRuntime ...attachRuntimeTestPreparation,
 ) TaskRecord {
@@ -177,26 +189,29 @@ func publishTestDetach(
 		t.Fatalf("GetEnvironment() error = %v", err)
 	}
 	task := validTaskRecord(createdAt)
-	owner, err := EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {
 		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
 	}
 	task.Owner = owner
-	task.Actor = TaskActorOperator
+	task.Actor = testtaskjournal.TaskActorOperator
 	task.ID = ids.NewAt(ids.KindTask, createdAt, 901)
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 902)
 	task.IdempotencyKey = "attach-detach-key-0001"
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 903)
 	task.RenderGeneration = int32(scope.ComposeProjection.Record.RenderGeneration)
-	task.Type = TaskDetach
+	task.Type = testtaskjournal.TaskDetach
 	task.Target = current.Record.ID
-	task.Params = map[string]string{TaskMutationEnvironmentParam: current.Record.EnvironmentID}
+	task.Params = map[string]string{testtaskjournal.TaskMutationEnvironmentParam: current.Record.EnvironmentID}
 	marker := pendingTaskMarker(task)
 	marker.Locator.ScopeID = current.Record.EnvironmentID
 	marker.Locator.Method = http.MethodDelete
 	marker.Locator.Route = "/attaches/{id}"
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetAttach, ID: current.Record.ID}
-	renderInput := AttachTaskRenderInput{
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetAttach,
+		ID:   current.Record.ID,
+	}
+	renderInput := testattachrender.AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: current.Record.ID, AttachName: current.Record.Name,
 		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
@@ -212,11 +227,17 @@ func publishTestDetach(
 		EnvironmentEpochRevision: attachTestEpochRevision(t, ctx, repository.store, current.Record.EnvironmentID),
 		RuntimeProjection:        scope.ComposeProjection.Record,
 		RuntimePreparation:       configuredAttachRuntimePreparation(task, current.Record.EnvironmentID),
-		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
-		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
-		Volumes:                  append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		Services: testattachrender.AttachTaskServiceSnapshots(
+			scope.ComposeProjection.Record.DesiredServices,
+		),
+		Networks: testattachrender.AttachTaskOwnedNetworkSnapshots(
+			scope.ComposeProjection.Record.DesiredZones,
+		),
+		Volumes: append(
+			[]testenvironmentprojection.EnvironmentVolumeIdentity(nil),
+			scope.ComposeProjection.Record.Volumes...),
 		VolumeMounts: append(
-			[]EnvironmentServiceVolumeMount(nil),
+			[]testenvironmentprojection.EnvironmentServiceVolumeMount(nil),
 			scope.ComposeProjection.Record.VolumeMounts...),
 		NetworkJoins:       nil,
 		ConsumerServiceIDs: []string{current.Record.ServiceID},

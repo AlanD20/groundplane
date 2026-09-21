@@ -15,7 +15,9 @@ func abortAssignedManualScriptBeforeStart(
 	at time.Time,
 ) (scriptexecutions.ScriptExecutionRecord, error) {
 	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
-		execution.StartAuthorized || execution.AssignmentID != "" || !execution.ActiveReference ||
+		execution.StartAuthorized ||
+		execution.AssignmentID != "" ||
+		!execution.ActiveReference ||
 		!at.After(execution.UpdatedAt) {
 		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
 			errs.KindStateConflict,
@@ -45,8 +47,10 @@ func abortAssignedManualScriptBeforeStart(
 }
 
 func manualScriptAssignedAbortMatches(execution scriptexecutions.ScriptExecutionRecord) bool {
-	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
-		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualAssignedAbort || execution.Outcome == nil ||
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+		execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
+		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualAssignedAbort ||
+		execution.Outcome == nil ||
 		execution.Outcome.Reason != scriptexecutions.ScriptOutcomeAbortBeforeStart ||
 		execution.Cleanup == nil ||
 		!execution.UpdatedAt.Equal(execution.Outcome.ObservedAt) {

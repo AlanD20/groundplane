@@ -8,6 +8,10 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -21,18 +25,22 @@ func TestScriptContextManualEntrySourcesSelectOnlyGrantedEntries(t *testing.T) {
 		const generationID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		content := []byte("selected value")
 		digest := sha256.Sum256(content)
-		values, err := newEntryValueGenerationRepository(store)
+		encoded, err := testentryvalues.EncodePlain(testentryvalues.PlainGeneration{
+			EnvironmentID: sources.Environment.Record.ID, EntryID: entryID, GenerationID: generationID,
+			Content: content, PlaintextSHA256: hex.EncodeToString(digest[:]), CreatedAt: execution.CreatedAt,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := values.CreatePlain(context.Background(), PlainEntryValueGeneration{
-			EnvironmentID: sources.Environment.Record.ID, EntryID: entryID, GenerationID: generationID,
-			Content: content, PlaintextSHA256: hex.EncodeToString(digest[:]), CreatedAt: execution.CreatedAt,
-		}); err != nil {
-			t.Fatal(err)
+		result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testentryvalues.PlainKey(entryID, generationID), Value: encoded,
+		}})
+		clear(encoded)
+		if err != nil || !result.Succeeded {
+			t.Fatalf("seed plain Entry generation = %#v, %v", result, err)
 		}
 		sources.Revision = store.revision
-		sources.DesiredProjection.Record.Entries = []EntryRecord{
+		sources.DesiredProjection.Record.Entries = []testentries.Record{
 			{EnvironmentID: sources.Environment.Record.ID, CurrentValueGenerationID: generationID,
 				Entry: core.EnvEntry{ID: entryID, Kind: core.EntryKindEnv, Key: "SELECTED", Exposure: []string{"all"},
 					Source: core.EntrySource{Kind: core.SourceLiteral, Literal: string(content)}}},
@@ -50,9 +58,12 @@ func TestScriptContextManualEntrySourcesSelectOnlyGrantedEntries(t *testing.T) {
 			bindings = []*agentpb.ScriptRunnerEntryBinding{{EntryId: entryID, ValueGenerationId: generationID,
 				Kind: agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV, EnvironmentKey: "SELECTED", Sha256: digest[:]}}
 		}
-		members, err := (&ScriptRepository{store: store}).manualScriptEntrySourceMembers(
-			context.Background(), sources, ScriptSourceReference{SourceOwnerID: sources.Environment.Record.ID,
-				OperationID: execution.OperationID, ScriptExecutionID: execution.ID}, bindings,
+		members, err := (composeScriptRepository(store)).manualScriptEntrySourceMembers(
+			context.Background(),
+			sources,
+			testscriptsourcereference.Reference{SourceOwnerID: sources.Environment.Record.ID,
+				OperationID: execution.OperationID, ScriptExecutionID: execution.ID},
+			bindings,
 		)
 		if err != nil || len(members) != len(bindings) {
 			t.Fatalf("explicit Entry source selection (granted=%t): count=%d, %v", granted, len(members), err)
@@ -72,8 +83,11 @@ func TestScriptContextManualEntrySourcesRejectMissingGrant(t *testing.T) {
 		Mode: core.ScriptExecutionExplicit, Image: "example/setup@sha256:" + strings.Repeat("b", 64), User: "0:0",
 		EntryIDs: []string{"ev_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 	}
-	_, err := (&ScriptRepository{store: store}).manualScriptEntrySourceMembers(
-		context.Background(), sources, ScriptSourceReference{SourceOwnerID: sources.Environment.Record.ID}, nil,
+	_, err := (composeScriptRepository(store)).manualScriptEntrySourceMembers(
+		context.Background(),
+		sources,
+		testscriptsourcereference.Reference{SourceOwnerID: sources.Environment.Record.ID},
+		nil,
 	)
 	if !isKind(err, errs.KindValidationFailed) {
 		t.Fatalf("missing explicit Entry grant accepted: %v", err)

@@ -47,8 +47,10 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 			return IdempotencyTransactionResult{}, err
 		}
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != retry.ID || !marker.CreatedAt.Equal(retry.CreatedAt) ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != retry.ID ||
+		!marker.CreatedAt.Equal(retry.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -183,8 +185,16 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	}
 	var replay hierarchydeletion.HierarchyDeletionReplayLocator
 	var lock hierarchydeletion.HierarchyDeletionLock
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &replay) != nil ||
-		hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[2].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &lock) != nil ||
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		read.Values[1].Value,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		&replay,
+	) != nil ||
+		hierarchydeletion.DecodeHierarchyDeletionRecord(
+			read.Values[2].Value,
+			hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+			&lock,
+		) != nil ||
 		replay.ParentOperationID != operation.Tombstone.OperationID ||
 		replay.CurrentTaskID != source.Record.ID ||
 		lock.ParentOperationID != operation.Tombstone.OperationID {

@@ -11,6 +11,20 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentcoordination "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -25,18 +39,18 @@ type environmentBlueprintAtomicPublication struct {
 	activeScriptRevision       int64
 	candidateAttachIDs         []string
 	newBackupSourceIDs         []string
-	newBackupSources           []EnvironmentBlueprintBackupPolicySourceInput
+	newBackupSources           []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput
 	volumeIDs                  []string
-	retainedAttachRevisions    []Versioned[AttachRecord]
+	retainedAttachRevisions    []testkeyvalue.Versioned[testattachments.Record]
 	retainedGrantRelations     [][2]string
 	preexistingBackupRevisions map[string]int64
-	detachWinner               Versioned[AttachRecord]
+	detachWinner               testkeyvalue.Versioned[testattachments.Record]
 }
 
 func (published environmentBlueprintAtomicPublication) candidateAttachKeys() []string {
 	keys := make([]string, len(published.candidateAttachIDs))
 	for index, id := range published.candidateAttachIDs {
-		keys[index] = attachKey(id)
+		keys[index] = testattachments.AttachKey(id)
 	}
 	return keys
 }
@@ -47,32 +61,35 @@ type environmentBlueprintAtomicAuditStore struct {
 	comparisons      int
 	successMutations int
 	failureReads     int
-	conditionByKey   map[string]Condition
+	conditionByKey   map[string]testkeyvalue.Condition
 }
 
 // Only final publication is faulted; private source staging must remain usable.
 func (store *environmentBlueprintAtomicAuditStore) TransactEnvironmentBlueprint(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	store.comparisons = len(conditions)
 	store.successMutations = len(mutations)
 	store.failureReads = len(conditions)
-	store.conditionByKey = make(map[string]Condition, len(conditions))
+	store.conditionByKey = make(map[string]testkeyvalue.Condition, len(conditions))
 	for _, condition := range conditions {
 		store.conditionByKey[condition.Key] = condition
 	}
 	if store.failFinal {
-		return TransactionResult{}, errs.New(errs.KindInternal, "injected final Blueprint publication failure")
+		return testkeyvalue.TransactionResult{}, errs.New(
+			errs.KindInternal,
+			"injected final Blueprint publication failure",
+		)
 	}
 	return store.hierarchyStore.Transact(ctx, conditions, mutations)
 }
 
 type environmentBlueprintBackingScope struct {
-	project     Versioned[ProjectRecord]
-	environment Versioned[EnvironmentRecord]
-	service     Versioned[ServiceRecord]
+	project     testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	service     testkeyvalue.Versioned[testservices.ServiceRecord]
 }
 
 func publishEnvironmentBlueprintAtomicShape(
@@ -97,9 +114,9 @@ func publishEnvironmentBlueprintAtomicShape(
 		projection.DesiredRoutes[0].Desired.TargetServiceID = serviceID
 	}
 
-	var attachPreparation BlueprintAttachTaskPreparation
+	var attachPreparation testblueprintplanning.BlueprintAttachTaskPreparation
 	var candidateAttachIDs []string
-	var retainedAttachRevisions []Versioned[AttachRecord]
+	var retainedAttachRevisions []testkeyvalue.Versioned[testattachments.Record]
 	var retainedGrantRelations [][2]string
 	if shape.attaches {
 		scopes := []environmentBlueprintBackingScope{
@@ -107,7 +124,7 @@ func publishEnvironmentBlueprintAtomicShape(
 			seedEnvironmentBlueprintBackingScope(t, fixture, 6300),
 		}
 		secondServiceID := ids.NewAt(ids.KindService, fixture.now, 6400)
-		projection.DesiredServices = append(projection.DesiredServices, EnvironmentServiceProjection{
+		projection.DesiredServices = append(projection.DesiredServices, testservices.EnvironmentServiceProjection{
 			EnvironmentID: fixture.environment.Record.ID,
 			Desired: core.Service{
 				ID: secondServiceID, Name: "worker", Image: "example/worker:1",
@@ -115,12 +132,12 @@ func publishEnvironmentBlueprintAtomicShape(
 			},
 		})
 		consumerIDs := []string{projection.DesiredServices[0].Desired.ID, secondServiceID}
-		inputs := make([]EnvironmentBlueprintAttachCandidateInput, 2)
+		inputs := make([]testblueprintplanning.EnvironmentBlueprintAttachCandidateInput, 2)
 		for index := range inputs {
 			record, facts, retained := environmentBlueprintMaximumAttachCandidate(
 				t, fixture, task, scopes[index], consumerIDs[index], int64(6500+index*100),
 			)
-			inputs[index] = EnvironmentBlueprintAttachCandidateInput{
+			inputs[index] = testblueprintplanning.EnvironmentBlueprintAttachCandidateInput{
 				Record: record, Facts: &facts,
 				BackingProject:       scopes[index].project,
 				BackingEnvironment:   scopes[index].environment,
@@ -142,7 +159,7 @@ func publishEnvironmentBlueprintAtomicShape(
 		for index := range retainedAttachRevisions {
 			retainedAttachRevisions[index].ReadRevision = attachReadRevision
 		}
-		attachPreparation, err = PrepareEnvironmentBlueprintAttachTask(
+		attachPreparation, err = testblueprintplanning.PrepareEnvironmentBlueprintAttachTask(
 			task.ID, fixture.environment.Record.ID, inputs, false, task.CreatedAt,
 		)
 		if err != nil {
@@ -162,7 +179,7 @@ func publishEnvironmentBlueprintAtomicShape(
 		seedEnvironmentBlueprintCurrentBackupPolicy(t, fixture, currentAttachIDs)
 		projection.Volumes = nil
 		for index := 0; index < 6; index++ {
-			projection.Volumes = append(projection.Volumes, EnvironmentVolumeIdentity{
+			projection.Volumes = append(projection.Volumes, testenvironmentprojection.EnvironmentVolumeIdentity{
 				ID:   ids.NewAt(ids.KindVolume, fixture.now, int64(6900+index)),
 				Slug: fmt.Sprintf("volume-%02d", index),
 				Key:  fmt.Sprintf("volume-%02d", index),
@@ -187,7 +204,7 @@ func publishEnvironmentBlueprintAtomicShape(
 	var scriptPublication BlueprintScriptPublication
 	activeScriptRevision := int64(0)
 	if shape.releases != 0 {
-		active, getErr := fixture.store.Get(ctx, scriptSetActiveKey(fixture.environment.Record.ID))
+		active, getErr := fixture.store.Get(ctx, testscripts.ScriptSetActiveKey(fixture.environment.Record.ID))
 		if getErr != nil || active.Entry == nil {
 			t.Fatalf("read active Script set = %#v, %v", active, getErr)
 		}
@@ -196,9 +213,9 @@ func publishEnvironmentBlueprintAtomicShape(
 		if repositoryErr != nil {
 			t.Fatal(repositoryErr)
 		}
-		var desiredScripts []ScriptRecord
+		var desiredScripts []testscripts.Record
 		if shape.realHookSources {
-			desiredScripts = []ScriptRecord{blueprintTerminalFixtureScript(t, task)}
+			desiredScripts = []testscripts.Record{blueprintTerminalFixtureScript(t, task)}
 		}
 		scriptPublication, err = scripts.PrepareBlueprintScriptPublication(
 			ctx,
@@ -215,21 +232,25 @@ func publishEnvironmentBlueprintAtomicShape(
 		defer scriptPublication.Clear()
 	}
 
-	var backupPreparation BlueprintBackupPolicyPreparation
+	var backupPreparation testblueprintplanning.BlueprintBackupPolicyPreparation
 	var newBackupSourceIDs []string
-	var newBackupSources []EnvironmentBlueprintBackupPolicySourceInput
+	var newBackupSources []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput
 	preexistingBackupRevisions := map[string]int64{}
 	if shape.backup {
-		sourceInputs := make([]EnvironmentBlueprintBackupPolicySourceInput, 0, MaximumBackupPolicySources)
+		sourceInputs := make(
+			[]testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput,
+			0,
+			testbackuppolicy.MaximumBackupPolicySources,
+		)
 		for index, attachID := range currentAttachIDs {
-			sourceInputs = append(sourceInputs, EnvironmentBlueprintBackupPolicySourceInput{
+			sourceInputs = append(sourceInputs, testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
 				CandidateID: ids.NewAt(ids.KindBackupSource, fixture.now, int64(7000+index)),
 				Kind:        core.BackupSourceAttach, TargetID: attachID,
 			})
 		}
 		for index, attachID := range candidateAttachIDs {
 			sourceID := ids.NewAt(ids.KindBackupSource, fixture.now, int64(7100+index))
-			sourceInputs = append(sourceInputs, EnvironmentBlueprintBackupPolicySourceInput{
+			sourceInputs = append(sourceInputs, testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
 				CandidateID: sourceID, Kind: core.BackupSourceAttach, TargetID: attachID,
 			})
 			newBackupSourceIDs = append(newBackupSourceIDs, sourceID)
@@ -237,15 +258,14 @@ func publishEnvironmentBlueprintAtomicShape(
 		}
 		for index, volume := range projection.Volumes {
 			sourceID := ids.NewAt(ids.KindBackupSource, fixture.now, int64(7200+index))
-			sourceInputs = append(sourceInputs, EnvironmentBlueprintBackupPolicySourceInput{
+			sourceInputs = append(sourceInputs, testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
 				CandidateID: sourceID, Kind: core.BackupSourceVolume, TargetID: volume.ID,
 			})
 			newBackupSourceIDs = append(newBackupSourceIDs, sourceID)
 			newBackupSources = append(newBackupSources, sourceInputs[len(sourceInputs)-1])
 		}
 		backupPreparation, err = fixture.repository.PrepareEnvironmentBlueprintBackupPolicy(
-			ctx,
-			EnvironmentBlueprintBackupPolicyInput{
+			ctx, testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 				EnvironmentID:     fixture.environment.Record.ID,
 				TaskID:            task.ID,
 				ReadRevision:      fixedRevision,
@@ -268,18 +288,14 @@ func publishEnvironmentBlueprintAtomicShape(
 		if identityErr != nil {
 			t.Fatal(identityErr)
 		}
-		if err = backupPreparation.SupplyInitialKey(BackupPolicyInitialKeyMaterial{
+		if err = backupPreparation.SupplyInitialKey(testbackuppolicymutations.BackupPolicyInitialKeyMaterial{
 			Recipient:  identity.Recipient().String(),
 			Ciphertext: []byte("controller-sealed-shape-age-identity"),
 		}); err != nil {
 			t.Fatalf("SupplyInitialKey() error = %v", err)
 		}
 		projection.Backup = backupPreparation.Projection()
-		for _, key := range []string{
-			backupPolicyKey(fixture.environment.Record.ID),
-			environmentCoordinationKey(fixture.environment.Record.ID),
-			backupPolicyConnectorReferenceKey(fixture.connector.Record.Connector.ID, fixture.environment.Record.ID),
-		} {
+		for _, key := range []string{testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID), testenvironmentcoordination.Key(fixture.environment.Record.ID), testbackuppolicy.BackupPolicyConnectorReferenceKey(fixture.connector.Record.Connector.ID, fixture.environment.Record.ID)} {
 			read, getErr := fixture.store.Get(context.Background(), key)
 			if getErr != nil || read.Entry == nil {
 				t.Fatalf("pre-existing Backup authority %q = %#v, %v", key, read, getErr)
@@ -304,12 +320,12 @@ func publishEnvironmentBlueprintAtomicShape(
 	}
 	if shape.scriptEditAfterPreparation {
 		first := scriptCheckpointTestRecord(task.CreatedAt.Add(time.Millisecond))
-		key := scriptSetScriptKey(fixture.environment.Record.ID, task.ID, first.ScriptID)
+		key := testscripts.ScriptSetScriptKey(fixture.environment.Record.ID, task.ID, first.ScriptID)
 		read, err := fixture.store.Get(ctx, key)
 		if err != nil || read.Entry == nil {
 			t.Fatalf("read selected Script primary: %v", err)
 		}
-		script, err := decodeScriptRecord(read.Entry.Value)
+		script, err := testscripts.DecodeRecord(read.Entry.Value)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -319,7 +335,7 @@ func publishEnvironmentBlueprintAtomicShape(
 	}
 
 	marker := environmentBlueprintTestMarker(task, fixture.environment.Record.ID)
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,41 +347,43 @@ func publishEnvironmentBlueprintAtomicShape(
 		projection,
 		marker,
 	)
-	var detachWinner Versioned[AttachRecord]
+	var detachWinner testkeyvalue.Versioned[testattachments.Record]
 	if shape.detachRetainedBeforeFinal {
-		detaching, detachErr := BeginAttachDetaching(
+		detaching, detachErr := testattachments.BeginAttachDetaching(
 			retainedAttachRevisions[0].Record,
 			ids.NewAt(ids.KindTask, fixture.now, 8800),
 		)
 		if detachErr != nil {
 			t.Fatalf("BeginAttachDetaching(retained target) error = %v", detachErr)
 		}
-		value, encodeErr := encodeAttachRecord(detaching)
+		value, encodeErr := testattachments.EncodeAttachRecord(detaching)
 		if encodeErr != nil {
 			t.Fatalf("encodeAttachRecord(detaching target) error = %v", encodeErr)
 		}
 		detachResult, detachErr := fixture.store.Transact(
 			ctx,
-			[]Condition{
-				{Key: attachKey(detaching.ID), ModRevision: retainedAttachRevisions[0].Revision},
-				{Key: deletionTombstoneKey("attach", detaching.ID)},
+			[]testkeyvalue.Condition{
+				{Key: testattachments.AttachKey(detaching.ID), ModRevision: retainedAttachRevisions[0].Revision},
+				{Key: testdeletions.TombstoneKey("attach", detaching.ID)},
 			},
-			[]Mutation{{Type: MutationPut, Key: attachKey(detaching.ID), Value: value}},
+			[]testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationPut, Key: testattachments.AttachKey(detaching.ID), Value: value},
+			},
 		)
 		clear(value)
 		if detachErr != nil || !detachResult.Succeeded {
 			t.Fatalf("commit retained target detach = %#v, %v", detachResult, detachErr)
 		}
-		detachWinner = Versioned[AttachRecord]{
+		detachWinner = testkeyvalue.Versioned[testattachments.Record]{
 			Record: detaching, Revision: detachResult.Revision, ReadRevision: detachResult.Revision,
 		}
 	}
 	if shape.tombstoneRetainedBeforeFinal {
-		key := deletionTombstoneKey("attach", retainedAttachRevisions[0].Record.ID)
+		key := testdeletions.TombstoneKey("attach", retainedAttachRevisions[0].Record.ID)
 		result, tombstoneErr := fixture.store.Transact(
 			ctx,
-			[]Condition{{Key: key}},
-			[]Mutation{{Type: MutationPut, Key: key, Value: []byte("deleting")}},
+			[]testkeyvalue.Condition{{Key: key}},
+			[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: []byte("deleting")}},
 		)
 		if tombstoneErr != nil || !result.Succeeded {
 			t.Fatalf("commit retained target deletion tombstone = %#v, %v", result, tombstoneErr)
@@ -387,18 +405,14 @@ func publishEnvironmentBlueprintAtomicShape(
 		fixture.project,
 		fixture.environment,
 		0,
-		claim,
-		EnvironmentDesiredRevisionIdentity{
+		claim, testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: fixture.environment.Record.ID,
 			RevisionID:    task.ID,
-		},
-		projection,
+		}, projection,
 		zones,
 		services,
 		routes,
-		releaseGroupPreparation,
-		ComponentTaskPreparation{},
-		attachPreparation,
+		releaseGroupPreparation, testcomponentplanning.ComponentTaskPreparation{}, attachPreparation,
 		backupPreparation,
 		scriptPublication,
 		releasePublication,

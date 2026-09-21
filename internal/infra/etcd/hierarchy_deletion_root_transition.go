@@ -42,9 +42,14 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 	}
 	var replay hierarchydeletion.HierarchyDeletionReplayLocator
 	var lock hierarchydeletion.HierarchyDeletionLock
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(auxiliary.Values[0].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &replay) != nil ||
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		auxiliary.Values[0].Value,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		&replay,
+	) != nil ||
 		hierarchydeletion.DecodeHierarchyDeletionRecord(auxiliary.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &lock) != nil ||
-		replay.ParentOperationID != operation.Tombstone.OperationID || replay.CurrentTaskID != task.ID ||
+		replay.ParentOperationID != operation.Tombstone.OperationID ||
+		replay.CurrentTaskID != task.ID ||
 		lock.ParentOperationID != operation.Tombstone.OperationID ||
 		lock.DeletionEpoch != operation.Tombstone.DeletionEpoch {
 		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()

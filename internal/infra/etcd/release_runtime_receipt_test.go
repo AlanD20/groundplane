@@ -12,6 +12,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -70,13 +73,13 @@ func TestReleaseRuntimeReceiptPromotesOnlySuccessfulMembers(t *testing.T) {
 		if err != nil || before.Entry != nil {
 			t.Fatal("prepared publication incorrectly promoted runtime")
 		}
-		if _, err := f.store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: prior}}); err != nil {
+		if _, err := f.store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: prior}}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	f.result.FailedStepID = f.task.Steps[5].ID
-	f.result.Diagnostic = TaskResultDiagnosticTimeoutBeforeEffect
-	if processed, err := f.finalize(t, TaskStatusFailed); err != nil || !processed {
+	f.result.Diagnostic = testtaskjournal.TaskResultDiagnosticTimeoutBeforeEffect
+	if processed, err := f.finalize(t, testtaskjournal.TaskStatusFailed); err != nil || !processed {
 		t.Fatalf("selected terminal batch=%v, %v", processed, err)
 	}
 	for index, member := range f.head.Members {
@@ -106,11 +109,14 @@ func TestReleaseRuntimeReceiptRejectsMismatchedAuthority(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newReleaseTerminalFixture(t, 2)
 			mutate(&f)
-			if _, err := f.finalize(t, TaskStatusCompleted); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+			if _, err := f.finalize(t, testtaskjournal.TaskStatusCompleted); !errors.Is(
+				err,
+				errs.New(errs.KindStateConflict, ""),
+			) {
 				t.Fatalf("mismatched authority error=%v", err)
 			}
 			for _, member := range f.head.Members {
-				for _, key := range []string{serviceruntimerecord.Key(member.ServiceID), releaseTerminalKey(member.ReleaseID)} {
+				for _, key := range []string{serviceruntimerecord.Key(member.ServiceID), testreleases.ReleaseTerminalKey(member.ReleaseID)} {
 					got, err := f.store.Get(context.Background(), key)
 					if err != nil || got.Entry != nil {
 						t.Fatal("rejected acknowledgement partially wrote terminal state")
@@ -127,16 +133,19 @@ func TestReleaseRuntimeReceiptCASAndProofGuards(t *testing.T) {
 	t.Parallel()
 	f := newReleaseTerminalFixture(t, 2)
 	f.store.raceKey = serviceruntimerecord.Key(f.head.Members[0].ServiceID)
-	if _, err := f.finalize(t, TaskStatusCompleted); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
+	if _, err := f.finalize(t, testtaskjournal.TaskStatusCompleted); !errors.Is(
+		err,
+		errs.New(errs.KindStateConflict, ""),
+	) {
 		t.Fatalf("runtime CAS race error=%v", err)
 	}
 	for _, member := range f.head.Members {
-		terminal, err := f.store.Get(context.Background(), releaseTerminalKey(member.ReleaseID))
+		terminal, err := f.store.Get(context.Background(), testreleases.ReleaseTerminalKey(member.ReleaseID))
 		if err != nil || terminal.Entry != nil {
 			t.Fatal("lost runtime CAS partially wrote terminal history")
 		}
 	}
-	if _, err := f.finalize(t, TaskStatusCompleted, Condition{Key: "/proof/not-present", ModRevision: 1}); !errors.Is(
+	if _, err := f.finalize(t, testtaskjournal.TaskStatusCompleted, testkeyvalue.Condition{Key: "/proof/not-present", ModRevision: 1}); !errors.Is(
 		err,
 		errs.New(errs.KindStateConflict, ""),
 	) {
@@ -150,9 +159,9 @@ func TestReleaseRuntimeReceiptBatchesPhysicalBytesAndProofConditions(t *testing.
 	t.Parallel()
 	f := newReleaseTerminalFixture(t, domain.MaximumGroupMembers)
 	f.store.keyPrefix = "/" + strings.Repeat("p", 10000) + "/"
-	guards := []Condition{{Key: "/proof/one"}, {Key: "/proof/two"}}
+	guards := []testkeyvalue.Condition{{Key: "/proof/one"}, {Key: "/proof/two"}}
 	for attempts := 0; ; attempts++ {
-		processed, err := f.finalize(t, TaskStatusCompleted, guards...)
+		processed, err := f.finalize(t, testtaskjournal.TaskStatusCompleted, guards...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +172,7 @@ func TestReleaseRuntimeReceiptBatchesPhysicalBytesAndProofConditions(t *testing.
 			t.Fatal("byte-bounded terminal cursor did not finish")
 		}
 	}
-	if f.store.maximumAggregate >= 92 || f.store.maximumBytes > maximumTransactionBytes {
+	if f.store.maximumAggregate >= 92 || f.store.maximumBytes > testkeyvalue.MaximumBytes {
 		t.Fatalf("batch bounds operations=%d bytes=%d", f.store.maximumAggregate, f.store.maximumBytes)
 	}
 }
@@ -175,24 +184,24 @@ func TestReleaseRuntimeReceiptPreservesCompensatedMember(t *testing.T) {
 	f := newReleaseTerminalFixture(t, 2)
 	member := f.head.Members[0]
 	priorRelease := ids.New(ids.KindDeployment)
-	key := releaseIntentStagingKey(f.head.PublicationID, member.ReleaseID)
+	key := testreleases.ReleaseIntentStagingKey(f.head.PublicationID, member.ReleaseID)
 	stored, err := f.store.Get(context.Background(), key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	intent, err := decodeReleaseRecord[domain.Intent](stored.Entry.Value, "release-intent")
+	intent, err := testreleases.DecodeReleaseRecord[domain.Intent](stored.Entry.Value, "release-intent")
 	if err != nil {
 		t.Fatal(err)
 	}
 	intent.PriorServingReleaseID, intent.PriorSuccessfulReleaseID = priorRelease, priorRelease
-	encoded, err := encodeReleaseRecord("release-intent", intent)
+	encoded, err := testreleases.EncodeReleaseRecord("release-intent", intent)
 	if err != nil {
 		t.Fatal(err)
 	}
 	priorReceipt := []byte("pre-operation acknowledged input")
-	if _, err := f.store.memoryHierarchyStore.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: key, Value: encoded},
-		{Type: MutationPut, Key: serviceruntimerecord.Key(member.ServiceID), Value: priorReceipt},
+	if _, err := f.store.memoryHierarchyStore.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: key, Value: encoded},
+		{Type: testkeyvalue.MutationPut, Key: serviceruntimerecord.Key(member.ServiceID), Value: priorReceipt},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +212,7 @@ func TestReleaseRuntimeReceiptPreservesCompensatedMember(t *testing.T) {
 		}
 	}
 	f.result.FailedStepID = f.task.Steps[0].ID
-	if processed, err := f.finalize(t, TaskStatusFailed); err != nil || !processed {
+	if processed, err := f.finalize(t, testtaskjournal.TaskStatusFailed); err != nil || !processed {
 		t.Fatalf("compensation terminal=%v, %v", processed, err)
 	}
 	got, err := f.store.Get(context.Background(), serviceruntimerecord.Key(member.ServiceID))

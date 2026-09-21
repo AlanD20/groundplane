@@ -1,8 +1,12 @@
-package etcd
+package agentregistration
 
 import (
 	"bytes"
 	"context"
+	base "github.com/AlanD20/groundplane/internal/infra/etcd"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	"maps"
 	"net/http"
 	"testing"
 )
@@ -12,7 +16,7 @@ import (
 func TestLocalAgentConfigReplacementCommitsWithIdempotencyMarker(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryTaskStore()
-	repository, err := newLocalAgentRepository(store)
+	repository, err := newRepository(store)
 	if err != nil {
 		t.Fatalf("newLocalAgentRepository() error = %v", err)
 	}
@@ -23,17 +27,17 @@ func TestLocalAgentConfigReplacementCommitsWithIdempotencyMarker(t *testing.T) {
 	}
 	responseBody := []byte(`{"pull_interval_seconds":5,"max_concurrent_tasks":2,"labels":{"zone":"edge"}}`)
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopePlatform,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopePlatform,
 		ScopeID:   "-",
 		Method:    http.MethodPut,
 		Route:     "/agents/{id}/config",
 		Key:       "agent-config-key-0001",
 	}
-	marker.Response = IdempotencyResponse{
+	marker.Response = testidempotency.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: responseBody,
 	}
-	desired := LocalAgentConfig{
+	desired := testlocalagents.LocalAgentConfig{
 		PullIntervalSeconds: 5,
 		MaxConcurrentTasks:  2,
 		Labels:              map[string]string{"zone": "edge"},
@@ -42,19 +46,27 @@ func TestLocalAgentConfigReplacementCommitsWithIdempotencyMarker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateConfigIdempotent() error = %v", err)
 	}
-	if updated.Record.Config.Labels["zone"] != "edge" || result.kind != idempotencyTransactionApplied {
+	outcome, _, conflict, classificationErr := result.Classify()
+	if updated.Record.Config.Labels["zone"] != "edge" || outcome != base.IdempotencyKnownApplied || conflict != nil ||
+		classificationErr != nil {
 		t.Fatalf("UpdateConfigIdempotent() = %#v/%#v", updated, result)
 	}
 	stored, err := repository.GetSingleton(ctx)
-	if err != nil || !equalLocalAgentConfig(stored.Record.Config, desired) {
+	if err != nil || stored.Record.Config.PullIntervalSeconds != desired.PullIntervalSeconds ||
+		stored.Record.Config.MaxConcurrentTasks != desired.MaxConcurrentTasks ||
+		!maps.Equal(stored.Record.Config.Labels, desired.Labels) {
 		t.Fatalf("GetSingleton() = %#v, %v", stored, err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := base.NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
 	evidence, err := idempotency.Read(ctx, marker.Locator)
-	if err != nil || evidence == nil || !bytes.Equal(evidence.marker.Response.Body, responseBody) {
+	if err != nil || evidence == nil {
 		t.Fatalf("Read(marker) = %#v, %v", evidence, err)
+	}
+	storedMarker, err := evidence.Marker()
+	if err != nil || !bytes.Equal(storedMarker.Response.Body, responseBody) {
+		t.Fatalf("Marker() = %#v, %v", storedMarker, err)
 	}
 }

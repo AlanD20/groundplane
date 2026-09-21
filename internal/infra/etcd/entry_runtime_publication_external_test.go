@@ -5,15 +5,25 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	desiredstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
-	current etcd.Versioned[etcd.EnvironmentComposeProjection], candidate etcd.EnvironmentComposeProjection,
-	task etcd.TaskRecord, race string,
+func proveEntryServingPublication(
+	t *testing.T,
+	fixture *etcd.ExecutedArtifactFixture,
+	current testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection],
+	candidate testenvironmentprojection.EnvironmentComposeProjection,
+	task etcd.TaskRecord,
+	race string,
 ) {
 	t.Helper()
 	ctx := t.Context()
@@ -22,24 +32,24 @@ func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFi
 	if err != nil {
 		t.Fatal(err)
 	}
-	claim, err := desired.ClaimEnvironmentBlueprintStage(ctx, etcd.EnvironmentBlueprintStageClaimRequest{
+	claim, err := desired.ClaimEnvironmentBlueprintStage(ctx, testblueprints.EnvironmentBlueprintStageClaimRequest{
 		EnvironmentID: task.Target, CandidateRevisionID: task.ID, CandidateTaskID: task.ID,
 		Locator: marker.Locator, Intent: marker.Intent, BaselineHeadRevision: current.Revision,
-		SourceKind: etcd.EnvironmentBlueprintSourceMutation, RenderGeneration: candidate.RenderGeneration,
-		ProjectionSchema: etcd.EnvironmentDesiredProjectionSchema, CreatedAt: task.CreatedAt,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: candidate.RenderGeneration,
+		ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: task.CreatedAt,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	digest, err := etcd.EnvironmentBlueprintDependencyDigest(candidate)
+	digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(candidate)
 	if err != nil {
 		t.Fatal(err)
 	}
 	entry := candidate.Entries[0]
-	if _, err := desired.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	if _, err := desired.StageEnvironmentBlueprintRevision(ctx, testblueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim, Projection: candidate, DependencyDigest: digest,
-		Mutation: &etcd.EnvironmentDesiredMutationAudit{Entry: &etcd.EnvironmentEntryMutationAudit{
-			Action: etcd.EnvironmentEntryMutationCreate, BaseRevisionID: current.Record.RevisionID,
+		Mutation: &testblueprints.EnvironmentDesiredMutationAudit{Entry: &testblueprints.EnvironmentEntryMutationAudit{
+			Action: testblueprints.EnvironmentEntryMutationCreate, BaseRevisionID: current.Record.RevisionID,
 			EntryID: entry.Entry.ID, Record: &entry,
 		}},
 	}); err != nil {
@@ -62,11 +72,23 @@ func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFi
 		t.Fatal(err)
 	}
 	publish := func() (etcd.IdempotencyTransactionResult, error) {
-		return publisher.PublishEnvironmentDesiredRevisionWithTask(ctx, fixture.Project, fixture.Environment,
-			current.Revision, claim,
-			etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: task.Target, RevisionID: task.ID},
-			candidate, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
-			etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker)
+		return publisher.PublishEnvironmentDesiredRevisionWithTask(
+			ctx,
+			fixture.Project,
+			fixture.Environment,
+			current.Revision,
+			claim,
+			testblueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: task.Target, RevisionID: task.ID},
+			candidate,
+			nil,
+			nil,
+			nil,
+			testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
+			testcomponentplanning.ComponentTaskPreparation{},
+			testblueprintplanning.BlueprintAttachTaskPreparation{},
+			task,
+			marker,
+		)
 	}
 	result, err := publish()
 	if publicationRace {
@@ -92,7 +114,11 @@ func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFi
 		outcome != etcd.IdempotencyKnownApplied {
 		t.Fatalf("Entry publication=%v, %v, %v", outcome, conflict, err)
 	}
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", fixture.Hierarchy, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints(
+		"/var/lib/groundplane/vol",
+		fixture.Hierarchy,
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,13 +138,14 @@ func proveEntryServingPublication(t *testing.T, fixture *etcd.ExecutedArtifactFi
 }
 
 type entryRuntimePublicationStore struct {
-	etcd.Store
+	testkeyvalue.Store
+
 	before func()
 }
 
-func (store *entryRuntimePublicationStore) Transact(ctx context.Context, conditions []etcd.Condition,
-	mutations []etcd.Mutation,
-) (etcd.TransactionResult, error) {
+func (store *entryRuntimePublicationStore) Transact(ctx context.Context, conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.before != nil {
 		before := store.before
 		store.before = nil

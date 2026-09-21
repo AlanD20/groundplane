@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,64 +11,77 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
+	testbackupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testbackupscheduling "github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
+	testbackupsources "github.com/AlanD20/groundplane/internal/infra/etcd/backupsources"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentcoordination "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testenvironmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-// Rationale: one protected replacement must publish ordered sources, the
-// Connector reference, the sealed era-1 key pair, and replay evidence at one revision.
+// Rationale: public preparation and protected publication must commit ordered
+// sources, Connector reference, era-1 key pair, and exact replay evidence.
 func TestBackupPolicyProtectedReplacementCommitsAgeStateAndReplays(t *testing.T) {
 	t.Parallel()
 	fixture := newBackupPolicyReplacementFixture(t, true)
-	candidate := fixture.candidate(t, true, "age")
+	prepared := fixture.prepared(t, fixture.policyInput(true, "age", fixture.connector.Record.Connector.ID))
+	defer prepared.Destroy()
+	projection := prepared.Projection()
 	marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-age-0001")
-	result, err := fixture.repository.replaceBackupPolicyProtected(
-		context.Background(), candidate, marker,
-	)
+	result, err := fixture.repository.ReplaceBackupPolicyProtected(context.Background(), prepared, marker)
 	if err != nil || result.kind != idempotencyTransactionApplied {
-		t.Fatalf("replaceBackupPolicyProtected() = %#v, %v", result, err)
+		t.Fatalf("ReplaceBackupPolicyProtected() = %#v, %v", result, err)
 	}
-	replayed, err := fixture.repository.replaceBackupPolicyProtected(
-		context.Background(), candidate, marker,
-	)
+	replayed, err := fixture.repository.ReplaceBackupPolicyProtected(context.Background(), prepared, marker)
 	if err != nil || replayed.kind != idempotencyTransactionExisting ||
 		string(replayed.marker.Response.Body) != string(marker.Response.Body) {
-		t.Fatalf("replaceBackupPolicyProtected(replay) = %#v, %v", replayed, err)
+		t.Fatalf("ReplaceBackupPolicyProtected(replay) = %#v, %v", replayed, err)
 	}
 	stored, found, err := fixture.repository.GetBackupPolicy(context.Background(), fixture.environment.Record.ID)
-	if err != nil || !found || len(stored.Record.SourceIDs) != len(candidate.Sources) {
+	if err != nil || !found || len(stored.Record.SourceIDs) != len(projection.Sources) {
 		t.Fatalf("GetBackupPolicy() = %#v, %t, %v", stored, found, err)
 	}
-	for index := range candidate.Sources {
-		if stored.Record.SourceIDs[index] != candidate.Sources[index].Source.Record.ID {
+	for index := range projection.Sources {
+		if stored.Record.SourceIDs[index] != projection.Sources[index].ID {
 			t.Fatalf("stored source order = %#v", stored.Record.SourceIDs)
 		}
 	}
-	key, found, err := fixture.repository.GetBackupKey(context.Background(), fixture.environment.Record.ID)
-	if err != nil || !found || key.Record.KeyEra != 1 ||
-		string(key.Encrypted.Ciphertext) != string(candidate.InitialKey.Encrypted.Ciphertext) {
-		t.Fatalf("GetBackupKey() = %#v, %t, %v", key, found, err)
+	key := mustBackupKey(t, fixture.store, fixture.environment.Record.ID)
+	defer clear(key.Encrypted.Ciphertext)
+	if key.Record.KeyEra != 1 || key.Record.Recipient != projection.AgeRecipient ||
+		string(key.Encrypted.Ciphertext) != "controller-sealed-age-identity" {
+		t.Fatalf("GetBackupKey() = %#v", key)
 	}
-	clear(key.Encrypted.Ciphertext)
 	assertBackupPolicyReference(t, fixture.store, fixture.connector.Record.Connector.ID,
 		fixture.environment.Record.ID, true)
 }
 
-// Rationale: encryption none and a disabled policy must never synthesize a
-// private identity, while disabling an age policy retains its existing key.
+// Rationale: encryption none never creates private key state, while Connector
+// moves and disablement retain the existing age key without revision churn.
 func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 	t.Parallel()
 	t.Run("none never creates", func(t *testing.T) {
 		fixture := newBackupPolicyReplacementFixture(t, true)
-		candidate := fixture.candidate(t, true, "none")
-		marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-none-0001")
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), candidate, marker,
-		); err != nil {
-			t.Fatalf("replaceBackupPolicyProtected(none) error = %v", err)
+		prepared := fixture.prepared(t, fixture.policyInput(true, "none", fixture.connector.Record.Connector.ID))
+		defer prepared.Destroy()
+		if _, err := fixture.repository.ReplaceBackupPolicyProtected(context.Background(), prepared,
+			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-none-0001")); err != nil {
+			t.Fatal(err)
 		}
-		if _, found, err := fixture.repository.GetBackupKey(
+		if _, found, err := backupPolicyKeyReader(t, fixture.store).GetBackupKey(
 			context.Background(), fixture.environment.Record.ID,
 		); err != nil || found {
 			t.Fatalf("GetBackupKey(none) found/error = %t/%v", found, err)
@@ -78,490 +90,218 @@ func TestBackupPolicyProtectedReplacementAvoidsAndRetainsKeys(t *testing.T) {
 
 	t.Run("move and disable retain", func(t *testing.T) {
 		fixture := newBackupPolicyReplacementFixture(t, true)
-		first := fixture.candidate(t, true, "age")
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), first,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-move-0001"),
-		); err != nil {
-			t.Fatalf("replaceBackupPolicyProtected(first) error = %v", err)
-		}
-		current := mustBackupPolicy(t, fixture.repository, fixture.environment.Record.ID)
-		existingKey := mustBackupKey(t, fixture.repository, fixture.environment.Record.ID)
-		defer clear(existingKey.Encrypted.Ciphertext)
-		secondConnector := fixture.createConnector(t, 2450, "archive-backups")
-		oldReference := mustBackupPolicyReference(
-			t, fixture.store, fixture.connector.Record.Connector.ID, fixture.environment.Record.ID,
-		)
-		move := first
-		move.MutationEpoch = mustBackupPolicyMutationEpoch(t, fixture.store, fixture.environment.Record.ID)
-		move.Current = &current
-		move.Replacement.ConnectorID = secondConnector.Record.Connector.ID
-		move.Replacement.Encryption = "none"
-		move.Sources = append([]backupPolicySourceEvidence(nil), first.Sources[:1]...)
-		move.Replacement.SourceIDs = []string{move.Sources[0].Source.Record.ID}
-		move.Replacement.UpdatedAt = move.Replacement.UpdatedAt.Add(time.Second)
-		move.Connector = &secondConnector
-		move.ConnectorOwnerIndex = mustBackupPolicyIndex(
-			t,
-			fixture.store,
-			connectorEnvironmentKey(fixture.environment.Record.ID, secondConnector.Record.Connector.ID),
-		)
-		move.ConnectorReferences = []backupPolicyConnectorReferenceEvidence{
-			{ConnectorID: fixture.connector.Record.Connector.ID, Entry: oldReference},
-			{ConnectorID: secondConnector.Record.Connector.ID},
-		}
-		move.ExistingKey = &existingKey
-		move.InitialKey = nil
-		move.Coordination = mustBackupPolicyCoordination(t, fixture.store, fixture.environment.Record.ID)
-		if err := sealBackupPolicyCandidateSchedule(&move, move.Replacement.UpdatedAt); err != nil {
+		first := fixture.prepared(t, fixture.policyInput(true, "age", fixture.connector.Record.Connector.ID))
+		if _, err := fixture.repository.ReplaceBackupPolicyProtected(context.Background(), first,
+			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-move-0001")); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), move,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-move-0002"),
-		); err != nil {
-			t.Fatalf("replaceBackupPolicyProtected(move) error = %v", err)
+		first.Destroy()
+		existing := mustBackupKey(t, fixture.store, fixture.environment.Record.ID)
+		defer clear(existing.Encrypted.Ciphertext)
+		second := fixture.createConnector(t, 2450, "archive-backups")
+		move := fixture.prepared(t, fixture.policyInput(true, "none", second.Record.Connector.ID))
+		if _, err := fixture.repository.ReplaceBackupPolicyProtected(context.Background(), move,
+			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-move-0002")); err != nil {
+			t.Fatal(err)
 		}
+		move.Destroy()
 		assertBackupPolicyReference(t, fixture.store, fixture.connector.Record.Connector.ID,
 			fixture.environment.Record.ID, false)
-		assertBackupPolicyReference(t, fixture.store, secondConnector.Record.Connector.ID,
+		assertBackupPolicyReference(t, fixture.store, second.Record.Connector.ID,
 			fixture.environment.Record.ID, true)
-		retained := mustBackupKey(t, fixture.repository, fixture.environment.Record.ID)
+		retained := mustBackupKey(t, fixture.store, fixture.environment.Record.ID)
 		defer clear(retained.Encrypted.Ciphertext)
-		if retained.RecordRevision != existingKey.RecordRevision ||
-			retained.EncryptedRevision != existingKey.EncryptedRevision {
-			t.Fatalf("move changed retained key revisions: %#v -> %#v", existingKey, retained)
+		if retained.RecordRevision != existing.RecordRevision ||
+			retained.EncryptedRevision != existing.EncryptedRevision {
+			t.Fatalf("move changed retained key revisions: %#v -> %#v", existing, retained)
 		}
-		moved := mustBackupPolicy(t, fixture.repository, fixture.environment.Record.ID)
-		newReference := mustBackupPolicyReference(
-			t, fixture.store, secondConnector.Record.Connector.ID, fixture.environment.Record.ID,
-		)
-		disabled := backupPolicyReplacementCandidate{
-			Environment:   fixture.environment,
-			Project:       fixture.project,
-			MutationEpoch: mustBackupPolicyMutationEpoch(t, fixture.store, fixture.environment.Record.ID),
-			Current:       &moved,
-			Replacement: BackupPolicyRecord{
-				EnvironmentID: fixture.environment.Record.ID,
-				UpdatedAt:     move.Replacement.UpdatedAt.Add(time.Second),
-			},
-			ConnectorReferences: []backupPolicyConnectorReferenceEvidence{{
-				ConnectorID: secondConnector.Record.Connector.ID, Entry: newReference,
-			}},
-			ExistingKey: &retained,
-		}
-		disabled.Coordination = mustBackupPolicyCoordination(t, fixture.store, fixture.environment.Record.ID)
-		if err := sealBackupPolicyCandidateSchedule(&disabled, disabled.Replacement.UpdatedAt); err != nil {
+		disable := fixture.policyInput(false, "none", second.Record.Connector.ID)
+		disabled := fixture.prepared(t, disable)
+		if _, err := fixture.repository.ReplaceBackupPolicyProtected(context.Background(), disabled,
+			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-disable-0001")); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), disabled,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-disable-0001"),
-		); err != nil {
-			t.Fatalf("replaceBackupPolicyProtected(disabled) error = %v", err)
-		}
-		assertBackupPolicyReference(t, fixture.store, secondConnector.Record.Connector.ID,
+		disabled.Destroy()
+		assertBackupPolicyReference(t, fixture.store, second.Record.Connector.ID,
 			fixture.environment.Record.ID, false)
-		afterDisable := mustBackupKey(t, fixture.repository, fixture.environment.Record.ID)
-		defer clear(afterDisable.Encrypted.Ciphertext)
-		if afterDisable.RecordRevision != retained.RecordRevision ||
-			afterDisable.EncryptedRevision != retained.EncryptedRevision {
-			t.Fatalf("disable changed retained key revisions: %#v -> %#v", retained, afterDisable)
+		after := mustBackupKey(t, fixture.store, fixture.environment.Record.ID)
+		defer clear(after.Encrypted.Ciphertext)
+		if after.RecordRevision != retained.RecordRevision || after.EncryptedRevision != retained.EncryptedRevision {
+			t.Fatalf("disable changed retained key revisions: %#v -> %#v", retained, after)
 		}
 	})
 }
 
-// Rationale: hierarchy and Connector deletion fences must win the same CAS as
-// the policy write, while malformed prevalidated evidence must fail before it.
-func TestBackupPolicyProtectedReplacementRejectsFencesScopeAndCorruption(t *testing.T) {
+// Rationale: marker identity and every deletion fence are consumed by the
+// same protected CAS as the policy publication.
+func TestBackupPolicyProtectedReplacementRejectsMarkerAndDeletionFences(t *testing.T) {
 	t.Parallel()
 	t.Run("marker scope", func(t *testing.T) {
 		fixture := newBackupPolicyReplacementFixture(t, true)
-		candidate := fixture.candidate(t, true, "none")
+		prepared := fixture.prepared(t, fixture.policyInput(true, "none", fixture.connector.Record.Connector.ID))
+		defer prepared.Destroy()
 		marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-scope-0001")
 		marker.Locator.ScopeID = ids.NewAt(ids.KindEnvironment, marker.CreatedAt, 2500)
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), candidate, marker,
+		if _, err := fixture.repository.ReplaceBackupPolicyProtected(
+			context.Background(), prepared, marker,
 		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("replaceBackupPolicyProtected(scope) error = %v", err)
-		}
-	})
-
-	t.Run("marker operation and retention", func(t *testing.T) {
-		for _, mutate := range []func(*IdempotencyMarker){
-			func(marker *IdempotencyMarker) { marker.Locator.Route = "/backup-policy" },
-			func(marker *IdempotencyMarker) { marker.Response.Status = http.StatusCreated },
-			func(marker *IdempotencyMarker) { marker.Response.ContentKind = "text/plain" },
-			func(marker *IdempotencyMarker) { marker.Response.Body = []byte("not-json") },
-			func(marker *IdempotencyMarker) { marker.RetainUntil = marker.RetainUntil.Add(time.Second) },
-		} {
-			fixture := newBackupPolicyReplacementFixture(t, true)
-			candidate := fixture.candidate(t, true, "none")
-			marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-marker-0001")
-			mutate(&marker)
-			if _, err := fixture.repository.replaceBackupPolicyProtected(
-				context.Background(), candidate, marker,
-			); !isKind(err, errs.KindValidationFailed) {
-				t.Fatalf("replaceBackupPolicyProtected(marker) error = %v", err)
-			}
-		}
-	})
-
-	t.Run("non-ready environment", func(t *testing.T) {
-		fixture := newBackupPolicyReplacementFixture(t, true)
-		candidate := fixture.candidate(t, true, "none")
-		candidate.Environment.Record.ProvisioningState = EnvironmentProvisioningProvisioning
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), candidate,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-not-ready-0001"),
-		); !isKind(err, errs.KindStateConflict) {
-			t.Fatalf("replaceBackupPolicyProtected(not ready) error = %v", err)
+			t.Fatalf("ReplaceBackupPolicyProtected(scope) error = %v", err)
 		}
 	})
 
 	for _, test := range []struct {
 		name string
-		kind DeletionTargetKind
+		kind testdeletions.DeletionTargetKind
 		id   func(*backupPolicyReplacementFixture) string
 	}{
-		{name: "environment fence", kind: DeletionTargetEnvironment,
+		{name: "environment", kind: testdeletions.DeletionTargetEnvironment,
 			id: func(f *backupPolicyReplacementFixture) string { return f.environment.Record.ID }},
-		{name: "project fence", kind: DeletionTargetProject,
+		{name: "project", kind: testdeletions.DeletionTargetProject,
 			id: func(f *backupPolicyReplacementFixture) string { return f.project.Record.ID }},
-		{name: "tenant fence", kind: DeletionTargetTenant,
+		{name: "tenant", kind: testdeletions.DeletionTargetTenant,
 			id: func(f *backupPolicyReplacementFixture) string { return f.project.Record.TenantID }},
-		{name: "connector delete race", kind: DeletionTargetConnector,
+		{name: "connector", kind: testdeletions.DeletionTargetConnector,
 			id: func(f *backupPolicyReplacementFixture) string { return f.connector.Record.Connector.ID }},
 	} {
-		t.Run(test.name, func(t *testing.T) {
+		t.Run(test.name+" fence", func(t *testing.T) {
 			fixture := newBackupPolicyReplacementFixture(t, true)
-			candidate := fixture.candidate(t, true, "none")
+			prepared := fixture.prepared(t, fixture.policyInput(true, "none", fixture.connector.Record.Connector.ID))
+			defer prepared.Destroy()
 			id := test.id(fixture)
-			transaction, err := fixture.store.Transact(context.Background(), nil, []Mutation{{
-				Type: MutationPut, Key: deletionTombstoneKey(string(test.kind), id), Value: []byte("fenced"),
+			transaction, err := fixture.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+				Type: testkeyvalue.MutationPut,
+				Key:  testdeletions.TombstoneKey(string(test.kind), id), Value: []byte("fenced"),
 			}})
 			if err != nil || !transaction.Succeeded {
 				t.Fatalf("seed deletion fence = %#v, %v", transaction, err)
 			}
-			result, err := fixture.repository.replaceBackupPolicyProtected(
-				context.Background(), candidate,
+			result, err := fixture.repository.ReplaceBackupPolicyProtected(
+				context.Background(), prepared,
 				backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-fence-0001"),
 			)
 			if err != nil || result.kind != idempotencyTransactionConflict ||
 				!isKind(result.conflict, errs.KindResourceInUse) {
-				t.Fatalf("replaceBackupPolicyProtected(fenced) = %#v, %v", result, err)
-			}
-		})
-	}
-
-	t.Run("source order", func(t *testing.T) {
-		fixture := newBackupPolicyReplacementFixture(t, true)
-		candidate := fixture.candidate(t, true, "age")
-		candidate.Sources[0], candidate.Sources[1] = candidate.Sources[1], candidate.Sources[0]
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), candidate,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-order-0001"),
-		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("replaceBackupPolicyProtected(order) error = %v", err)
-		}
-	})
-
-	t.Run("corrupt reverse reference", func(t *testing.T) {
-		fixture := newBackupPolicyReplacementFixture(t, true)
-		first := fixture.candidate(t, true, "none")
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), first,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-corrupt-0001"),
-		); err != nil {
-			t.Fatalf("replaceBackupPolicyProtected(first) error = %v", err)
-		}
-		current := mustBackupPolicy(t, fixture.repository, fixture.environment.Record.ID)
-		reference := mustBackupPolicyReference(
-			t, fixture.store, fixture.connector.Record.Connector.ID, fixture.environment.Record.ID,
-		)
-		reference.Value = []byte("wrong-environment")
-		disabled := backupPolicyReplacementCandidate{
-			Environment:   fixture.environment,
-			Project:       fixture.project,
-			MutationEpoch: mustBackupPolicyMutationEpoch(t, fixture.store, fixture.environment.Record.ID),
-			Current:       &current,
-			Replacement: BackupPolicyRecord{
-				EnvironmentID: fixture.environment.Record.ID,
-				UpdatedAt:     first.Replacement.UpdatedAt.Add(time.Second),
-			},
-			ConnectorReferences: []backupPolicyConnectorReferenceEvidence{{
-				ConnectorID: fixture.connector.Record.Connector.ID, Entry: reference,
-			}},
-		}
-		disabled.Coordination = mustBackupPolicyCoordination(t, fixture.store, fixture.environment.Record.ID)
-		if err := sealBackupPolicyCandidateSchedule(&disabled, disabled.Replacement.UpdatedAt); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), disabled,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-corrupt-0002"),
-		); !isKind(err, errs.KindInternal) {
-			t.Fatalf("replaceBackupPolicyProtected(corrupt ref) error = %v", err)
-		}
-	})
-
-	t.Run("config with none", func(t *testing.T) {
-		fixture := newBackupPolicyReplacementFixture(t, true)
-		candidate := fixture.candidate(t, true, "none")
-		candidate.Sources = append([]backupPolicySourceEvidence(nil), fixture.sources...)
-		candidate.Replacement.SourceIDs = make([]string, len(candidate.Sources))
-		for index := range candidate.Sources {
-			candidate.Replacement.SourceIDs[index] = candidate.Sources[index].Source.Record.ID
-		}
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), candidate,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-config-none-0001"),
-		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("replaceBackupPolicyProtected(config none) error = %v", err)
-		}
-	})
-
-	t.Run("disabled config still requires age", func(t *testing.T) {
-		fixture := newBackupPolicyReplacementFixture(t, false)
-		candidate := fixture.candidate(t, true, "age")
-		candidate.Replacement.Enabled = false
-		candidate.Replacement.Encryption = "none"
-		candidate.Connector = nil
-		candidate.ConnectorOwnerIndex = nil
-		candidate.ConnectorReferences = nil
-		candidate.InitialKey = nil
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), candidate,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-disabled-config-0001"),
-		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("replaceBackupPolicyProtected(disabled config) error = %v", err)
-		}
-	})
-
-	t.Run("duplicate source identity", func(t *testing.T) {
-		fixture := newBackupPolicyReplacementFixture(t, false)
-		candidate := fixture.candidate(t, true, "age")
-		duplicate := candidate.Sources[0]
-		duplicate.Source.Record.ID = ids.NewAt(ids.KindBackupSource, fixture.now, 2550)
-		duplicate.Source.Revision++
-		duplicate.Source.ReadRevision++
-		candidate.Sources = append(candidate.Sources, duplicate)
-		candidate.Replacement.SourceIDs = append(candidate.Replacement.SourceIDs, duplicate.Source.Record.ID)
-		if _, err := fixture.repository.replaceBackupPolicyProtected(
-			context.Background(), candidate,
-			backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-duplicate-0001"),
-		); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("replaceBackupPolicyProtected(duplicate) error = %v", err)
-		}
-	})
-
-	for _, test := range []struct {
-		name string
-		key  func(backupPolicyReplacementCandidate) string
-	}{
-		{name: "source environment index", key: func(candidate backupPolicyReplacementCandidate) string {
-			return candidate.Sources[0].EnvironmentIndex.Key
-		}},
-		{name: "source identity index", key: func(candidate backupPolicyReplacementCandidate) string {
-			return candidate.Sources[0].IdentityIndex.Key
-		}},
-		{name: "volume projection root", key: func(candidate backupPolicyReplacementCandidate) string {
-			return environmentBlueprintRootKey(
-				candidate.Replacement.EnvironmentID,
-				candidate.Sources[0].Volume.Projection.Record.RevisionID,
-			)
-		}},
-		{name: "connector owner index", key: func(candidate backupPolicyReplacementCandidate) string {
-			return candidate.ConnectorOwnerIndex.Key
-		}},
-	} {
-		t.Run(test.name+" corruption", func(t *testing.T) {
-			fixture := newBackupPolicyReplacementFixture(t, true)
-			candidate := fixture.candidate(t, true, "none")
-			key := test.key(candidate)
-			transaction, err := fixture.store.Transact(
-				context.Background(), nil, []Mutation{{Type: MutationDelete, Key: key}},
-			)
-			if err != nil || !transaction.Succeeded {
-				t.Fatalf("delete index = %#v, %v", transaction, err)
-			}
-			result, err := fixture.repository.replaceBackupPolicyProtected(
-				context.Background(), candidate,
-				backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-index-race-0001"),
-			)
-			if err != nil || result.kind != idempotencyTransactionConflict || result.conflict == nil {
-				t.Fatalf("replaceBackupPolicyProtected(index corruption) = %#v, %v", result, err)
+				t.Fatalf("ReplaceBackupPolicyProtected(fenced) = %#v, %v", result, err)
 			}
 		})
 	}
 }
 
-// Rationale: the Controller-owned UTC grammar must accept only exact daily or
-// weekly boundary clocks and reject every broader systemd calendar feature.
-func TestBackupPolicyFrequencyGrammarBoundaries(t *testing.T) {
-	t.Parallel()
-	for _, frequency := range []string{
-		"*-*-* 00:00:00", "*-*-* 23:59:59", "Mon *-*-* 00:00:00", "Sun *-*-* 23:59:59",
-	} {
-		if err := validateBackupPolicyFrequency(frequency); err != nil {
-			t.Fatalf("validateBackupPolicyFrequency(%q) error = %v", frequency, err)
-		}
-	}
-	for _, frequency := range []string{
-		"0 3 * * *", "*-*-* 24:00:00", "*-*-* 23:60:00", "*-*-* 23:59:60",
-		"*-*-* 3:00:00", "mon *-*-* 03:00:00", "Mon,Tue *-*-* 03:00:00",
-		"Mon  *-*-* 03:00:00", "*-*-* 03:00:00 UTC", "2026-08-23 03:00:00",
-	} {
-		if err := validateBackupPolicyFrequency(frequency); !isKind(err, errs.KindValidationFailed) {
-			t.Fatalf("validateBackupPolicyFrequency(%q) error = %v", frequency, err)
-		}
-	}
-}
-
-// Rationale: an ambiguous transport result must be returned unchanged and a
-// later exact retry must resolve exclusively through the committed marker.
+// Rationale: ambiguous commit delivery must preserve the storage error while
+// exact retry resolves through the committed marker and another key conflicts.
 func TestBackupPolicyProtectedReplacementPreservesUnknownOutcomeAndConflicts(t *testing.T) {
 	t.Parallel()
-	fixture := newBackupPolicyReplacementFixture(t, false)
-	candidate := fixture.candidate(t, true, "age")
+	fixture := newBackupPolicyReplacementFixture(t, true)
+	prepared := fixture.prepared(t, fixture.policyInput(true, "none", fixture.connector.Record.Connector.ID))
+	defer prepared.Destroy()
 	unknown := errs.New(errs.KindStorageUnavailable, "unknown backup policy write outcome")
 	store := &backupPolicyReplacementUnknownStore{memoryHierarchyStore: fixture.store, failNext: unknown}
 	repository, err := newBackupPolicyRepository(store)
 	if err != nil {
-		t.Fatalf("newBackupPolicyRepository() error = %v", err)
+		t.Fatal(err)
 	}
 	marker := backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-unknown-0001")
-	if _, err := repository.replaceBackupPolicyProtected(
-		context.Background(), candidate, marker,
+	if _, err := repository.ReplaceBackupPolicyProtected(
+		context.Background(), prepared, marker,
 	); !errors.Is(err, unknown) {
-		t.Fatalf("replaceBackupPolicyProtected(unknown) error = %v", err)
+		t.Fatalf("ReplaceBackupPolicyProtected(unknown) error = %v", err)
 	}
-	replayed, err := repository.replaceBackupPolicyProtected(context.Background(), candidate, marker)
+	replayed, err := repository.ReplaceBackupPolicyProtected(context.Background(), prepared, marker)
 	if err != nil || replayed.kind != idempotencyTransactionExisting {
-		t.Fatalf("replaceBackupPolicyProtected(after unknown) = %#v, %v", replayed, err)
+		t.Fatalf("ReplaceBackupPolicyProtected(after unknown) = %#v, %v", replayed, err)
 	}
-	conflict, err := repository.replaceBackupPolicyProtected(
-		context.Background(), candidate,
+	conflict, err := repository.ReplaceBackupPolicyProtected(
+		context.Background(), prepared,
 		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-conflict-0001"),
 	)
 	if err != nil || conflict.kind != idempotencyTransactionConflict ||
 		!isKind(conflict.conflict, errs.KindStateConflict) {
-		t.Fatalf("replaceBackupPolicyProtected(stale) = %#v, %v", conflict, err)
+		t.Fatalf("ReplaceBackupPolicyProtected(stale) = %#v, %v", conflict, err)
 	}
 }
 
-// Rationale: a canonical Environment operation lock acquired after preparation
-// must fence policy publication without allowing any replacement write.
-func TestBackupPolicyProtectedReplacementRejectsHeldEnvironmentOperationLockWithoutWrites(t *testing.T) {
+// Rationale: operation-lock and coordination changes after public preparation
+// must lose without adding any replacement write.
+func TestBackupPolicyProtectedReplacementRejectsChangedCoordinationWithoutWrites(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	fixture := newBackupPolicyReplacementFixture(t, false)
-	candidate := fixture.candidate(t, true, "age")
-	transaction, err := fixture.store.Transact(ctx, nil, []Mutation{{
-		Type:  MutationPut,
-		Key:   environmentOperationLockKey(fixture.environment.Record.ID),
-		Value: []byte("held"),
-	}})
-	if err != nil || !transaction.Succeeded {
-		t.Fatalf("seed Environment operation lock = %#v, %v", transaction, err)
-	}
-	revisionBefore := fixture.store.revision
-	result, err := fixture.repository.replaceBackupPolicyProtected(
-		ctx,
-		candidate,
-		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-held-lock-0001"),
-	)
-	if err != nil || result.kind != idempotencyTransactionConflict ||
-		!isKind(result.conflict, errs.KindResourceInUse) {
-		t.Fatalf("replaceBackupPolicyProtected(held lock) = %#v, %v", result, err)
-	}
-	if fixture.store.revision != revisionBefore {
-		t.Fatalf("held-lock replacement revision = %d, want unchanged %d", fixture.store.revision, revisionBefore)
-	}
-}
-
-// Rationale: preparation is valid only for its exact Environment coordination
-// revision; advancing that fence must reject the stale candidate without writes.
-func TestBackupPolicyProtectedReplacementRejectsAdvancedCoordinationWithoutWrites(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	fixture := newBackupPolicyReplacementFixture(t, false)
-	candidate := fixture.candidate(t, true, "age")
-	coordinationValue, err := encodeEnvironmentCoordinationRecord(candidate.Coordination.Record)
-	if err != nil {
-		t.Fatal(err)
-	}
-	transaction, err := fixture.store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: environmentCoordinationKey(fixture.environment.Record.ID),
-		Value: coordinationValue,
-	}})
-	if err != nil || !transaction.Succeeded {
-		t.Fatalf("advance Environment coordination = %#v, %v", transaction, err)
-	}
-	revisionBefore := fixture.store.revision
-	result, err := fixture.repository.replaceBackupPolicyProtected(
-		ctx,
-		candidate,
-		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-stale-coordination-0001"),
-	)
-	if err != nil || result.kind != idempotencyTransactionConflict ||
-		!isKind(result.conflict, errs.KindStateConflict) {
-		t.Fatalf("replaceBackupPolicyProtected(stale epoch) = %#v, %v", result, err)
-	}
-	if fixture.store.revision != revisionBefore {
-		t.Fatalf(
-			"stale-coordination replacement revision = %d, want unchanged %d",
-			fixture.store.revision,
-			revisionBefore,
-		)
-	}
-}
-
-// Rationale: even a prevalidated candidate must be rejected before etcd when
-// its source compares and protected evidence exceed the 96-operation ceiling.
-func TestBackupPolicyProtectedReplacementEnforcesTransactionBound(t *testing.T) {
-	t.Parallel()
-	fixture := newBackupPolicyReplacementFixture(t, false)
-	candidate := fixture.candidate(t, true, "age")
-	candidate.Sources = make([]backupPolicySourceEvidence, 90)
-	candidate.Replacement.SourceIDs = make([]string, len(candidate.Sources))
-	for index := range candidate.Sources {
-		sourceID := ids.NewAt(ids.KindBackupSource, candidate.Replacement.UpdatedAt, int64(2600+index))
-		volumeID := ids.NewAt(ids.KindVolume, candidate.Replacement.UpdatedAt, int64(2700+index))
-		record := BackupSourceRecord{
-			ID: sourceID, EnvironmentID: fixture.environment.Record.ID,
-			Kind: core.BackupSourceVolume, TargetID: volumeID,
-			CreatedAt: candidate.Replacement.UpdatedAt,
-		}
-		candidate.Replacement.SourceIDs[index] = sourceID
-		candidate.Sources[index] = backupPolicySourceEvidence{Source: Versioned[BackupSourceRecord]{
-			Record: record, Revision: 1, ReadRevision: 1,
-		}, EnvironmentIndex: &KeyValue{
-			Key:   backupSourceEnvironmentKey(fixture.environment.Record.ID, sourceID),
-			Value: []byte(sourceID), ModRevision: 1,
-		}, IdentityIndex: &KeyValue{
-			Key:   backupSourceIdentityKey(fixture.environment.Record.ID, record.Kind, record.TargetID),
-			Value: []byte(sourceID), ModRevision: 1,
-		}, Volume: syntheticBackupPolicyVolumeEvidence(
-			fixture.environment.Record.ID, volumeID, candidate.Replacement.UpdatedAt, int64(2800+index),
-		)}
-	}
-	if _, err := fixture.repository.replaceBackupPolicyProtected(
-		context.Background(), candidate,
-		backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-bound-0001"),
-	); !isKind(err, errs.KindValidationFailed) {
-		t.Fatalf("replaceBackupPolicyProtected(bound) error = %v", err)
+	for _, test := range []struct {
+		name     string
+		mutation func(*testing.T, *backupPolicyReplacementFixture) testkeyvalue.Mutation
+		wantKind errs.Kind
+	}{
+		{
+			name: "operation lock", wantKind: errs.KindResourceInUse,
+			mutation: func(_ *testing.T, fixture *backupPolicyReplacementFixture) testkeyvalue.Mutation {
+				return testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID),
+					Value: []byte("held"),
+				}
+			},
+		},
+		{
+			name: "coordination revision", wantKind: errs.KindStateConflict,
+			mutation: func(t *testing.T, fixture *backupPolicyReplacementFixture) testkeyvalue.Mutation {
+				coordination := mustBackupPolicyCoordination(t, fixture.store, fixture.environment.Record.ID)
+				value, err := testenvironmentcoordination.Encode(coordination.Record)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testenvironmentcoordination.Key(fixture.environment.Record.ID),
+					Value: value,
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newBackupPolicyReplacementFixture(t, true)
+			if test.name == "coordination revision" {
+				value, err := testenvironmentcoordination.Encode(
+					testenvironmentcoordination.EnvironmentCoordinationRecord{
+						EnvironmentID: fixture.environment.Record.ID, ScheduleClockFloor: fixture.now,
+					},
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := fixture.store.Transact(t.Context(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: testenvironmentcoordination.Key(fixture.environment.Record.ID), Value: value}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			prepared := fixture.prepared(t, fixture.policyInput(true, "none", fixture.connector.Record.Connector.ID))
+			defer prepared.Destroy()
+			transaction, err := fixture.store.Transact(
+				context.Background(), nil, []testkeyvalue.Mutation{test.mutation(t, fixture)},
+			)
+			if err != nil || !transaction.Succeeded {
+				t.Fatalf("advance fence = %#v, %v", transaction, err)
+			}
+			revisionBefore := fixture.store.revision
+			result, err := fixture.repository.ReplaceBackupPolicyProtected(
+				context.Background(), prepared,
+				backupPolicyReplacementMarker(fixture.environment.Record.ID, "backup-policy-stale-fence-0001"),
+			)
+			if err != nil || result.kind != idempotencyTransactionConflict ||
+				!isKind(result.conflict, test.wantKind) {
+				t.Fatalf("ReplaceBackupPolicyProtected(stale fence) = %#v, %v", result, err)
+			}
+			if fixture.store.revision != revisionBefore {
+				t.Fatalf("stale replacement revision = %d, want %d", fixture.store.revision, revisionBefore)
+			}
+		})
 	}
 }
 
 type backupPolicyReplacementFixture struct {
 	repository    *BackupPolicyRepository
 	store         *memoryHierarchyStore
-	environment   Versioned[EnvironmentRecord]
-	project       Versioned[ProjectRecord]
-	mutationEpoch Versioned[EnvironmentMutationEpochRecord]
-	sources       []backupPolicySourceEvidence
-	connector     Versioned[ConnectorRecord]
+	environment   testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	project       testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	mutationEpoch testkeyvalue.Versioned[testbackupruntime.EnvironmentMutationEpochRecord]
+	sources       []testbackuppolicymutations.SourceEvidence
+	connector     testkeyvalue.Versioned[testconnectors.Record]
 	now           time.Time
 }
 
@@ -574,24 +314,24 @@ func newBackupPolicyReplacementFixture(t *testing.T, includeVolume bool) *backup
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	tenantID := ids.NewAt(ids.KindTenant, now, 2300)
-	if _, err := hierarchy.CreateTenant(context.Background(), TenantRecord{
+	if _, err := hierarchy.CreateTenant(context.Background(), testhierarchy.TenantRecord{
 		ID: tenantID, Slug: "backup-tenant", Name: "Backup Tenant",
 	}); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	project, err := hierarchy.CreateProject(context.Background(), ProjectRecord{
+	project, err := hierarchy.CreateProject(context.Background(), testhierarchy.ProjectRecord{
 		ID: ids.NewAt(ids.KindProject, now, 2301), TenantID: tenantID,
-		Slug: "backup-project", Name: "Backup Project", Kind: ProjectKindTenant,
+		Slug: "backup-project", Name: "Backup Project", Kind: testhierarchy.ProjectKindTenant,
 	})
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 2302)
-	environment, err := hierarchy.CreateEnvironment(context.Background(), EnvironmentRecord{
+	environment, err := hierarchy.CreateEnvironment(context.Background(), testhierarchy.EnvironmentRecord{
 		ID: environmentID, ProjectID: project.Record.ID,
 		Name: "production", NetworkPool: "10.240.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + project.Record.ID + "/" + environmentID,
-		ProvisioningState: EnvironmentProvisioningReady,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      ids.NewAt(ids.KindTask, now, 2303), CreatedAt: now,
 	})
 	if err != nil {
@@ -602,29 +342,31 @@ func newBackupPolicyReplacementFixture(t *testing.T, includeVolume bool) *backup
 		t.Fatalf("newBackupPolicyRepository() error = %v", err)
 	}
 	repository.now = func() time.Time { return now }
-	configSource, err := repository.EnsureBackupSource(
-		context.Background(), environment, project, core.BackupSourceConfig, environment.Record.ID,
+	configSource, err := testbackupsources.EnsureBackupSource(
+		context.Background(), store, repository.now,
+		environment, project, core.BackupSourceConfig, environment.Record.ID,
 	)
 	if err != nil {
 		t.Fatalf("EnsureBackupSource(config) error = %v", err)
 	}
-	sources := []backupPolicySourceEvidence{backupPolicyReplacementSourceEvidence(
+	sources := []testbackuppolicymutations.SourceEvidence{backupPolicyReplacementSourceEvidence(
 		t, store, configSource, nil, nil,
 	)}
 	if includeVolume {
-		volume := EnvironmentVolumeIdentity{
+		volume := testenvironmentprojection.EnvironmentVolumeIdentity{
 			ID: ids.NewAt(ids.KindVolume, now, 2400), Slug: "backup-data", Key: "backup-data",
 		}
 		createdVolume := seedBackupPolicyVolumeProjection(
 			t, store, environment, project, volume, 2401,
 		)
-		volumeSource, err := repository.EnsureBackupSource(
-			context.Background(), environment, project, core.BackupSourceVolume, volume.ID,
+		volumeSource, err := testbackupsources.EnsureBackupSource(
+			context.Background(), store, repository.now,
+			environment, project, core.BackupSourceVolume, volume.ID,
 		)
 		if err != nil {
 			t.Fatalf("EnsureBackupSource(volume) error = %v", err)
 		}
-		sources = []backupPolicySourceEvidence{
+		sources = []testbackuppolicymutations.SourceEvidence{
 			backupPolicyReplacementSourceEvidence(t, store, volumeSource, nil, &createdVolume),
 			backupPolicyReplacementSourceEvidence(t, store, configSource, nil, nil),
 		}
@@ -642,14 +384,17 @@ func (fixture *backupPolicyReplacementFixture) createConnector(
 	t *testing.T,
 	seed int64,
 	name string,
-) Versioned[ConnectorRecord] {
+) testkeyvalue.Versioned[testconnectors.Record] {
 	t.Helper()
 	repository, err := newConnectorRepository(fixture.store)
 	if err != nil {
 		t.Fatalf("newConnectorRepository() error = %v", err)
 	}
 	record := testConnectorRecord(t, fixture.environment.Record.ID, fixture.now, seed, name)
-	credentials, err := NewConnectorEncryptedCredentials(record.Connector.ID, []byte("sealed-connector-credentials"))
+	credentials, err := testconnectors.NewEncryptedCredentials(
+		record.Connector.ID,
+		[]byte("sealed-connector-credentials"),
+	)
 	if err != nil {
 		t.Fatalf("NewConnectorEncryptedCredentials() error = %v", err)
 	}
@@ -662,113 +407,73 @@ func (fixture *backupPolicyReplacementFixture) createConnector(
 	return created
 }
 
-func (fixture *backupPolicyReplacementFixture) candidate(
-	t *testing.T,
+func (fixture *backupPolicyReplacementFixture) policyInput(
 	enabled bool,
 	encryption string,
-) backupPolicyReplacementCandidate {
-	t.Helper()
-	policy := BackupPolicyRecord{
-		EnvironmentID: fixture.environment.Record.ID,
-		Enabled:       enabled,
-		UpdatedAt:     fixture.now,
-	}
-	coordinationValue, err := fixture.store.Get(
-		context.Background(), environmentCoordinationKey(fixture.environment.Record.ID),
-	)
-	if err != nil || coordinationValue == nil {
-		t.Fatalf("get Environment coordination = %#v, %v", coordinationValue, err)
-	}
-	coordination := EnvironmentCoordinationRecord{
-		EnvironmentID: fixture.environment.Record.ID, ScheduleClockFloor: fixture.now,
-	}
-	coordinationRevision := int64(0)
-	if coordinationValue.Entry != nil {
-		coordination, err = decodeEnvironmentCoordinationRecord(coordinationValue.Entry.Value)
-		if err != nil {
-			t.Fatal(err)
-		}
-		coordinationRevision = coordinationValue.Entry.ModRevision
-	}
-	candidate := backupPolicyReplacementCandidate{
-		Environment: fixture.environment, Project: fixture.project,
-		MutationEpoch: fixture.mutationEpoch, Replacement: policy,
-		Coordination: Versioned[EnvironmentCoordinationRecord]{
-			Record: coordination, Revision: coordinationRevision,
-			ReadRevision: coordinationValue.ReadRevision,
-		},
-	}
-	if !enabled {
-		if err := sealBackupPolicyCandidateSchedule(&candidate, fixture.now); err != nil {
-			t.Fatal(err)
-		}
-		return candidate
-	}
-	policy.Frequency = "*-*-* 03:00:00"
-	policy.Keep = 7
-	policy.Encryption = encryption
-	policy.ConnectorID = fixture.connector.Record.Connector.ID
+	connectorID string,
+) testbackuppolicy.BackupPolicyReplacementInput {
 	selectedSources := fixture.sources
 	if encryption == "none" {
 		selectedSources = nil
 		for _, source := range fixture.sources {
-			if string(source.Source.Record.Kind) != "config" {
+			if source.Source.Record.Kind != core.BackupSourceConfig {
 				selectedSources = append(selectedSources, source)
 			}
 		}
-		if len(selectedSources) == 0 {
-			t.Fatal("none-encrypted test candidate requires a non-config source")
+	}
+	input := testbackuppolicy.BackupPolicyReplacementInput{
+		EnvironmentID: fixture.environment.Record.ID,
+		Enabled:       enabled,
+		Frequency:     "*-*-* 03:00:00",
+		Keep:          7,
+		Encryption:    encryption,
+		ConnectorID:   connectorID,
+		Sources:       make([]testbackuppolicy.BackupPolicySourceSelection, len(selectedSources)),
+	}
+	for index, source := range selectedSources {
+		input.Sources[index] = testbackuppolicy.BackupPolicySourceSelection{
+			Kind: source.Source.Record.Kind, TargetID: source.Source.Record.TargetID,
 		}
 	}
-	policy.SourceIDs = make([]string, len(selectedSources))
-	for index := range selectedSources {
-		policy.SourceIDs[index] = selectedSources[index].Source.Record.ID
+	return input
+}
+
+func (fixture *backupPolicyReplacementFixture) prepared(
+	t *testing.T,
+	input testbackuppolicy.BackupPolicyReplacementInput,
+) testbackuppolicymutations.PreparedBackupPolicyReplacement {
+	t.Helper()
+	prepared, err := fixture.repository.PrepareBackupPolicyReplacement(context.Background(), input)
+	if err != nil {
+		t.Fatalf("PrepareBackupPolicyReplacement() error = %v", err)
 	}
-	candidate.Replacement = policy
-	candidate.Sources = append([]backupPolicySourceEvidence(nil), selectedSources...)
-	connector := fixture.connector
-	candidate.Connector = &connector
-	candidate.ConnectorOwnerIndex = mustBackupPolicyIndex(
-		t,
-		fixture.store,
-		connectorEnvironmentKey(fixture.environment.Record.ID, fixture.connector.Record.Connector.ID),
-	)
-	candidate.ConnectorReferences = []backupPolicyConnectorReferenceEvidence{{
-		ConnectorID: fixture.connector.Record.Connector.ID,
-	}}
-	if encryption == "age" {
+	if prepared.RequiresInitialKey() {
 		identity, err := age.GenerateX25519Identity()
 		if err != nil {
 			t.Fatalf("age.GenerateX25519Identity() error = %v", err)
 		}
-		candidate.InitialKey = &backupPolicyInitialKey{
-			Record: BackupKeyRecord{
-				EnvironmentID: fixture.environment.Record.ID,
-				Recipient:     identity.Recipient().String(), KeyEra: 1,
-				CreatedAt: fixture.now, RotatedAt: fixture.now,
+		prepared, err = fixture.repository.SupplyBackupPolicyInitialKey(
+			context.Background(), prepared, testbackuppolicymutations.BackupPolicyInitialKeyMaterial{
+				Recipient: identity.Recipient().String(), Ciphertext: []byte("controller-sealed-age-identity"),
 			},
-			Encrypted: BackupKeyEncryptedValue{
-				EnvironmentID: fixture.environment.Record.ID,
-				KeyEra:        1, Ciphertext: []byte("controller-sealed-age-identity"),
-			},
+		)
+		if err != nil {
+			t.Fatalf("SupplyBackupPolicyInitialKey() error = %v", err)
 		}
 	}
-	if err := sealBackupPolicyCandidateSchedule(&candidate, fixture.now); err != nil {
-		t.Fatal(err)
-	}
-	return candidate
+	return prepared
 }
 
-func backupPolicyReplacementMarker(environmentID string, key string) IdempotencyMarker {
+func backupPolicyReplacementMarker(environmentID string, key string) testidempotency.IdempotencyMarker {
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 		ScopeID:   environmentID,
 		Method:    http.MethodPut,
-		Route:     backupPolicyReplacementRoute,
+		Route:     "/environments/{id}/backup-policy",
 		Key:       key,
 	}
-	marker.Response = IdempotencyResponse{
+	marker.Response = testidempotency.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"status":"saved"}`),
 	}
 	return marker
@@ -777,27 +482,31 @@ func backupPolicyReplacementMarker(environmentID string, key string) Idempotency
 func backupPolicyReplacementSourceEvidence(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	source Versioned[BackupSourceRecord],
-	attach *Versioned[AttachRecord],
-	volume *backupVolumeProjectionEvidence,
-) backupPolicySourceEvidence {
+	source testkeyvalue.Versioned[testbackuppolicy.BackupSourceRecord],
+	attach *testkeyvalue.Versioned[testattachments.Record],
+	volume *testenvironmentqueries.BackupVolumeProjectionEvidence,
+) testbackuppolicymutations.SourceEvidence {
 	t.Helper()
-	evidence := backupPolicySourceEvidence{
+	evidence := testbackuppolicymutations.SourceEvidence{
 		Source: source,
 		EnvironmentIndex: mustBackupPolicyIndex(
-			t, store, backupSourceEnvironmentKey(source.Record.EnvironmentID, source.Record.ID),
+			t, store, testbackuppolicy.BackupSourceEnvironmentKey(source.Record.EnvironmentID, source.Record.ID),
 		),
 		IdentityIndex: mustBackupPolicyIndex(
 			t,
 			store,
-			backupSourceIdentityKey(source.Record.EnvironmentID, source.Record.Kind, source.Record.TargetID),
+			testbackuppolicy.BackupSourceIdentityKey(
+				source.Record.EnvironmentID,
+				source.Record.Kind,
+				source.Record.TargetID,
+			),
 		),
 		Attach: attach,
 		Volume: volume,
 	}
 	if attach != nil {
 		evidence.TargetOwnerIndex = mustBackupPolicyIndex(
-			t, store, attachOwnerKey(source.Record.EnvironmentID, attach.Record.ID),
+			t, store, testattachments.AttachOwnerKey(source.Record.EnvironmentID, attach.Record.ID),
 		)
 	}
 	return evidence
@@ -806,11 +515,11 @@ func backupPolicyReplacementSourceEvidence(
 func seedBackupPolicyVolumeProjection(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
-	volume EnvironmentVolumeIdentity,
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	volume testenvironmentprojection.EnvironmentVolumeIdentity,
 	seed int64,
-) backupVolumeProjectionEvidence {
+) testenvironmentqueries.BackupVolumeProjectionEvidence {
 	t.Helper()
 	hierarchy, err := newHierarchyRepository(store)
 	if err != nil {
@@ -818,7 +527,7 @@ func seedBackupPolicyVolumeProjection(
 	}
 	task := environmentBlueprintTestTask(t, project.Record, environment.Record, seed)
 	projection := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
-	projection.Volumes = []EnvironmentVolumeIdentity{volume}
+	projection.Volumes = []testenvironmentprojection.EnvironmentVolumeIdentity{volume}
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
 		t.Fatal(err)
@@ -831,20 +540,20 @@ func seedBackupPolicyVolumeProjection(
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
-	headValue, err := encodeTaskReference(task.ID)
+	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.Transact(context.Background(), []Condition{{
-		Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: 0,
-	}}, []Mutation{{
-		Type: MutationPut, Key: environmentBlueprintHeadKey(environment.Record.ID), Value: headValue,
+	result, err := store.Transact(context.Background(), []testkeyvalue.Condition{{
+		Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), ModRevision: 0,
+	}}, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), Value: headValue,
 	}})
 	clear(headValue)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("publish backup Volume fixture = %#v, %v", result, err)
 	}
-	evidence, err := loadBackupVolumeProjectionEvidence(
+	evidence, err := testenvironmentqueries.LoadBackupVolumeProjectionEvidence(
 		context.Background(), store, environment.Record.ID, volume.ID, result.Revision,
 	)
 	if err != nil {
@@ -853,31 +562,7 @@ func seedBackupPolicyVolumeProjection(
 	return evidence
 }
 
-func syntheticBackupPolicyVolumeEvidence(
-	environmentID string,
-	volumeID string,
-	at time.Time,
-	seed int64,
-) *backupVolumeProjectionEvidence {
-	revisionID := ids.NewAt(ids.KindTask, at, seed)
-	return &backupVolumeProjectionEvidence{
-		Projection: Versioned[EnvironmentComposeProjection]{
-			Record: EnvironmentComposeProjection{
-				EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
-				Volumes: []EnvironmentVolumeIdentity{{
-					ID: volumeID, Slug: "volume-" + volumeID, Key: "volume-" + volumeID,
-				}},
-			},
-			Revision: 1, ReadRevision: 1,
-		},
-		ProjectionRoot: 1, DependencyDigest: strings.Repeat("a", 64),
-		Volume: EnvironmentVolumeIdentity{
-			ID: volumeID, Slug: "volume-" + volumeID, Key: "volume-" + volumeID,
-		},
-	}
-}
-
-func mustBackupPolicyIndex(t *testing.T, store *memoryHierarchyStore, key string) *KeyValue {
+func mustBackupPolicyIndex(t *testing.T, store *memoryHierarchyStore, key string) *testkeyvalue.KeyValue {
 	t.Helper()
 	result, err := store.Get(context.Background(), key)
 	if err != nil || result == nil || result.Entry == nil {
@@ -890,7 +575,7 @@ func mustBackupPolicy(
 	t *testing.T,
 	repository *BackupPolicyRepository,
 	environmentID string,
-) Versioned[BackupPolicyRecord] {
+) testkeyvalue.Versioned[testbackuppolicy.BackupPolicyRecord] {
 	t.Helper()
 	record, found, err := repository.GetBackupPolicy(context.Background(), environmentID)
 	if err != nil || !found {
@@ -901,11 +586,11 @@ func mustBackupPolicy(
 
 func mustBackupKey(
 	t *testing.T,
-	repository *BackupPolicyRepository,
+	store *memoryHierarchyStore,
 	environmentID string,
-) VersionedBackupKey {
+) testbackuppolicy.VersionedBackupKey {
 	t.Helper()
-	key, found, err := repository.GetBackupKey(context.Background(), environmentID)
+	key, found, err := backupPolicyKeyReader(t, store).GetBackupKey(context.Background(), environmentID)
 	if err != nil || !found {
 		t.Fatalf("GetBackupKey() = %#v, %t, %v", key, found, err)
 	}
@@ -917,10 +602,10 @@ func mustBackupPolicyReference(
 	store *memoryHierarchyStore,
 	connectorID string,
 	environmentID string,
-) *KeyValue {
+) *testkeyvalue.KeyValue {
 	t.Helper()
 	result, err := store.Get(
-		context.Background(), backupPolicyConnectorReferenceKey(connectorID, environmentID),
+		context.Background(), testbackuppolicy.BackupPolicyConnectorReferenceKey(connectorID, environmentID),
 	)
 	if err != nil || result == nil || result.Entry == nil {
 		t.Fatalf("Connector reference read = %#v, %v", result, err)
@@ -937,7 +622,7 @@ func assertBackupPolicyReference(
 ) {
 	t.Helper()
 	result, err := store.Get(
-		context.Background(), backupPolicyConnectorReferenceKey(connectorID, environmentID),
+		context.Background(), testbackuppolicy.BackupPolicyConnectorReferenceKey(connectorID, environmentID),
 	)
 	if err != nil || result == nil || (result.Entry != nil) != want {
 		t.Fatalf("Connector reference present = %t, want %t; result/error = %#v/%v",
@@ -952,14 +637,14 @@ type backupPolicyReplacementUnknownStore struct {
 
 func (store *backupPolicyReplacementUnknownStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	result, err := store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 	if err == nil && result.Succeeded && store.failNext != nil {
 		failure := store.failNext
 		store.failNext = nil
-		return TransactionResult{}, failure
+		return testkeyvalue.TransactionResult{}, failure
 	}
 	return result, err
 }
@@ -967,10 +652,10 @@ func (store *backupPolicyReplacementUnknownStore) Transact(
 func replaceBackupSchedulePolicy(
 	t *testing.T,
 	fixture *backupPolicyReplacementFixture,
-	input BackupPolicyReplacementInput,
+	input testbackuppolicy.BackupPolicyReplacementInput,
 	at time.Time,
 	key string,
-) BackupPolicyProjection {
+) testbackupqueries.BackupPolicyProjection {
 	t.Helper()
 	prepared, err := fixture.repository.PrepareBackupPolicyReplacement(
 		context.Background(), input,
@@ -998,13 +683,13 @@ func replaceBackupSchedulePolicy(
 func backupSchedulePolicyInput(
 	fixture *backupPolicyReplacementFixture,
 	enabled bool,
-) BackupPolicyReplacementInput {
+) testbackuppolicy.BackupPolicyReplacementInput {
 	volume := fixture.sources[0].Source.Record
-	return BackupPolicyReplacementInput{
+	return testbackuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: fixture.environment.Record.ID,
 		Enabled:       enabled, Frequency: "*-*-* 03:00:00", Keep: 7,
 		Encryption: "none", ConnectorID: fixture.connector.Record.Connector.ID,
-		Sources: []BackupPolicySourceSelection{{
+		Sources: []testbackuppolicy.BackupPolicySourceSelection{{
 			Kind: core.BackupSourceVolume, TargetID: volume.TargetID,
 		}},
 	}
@@ -1024,19 +709,21 @@ func TestBackupPolicyReplacementPublishesScheduleAtomicallyAndLatestCatchUp(t *t
 	if projection.NextRunAt == nil || !projection.NextRunAt.Equal(wantNext) {
 		t.Fatalf("next_run_at = %v, want %s", projection.NextRunAt, wantNext)
 	}
-	read, err := fixture.store.GetMany(context.Background(), GetManyRequest{Keys: []string{
-		backupPolicyKey(fixture.environment.Record.ID),
-		environmentCoordinationKey(fixture.environment.Record.ID),
-	}})
+	read, err := fixture.store.GetMany(
+		context.Background(),
+		testkeyvalue.GetManyRequest{
+			Keys: []string{
+				testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID),
+				testenvironmentcoordination.Key(fixture.environment.Record.ID),
+			},
+		},
+	)
 	if err != nil || read == nil || len(read.Values) != 2 ||
 		read.Values[0] == nil || read.Values[1] == nil ||
 		read.Values[0].ModRevision != read.Values[1].ModRevision {
 		t.Fatalf("atomic policy/coordination read = %#v, %v", read, err)
 	}
-	runtime, err := newBackupRuntimeRepository(fixture.store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	runtime := testbackupscheduling.New(fixture.store)
 	delayed := time.Date(2026, 8, 27, 10, 0, 0, 0, time.UTC)
 	evaluation, err := runtime.EvaluateBackupSchedule(
 		context.Background(), fixture.environment.Record.ID, delayed,
@@ -1079,10 +766,7 @@ func TestBackupPolicyDisableReenableCannotReplayDisabledOccurrences(t *testing.T
 	if reenabled.NextRunAt == nil || !reenabled.NextRunAt.Equal(wantNext) {
 		t.Fatalf("re-enabled next_run_at = %v, want %s", reenabled.NextRunAt, wantNext)
 	}
-	runtime, err := newBackupRuntimeRepository(fixture.store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	runtime := testbackupscheduling.New(fixture.store)
 	beforeNext, err := runtime.EvaluateBackupSchedule(
 		context.Background(), fixture.environment.Record.ID, reenabledAt.Add(30*time.Minute),
 	)
@@ -1099,18 +783,15 @@ func TestBackupScheduleOverlapPublishesOutcomeAtomically(t *testing.T) {
 		t, fixture, backupSchedulePolicyInput(fixture, true), fixture.now,
 		"backup-schedule-overlap-0001",
 	)
-	lock, err := fixture.store.Transact(context.Background(), nil, []Mutation{{
-		Type:  MutationPut,
-		Key:   environmentOperationLockKey(fixture.environment.Record.ID),
+	lock, err := fixture.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type:  testkeyvalue.MutationPut,
+		Key:   testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID),
 		Value: []byte("held"),
 	}})
 	if err != nil || !lock.Succeeded {
 		t.Fatalf("seed operation lock = %#v, %v", lock, err)
 	}
-	runtime, err := newBackupRuntimeRepository(fixture.store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	runtime := testbackupscheduling.New(fixture.store)
 	now := time.Date(2026, 8, 24, 4, 0, 0, 0, time.UTC)
 	evaluation, err := runtime.EvaluateBackupSchedule(
 		context.Background(), fixture.environment.Record.ID, now,
@@ -1121,7 +802,7 @@ func TestBackupScheduleOverlapPublishesOutcomeAtomically(t *testing.T) {
 	if err := runtime.SkipScheduledBackup(context.Background(), evaluation, now); err != nil {
 		t.Fatal(err)
 	}
-	dueKey, err := backupDueOutcomeKey(
+	dueKey, err := testbackupruntime.BackupDueOutcomeKey(
 		evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt,
 	)
 	if err != nil {
@@ -1131,12 +812,12 @@ func TestBackupScheduleOverlapPublishesOutcomeAtomically(t *testing.T) {
 	if err != nil || dueValue == nil || dueValue.Entry == nil {
 		t.Fatalf("due outcome read = %#v, %v", dueValue, err)
 	}
-	due, err := decodeBackupDueOutcomeRecord(dueValue.Entry.Value)
-	if err != nil || due.Outcome != BackupDueSkippedOverlap || due.TaskID != "" {
+	due, err := testbackupruntime.DecodeBackupDueOutcomeRecord(dueValue.Entry.Value)
+	if err != nil || due.Outcome != testbackupruntime.BackupDueSkippedOverlap || due.TaskID != "" {
 		t.Fatalf("overlap due outcome = %#v, %v", due, err)
 	}
 	coordinationValue, err := fixture.store.Get(
-		context.Background(), environmentCoordinationKey(evaluation.EnvironmentID),
+		context.Background(), testenvironmentcoordination.Key(evaluation.EnvironmentID),
 	)
 	if err != nil || coordinationValue == nil || coordinationValue.Entry == nil ||
 		coordinationValue.Entry.ModRevision != dueValue.Entry.ModRevision {
@@ -1148,17 +829,17 @@ func mustBackupPolicyCoordination(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	environmentID string,
-) Versioned[EnvironmentCoordinationRecord] {
+) testkeyvalue.Versioned[testenvironmentcoordination.EnvironmentCoordinationRecord] {
 	t.Helper()
-	value, err := store.Get(context.Background(), environmentCoordinationKey(environmentID))
+	value, err := store.Get(context.Background(), testenvironmentcoordination.Key(environmentID))
 	if err != nil || value == nil || value.Entry == nil {
 		t.Fatalf("get Environment coordination = %#v, %v", value, err)
 	}
-	record, err := decodeEnvironmentCoordinationRecord(value.Entry.Value)
+	record, err := testenvironmentcoordination.Decode(value.Entry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Versioned[EnvironmentCoordinationRecord]{
+	return testkeyvalue.Versioned[testenvironmentcoordination.EnvironmentCoordinationRecord]{
 		Record: record, Revision: value.Entry.ModRevision, ReadRevision: value.ReadRevision,
 	}
 }

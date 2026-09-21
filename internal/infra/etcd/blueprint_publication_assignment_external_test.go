@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/agent"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -27,7 +29,7 @@ func proveBoundedBlueprintAgentAdmission(t *testing.T, claim etcd.TaskAssignment
 		AuthoritySha256:     decodeTestDigest(t, record.RestorationAuthoritySHA256)}
 	for _, candidate := range authority.Candidates {
 		target := agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE
-		if candidate.Target == etcd.ReleaseRestorationServingPredecessor {
+		if candidate.Target == testtaskassignments.ReleaseRestorationServingPredecessor {
 			target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR
 		}
 		wire.Candidates = append(wire.Candidates, &agentpb.ReleaseRestorationCandidate{
@@ -54,7 +56,7 @@ func proveBoundedBlueprintAgentAdmission(t *testing.T, claim etcd.TaskAssignment
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	err := pool.Submit(ctx, agent.Assignment{AssignmentID: record.AssignmentID, TaskID: record.TaskID,
+	err := pool.Submit(ctx, testtaskassignment.Assignment{AssignmentID: record.AssignmentID, TaskID: record.TaskID,
 		OperationID: authority.OperationID, Plan: plan, ExecutionEpoch: record.ExecutionEpoch,
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 		Deadline:      record.Deadline, ForwardDeadline: record.Deadline, RecoveryDeadline: record.RecoveryDeadline,

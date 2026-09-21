@@ -295,8 +295,10 @@ func validateVolumeRemovalInitialBinding(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != runtime.OriginTaskID || marker.Locator != locator ||
-		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
-		marker.ReplayTarget.ID != runtime.VolumeID || marker.Response.Status != http.StatusAccepted ||
+		marker.ReplayTarget == nil ||
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
+		marker.ReplayTarget.ID != runtime.VolumeID ||
+		marker.Response.Status != http.StatusAccepted ||
 		!bytes.Equal(marker.Response.Body, []byte(`{"task_id":"`+runtime.OriginTaskID+`"}`)) ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 ||
 		sha256.Sum256(marker.Intent.Ciphertext) != runtime.IntentSHA256 ||

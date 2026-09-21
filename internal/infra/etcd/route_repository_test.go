@@ -6,6 +6,14 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,7 +23,7 @@ func TestRouteRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
-	records := []RouteRecord{
+	records := []testroutes.Record{
 		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1010, "/api/*"),
 		routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1011, "/admin/*"),
 	}
@@ -27,14 +35,14 @@ func TestRouteRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 	)
 	for _, record := range records {
 		var err error
-		projection, err = ApplyEnvironmentRoute(projection, record)
+		projection, err = testenvironmentprojection.ApplyEnvironmentRoute(projection, record)
 		if err != nil {
 			t.Fatalf("ApplyEnvironmentRoute(%s) error = %v", record.Desired.Path, err)
 		}
 	}
 	routeRepositoryTestSelectDesiredHead(t, store, project, environment, projection)
 	duplicateMatch := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1012, "/api/*")
-	if _, err := ApplyEnvironmentRoute(projection, duplicateMatch); !isKind(
+	if _, err := testenvironmentprojection.ApplyEnvironmentRoute(projection, duplicateMatch); !isKind(
 		err,
 		errs.KindValidationFailed,
 	) {
@@ -44,14 +52,13 @@ func TestRouteRepositoryCreatesReadsAndPagesScopedRecords(t *testing.T) {
 	if err != nil || stored.Record != records[0] {
 		t.Fatalf("GetRoute() = %#v, %v", stored, err)
 	}
-	first, err := repository.ListRoutes(ctx, environment.Record.ID, PageRequest{Limit: 1})
+	first, err := repository.ListRoutes(ctx, environment.Record.ID, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil || len(first.Items) != 1 || first.NextCursor == "" {
 		t.Fatalf("ListRoutes(first) = %#v, %v", first, err)
 	}
 	second, err := repository.ListRoutes(
 		ctx,
-		environment.Record.ID,
-		PageRequest{Limit: 1, Cursor: first.NextCursor},
+		environment.Record.ID, testkeyvalue.PageRequest{Limit: 1, Cursor: first.NextCursor},
 	)
 	if err != nil || len(second.Items) != 1 || second.NextCursor != "" || second.Revision != first.Revision {
 		t.Fatalf("ListRoutes(second) = %#v, %v", second, err)
@@ -72,9 +79,9 @@ func TestRouteRepositoryRejectsMissingOrDeletingTargetService(t *testing.T) {
 	}
 	if _, err := store.Transact(
 		ctx,
-		[]Condition{{Key: deletionTombstoneKey("service", target.Record.Desired.ID)}},
-		[]Mutation{{
-			Type: MutationPut, Key: deletionTombstoneKey("service", target.Record.Desired.ID), Value: []byte("fenced"),
+		[]testkeyvalue.Condition{{Key: testdeletions.TombstoneKey("service", target.Record.Desired.ID)}},
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testdeletions.TombstoneKey("service", target.Record.Desired.ID), Value: []byte("fenced"),
 		}},
 	); err != nil {
 		t.Fatalf("install Service fence: %v", err)
@@ -135,10 +142,7 @@ func routeRepositoryTestHierarchy(
 	t *testing.T,
 ) (
 	*RouteRepository,
-	*memoryHierarchyStore,
-	Versioned[EnvironmentRecord],
-	Versioned[ProjectRecord],
-	Versioned[ServiceRecord],
+	*memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], testkeyvalue.Versioned[testhierarchy.ProjectRecord], testkeyvalue.Versioned[testservices.ServiceRecord],
 ) {
 	t.Helper()
 	store := newMemoryHierarchyStore()
@@ -151,7 +155,7 @@ func routeRepositoryTestHierarchy(
 	targetDesired := core.Service{
 		ID: targetID, Name: "api", Image: "app:latest", Strategy: core.StrategyRecreate, Replicas: 1,
 	}
-	targetRecord, err := NewServiceRecord(environment.Record.ID, targetDesired, "")
+	targetRecord, err := testservices.NewServiceRecord(environment.Record.ID, targetDesired, "")
 	if err != nil {
 		t.Fatalf("NewServiceRecord(target) error = %v", err)
 	}
@@ -161,26 +165,34 @@ func routeRepositoryTestHierarchy(
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {api: {}}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
-	headValue, err := encodeTaskReference(task.ID)
+	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
 	defer clear(headValue)
 	configurationValue := stageTestRuntimeConfiguration(t, store, environment.Record.ID, projection.RenderGeneration)
 	defer clear(configurationValue)
-	runtimeValue, err := encodeServiceRuntimeRecord(newServiceRuntimeRecord(targetRecord))
+	runtimeValue, err := testservices.EncodeServiceRuntimeRecord(testservices.NewServiceRuntimeRecord(targetRecord))
 	if err != nil {
 		t.Fatalf("encodeServiceRuntimeRecord() error = %v", err)
 	}
 	defer clear(runtimeValue)
-	seed, err := store.Transact(context.Background(), []Condition{
-		{Key: environmentBlueprintHeadKey(environment.Record.ID)},
-		{Key: serviceRuntimeKey(targetID)},
+	seed, err := store.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID)},
+		{Key: testservices.ServiceRuntimeKey(targetID)},
 		{Key: runtimeConfigurationHeadKey(environment.Record.ID)},
-	}, []Mutation{
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(environment.Record.ID), Value: headValue},
-		{Type: MutationPut, Key: serviceRuntimeKey(targetID), Value: runtimeValue},
-		{Type: MutationPut, Key: runtimeConfigurationHeadKey(environment.Record.ID), Value: configurationValue},
+	}, []testkeyvalue.Mutation{
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
+			Value: headValue,
+		},
+		{Type: testkeyvalue.MutationPut, Key: testservices.ServiceRuntimeKey(targetID), Value: runtimeValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   runtimeConfigurationHeadKey(environment.Record.ID),
+			Value: configurationValue,
+		},
 	})
 	if err != nil || !seed.Succeeded {
 		t.Fatalf("seed desired Service projection = %#v, %v", seed, err)
@@ -205,14 +217,14 @@ func routeRepositoryTestProjection(
 	environmentID string,
 	serviceID string,
 	revisionID string,
-) EnvironmentComposeProjection {
+) testenvironmentprojection.EnvironmentComposeProjection {
 	t.Helper()
 	service := core.Service{
 		ID: serviceID, Name: "api", Image: "app:latest", Strategy: core.StrategyRecreate, Replicas: 1,
 	}
-	return withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+	return withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
-		DesiredServices: []EnvironmentServiceProjection{{
+		DesiredServices: []testservices.EnvironmentServiceProjection{{
 			EnvironmentID: environmentID, Desired: service,
 		}},
 	})
@@ -221,9 +233,9 @@ func routeRepositoryTestProjection(
 func routeRepositoryTestSelectDesiredHead(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
-	projection EnvironmentComposeProjection,
+	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 ) {
 	t.Helper()
 	hierarchy, err := newHierarchyRepository(store)
@@ -235,35 +247,34 @@ func routeRepositoryTestSelectDesiredHead(
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {api: {}}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
-	headValue, err := encodeTaskReference(task.ID)
+	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
 	defer clear(headValue)
-	conditions := make([]Condition, 0, len(projection.DesiredRoutes))
-	mutations := []Mutation{{
-		Type: MutationPut, Key: environmentBlueprintHeadKey(environment.Record.ID), Value: headValue,
+	conditions := make([]testkeyvalue.Condition, 0, len(projection.DesiredRoutes))
+	mutations := []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), Value: headValue,
 	}}
 	for _, desired := range projection.DesiredRoutes {
-		observation, observationErr := NewRouteObservationRecord(
+		observation, observationErr := testroutes.NewObservationRecord(
 			desired.EnvironmentID,
 			desired.Desired.ID,
-			desired.DesiredGeneration,
-			RouteObservation{
-				Status: RouteObservedUnserved, DesiredGeneration: desired.DesiredGeneration,
+			desired.DesiredGeneration, testroutes.Observation{
+				Status: testroutes.ObservedUnserved, DesiredGeneration: desired.DesiredGeneration,
 			},
 		)
 		if observationErr != nil {
 			t.Fatalf("NewRouteObservationRecord() error = %v", observationErr)
 		}
-		observationValue, observationErr := encodeRouteObservation(observation)
+		observationValue, observationErr := testroutes.EncodeObservation(observation)
 		if observationErr != nil {
 			t.Fatalf("encodeRouteObservation() error = %v", observationErr)
 		}
 		defer clear(observationValue)
-		conditions = append(conditions, Condition{Key: routeObservationKey(desired.Desired.ID)})
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: routeObservationKey(desired.Desired.ID), Value: observationValue,
+		conditions = append(conditions, testkeyvalue.Condition{Key: testroutes.ObservationKey(desired.Desired.ID)})
+		mutations = append(mutations, testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationPut, Key: testroutes.ObservationKey(desired.Desired.ID), Value: observationValue,
 		})
 	}
 	result, err := store.Transact(context.Background(), conditions, mutations)
@@ -278,9 +289,9 @@ func routeRepositoryTestRecord(
 	serviceID string,
 	offset int64,
 	path string,
-) RouteRecord {
+) testroutes.Record {
 	t.Helper()
-	record, err := NewRouteRecord(environmentID, core.Route{
+	record, err := testroutes.NewRecord(environmentID, core.Route{
 		ID: ids.NewAt(ids.KindRoute, serviceRecordTestTime(), offset), Host: "app.example.com",
 		Path: path, TargetServiceID: serviceID, TargetPort: 8080, Exposure: "public",
 	})

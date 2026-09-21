@@ -7,25 +7,36 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Rationale: accepting newer desired input cannot invalidate the owned old
 // execution's terminal evidence or let Retry reselect that obsolete input.
 func TestBlueprintTerminalAcknowledgesExecutionAfterNewDesiredPublication(t *testing.T) {
-	for _, status := range []TaskStatus{TaskStatusCompleted, TaskStatusTimedOut} {
+	for _, status := range []testtaskjournal.TaskStatus{testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskStatusTimedOut} {
 		t.Run(string(status), func(t *testing.T) {
 			ctx := context.Background()
 			published, tasks, claim, agentID := claimBlueprintTerminalDesiredFixture(t)
 			successor := publishBlueprintTerminalSuccessor(t, published)
 			head := published.store.valueAt(
-				environmentBlueprintHeadKey(published.environmentID),
+				testblueprints.EnvironmentBlueprintHeadKey(published.environmentID),
 				published.store.revision,
 			)
-			original := published.store.valueAt(taskKey(claim.Task.Record.ID), published.store.revision)
-			result := TaskResultRecord{Kind: TaskResultCompose, ExecutionEpoch: 1, Diagnostic: TaskResultDiagnosticNone}
-			if status == TaskStatusTimedOut {
-				result.Diagnostic = TaskResultDiagnosticTimeoutBeforeEffect
+			original := published.store.valueAt(
+				testtaskjournal.TaskStorageKey(claim.Task.Record.ID),
+				published.store.revision,
+			)
+			result := testtaskjournal.TaskResultRecord{
+				Kind:           testtaskjournal.TaskResultCompose,
+				ExecutionEpoch: 1,
+				Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+			}
+			if status == testtaskjournal.TaskStatusTimedOut {
+				result.Diagnostic = testtaskjournal.TaskResultDiagnosticTimeoutBeforeEffect
 			}
 			terminal, err := tasks.AcknowledgeTask(ctx, agentID, 1, claim.Task.Record.ID,
 				claim.Assignment.Record.AssignmentID, status, result, published.task.CreatedAt.Add(time.Minute))
@@ -40,18 +51,20 @@ func TestBlueprintTerminalAcknowledgesExecutionAfterNewDesiredPublication(t *tes
 			if afterHead == nil || afterHead.ModRevision != head.ModRevision {
 				t.Fatal("old completion changed latest desired head")
 			}
-			if writer := published.store.valueAt(taskMaterializationWriterKey(published.environmentID), published.store.revision); writer != nil {
+			if writer := published.store.valueAt(testtaskjournal.TaskMaterializationWriterKey(published.environmentID), published.store.revision); writer != nil {
 				t.Fatal("acknowledged execution retained its writer")
 			}
 			applied := published.store.valueAt(
-				environmentComposeProjectionKey(published.environmentID),
+				testenvironmentprojection.EnvironmentComposeProjectionStorageKey(published.environmentID),
 				published.store.revision,
 			)
-			if status == TaskStatusCompleted {
+			if status == testtaskjournal.TaskStatusCompleted {
 				if applied == nil {
 					t.Fatal("successful old execution lost its applied result")
 				}
-				projection, decodeErr := decodeEnvironmentComposeProjection(applied.Value)
+				projection, decodeErr := testenvironmentprojection.DecodeEnvironmentComposeProjectionStorage(
+					applied.Value,
+				)
 				if decodeErr != nil || projection.RevisionID != published.task.ID ||
 					projection.RevisionID == successor.ID {
 					t.Fatalf("old completion claimed wrong input applied: %v", decodeErr)
@@ -81,10 +94,17 @@ func TestBlueprintTerminalAcknowledgesExecutionAfterNewDesiredPublication(t *tes
 			if original.ModRevision != claim.Task.Revision {
 				t.Fatal("successor publication rewrote original Task history")
 			}
-			if status != TaskStatusCompleted {
-				retry, cloneErr := cloneRetryTask(terminal.Record,
-					ids.NewAt(ids.KindTask, published.task.CreatedAt, 19884), TaskActorOperator,
-					published.task.CreatedAt.Add(3*time.Minute))
+			if status != testtaskjournal.TaskStatusCompleted {
+				retry, cloneErr := CloneRetryTask(
+					terminal.Record,
+					ids.NewAt(
+						ids.KindTask,
+						published.task.CreatedAt,
+						19884,
+					),
+					testtaskjournal.TaskActorOperator,
+					published.task.CreatedAt.Add(3*time.Minute),
+				)
 				if cloneErr != nil {
 					t.Fatal(cloneErr)
 				}
@@ -157,12 +177,25 @@ func publishBlueprintTerminalSuccessor(t *testing.T, published environmentBluepr
 	projection := current.Record
 	projection.RevisionID, projection.RenderGeneration = task.ID, uint64(task.RenderGeneration)
 	projection.DesiredServices[0].Desired.Image = "example/api:2"
-	result := publishEnvironmentBlueprintTestRevision(t, hierarchy, project, environment, current.Revision,
-		environmentBlueprintTestRevision(published.environmentID, task, "services: {}\n"), projection,
+	result := publishEnvironmentBlueprintTestRevision(
+		t,
+		hierarchy,
+		project,
+		environment,
+		current.Revision,
+		environmentBlueprintTestRevision(published.environmentID, task, "services: {}\n"),
+		projection,
 		environmentBlueprintTestZoneChanges(t, hierarchy, projection),
 		environmentBlueprintTestServiceChanges(t, hierarchy, projection),
-		environmentBlueprintTestRouteChanges(t, hierarchy, projection), ComponentTaskPreparation{}, task,
-		environmentBlueprintTestMarker(task, published.environmentID))
+		environmentBlueprintTestRouteChanges(
+			t,
+			hierarchy,
+			projection,
+		),
+		testcomponentplanning.ComponentTaskPreparation{},
+		task,
+		environmentBlueprintTestMarker(task, published.environmentID),
+	)
 	outcome, _, conflict, classifyErr := result.Classify()
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("successor publication: outcome=%v conflict=%v error=%v", outcome, conflict, classifyErr)

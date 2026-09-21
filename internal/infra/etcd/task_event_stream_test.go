@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -29,10 +31,10 @@ func TestTaskEventStreamReplaysSuffixAndFinalDrains(t *testing.T) {
 		t.Fatalf("OpenTaskEventStream() error = %v", err)
 	}
 	assertTaskStreamWatchStarts(t, store,
-		memoryTaskWatchStart{prefix: taskKey(task.ID), revision: snapshotRevision + 1},
-		memoryTaskWatchStart{prefix: taskEventScopePrefix(task.ID), revision: snapshotRevision + 1},
+		memoryTaskWatchStart{prefix: testtaskjournal.TaskStorageKey(task.ID), revision: snapshotRevision + 1},
+		memoryTaskWatchStart{prefix: testtaskjournal.TaskEventScopePrefix(task.ID), revision: snapshotRevision + 1},
 	)
-	emitted := make(chan TaskEventRecord, 4)
+	emitted := make(chan testtaskjournal.TaskEventRecord, 4)
 	done := runTaskEventStream(ctx, stream, emitted)
 	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 2 {
 		t.Fatalf("initial suffix sequence = %d, want 2", event.Sequence)
@@ -78,8 +80,8 @@ func TestTaskEventStreamValidatesResumeBeforeOpeningWatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenTaskEventStream(terminal) error = %v", err)
 	}
-	var emitted []TaskEventRecord
-	if err := stream.Run(ctx, func(event TaskEventRecord) error {
+	var emitted []testtaskjournal.TaskEventRecord
+	if err := stream.Run(ctx, func(event testtaskjournal.TaskEventRecord) error {
 		emitted = append(emitted, event)
 		return nil
 	}); err != nil {
@@ -88,7 +90,7 @@ func TestTaskEventStreamValidatesResumeBeforeOpeningWatches(t *testing.T) {
 	if len(emitted) != 1 || emitted[0].Sequence != 1 {
 		t.Fatalf("terminal replay = %#v, want sequence 1", emitted)
 	}
-	if emitted[0].Identity.Ordinal != 1 || emitted[0].State != TaskEventStateRunning {
+	if emitted[0].Identity.Ordinal != 1 || emitted[0].State != testtaskjournal.TaskEventStateRunning {
 		t.Fatalf("terminal replay event = %#v, want original ordinal 1 running event", emitted[0])
 	}
 	if starts := store.watchStartCount(); starts != 0 {
@@ -114,20 +116,20 @@ func TestTaskEventStreamRecoversCompactionBySequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenTaskEventStream() error = %v", err)
 	}
-	emitted := make(chan TaskEventRecord, 4)
+	emitted := make(chan testtaskjournal.TaskEventRecord, 4)
 	done := runTaskEventStream(ctx, stream, emitted)
 	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 1 {
 		t.Fatalf("initial sequence = %d, want 1", event.Sequence)
 	}
 	appendTaskStreamEvent(t, repository, task.ID, 2)
 	recoveryRevision := store.currentRevision()
-	store.failWatch(taskEventScopePrefix(task.ID), errs.New(errs.KindCursorExpired, "compacted"))
+	store.failWatch(testtaskjournal.TaskEventScopePrefix(task.ID), errs.New(errs.KindCursorExpired, "compacted"))
 	waitForTaskWatchStarts(t, store, 4, done)
 	assertTaskStreamWatchStarts(t, store,
-		memoryTaskWatchStart{prefix: taskKey(task.ID), revision: initialRevision + 1},
-		memoryTaskWatchStart{prefix: taskEventScopePrefix(task.ID), revision: initialRevision + 1},
-		memoryTaskWatchStart{prefix: taskKey(task.ID), revision: recoveryRevision + 1},
-		memoryTaskWatchStart{prefix: taskEventScopePrefix(task.ID), revision: recoveryRevision + 1},
+		memoryTaskWatchStart{prefix: testtaskjournal.TaskStorageKey(task.ID), revision: initialRevision + 1},
+		memoryTaskWatchStart{prefix: testtaskjournal.TaskEventScopePrefix(task.ID), revision: initialRevision + 1},
+		memoryTaskWatchStart{prefix: testtaskjournal.TaskStorageKey(task.ID), revision: recoveryRevision + 1},
+		memoryTaskWatchStart{prefix: testtaskjournal.TaskEventScopePrefix(task.ID), revision: recoveryRevision + 1},
 	)
 	if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 2 {
 		t.Fatalf("post-compaction sequence = %d, want 2", event.Sequence)
@@ -170,13 +172,13 @@ func TestTaskEventStreamRecoversClosedWatchBeforeFollow(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			prefix := taskEventScopePrefix(task.ID)
+			prefix := testtaskjournal.TaskEventScopePrefix(task.ID)
 			if primary {
-				prefix = taskKey(task.ID)
+				prefix = testtaskjournal.TaskStorageKey(task.ID)
 			}
 			store.failWatch(prefix, errs.New(errs.KindCursorExpired, "compacted"))
 			appendTaskStreamEvent(t, repository, task.ID, 2)
-			emitted := make(chan TaskEventRecord, 4)
+			emitted := make(chan testtaskjournal.TaskEventRecord, 4)
 			done := runTaskEventStream(ctx, stream, emitted)
 			waitForTaskWatchStarts(t, store, 4, done)
 			if event := receiveTaskStreamEvent(t, emitted); event.Sequence != 2 {
@@ -232,13 +234,13 @@ func TestTaskEventStreamClosedWatchPreservesFailureAndCancellation(t *testing.T)
 				if err != nil {
 					t.Fatal(err)
 				}
-				prefix := taskEventScopePrefix(task.ID)
+				prefix := testtaskjournal.TaskEventScopePrefix(task.ID)
 				if primary {
-					prefix = taskKey(task.ID)
+					prefix = testtaskjournal.TaskStorageKey(task.ID)
 				}
 				finishTaskStreamWatch(t, store, prefix, test.watchErr)
 				var emitted []uint64
-				err = stream.Run(ctx, func(event TaskEventRecord) error {
+				err = stream.Run(ctx, func(event testtaskjournal.TaskEventRecord) error {
 					emitted = append(emitted, event.Sequence)
 					if test.cancel {
 						cancel()
@@ -294,21 +296,25 @@ func TestTaskEventStreamDisconnectsOnSequenceGap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenTaskEventStream() error = %v", err)
 	}
-	emitted := make(chan TaskEventRecord, 1)
+	emitted := make(chan testtaskjournal.TaskEventRecord, 1)
 	done := runTaskEventStream(ctx, stream, emitted)
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	prepared, err := prepareTaskEvent(task, input, nil, taskJournalTime().Add(time.Second))
 	if err != nil {
 		t.Fatalf("prepareTaskEvent() error = %v", err)
 	}
 	prepared.Event.Sequence = 2
-	encoded, err := encodeTaskEventRecord(prepared.Event)
+	encoded, err := testtaskjournal.EncodeTaskEventRecord(prepared.Event)
 	if err != nil {
 		t.Fatalf("encodeTaskEventRecord() error = %v", err)
 	}
-	result, err := store.Transact(ctx, []Condition{{Key: taskEventKey(task.ID, 2)}}, []Mutation{{
-		Type: MutationPut, Key: taskEventKey(task.ID, 2), Value: encoded,
-	}})
+	result, err := store.Transact(
+		ctx,
+		[]testkeyvalue.Condition{{Key: testtaskjournal.TaskEventKey(task.ID, 2)}},
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskEventKey(task.ID, 2), Value: encoded,
+		}},
+	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed gapped event = %#v, %v", result, err)
 	}
@@ -344,10 +350,10 @@ func TestTaskEventStreamCancellationJoinsWatches(t *testing.T) {
 	if count := store.watcherCount(); count != 2 {
 		t.Fatalf("watcher count before cancellation = %d, want 2", count)
 	}
-	emitStarted := make(chan TaskEventRecord, 1)
+	emitStarted := make(chan testtaskjournal.TaskEventRecord, 1)
 	done := make(chan error, 1)
 	go func() {
-		done <- stream.Run(ctx, func(event TaskEventRecord) error {
+		done <- stream.Run(ctx, func(event testtaskjournal.TaskEventRecord) error {
 			emitStarted <- event
 			<-ctx.Done()
 			return ctx.Err()
@@ -370,7 +376,7 @@ func appendTaskStreamEvent(t *testing.T, repository *TaskRepository, taskID stri
 	t.Helper()
 	if _, err := repository.AppendTaskEvent(
 		context.Background(),
-		taskEventInput(taskID, ordinal, TaskEventStateRunning),
+		taskEventInput(taskID, ordinal, testtaskjournal.TaskEventStateRunning),
 		taskJournalTime().Add(time.Duration(ordinal)*time.Second),
 	); err != nil {
 		t.Fatalf("AppendTaskEvent(%d) error = %v", ordinal, err)
@@ -389,22 +395,22 @@ func terminalizeTaskStream(
 		t.Fatalf("GetTask(terminalize) error = %v", err)
 	}
 	running := current.Record
-	terminal, err := transitionTaskStatus(
+	terminal, err := TransitionTaskStatus(
 		running,
-		TaskStatusRunning,
-		TaskStatusCompleted,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusCompleted,
 		taskJournalTime().Add(21*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(completed) error = %v", err)
 	}
-	encoded, err := encodeTaskRecord(terminal)
+	encoded, err := EncodeTaskRecord(terminal)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord(terminal) error = %v", err)
 	}
-	result, err := store.Transact(context.Background(), []Condition{{
-		Key: taskKey(taskID), ModRevision: current.Revision,
-	}}, []Mutation{{Type: MutationPut, Key: taskKey(taskID), Value: encoded}})
+	result, err := store.Transact(context.Background(), []testkeyvalue.Condition{{
+		Key: testtaskjournal.TaskStorageKey(taskID), ModRevision: current.Revision,
+	}}, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(taskID), Value: encoded}})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("persist terminal Task = %#v, %v", result, err)
 	}
@@ -413,11 +419,11 @@ func terminalizeTaskStream(
 func runTaskEventStream(
 	ctx context.Context,
 	stream *TaskEventStream,
-	emitted chan<- TaskEventRecord,
+	emitted chan<- testtaskjournal.TaskEventRecord,
 ) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		done <- stream.Run(ctx, func(event TaskEventRecord) error {
+		done <- stream.Run(ctx, func(event testtaskjournal.TaskEventRecord) error {
 			select {
 			case emitted <- event:
 				return nil
@@ -429,14 +435,17 @@ func runTaskEventStream(
 	return done
 }
 
-func receiveTaskStreamEvent(t *testing.T, emitted <-chan TaskEventRecord) TaskEventRecord {
+func receiveTaskStreamEvent(
+	t *testing.T,
+	emitted <-chan testtaskjournal.TaskEventRecord,
+) testtaskjournal.TaskEventRecord {
 	t.Helper()
 	select {
 	case event := <-emitted:
 		return event
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for Task event")
-		return TaskEventRecord{}
+		return testtaskjournal.TaskEventRecord{}
 	}
 }
 
@@ -451,7 +460,7 @@ func receiveTaskStreamDone(t *testing.T, done <-chan error) error {
 	}
 }
 
-func assertNoTaskStreamEvent(t *testing.T, emitted <-chan TaskEventRecord) {
+func assertNoTaskStreamEvent(t *testing.T, emitted <-chan testtaskjournal.TaskEventRecord) {
 	t.Helper()
 	select {
 	case event := <-emitted:

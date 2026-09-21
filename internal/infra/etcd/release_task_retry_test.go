@@ -12,6 +12,15 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -46,7 +55,7 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 	hook.EnvironmentID, hook.ServiceID = environmentID, serviceID
 	hook.PlanHash = strings.Repeat("a", 64)
 
-	render := ReleaseRenderInput{
+	render := testreleaserender.ReleaseRenderInput{
 		ReleaseID: releaseID, PlanID: planID, ArtifactID: artifactID, PriorArtifactID: priorArtifactID, ServiceID: serviceID, ServiceName: "api",
 		CandidateWorkload: releaseTestWorkloadSeal(
 			"registry.example/api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -56,9 +65,9 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		PriorTarget: domain.WorkloadSingleton,
 		TenantID:    tenantID, TenantSlug: "tenant", ProjectID: projectID, ProjectSlug: "project",
 		EnvironmentID: environmentID, EnvironmentName: "production", AuthorizedVolumeDir: "/var/lib/groundplane/volumes",
-		Projection: EnvironmentComposeProjection{
+		Projection: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 11), RenderGeneration: 1,
-			DesiredServices: []EnvironmentServiceProjection{{
+			DesiredServices: []testservices.EnvironmentServiceProjection{{
 				EnvironmentID: environmentID,
 				Desired: core.Service{
 					ID:       serviceID,
@@ -71,7 +80,7 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		},
 	}
 	render.Projection = withTestEnvironmentComposeArtifact(render.Projection)
-	rawRender, err := EncodeReleaseRenderInput(render)
+	rawRender, err := testreleaserender.EncodeReleaseRenderInput(render)
 	if err != nil {
 		t.Fatalf("EncodeReleaseRenderInput() error = %v", err)
 	}
@@ -127,9 +136,9 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		PlanID: planID, PlanHash: bytes.Repeat([]byte{0xaa}, sha256.Size),
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, ProcedureBytes: procedureBytes,
 	}
-	manifest := ReleaseStagedManifest{
+	manifest := testreleases.ReleaseStagedManifest{
 		PublicationID: publicationID, OperationID: operationID,
-		Members: []ReleaseStagedMemberRef{{
+		Members: []testreleases.ReleaseStagedMemberRef{{
 			ReleaseID: releaseID, ServiceID: serviceID, IntentDigest: intentDigest,
 			RenderDigest: renderDigest, CheckpointDigest: checkpointDigest,
 		}}, CreatedAt: now,
@@ -144,12 +153,16 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		typeName string
 		value    any
 	}{
-		{releasePublicationKey(publicationID), "release-publication", ReleasePublicationMarker{
-			PublicationID: publicationID, OperationID: operationID, ManifestDigest: manifest.Digest,
-			CandidateReleaseDescriptor: descriptor, PublishedAt: now,
-		}},
-		{releaseManifestStagingKey(publicationID), "release-staged-manifest", manifest},
-		{releaseOperationKey(operationID), "release-operation", ReleaseOperationHead{
+		{
+			testreleases.ReleasePublicationKey(publicationID),
+			"release-publication",
+			testreleases.ReleasePublicationMarker{
+				PublicationID: publicationID, OperationID: operationID, ManifestDigest: manifest.Digest,
+				CandidateReleaseDescriptor: descriptor, PublishedAt: now,
+			},
+		},
+		{testreleases.ReleaseManifestStagingKey(publicationID), "release-staged-manifest", manifest},
+		{testreleases.ReleaseOperationKey(operationID), "release-operation", testreleases.ReleaseOperationHead{
 			OperationID: operationID, PublicationID: publicationID, EnvironmentID: environmentID,
 			FailurePolicy: domain.OnFailureLeaveActive, State: domain.StateRecoveryRequired,
 			RecoveryOutcome: domain.StateFailed, FailedMemberOrdinal: 1,
@@ -158,62 +171,72 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 			}, Members: []domain.GroupMember{member},
 			LatestTaskID: sourceTaskID, ConfiguredTimeoutSeconds: 900, ComputedBudgetSeconds: 1200, CreatedAt: now, UpdatedAt: now,
 		}},
-		{releaseFenceSetKey(environmentID), "release-fence-set", ReleaseFenceSet{
+		{testreleases.ReleaseFenceSetKey(environmentID), "release-fence-set", testreleases.ReleaseFenceSet{
 			EnvironmentID: environmentID, Generation: 1, OperationID: operationID, AttemptTaskID: sourceTaskID,
-			Members: []ReleaseFenceMember{
+			Members: []testreleases.ReleaseFenceMember{
 				{ServiceID: serviceID, CandidateReleaseID: releaseID, RenderInputDigest: renderDigest},
 			},
 		}},
-		{releaseIntentStagingKey(publicationID, releaseID), "release-intent", intent},
-		{releaseRenderInputStagingKey(publicationID, releaseID), "release-render-input", rawRender},
-		{scriptExecutionKey(hook.ID), "script-execution", hook},
+		{testreleases.ReleaseIntentStagingKey(publicationID, releaseID), "release-intent", intent},
+		{testreleases.ReleaseRenderInputStagingKey(publicationID, releaseID), "release-render-input", rawRender},
+		{testscriptexecutions.ScriptExecutionKey(hook.ID), "script-execution", hook},
 	}
-	mutations := make([]Mutation, 0, len(records)+1)
+	mutations := make([]testkeyvalue.Mutation, 0, len(records)+1)
 	for _, record := range records {
-		value, encodeErr := encodeReleaseRecord(record.typeName, record.value)
+		value, encodeErr := testreleases.EncodeReleaseRecord(record.typeName, record.value)
 		if encodeErr != nil {
 			t.Fatalf("encode %s error = %v", record.typeName, encodeErr)
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: record.key, Value: value})
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: record.key, Value: value},
+		)
 	}
 	mutations = append(
 		mutations,
-		Mutation{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: []byte(`{"schema":1}`)},
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testhierarchy.EnvironmentMutationEpochKey(environmentID),
+			Value: []byte(`{"schema":1}`),
+		},
 	)
 	seeded, err := store.Transact(ctx, nil, mutations)
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed release retry = %#v, %v", seeded, err)
 	}
-	read, err := store.GetMany(ctx, GetManyRequest{Keys: []string{releaseOperationKey(operationID)}})
+	read, err := store.GetMany(
+		ctx,
+		testkeyvalue.GetManyRequest{Keys: []string{testreleases.ReleaseOperationKey(operationID)}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	source := TaskRecord{
 		ID: sourceTaskID, OperationID: operationID,
-		Owner: TaskOwner{
-			WorkspaceType: TaskWorkspaceTenant,
+		Owner: testtaskjournal.TaskOwner{
+			WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
 			TenantID:      tenantID,
 			ProjectID:     projectID,
 			EnvironmentID: environmentID,
 		},
-		Executor: TaskExecutorAgent, PlanID: planID, Type: TaskDeploy,
-		PlanHash: hook.PlanHash, Params: map[string]string{
-			TaskComposeArtifactParam:    artifactID,
-			TaskReleasePublicationParam: publicationID, ReleaseHookStepExecutionParam(hook.StepID): hook.ID,
-		}, Steps: []TaskStepRecord{
-			{Kind: TaskStepOperation, ID: forwardStepID},
-			{Kind: TaskStepOperation, ID: hook.StepID},
-			{Kind: TaskStepOperation, ID: probeStepID},
-			{Kind: TaskStepOperation, ID: compensateStepID},
+		Executor: testtaskjournal.TaskExecutorAgent, PlanID: planID, Type: testtaskjournal.TaskDeploy,
+		PlanHash: hook.PlanHash, Params: map[string]string{testtaskjournal.TaskComposeArtifactParam: artifactID, testreleaserender.TaskReleasePublicationParam: publicationID, testreleaserender.ReleaseHookStepExecutionParam(hook.StepID): hook.ID}, Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: forwardStepID},
+			{Kind: testtaskjournal.TaskStepOperation, ID: hook.StepID},
+			{Kind: testtaskjournal.TaskStepOperation, ID: probeStepID},
+			{Kind: testtaskjournal.TaskStepOperation, ID: compensateStepID},
 		},
-		Result: &TaskResultRecord{Kind: TaskResultCompose, ReconciliationRequired: true}, CreatedAt: now,
+		Result: &testtaskjournal.TaskResultRecord{
+			Kind:                   testtaskjournal.TaskResultCompose,
+			ReconciliationRequired: true,
+		}, CreatedAt: now,
 	}
 	retry := cloneTaskRecord(source)
 	retry.ID, retry.RetryOf, retry.CreatedAt = retryTaskID, sourceTaskID, now.Add(time.Minute)
 	if _, err := validateReleaseCandidateDescriptor(descriptor, source, manifest); err != nil {
 		t.Fatalf("invalid retry descriptor fixture: %v", err)
 	}
-	if _, err := decodeReleaseRenderInput(rawRender); err != nil {
+	if _, err := testreleaserender.DecodeReleaseRenderInput(rawRender); err != nil {
 		t.Fatalf("invalid retry render fixture: %v", err)
 	}
 	change, err := repository.prepareReleaseTaskRetry(ctx, source, retry, read.ReadRevision)
@@ -232,17 +255,30 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 	if err != nil || replay.Succeeded {
 		t.Fatalf("replay release retry = %#v, %v", replay, err)
 	}
-	updated, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
-		releaseOperationKey(operationID), releaseFenceSetKey(environmentID), scriptExecutionKey(hook.ID),
-	}})
+	updated, err := store.GetMany(
+		ctx,
+		testkeyvalue.GetManyRequest{
+			Keys: []string{
+				testreleases.ReleaseOperationKey(operationID),
+				testreleases.ReleaseFenceSetKey(environmentID),
+				testscriptexecutions.ScriptExecutionKey(hook.ID),
+			},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	head, err := decodeReleaseRecord[ReleaseOperationHead](updated.Values[0].Value, "release-operation")
+	head, err := testreleases.DecodeReleaseRecord[testreleases.ReleaseOperationHead](
+		updated.Values[0].Value,
+		"release-operation",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fence, err := decodeReleaseRecord[ReleaseFenceSet](updated.Values[1].Value, "release-fence-set")
+	fence, err := testreleases.DecodeReleaseRecord[testreleases.ReleaseFenceSet](
+		updated.Values[1].Value,
+		"release-fence-set",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +286,10 @@ func TestPrepareReleaseTaskRetryTransfersSealedLineageOnce(t *testing.T) {
 		head.Attempts[1].RetryOf != sourceTaskID || fence.Generation != 2 || fence.AttemptTaskID != retryTaskID {
 		t.Fatalf("retry head=%#v fence=%#v", head, fence)
 	}
-	transferred, err := decodeEnvelope[ScriptExecutionRecord](updated.Values[2].Value, "script-execution")
+	transferred, err := testrecordcodec.Decode[testscriptexecutions.ScriptExecutionRecord](
+		updated.Values[2].Value,
+		"script-execution",
+	)
 	if err != nil || transferred.CurrentTaskID != retryTaskID || !transferred.ActiveReference ||
 		!transferred.UpdatedAt.Equal(retry.CreatedAt) {
 		t.Fatalf("retry hook ownership = %#v, %v", transferred, err)

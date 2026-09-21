@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -18,7 +20,9 @@ func TestRuntimeConfigurationProcedureRejectsDivergentTaskAuthority(t *testing.T
 	seed, err := store.Transact(
 		context.Background(),
 		nil,
-		[]Mutation{{Type: MutationPut, Key: taskKey(task.ID), Value: []byte("seed")}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: []byte("seed")},
+		},
 	)
 	if err != nil {
 		t.Fatal(err)

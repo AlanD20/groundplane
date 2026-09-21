@@ -5,18 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"testing"
-
-	"github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	volume "github.com/AlanD20/groundplane/internal/controller/volume"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	"github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
-	"github.com/AlanD20/groundplane/internal/volume"
 	api "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"net/http"
+	"testing"
 )
 
 // Rationale: the public mutation path must preserve prepared Script sources,
@@ -104,7 +103,11 @@ func TestVolumeRemovalProductionPublishesDurableOperation(t *testing.T) {
 		state.Runtime.Record.StepID != task.Record.Steps[len(task.Record.Steps)-1].ID {
 		t.Fatal("removal attempt did not bind its six-hour deadline and final path step")
 	}
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", fixture.Blueprint, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints(
+		"/var/lib/groundplane/vol",
+		fixture.Blueprint,
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

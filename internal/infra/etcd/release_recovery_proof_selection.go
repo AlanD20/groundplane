@@ -329,8 +329,10 @@ func ordinaryRecoveryIntentMatchesAttempt(
 	intent domain.Intent,
 	head releases.ReleaseOperationHead,
 ) bool {
-	if head.OperationID != task.OperationID || head.PublicationID != task.Params[releaserender.TaskReleasePublicationParam] ||
-		head.EnvironmentID != task.Owner.EnvironmentID || head.LatestTaskID != task.ID ||
+	if head.OperationID != task.OperationID ||
+		head.PublicationID != task.Params[releaserender.TaskReleasePublicationParam] ||
+		head.EnvironmentID != task.Owner.EnvironmentID ||
+		head.LatestTaskID != task.ID ||
 		len(head.Attempts) == 0 ||
 		intent.OriginatingTaskID != head.Attempts[0].TaskID {
 		return false

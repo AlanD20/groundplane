@@ -6,6 +6,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testhierarchydeletionfinalization "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -22,8 +27,13 @@ func TestHierarchyEnvironmentFinalizerExcludesVolumeRemovalLock(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			begin := hierarchyDeletionCreationTestBegin(fixture.now, HierarchyDeletionTargetEnvironment,
-				fixture.environment.Record.ID, HierarchyDeletionOperationEnvironment, "6")
+			begin := hierarchyDeletionCreationTestBegin(
+				fixture.now,
+				testhierarchydeletion.HierarchyDeletionTargetEnvironment,
+				fixture.environment.Record.ID,
+				testhierarchydeletion.HierarchyDeletionOperationEnvironment,
+				"6",
+			)
 			created, err := journal.Begin(ctx, begin)
 			if err != nil {
 				t.Fatal(err)
@@ -36,10 +46,13 @@ func TestHierarchyEnvironmentFinalizerExcludesVolumeRemovalLock(t *testing.T) {
 				backend.owner = &owner
 			}
 			before := fixture.store.revision
-			effects, err := journal.prepareHierarchyDeletionEnvironmentFinalizer(ctx, created.Operation,
-				HierarchyDeletionAction{ActionKind: HierarchyDeletionEnvironmentFinalize,
-					TargetID: owner.EnvironmentID, TargetRevision: fixture.environment.Revision})
-			defer clearByteSlices(effects.values)
+			effects, err := testhierarchydeletionfinalization.NewPreparer(backend).Prepare(
+				ctx, created.Operation, testhierarchydeletion.HierarchyDeletionAction{
+					ActionKind: testhierarchydeletion.HierarchyDeletionEnvironmentFinalize,
+					TargetID:   owner.EnvironmentID, TargetRevision: fixture.environment.Revision,
+				},
+			)
+			defer testkeyvalue.ClearByteSlices(effects.Values())
 			if mode == "held" {
 				if !isKind(err, errs.KindStateConflict) || fixture.store.revision != before {
 					t.Fatalf("hierarchy finalizer ignored held Volume removal lock: %v", err)
@@ -49,7 +62,7 @@ func TestHierarchyEnvironmentFinalizerExcludesVolumeRemovalLock(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := backend.Transact(ctx, effects.conditions, effects.mutations)
+			result, err := backend.Transact(ctx, effects.Conditions(), effects.Mutations())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -57,13 +70,23 @@ func TestHierarchyEnvironmentFinalizerExcludesVolumeRemovalLock(t *testing.T) {
 				if !result.Succeeded {
 					t.Fatal("unlocked hierarchy finalizer rejected")
 				}
-				assertEnvironmentDeletionCompanion(t, fixture.store, environmentKey(owner.EnvironmentID), false)
+				assertEnvironmentDeletionCompanion(
+					t,
+					fixture.store,
+					testhierarchy.EnvironmentKey(owner.EnvironmentID),
+					false,
+				)
 				return
 			}
 			if result.Succeeded || fixture.store.revision != before+1 {
 				t.Fatal("hierarchy finalizer committed over late Volume removal ownership")
 			}
-			assertEnvironmentDeletionCompanion(t, fixture.store, environmentKey(owner.EnvironmentID), true)
+			assertEnvironmentDeletionCompanion(
+				t,
+				fixture.store,
+				testhierarchy.EnvironmentKey(owner.EnvironmentID),
+				true,
+			)
 		})
 	}
 }
@@ -95,15 +118,33 @@ func TestEnvironmentDeletionCompletionExcludesVolumeRemovalLock(t *testing.T) {
 				t.Fatal(err)
 			}
 			before := fixture.store.revision
-			_, err = tasks.AcknowledgeTask(ctx, agentID, 1, fixture.task.ID,
-				taskAssignmentIDForTest(t, fixture.tasks, fixture.task.ID), TaskStatusCompleted,
-				TaskResultRecord{Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone},
-				fixture.now.Add(2*time.Second))
+			_, err = tasks.AcknowledgeTask(
+				ctx,
+				agentID,
+				1,
+				fixture.task.ID,
+				taskAssignmentIDForTest(
+					t,
+					fixture.tasks,
+					fixture.task.ID,
+				),
+				testtaskjournal.TaskStatusCompleted,
+				testtaskjournal.TaskResultRecord{
+					Kind:       testtaskjournal.TaskResultEnvironmentDirectory,
+					Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+				},
+				fixture.now.Add(2*time.Second),
+			)
 			if mode == "unlocked" {
 				if err != nil {
 					t.Fatal(err)
 				}
-				assertEnvironmentDeletionCompanion(t, fixture.store, environmentKey(owner.EnvironmentID), false)
+				assertEnvironmentDeletionCompanion(
+					t,
+					fixture.store,
+					testhierarchy.EnvironmentKey(owner.EnvironmentID),
+					false,
+				)
 				return
 			}
 			if !isKind(err, errs.KindStateConflict) {
@@ -115,7 +156,12 @@ func TestEnvironmentDeletionCompletionExcludesVolumeRemovalLock(t *testing.T) {
 			if fixture.store.revision != before {
 				t.Fatal("rejected Environment finalization wrote state")
 			}
-			assertEnvironmentDeletionCompanion(t, fixture.store, environmentKey(owner.EnvironmentID), true)
+			assertEnvironmentDeletionCompanion(
+				t,
+				fixture.store,
+				testhierarchy.EnvironmentKey(owner.EnvironmentID),
+				true,
+			)
 			assertEnvironmentDeletionCompanion(
 				t,
 				fixture.store,

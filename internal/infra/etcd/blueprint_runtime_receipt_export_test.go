@@ -3,6 +3,7 @@ package etcd
 import (
 	"testing"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 )
 
@@ -10,7 +11,7 @@ import (
 // and Task acknowledgement used by the external integration fixture.
 func (fixture *ExecutedArtifactFixture) AcknowledgedRuntime(
 	t *testing.T, serviceID string,
-) Versioned[serviceruntimerecord.Record] {
+) testkeyvalue.Versioned[serviceruntimerecord.Record] {
 	t.Helper()
 	value, err := fixture.store.Get(t.Context(), serviceruntimerecord.Key(serviceID))
 	if err != nil || value.Entry == nil {
@@ -20,6 +21,6 @@ func (fixture *ExecutedArtifactFixture) AcknowledgedRuntime(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Versioned[serviceruntimerecord.Record]{Record: record, Revision: value.Entry.ModRevision,
+	return testkeyvalue.Versioned[serviceruntimerecord.Record]{Record: record, Revision: value.Entry.ModRevision,
 		ReadRevision: value.ReadRevision}
 }

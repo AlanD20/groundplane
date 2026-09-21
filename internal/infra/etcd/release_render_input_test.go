@@ -10,6 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 func TestGetReleaseRenderInputAtDecodesStoredEnvelope(t *testing.T) {
@@ -19,19 +24,24 @@ func TestGetReleaseRenderInputAtDecodesStoredEnvelope(t *testing.T) {
 	input.PriorWorkload = releaseTestPriorWorkload("registry.example/worker:previous")
 	input.CandidateWorkload.ReplicaCount = 3
 	input.PriorWorkload.ReplicaCount = 2
-	raw, err := EncodeReleaseRenderInput(input)
+	raw, err := testreleaserender.EncodeReleaseRenderInput(input)
 	if err != nil {
 		t.Fatalf("EncodeReleaseRenderInput() error = %v", err)
 	}
-	stored, err := encodeReleaseRecord("release-render-input", json.RawMessage(raw))
+	stored, err := testreleases.EncodeReleaseRecord("release-render-input", json.RawMessage(raw))
 	if err != nil {
 		t.Fatalf("encodeReleaseRecord() error = %v", err)
 	}
 	store := &releaseRenderInputTestStore{memoryTaskStore: newMemoryTaskStore()}
-	seedTaskRepositoryValue(t, store.memoryTaskStore, releaseRenderInputStagingKey("", input.ReleaseID), stored)
+	seedTaskRepositoryValue(
+		t,
+		store.memoryTaskStore,
+		testreleases.ReleaseRenderInputStagingKey("", input.ReleaseID),
+		stored,
+	)
 	revision := store.currentRevision()
 
-	got, err := (&ReleaseLedger{store: store}).GetReleaseRenderInputAt(
+	got, err := (releaseLedgerFixture(t, store)).GetReleaseRenderInputAt(
 		context.Background(), input.ReleaseID, revision,
 	)
 	if err != nil {
@@ -55,12 +65,16 @@ func (*releaseRenderInputTestStore) Close() error { return nil }
 func (*releaseRenderInputTestStore) Health(context.Context) error { return nil }
 
 func (store *releaseRenderInputTestStore) Put(ctx context.Context, key string, value []byte) (int64, error) {
-	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: value}})
+	result, err := store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}},
+	)
 	return result.Revision, err
 }
 
 func (store *releaseRenderInputTestStore) Delete(ctx context.Context, key string) (int64, error) {
-	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: key}})
+	result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}})
 	return result.Revision, err
 }
 
@@ -85,7 +99,7 @@ func TestValidateReleaseRenderInputRejectsMismatchedDependencyAuthority(t *testi
 			{Service: "api", Dependency: "worker", Condition: core.ServiceDependencyStarted},
 		},
 	}}
-	input := ReleaseRenderInput{
+	input := testreleaserender.ReleaseRenderInput{
 		ReleaseID: ids.NewAt(ids.KindDeployment, now, 3), PlanID: ids.NewAt(ids.KindPlan, now, 4),
 		ArtifactID: ids.NewAt(ids.KindConfig, now, 5), ServiceID: workerID, ServiceName: "worker",
 		CandidateWorkload: releaseTestWorkloadSeal(
@@ -107,9 +121,9 @@ func TestValidateReleaseRenderInputRejectsMismatchedDependencyAuthority(t *testi
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 8), EnvironmentName: "production",
 		AuthorizedVolumeDir: "/var/lib/groundplane/volumes",
 	}
-	input.Projection = EnvironmentComposeProjection{
+	input.Projection = testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 9), RenderGeneration: 1,
-		DesiredServices: []EnvironmentServiceProjection{
+		DesiredServices: []testservices.EnvironmentServiceProjection{
 			{
 				EnvironmentID: input.EnvironmentID,
 				Desired: core.Service{
@@ -133,11 +147,11 @@ func TestValidateReleaseRenderInputRejectsMismatchedDependencyAuthority(t *testi
 	}
 	input.Projection = withTestEnvironmentComposeArtifact(input.Projection)
 	input.ServiceDependencyPlans = projectionPlans
-	if err := validateReleaseRenderInput(input); err != nil {
+	if err := testreleaserender.ValidateReleaseRenderInput(input); err != nil {
 		t.Fatalf("valid dependency authority baseline rejected: %v", err)
 	}
 	input.ServiceDependencyPlans = tamperedPlans
-	if err := validateReleaseRenderInput(input); err == nil {
+	if err := testreleaserender.ValidateReleaseRenderInput(input); err == nil {
 		t.Fatal("validateReleaseRenderInput() accepted mismatched dependency authorities")
 	}
 }
@@ -147,7 +161,7 @@ func TestValidateReleaseRenderInputAcceptsPortlessRecreate(t *testing.T) {
 	input := portlessReleaseRenderInput(domain.StrategyRecreate)
 	input.PriorArtifactID = ids.NewAt(ids.KindConfig, time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC), 10)
 	input.PriorWorkload = releaseTestPriorWorkload("registry.example/worker:previous")
-	if err := validateReleaseRenderInput(input); err != nil {
+	if err := testreleaserender.ValidateReleaseRenderInput(input); err != nil {
 		t.Fatalf("validateReleaseRenderInput() error = %v", err)
 	}
 }
@@ -161,7 +175,7 @@ func TestValidateReleaseRenderInputRejectsPortlessBlueGreen(t *testing.T) {
 	input.PriorArtifactID = ids.NewAt(ids.KindConfig, time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC), 11)
 	input.PriorWorkload = releaseTestPriorWorkload("registry.example/worker:previous")
 	input.ProxyGeneration, input.PriorProxyGeneration = 2, 1
-	if err := validateReleaseRenderInput(input); err == nil {
+	if err := testreleaserender.ValidateReleaseRenderInput(input); err == nil {
 		t.Fatal("validateReleaseRenderInput() accepted blue-green without an addressable proxy port")
 	}
 }
@@ -178,7 +192,7 @@ func TestValidateReleaseRenderInputAcceptsAddressableRecreateWithoutDurableSlot(
 	input.ProxyConfigDigest, input.PriorProxyDigest = "candidate", "prior"
 	input.PriorArtifactID = ids.NewAt(ids.KindConfig, time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC), 12)
 	input.PriorWorkload = releaseTestPriorWorkload("registry.example/worker:previous")
-	if err := validateReleaseRenderInput(input); err != nil {
+	if err := testreleaserender.ValidateReleaseRenderInput(input); err != nil {
 		t.Fatalf("validateReleaseRenderInput() error = %v", err)
 	}
 	if input.Slot != "" {
@@ -191,36 +205,38 @@ func TestFirstBlueGreenRenderPublicationRoundTrip(t *testing.T) {
 	input.Slot, input.CandidateTarget = domain.SlotBlue, domain.WorkloadBlue
 	input.ProxyGeneration, input.ProxyPorts, input.ProxyConfigDigest = 2, []uint16{8080}, "candidate"
 	input.ProxyImage = releaseProxyImageFixture()
-	encoded, err := EncodeReleaseRenderInput(input)
+	encoded, err := testreleaserender.EncodeReleaseRenderInput(input)
 	if err != nil {
 		t.Fatalf("first blue-green publication: %v", err)
 	}
-	decoded, err := decodeReleaseRenderInput(encoded)
+	decoded, err := testreleaserender.DecodeReleaseRenderInput(encoded)
 	if err != nil || decoded.PriorWorkload != nil || decoded.PriorArtifactID != "" ||
 		decoded.PriorProxyGeneration != 0 ||
 		decoded.PriorProxyDigest != "" {
 		t.Fatalf("first blue-green changed absent predecessor: %v", err)
 	}
-	for name, mutate := range map[string]func(*ReleaseRenderInput){
-		"stray-generation": func(value *ReleaseRenderInput) { value.PriorProxyGeneration = 1 },
-		"stray-digest":     func(value *ReleaseRenderInput) { value.PriorProxyDigest = "prior" },
-		"missing-artifact": func(value *ReleaseRenderInput) { value.PriorWorkload = releaseTestPriorWorkload("app:prior") },
-		"missing-workload": func(value *ReleaseRenderInput) { value.PriorArtifactID = value.ArtifactID },
+	for name, mutate := range map[string]func(*testreleaserender.ReleaseRenderInput){
+		"stray-generation": func(value *testreleaserender.ReleaseRenderInput) { value.PriorProxyGeneration = 1 },
+		"stray-digest":     func(value *testreleaserender.ReleaseRenderInput) { value.PriorProxyDigest = "prior" },
+		"missing-artifact": func(value *testreleaserender.ReleaseRenderInput) {
+			value.PriorWorkload = releaseTestPriorWorkload("app:prior")
+		},
+		"missing-workload": func(value *testreleaserender.ReleaseRenderInput) { value.PriorArtifactID = value.ArtifactID },
 	} {
 		t.Run(name, func(t *testing.T) {
 			invalid := input
 			mutate(&invalid)
-			if _, err := EncodeReleaseRenderInput(invalid); err == nil {
+			if _, err := testreleaserender.EncodeReleaseRenderInput(invalid); err == nil {
 				t.Fatal("incomplete or invented predecessor authority accepted")
 			}
 		})
 	}
 }
 
-func portlessReleaseRenderInput(strategy domain.Strategy) ReleaseRenderInput {
+func portlessReleaseRenderInput(strategy domain.Strategy) testreleaserender.ReleaseRenderInput {
 	now := time.Date(2026, 8, 26, 13, 0, 0, 0, time.UTC)
 	serviceID := ids.NewAt(ids.KindService, now, 1)
-	input := ReleaseRenderInput{
+	input := testreleaserender.ReleaseRenderInput{
 		ReleaseID: ids.NewAt(ids.KindDeployment, now, 2), PlanID: ids.NewAt(ids.KindPlan, now, 3),
 		ArtifactID: ids.NewAt(ids.KindConfig, now, 4), ServiceID: serviceID, ServiceName: "worker",
 		CandidateWorkload: releaseTestWorkloadSeal(
@@ -232,9 +248,9 @@ func portlessReleaseRenderInput(strategy domain.Strategy) ReleaseRenderInput {
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 7), EnvironmentName: "production",
 		AuthorizedVolumeDir: "/var/lib/groundplane/volumes",
 	}
-	input.Projection = EnvironmentComposeProjection{
+	input.Projection = testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: input.EnvironmentID, RevisionID: ids.NewAt(ids.KindTask, now, 8), RenderGeneration: 1,
-		DesiredServices: []EnvironmentServiceProjection{{
+		DesiredServices: []testservices.EnvironmentServiceProjection{{
 			EnvironmentID: input.EnvironmentID,
 			Desired: core.Service{
 				ID:       serviceID,

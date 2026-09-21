@@ -71,8 +71,10 @@ func (report scriptClosingReport) validate(current TaskAssignment) error {
 		report.AssignmentID != assignment.AssignmentID || report.AgentID != assignment.AgentID ||
 		report.AgentGeneration != assignment.AgentGeneration || report.ExecutionEpoch != assignment.ExecutionEpoch ||
 		report.TaskRevision <= 0 || report.TaskRevision != current.Task.Revision ||
-		report.AssignmentRevision <= 0 || report.AssignmentRevision != current.Assignment.Revision ||
-		report.Result.ExecutionEpoch != assignment.ExecutionEpoch || report.Result.ReconciliationRequired ||
+		report.AssignmentRevision <= 0 ||
+		report.AssignmentRevision != current.Assignment.Revision ||
+		report.Result.ExecutionEpoch != assignment.ExecutionEpoch ||
+		report.Result.ReconciliationRequired ||
 		report.RecoveryRecordSHA256 != assignment.ReleaseRecoveryRecordSHA256 ||
 		report.Result.ReleaseRecoveryRecordSHA256 != report.RecoveryRecordSHA256 ||
 		taskjournal.ValidateTaskResult(report.Result, task.Steps, report.Status) != nil ||
@@ -133,12 +135,12 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 			)
 		}
 		return report, etcdstore.Condition{
-				Key:         key,
-				ModRevision: value.ModRevision,
-			}, etcdstore.Mutation{
-				Type: etcdstore.MutationDelete,
-				Key:  key,
-			}, nil
+			Key:         key,
+			ModRevision: value.ModRevision,
+		}, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  key,
+		}, nil
 	}
 	if value != nil {
 		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, taskassignments.CorruptTaskAssignment()
@@ -157,12 +159,12 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 	}
 	encoded, err := recordcodec.Encode(scriptClosingReportEnvelope(task), report)
 	return report, etcdstore.Condition{
-			Key: key,
-		}, etcdstore.Mutation{
-			Type:  etcdstore.MutationPut,
-			Key:   key,
-			Value: encoded,
-		}, err
+		Key: key,
+	}, etcdstore.Mutation{
+		Type:  etcdstore.MutationPut,
+		Key:   key,
+		Value: encoded,
+	}, err
 }
 
 func (repository *TaskRepository) resumeScriptClosingReport(

@@ -7,6 +7,13 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -14,12 +21,12 @@ import (
 // Controller plan producer. Release history is seeded, not deployed: this proves
 // plan production/publication/admission, not serving-Release source discovery.
 type ManualScriptAdmissionFixture struct {
-	Sources   ScriptExecutionSources
+	Sources   testscriptsourcequeries.ScriptExecutionSources
 	Task      TaskRecord
-	Execution ScriptExecutionRecord
+	Execution testscriptexecutions.ScriptExecutionRecord
 	Scripts   *ScriptRepository
 	store     *memoryHierarchyStore
-	marker    IdempotencyMarker
+	marker    testidempotency.IdempotencyMarker
 }
 
 func NewManualScriptAdmissionFixture(t *testing.T) *ManualScriptAdmissionFixture {
@@ -49,7 +56,7 @@ func newManualScriptAdmissionFixture(
 	sources.DesiredProjection.Record.NormalizedCompose = append([]byte(nil), compose...)
 	return &ManualScriptAdmissionFixture{
 		Sources: sources, Task: task, Execution: execution,
-		Scripts: &ScriptRepository{store: store}, store: store, marker: marker,
+		Scripts: composeScriptRepository(store), store: store, marker: marker,
 	}
 }
 
@@ -72,38 +79,38 @@ func (fixture *ManualScriptAdmissionFixture) Publish(t *testing.T, plan *agentpb
 
 func (fixture *ManualScriptAdmissionFixture) ChangeRoot(t *testing.T, change string) {
 	t.Helper()
-	key := scriptSourceRootKey(fixture.Task.OperationID)
+	key := testscriptsourceevidence.ScriptSourceRootKey(fixture.Task.OperationID)
 	value := fixture.store.valueAt(key, fixture.store.revision)
-	root, err := decodeScriptOperationSourceRoot(value.Value)
+	root, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(value.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutation := Mutation{Type: MutationPut, Key: key}
+	mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key}
 	switch change {
 	case "digest":
 		root.MembershipSHA256 = scriptSourceReferenceDigest("different source set")
 	case "count":
 		root.MembershipCount++
 	case "releasing":
-		root.Phase = ScriptOperationSourceReleasing
-		root.ReleasePath = ScriptSourceReleaseNormal
-		root.RetryDisposition = ScriptRetryDispositionForbidden
+		root.Phase = testscriptsourceevidence.ScriptOperationSourceReleasing
+		root.ReleasePath = testscriptsourceevidence.ScriptSourceReleaseNormal
+		root.RetryDisposition = testscriptsourcereference.RetryDispositionForbidden
 	case "retry_available":
-		root.RetryDisposition = ScriptRetryDispositionAvailable
+		root.RetryDisposition = testscriptsourcereference.RetryDispositionAvailable
 		deadline := fixture.Task.CreatedAt.Add(24 * time.Hour)
 		root.RetryExpiresAt = &deadline
 	case "absent":
-		mutation.Type = MutationDelete
+		mutation.Type = testkeyvalue.MutationDelete
 	default:
 		t.Fatalf("unknown root change %q", change)
 	}
-	if mutation.Type == MutationPut {
-		mutation.Value, err = encodeEnvelope("script-operation-source-root", root)
+	if mutation.Type == testkeyvalue.MutationPut {
+		mutation.Value, err = testrecordcodec.Encode("script-operation-source-root", root)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	result, err := fixture.store.Transact(context.Background(), nil, []Mutation{mutation})
+	result, err := fixture.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{mutation})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("change manual Script root = %#v, %v", result, err)
 	}

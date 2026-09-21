@@ -2,14 +2,15 @@ package etcd
 
 import (
 	"context"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 )
 
 func (store *memoryTaskStore) Range(
 	ctx context.Context,
-	request RangeRequest,
-) (*RangeResult, error) {
+	request testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -37,11 +38,11 @@ func (store *memoryTaskStore) Range(
 	if more {
 		keys = keys[:request.Limit]
 	}
-	values := make([]KeyValue, 0, len(keys))
+	values := make([]testkeyvalue.KeyValue, 0, len(keys))
 	for _, key := range keys {
 		values = append(values, *store.valueAtLocked(key, revision))
 	}
-	return &RangeResult{
+	return &testkeyvalue.RangeResult{
 		Values: values, ReadRevision: revision, ResponseRevision: store.revision, More: more,
 	}, nil
 }

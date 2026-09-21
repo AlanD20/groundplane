@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -21,18 +22,18 @@ func TestTaskResultRecordRoundTripsAsBoundedSummary(t *testing.T) {
 	record := validTaskRecord(taskJournalTime())
 	startedAt := record.CreatedAt.Add(1)
 	terminalAt := record.CreatedAt.Add(2)
-	record.Status = TaskStatusCompleted
+	record.Status = testtaskjournal.TaskStatusCompleted
 	record.StartedAt = &startedAt
 	record.FinishedAt = &terminalAt
 	record.UpdatedAt = terminalAt
-	retainUntil := terminalAt.Add(TaskRetention)
+	retainUntil := terminalAt.Add(testtaskjournal.TaskRetention)
 	record.RetainUntil = &retainUntil
 	result := completedComposeTaskResult()
 	result.ExecutionEpoch = 23
 	result.ReleaseRecoveryRecordSHA256 = strings.Repeat("4", 64)
-	result.Projects = make([]TaskObservedProjectSummary, 64)
+	result.Projects = make([]testtaskjournal.TaskObservedProjectSummary, 64)
 	for index := range result.Projects {
-		result.Projects[index] = TaskObservedProjectSummary{
+		result.Projects[index] = testtaskjournal.TaskObservedProjectSummary{
 			ProjectName: fmt.Sprintf("gp-%02d", index), ObservedAt: terminalAt,
 			ContainerCount: uint32(index + 1), NetworkCount: uint32(index + 101),
 			VolumeCount: uint32(index + 201), CollisionCount: uint32(index + 301),
@@ -44,11 +45,11 @@ func TestTaskResultRecordRoundTripsAsBoundedSummary(t *testing.T) {
 	)
 	record.Result = &result
 
-	encoded, err := encodeTaskRecord(record)
+	encoded, err := EncodeTaskRecord(record)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord() error = %v", err)
 	}
-	decoded, err := decodeTaskRecord(encoded)
+	decoded, err := DecodeTaskRecord(encoded)
 	if err != nil {
 		t.Fatalf("decodeTaskRecord() error = %v", err)
 	}
@@ -56,22 +57,22 @@ func TestTaskResultRecordRoundTripsAsBoundedSummary(t *testing.T) {
 		t.Fatalf("decoded result = %#v, want %#v", decoded.Result, record.Result)
 	}
 	overLimit := record
-	overLimit.Result = cloneTaskResult(record.Result)
-	overLimit.Result.Projects = append(overLimit.Result.Projects, TaskObservedProjectSummary{
+	overLimit.Result = testtaskjournal.CloneTaskResult(record.Result)
+	overLimit.Result.Projects = append(overLimit.Result.Projects, testtaskjournal.TaskObservedProjectSummary{
 		ProjectName: "gp-64", ObservedAt: terminalAt,
 	})
-	if _, err := encodeTaskRecord(overLimit); !isKind(err, errs.KindValidationFailed) {
+	if _, err := EncodeTaskRecord(overLimit); !isKind(err, errs.KindValidationFailed) {
 		t.Fatalf("encodeTaskRecord(65 project summaries) error = %v, want validation failed", err)
 	}
 	for name, digest := range map[string]string{"missing": "", "zero": strings.Repeat("0", 64)} {
 		invalid := record
-		invalid.Result = cloneTaskResult(record.Result)
+		invalid.Result = testtaskjournal.CloneTaskResult(record.Result)
 		invalid.Result.DNSResolverCandidateObservation.ImageConfigDigest = digest
-		if _, err := encodeTaskRecord(invalid); !isKind(err, errs.KindValidationFailed) {
+		if _, err := EncodeTaskRecord(invalid); !isKind(err, errs.KindValidationFailed) {
 			t.Fatalf("encodeTaskRecord(%s DNS resolver image config digest) error = %v", name, err)
 		}
 	}
-	cloned := cloneTaskResult(record.Result)
+	cloned := testtaskjournal.CloneTaskResult(record.Result)
 	originalProofByte := record.Result.DNSResolverCandidateObservation.CanonicalEvidence[0]
 	cloned.Projects[0].ProjectName = "changed"
 	cloned.DNSResolverCandidateObservation.CanonicalEvidence[0] ^= 0xff
@@ -86,7 +87,7 @@ func testDurableDNSProof(
 	generation uint64,
 	observedAt time.Time,
 	forwarders int,
-) *TaskDNSResolverObservationEvidence {
+) *testtaskjournal.TaskDNSResolverObservationEvidence {
 	artifact, _ := hex.DecodeString(artifactSHA)
 	image, _ := hex.DecodeString(strings.Repeat("2", 64))
 	config, _ := hex.DecodeString(strings.Repeat("9", 64))
@@ -126,7 +127,7 @@ func testDurableDNSProof(
 	}
 	_ = dnsproof.Seal(evidence)
 	canonical, _ := dnsproof.Marshal(evidence)
-	return &TaskDNSResolverObservationEvidence{
+	return &testtaskjournal.TaskDNSResolverObservationEvidence{
 		ComponentID:             componentID,
 		ServiceID:               serviceID,
 		ArtifactID:              artifactID,
@@ -146,9 +147,9 @@ func testDurableDNSProof(
 	}
 }
 
-func completedComposeTaskResult() TaskResultRecord {
-	return TaskResultRecord{
-		Kind:       TaskResultCompose,
-		Diagnostic: TaskResultDiagnosticNone,
+func completedComposeTaskResult() testtaskjournal.TaskResultRecord {
+	return testtaskjournal.TaskResultRecord{
+		Kind:       testtaskjournal.TaskResultCompose,
+		Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 	}
 }

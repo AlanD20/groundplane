@@ -6,10 +6,14 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -20,8 +24,12 @@ type explicitProducerPorts struct {
 	reference  string
 }
 
-func (ports *explicitProducerPorts) GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error) {
-	return etcd.Versioned[etcd.LocalAgentRecord]{Record: etcd.LocalAgentRecord{ID: "setup-agent"}}, nil
+func (ports *explicitProducerPorts) GetSingleton(
+	context.Context,
+) (testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], error) {
+	return testkeyvalue.Versioned[testlocalagents.LocalAgentRecord]{
+		Record: testlocalagents.LocalAgentRecord{ID: "setup-agent"},
+	}, nil
 }
 
 func (ports *explicitProducerPorts) ResolveWorkloadImages(
@@ -43,7 +51,7 @@ func (ports *explicitProducerPorts) ResolveWorkloadImages(
 }
 
 func (ports *explicitProducerPorts) ResolveTaskMaterializationSource(
-	context.Context, string, etcd.TaskMaterializationSource,
+	context.Context, string, testtaskmaterialization.Source,
 ) ([]byte, error) {
 	ports.t.Fatal("grant-free setup resolved an Entry value")
 	return nil, nil
@@ -53,7 +61,7 @@ func (ports *explicitProducerPorts) ResolveTaskMaterializationSource(
 // image and pass actual stored-source publication, not just a hand-built DTO.
 func TestScriptExplicitProducerPublishesSeparatePreparedImage(t *testing.T) {
 	fixture, input, ports := explicitProducerInput(t)
-	plan, err := controller.BuildManualScriptPlan(context.Background(), input)
+	plan, err := testtaskplanning.BuildManualScriptPlan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,8 +78,8 @@ func TestScriptExplicitProducerPublishesSeparatePreparedImage(t *testing.T) {
 	if ports.imageCalls != 1 {
 		t.Fatal("publication re-resolved the image")
 	}
-	input.Preparation = controller.ScriptRunnerPreparation{}
-	if _, err := controller.BuildManualScriptPlan(context.Background(), input); err == nil {
+	input.Preparation = testtaskplanning.ScriptRunnerPreparation{}
+	if _, err := testtaskplanning.BuildManualScriptPlan(context.Background(), input); err == nil {
 		t.Fatal("explicit producer accepted caller input without image preparation")
 	}
 }
@@ -81,13 +89,13 @@ func TestScriptExplicitProducerPublishesSeparatePreparedImage(t *testing.T) {
 func TestScriptExplicitProducerFrozenHookPreservesPreparation(t *testing.T) {
 	fixture, input, ports := explicitProducerInput(t)
 	input.Sources.Script.Record.Desired.When = core.ScriptPreDeploy
-	hook, err := controller.BuildReleaseHookRenderInput(context.Background(), input)
+	hook, err := testtaskplanning.BuildReleaseHookRenderInput(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	replayed, err := controller.BuildReleaseHookPlan(controller.ReleaseHookPlanInput{
+	replayed, err := testtaskplanning.BuildReleaseHookPlan(testtaskplanning.ReleaseHookPlanInput{
 		Operation: domain.OperationDeploy, CandidateReleaseID: fixture.Sources.Release.Intent.ID,
-		PreStepIDs: []string{input.StepID}, Hooks: []etcd.ReleaseHookRenderInput{hook},
+		PreStepIDs: []string{input.StepID}, Hooks: []testreleaserender.ReleaseHookRenderInput{hook},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -110,17 +118,17 @@ func TestScriptExplicitProducerFrozenHookPreservesPreparation(t *testing.T) {
 
 func explicitProducerInput(
 	t *testing.T,
-) (*etcd.ManualScriptAdmissionFixture, controller.ManualScriptPlanInput, *explicitProducerPorts) {
+) (*etcd.ManualScriptAdmissionFixture, testtaskplanning.ManualScriptPlanInput, *explicitProducerPorts) {
 	t.Helper()
 	fixture := etcd.NewExplicitManualScriptAdmissionFixture(t, core.ScriptExecution{
 		Mode: core.ScriptExecutionExplicit, Image: "example/setup@sha256:" + strings.Repeat("b", 64), User: "0:0",
 	})
 	ports := &explicitProducerPorts{t: t}
-	artifacts, err := controller.NewScriptArtifactService(fixture.Scripts, ports)
+	artifacts, err := testtaskplanning.NewScriptArtifactService(fixture.Scripts, ports)
 	if err != nil {
 		t.Fatal(err)
 	}
-	preparation, err := controller.NewScriptRunnerPreparationService(artifacts, ports, ports)
+	preparation, err := testtaskplanning.NewScriptRunnerPreparationService(artifacts, ports, ports)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +136,7 @@ func explicitProducerInput(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fixture, controller.ManualScriptPlanInput{
+	return fixture, testtaskplanning.ManualScriptPlanInput{
 		TaskID: fixture.Task.ID, OperationID: fixture.Task.OperationID, PlanID: fixture.Task.PlanID,
 		StepID: fixture.Execution.StepID, ExecutionID: fixture.Execution.ID, SnapshotID: fixture.Execution.SnapshotID,
 		Sources: fixture.Sources, Preparation: prepared,

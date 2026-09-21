@@ -6,6 +6,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 )
 
 // Rationale: both deadline collectors must fence an unstarted execution and
@@ -30,18 +34,22 @@ func TestManualScriptBeforeStartTimeoutRetainsRetryAuthority(t *testing.T) {
 				t.Fatalf("before-start timeout = %d, %v", count, err)
 			}
 			terminal, err := tasks.GetTask(ctx, assignment.Task.Record.ID)
-			if err != nil || terminal.Record.Status != TaskStatusTimedOut || terminal.Record.RetainUntil == nil {
+			if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusTimedOut ||
+				terminal.Record.RetainUntil == nil {
 				t.Fatalf("timeout terminal = %s, %v", terminal.Record.Status, err)
 			}
-			rootValue := store.valueAt(scriptSourceRootKey(execution.OperationID), store.revision)
-			root, err := decodeScriptOperationSourceRoot(rootValue.Value)
-			if err != nil || root.Phase != ScriptOperationSourceActive ||
-				root.RetryDisposition != ScriptRetryDispositionAvailable || root.RetryExpiresAt == nil ||
+			rootValue := store.valueAt(
+				testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID),
+				store.revision,
+			)
+			root, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(rootValue.Value)
+			if err != nil || root.Phase != testscriptsourceevidence.ScriptOperationSourceActive ||
+				root.RetryDisposition != testscriptsourcereference.RetryDispositionAvailable || root.RetryExpiresAt == nil ||
 				!root.RetryExpiresAt.Equal(*terminal.Record.RetainUntil) || rootValue.ModRevision != terminal.Revision {
 				t.Fatalf("timeout lost atomic retry authority: %v", err)
 			}
 			retained, err := scripts.GetScriptExecution(ctx, execution.ID)
-			if err != nil || retained.Record.State != ScriptExecutionNotStarted ||
+			if err != nil || retained.Record.State != testscriptexecutions.ScriptExecutionNotStarted ||
 				!retained.Record.ActiveReference || retained.Record.AssignmentID != "" {
 				t.Fatalf("timeout changed sealed execution: %v", err)
 			}
@@ -52,8 +60,13 @@ func TestManualScriptBeforeStartTimeoutRetainsRetryAuthority(t *testing.T) {
 			}
 			retryAt := deadline.Add(2 * time.Second)
 			retryID := ids.NewAt(ids.KindTask, retryAt, 120)
-			result, err := tasks.RetryTask(ctx, terminal.Record.ID, retryID, TaskActorOperator,
-				pendingRetryMarker(terminal.Record, retryID, retryAt, "manual-timeout-retry"))
+			result, err := tasks.RetryTask(
+				ctx,
+				terminal.Record.ID,
+				retryID,
+				testtaskjournal.TaskActorOperator,
+				pendingRetryMarker(terminal.Record, retryID, retryAt, "manual-timeout-retry"),
+			)
 			if err != nil || result.kind != idempotencyTransactionApplied {
 				t.Fatalf("timeout retry = %v", err)
 			}
@@ -72,13 +85,15 @@ func TestManualScriptTimeoutCannotRacePastStart(t *testing.T) {
 			input := scriptCheckpointTestInput(execution, assignment.Task.Record.CreatedAt.Add(2*time.Second))
 			input.AgentID = assignment.Assignment.Record.AgentID
 			input.AssignmentID = assignment.Assignment.Record.AssignmentID
-			input.ExpectedState, input.State = ScriptExecutionNotStarted, ScriptExecutionStartAuthorized
-			input.Evidence = ScriptCheckpointEvidence{
-				Kind: ScriptCheckpointEvidenceStartAuthorized, StartAuthorized: &ScriptStartAuthorizedEvidence{},
+			input.ExpectedState, input.State = testscriptexecutions.ScriptExecutionNotStarted, testscriptexecutions.ScriptExecutionStartAuthorized
+			input.Evidence = testscriptexecutions.ScriptCheckpointEvidence{
+				Kind: testscriptexecutions.ScriptCheckpointEvidenceStartAuthorized, StartAuthorized: &testscriptexecutions.ScriptStartAuthorizedEvidence{},
 			}
-			input.PayloadSHA256 = scriptSourceReferenceDigest(string(ScriptExecutionStartAuthorized))
+			input.PayloadSHA256 = scriptSourceReferenceDigest(
+				string(testscriptexecutions.ScriptExecutionStartAuthorized),
+			)
 			racing := &manualAssignedAbortRaceStore{memoryHierarchyStore: store, scripts: scripts, input: input,
-				rootKey: scriptSourceRootKey(execution.OperationID)}
+				rootKey: testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID)}
 			tasks, err := newTaskRepository(racing)
 			if err != nil {
 				t.Fatal(err)
@@ -96,12 +111,12 @@ func TestManualScriptTimeoutCannotRacePastStart(t *testing.T) {
 				}
 			}
 			current, err := tasks.GetTaskAssignment(ctx, assignment.Task.Record.ID)
-			if err != nil || current.Task.Record.Status != TaskStatusRunning ||
+			if err != nil || current.Task.Record.Status != testtaskjournal.TaskStatusRunning ||
 				current.Assignment.Record.AssignmentID != assignment.Assignment.Record.AssignmentID {
 				t.Fatalf("timeout discarded cleanup authority: %v", err)
 			}
 			retained, err := scripts.GetScriptExecution(ctx, execution.ID)
-			if err != nil || retained.Record.State != ScriptExecutionStartAuthorized ||
+			if err != nil || retained.Record.State != testscriptexecutions.ScriptExecutionStartAuthorized ||
 				!retained.Record.ActiveReference {
 				t.Fatalf("timeout changed winning start checkpoint: %v", err)
 			}

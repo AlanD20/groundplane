@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,18 +20,25 @@ func TestBlueprintRuntimeSharesTerminalCommitAndReplay(t *testing.T) {
 			ctx := context.Background()
 			published, tasks, claim, agentID := claimBlueprintTerminalDesiredFixture(t)
 			value := published.store.valueAt(
-				releasePublicationKey(published.releasePublicationID),
+				testreleases.ReleasePublicationKey(published.releasePublicationID),
 				published.store.revision,
 			)
-			marker, err := decodeReleaseRecord[ReleasePublicationMarker](value.Value, "release-publication")
+			marker, err := testreleases.DecodeReleaseRecord[testreleases.ReleasePublicationMarker](
+				value.Value,
+				"release-publication",
+			)
 			if err != nil || len(marker.BlueprintRuntimes) != 1 {
 				t.Fatalf("fixture runtime preparation: %v", err)
 			}
 			key := serviceruntimerecord.Key(marker.BlueprintRuntimes[0].ServiceID)
-			status := TaskStatusCompleted
-			result := TaskResultRecord{Kind: TaskResultCompose, ExecutionEpoch: 1, Diagnostic: TaskResultDiagnosticNone}
+			status := testtaskjournal.TaskStatusCompleted
+			result := testtaskjournal.TaskResultRecord{
+				Kind:           testtaskjournal.TaskResultCompose,
+				ExecutionEpoch: 1,
+				Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+			}
 			if outcome == "no effect" {
-				status, result.Diagnostic = TaskStatusTimedOut, TaskResultDiagnosticTimeoutBeforeEffect
+				status, result.Diagnostic = testtaskjournal.TaskStatusTimedOut, testtaskjournal.TaskResultDiagnosticTimeoutBeforeEffect
 			}
 			if outcome == "lost response" {
 				tasks.blueprintTerminalStore = &blueprintTerminalFaultStore{
@@ -58,7 +67,7 @@ func TestBlueprintRuntimeSharesTerminalCommitAndReplay(t *testing.T) {
 				if receipt == nil || receipt.ModRevision != terminal.Revision {
 					t.Fatal("runtime and successful Task did not share the atomic commit")
 				}
-				record, err := decodeReleaseRecord[serviceruntimerecord.Record](receipt.Value, "service-acknowledged-runtime")
+				record, err := testreleases.DecodeReleaseRecord[serviceruntimerecord.Record](receipt.Value, "service-acknowledged-runtime")
 				if err != nil || serviceruntimerecord.Validate(record) != nil || record.Source.TaskID != terminal.Record.ID {
 					t.Fatalf("invalid acknowledged runtime: %v", err)
 				}

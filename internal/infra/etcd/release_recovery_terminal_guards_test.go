@@ -7,6 +7,10 @@ import (
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: lost proof witnesses must prevent intermediate checkpoint, summary
@@ -18,24 +22,33 @@ func TestRecoveryProofRaceCannotPartiallyTerminalizeRelease(t *testing.T) {
 				ctx := context.Background()
 				f, assignment, result, _, renderKey := recoveryProofFixture(t, false)
 				task := f.claim.Task.Record
-				fence, err := encodeReleaseRecord("release-fence-set", ReleaseFenceSet{
+				fence, err := testreleases.EncodeReleaseRecord("release-fence-set", testreleases.ReleaseFenceSet{
 					EnvironmentID: task.Owner.EnvironmentID, Generation: 1, OperationID: task.OperationID, AttemptTaskID: task.ID,
-					Members: []ReleaseFenceMember{{ServiceID: f.serviceID, CandidateReleaseID: f.releaseID}},
+					Members: []testreleases.ReleaseFenceMember{
+						{ServiceID: f.serviceID, CandidateReleaseID: f.releaseID},
+					},
 				})
 				if err != nil {
 					t.Fatal(err)
 				}
-				checkpoint, err := encodeReleaseRecord(
+				checkpoint, err := testreleases.EncodeReleaseRecord(
 					"release-checkpoint",
 					domain.Checkpoint{ReleaseID: f.releaseID, State: domain.StatePending, UpdatedAt: f.now},
 				)
 				if err != nil {
 					t.Fatal(err)
 				}
-				checkpointKey := releaseCheckpointStagingKey(task.Params[TaskReleasePublicationParam], f.releaseID)
-				seed, err := f.repository.store.Transact(ctx, nil, []Mutation{
-					{Type: MutationPut, Key: releaseFenceSetKey(task.Owner.EnvironmentID), Value: fence},
-					{Type: MutationPut, Key: checkpointKey, Value: checkpoint},
+				checkpointKey := testreleases.ReleaseCheckpointStagingKey(
+					task.Params[testreleaserender.TaskReleasePublicationParam],
+					f.releaseID,
+				)
+				seed, err := f.repository.store.Transact(ctx, nil, []testkeyvalue.Mutation{
+					{
+						Type:  testkeyvalue.MutationPut,
+						Key:   testreleases.ReleaseFenceSetKey(task.Owner.EnvironmentID),
+						Value: fence,
+					},
+					{Type: testkeyvalue.MutationPut, Key: checkpointKey, Value: checkpoint},
 				})
 				if err != nil {
 					t.Fatal(err)
@@ -43,9 +56,7 @@ func TestRecoveryProofRaceCannotPartiallyTerminalizeRelease(t *testing.T) {
 				ack, err := f.repository.releaseRecoveryAcknowledgementAtRevision(
 					ctx,
 					task,
-					assignment,
-					TaskStatusCompleted,
-					result,
+					assignment, testtaskjournal.TaskStatusCompleted, result,
 					seed.Revision,
 				)
 				if err != nil || !ack.final {
@@ -53,29 +64,28 @@ func TestRecoveryProofRaceCannotPartiallyTerminalizeRelease(t *testing.T) {
 				}
 				key := renderKey
 				if source == "manifest" {
-					key = releaseManifestStagingKey(task.Params[TaskReleasePublicationParam])
+					key = testreleases.ReleaseManifestStagingKey(
+						task.Params[testreleaserender.TaskReleasePublicationParam],
+					)
 				}
 				read, err := f.repository.store.GetMany(
-					ctx,
-					GetManyRequest{Keys: []string{key}, Revision: seed.Revision},
+					ctx, testkeyvalue.GetManyRequest{Keys: []string{key}, Revision: seed.Revision},
 				)
 				if err != nil {
 					t.Fatal(err)
 				}
-				mutation := Mutation{Type: MutationPut, Key: key, Value: read.Values[0].Value}
+				mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: read.Values[0].Value}
 				if prune {
-					mutation.Type = MutationDelete
+					mutation.Type = testkeyvalue.MutationDelete
 				}
-				if _, err := f.repository.store.Transact(ctx, nil, []Mutation{mutation}); err != nil {
+				if _, err := f.repository.store.Transact(ctx, nil, []testkeyvalue.Mutation{mutation}); err != nil {
 					t.Fatal(err)
 				}
 				result.FailedStepID = f.forwardStepID
 				processed, err := f.repository.finalizeReleaseTaskBatch(
 					ctx,
 					task,
-					assignment,
-					TaskStatusFailed,
-					result,
+					assignment, testtaskjournal.TaskStatusFailed, result,
 					f.agentID,
 					f.now.Add(time.Minute),
 					seed.Revision,
@@ -84,13 +94,9 @@ func TestRecoveryProofRaceCannotPartiallyTerminalizeRelease(t *testing.T) {
 					t.Fatal("changed proof source committed a partial release terminal batch")
 				}
 				after, err := f.repository.store.GetMany(
-					ctx,
-					GetManyRequest{
+					ctx, testkeyvalue.GetManyRequest{
 						Keys: []string{
-							checkpointKey,
-							releaseTerminalKey(f.releaseID),
-							releaseProjectionKey(f.serviceID),
-							releaseRetentionKey(f.releaseID),
+							checkpointKey, testreleases.ReleaseTerminalKey(f.releaseID), testreleases.ReleaseProjectionKey(f.serviceID), testreleases.ReleaseRetentionKey(f.releaseID),
 						},
 					},
 				)

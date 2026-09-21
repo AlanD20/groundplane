@@ -9,6 +9,12 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -22,10 +28,10 @@ func TestVolumeRemovalInitialTaskDeclaresMaterializationAuthority(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clearBackupRuntimeMutations(publication.mutations)
+	defer testkeyvalue.ClearMutationValues(publication.mutations)
 	environmentID, declared, err := taskMaterializationEnvironment(task)
 	if err != nil || !declared || environmentID != task.Owner.EnvironmentID ||
-		task.Params[TaskResourceKindParam] != TaskResourceVolume {
+		task.Params[testtaskjournal.TaskResourceKindParam] != testtaskjournal.TaskResourceVolume {
 		t.Fatalf(
 			"published removal Task has no standard materialization authority: declared=%t error=%v",
 			declared,
@@ -42,7 +48,7 @@ func TestVolumeRemovalInitialOwnershipExcludesScriptPreparation(t *testing.T) {
 			ctx := context.Background()
 			store, operationID, members, _, _, _ := scriptRunnerSnapshotSourceFixture(t)
 			member := members[2]
-			if member.Reference.Source.Kind != ScriptSourceVolume {
+			if member.Reference.Source.Kind != testscriptsourcereference.SourceVolume {
 				t.Fatal("fixture has no Volume")
 			}
 			if removing {
@@ -65,17 +71,21 @@ func TestVolumeRemovalInitialOwnershipExcludesScriptPreparation(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				defer clearBackupRuntimeMutations(publication.mutations)
+				defer testkeyvalue.ClearMutationValues(publication.mutations)
 				result, err := store.Transact(ctx, publication.conditions, publication.mutations)
 				if err != nil || !result.Succeeded {
 					t.Fatalf("publish initial records: %v", err)
 				}
 			}
-			authority, err := newScriptSourceReferenceAuthority(store)
+			authority, err := testscriptsourcepublication.NewAuthority(store)
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = authority.Prepare(ctx, operationID, []ScriptSourcePreparationMember{member})
+			_, err = authority.Prepare(
+				ctx,
+				operationID,
+				[]testscriptsourceevidence.ScriptSourcePreparationMember{member},
+			)
 			if !removing {
 				if err != nil {
 					t.Fatalf("unowned source rejected: %v", err)
@@ -85,7 +95,7 @@ func TestVolumeRemovalInitialOwnershipExcludesScriptPreparation(t *testing.T) {
 			if !isKind(err, errs.KindStateConflict) {
 				t.Fatalf("Script reserved a Volume already owned by removal: %v", err)
 			}
-			if count := store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision); count != nil {
+			if count := store.valueAt(testscriptsourceevidence.ScriptSourceCountKey(member.Reference.Source), store.revision); count != nil {
 				t.Fatal("rejected acquisition installed a source count")
 			}
 		})
@@ -100,30 +110,38 @@ type volumeSourceOwnerRaceStore struct {
 
 func (store *volumeSourceOwnerRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	for _, mutation := range mutations {
-		if !store.injected && mutation.Key == scriptSourceCountKey(volumeScriptSource(store.owner.VolumeID)) {
+		if !store.injected &&
+			mutation.Key == testscriptsourceevidence.ScriptSourceCountKey(volumeScriptSource(store.owner.VolumeID)) {
 			value, err := removalrecord.EncodeOwner(store.owner)
 			if err != nil {
-				return TransactionResult{}, err
+				return testkeyvalue.TransactionResult{}, err
 			}
 			defer clear(value)
 			guards := append(
-				volumeScriptAbsenceConditions(store.owner.VolumeID),
-				Condition{Key: removalrecord.OwnerKey(store.owner.VolumeID)},
+				volumeScriptAbsenceConditions(
+					store.owner.VolumeID,
+				),
+				testkeyvalue.Condition{Key: removalrecord.OwnerKey(store.owner.VolumeID)},
 			)
 			result, err := store.hierarchyStore.Transact(
 				ctx,
 				guards,
-				[]Mutation{{Type: MutationPut, Key: removalrecord.OwnerKey(store.owner.VolumeID), Value: value}},
+				[]testkeyvalue.Mutation{
+					{Type: testkeyvalue.MutationPut, Key: removalrecord.OwnerKey(store.owner.VolumeID), Value: value},
+				},
 			)
 			if err != nil {
-				return TransactionResult{}, err
+				return testkeyvalue.TransactionResult{}, err
 			}
 			if !result.Succeeded {
-				return TransactionResult{}, errs.New(errs.KindInternal, "fixture owner race did not commit")
+				return testkeyvalue.TransactionResult{}, errs.New(
+					errs.KindInternal,
+					"fixture owner race did not commit",
+				)
 			}
 			store.injected = true
 			break
@@ -141,16 +159,23 @@ func TestVolumeRemovalInitialOwnershipWinsSourceAcquisitionRace(t *testing.T) {
 		VolumeID: member.Reference.Source.VolumeID, EnvironmentID: member.Reference.SourceOwnerID,
 		OperationID: ids.New(ids.KindOperation),
 	}}
-	authority, err := newScriptSourceReferenceAuthority(transactions)
+	authority, err := testscriptsourcepublication.NewAuthority(transactions)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = authority.Prepare(context.Background(), operationID, []ScriptSourcePreparationMember{member})
+	_, err = authority.Prepare(
+		context.Background(),
+		operationID,
+		[]testscriptsourceevidence.ScriptSourcePreparationMember{member},
+	)
 	if !transactions.injected || !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("late owner did not exclude source acquisition: %v", err)
 	}
-	if store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision) != nil ||
-		store.valueAt(scriptSourceForwardReferenceKey(member.Reference), store.revision) != nil {
+	if store.valueAt(testscriptsourceevidence.ScriptSourceCountKey(member.Reference.Source), store.revision) != nil ||
+		store.valueAt(
+			testscriptsourceevidence.ScriptSourceForwardReferenceKey(member.Reference),
+			store.revision,
+		) != nil {
 		t.Fatal("losing source acquisition installed a count or membership")
 	}
 }
@@ -199,7 +224,7 @@ func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bind initial publication: %v", err)
 	}
-	defer clearBackupRuntimeMutations(publication.mutations)
+	defer testkeyvalue.ClearMutationValues(publication.mutations)
 	if len(publication.conditions) != 2 || len(publication.mutations) != 4 {
 		t.Fatalf(
 			"unexpected initial fragment: %d compares, %d mutations",
@@ -212,10 +237,10 @@ func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
 		removalrecord.ProgressKey(task.OperationID), removalrecord.OwnerKey(task.Target),
 		removalrecord.PendingPathKey(task.OperationID),
 	}
-	if publication.conditions[0] != (Condition{Key: removalrecord.Root(task.OperationID), Prefix: true}) {
+	if publication.conditions[0] != (testkeyvalue.Condition{Key: removalrecord.Root(task.OperationID), Prefix: true}) {
 		t.Fatal("initial fragment does not require complete operation absence")
 	}
-	if publication.conditions[1] != (Condition{Key: removalrecord.OwnerKey(task.Target)}) {
+	if publication.conditions[1] != (testkeyvalue.Condition{Key: removalrecord.OwnerKey(task.Target)}) {
 		t.Fatal("initial fragment does not exclude a different removal owner")
 	}
 	owner, err := removalrecord.DecodeOwner(publication.mutations[3].Value)
@@ -236,7 +261,7 @@ func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
 		t.Fatalf("initial progress encoding: %v", err)
 	}
 	for index, mutation := range publication.mutations {
-		if mutation.Key != wantKeys[index] || mutation.Type != MutationPut || mutation.Prefix {
+		if mutation.Key != wantKeys[index] || mutation.Type != testkeyvalue.MutationPut || mutation.Prefix {
 			t.Fatal("initial record fragment changed key or effect")
 		}
 	}
@@ -259,7 +284,7 @@ func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
 	for _, occupiedKey := range wantKeys {
 		t.Run(occupiedKey, func(t *testing.T) {
 			backend := newMemoryTaskStore()
-			if _, err := backend.Transact(context.Background(), nil, []Mutation{{Type: MutationPut, Key: occupiedKey, Value: []byte("occupied")}}); err != nil {
+			if _, err := backend.Transact(context.Background(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: occupiedKey, Value: []byte("occupied")}}); err != nil {
 				t.Fatal(err)
 			}
 			before := backend.revision
@@ -274,40 +299,48 @@ func TestVolumeRemovalInitialPublicationFragment(t *testing.T) {
 // Rationale: a valid removal record set cannot authorize a different Task,
 // protected intent, original response, or replay target at publication time.
 func TestVolumeRemovalInitialPublicationRejectsChangedBinding(t *testing.T) {
-	for name, change := range map[string]func(*TaskRecord, *IdempotencyMarker){
-		"task id": func(task *TaskRecord, _ *IdempotencyMarker) { task.ID = ids.NewAt(ids.KindTask, task.CreatedAt, 100) },
-		"operation": func(task *TaskRecord, _ *IdempotencyMarker) {
+	for name, change := range map[string]func(*TaskRecord, *testidempotency.IdempotencyMarker){
+		"task id": func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) {
+			task.ID = ids.NewAt(ids.KindTask, task.CreatedAt, 100)
+		},
+		"operation": func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) {
 			task.OperationID = ids.NewAt(ids.KindOperation, task.CreatedAt, 100)
 		},
-		"environment": func(task *TaskRecord, _ *IdempotencyMarker) {
+		"environment": func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) {
 			task.Owner.EnvironmentID = ids.NewAt(ids.KindEnvironment, task.CreatedAt, 100)
 		},
-		"volume": func(task *TaskRecord, _ *IdempotencyMarker) {
+		"volume": func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) {
 			task.Target = ids.NewAt(ids.KindVolume, task.CreatedAt, 100)
 		},
-		"timeout":    func(task *TaskRecord, _ *IdempotencyMarker) { task.TimeoutSeconds = 120 },
-		"generation": func(task *TaskRecord, _ *IdempotencyMarker) { task.RenderGeneration++ },
-		"step": func(task *TaskRecord, _ *IdempotencyMarker) {
+		"timeout":    func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) { task.TimeoutSeconds = 120 },
+		"generation": func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) { task.RenderGeneration++ },
+		"step": func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) {
 			task.Steps[0].ID = ids.NewAt(ids.KindStep, task.CreatedAt, 100)
 		},
-		"task time": func(task *TaskRecord, _ *IdempotencyMarker) { task.CreatedAt = task.CreatedAt.Add(-time.Second) },
-		"task kind": func(task *TaskRecord, _ *IdempotencyMarker) { task.Type = TaskUpdate },
-		"wrong intent": func(_ *TaskRecord, marker *IdempotencyMarker) {
+		"task time": func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) {
+			task.CreatedAt = task.CreatedAt.Add(-time.Second)
+		},
+		"task kind": func(task *TaskRecord, _ *testidempotency.IdempotencyMarker) { task.Type = testtaskjournal.TaskUpdate },
+		"wrong intent": func(_ *TaskRecord, marker *testidempotency.IdempotencyMarker) {
 			marker.Intent.Ciphertext = []byte("another-protected-intent")
 			digest := sha256.Sum256(marker.Intent.Ciphertext)
 			marker.Intent.CiphertextDigest = hex.EncodeToString(digest[:])
 		},
-		"wrong key":      func(_ *TaskRecord, marker *IdempotencyMarker) { marker.Locator.Key = strings.Repeat("b", 128) },
-		"wrong route":    func(_ *TaskRecord, marker *IdempotencyMarker) { marker.Locator.Route = "/tasks/{id}" },
-		"missing target": func(_ *TaskRecord, marker *IdempotencyMarker) { marker.ReplayTarget = nil },
-		"wrong target": func(_ *TaskRecord, marker *IdempotencyMarker) {
+		"wrong key": func(_ *TaskRecord, marker *testidempotency.IdempotencyMarker) {
+			marker.Locator.Key = strings.Repeat("b", 128)
+		},
+		"wrong route":    func(_ *TaskRecord, marker *testidempotency.IdempotencyMarker) { marker.Locator.Route = "/tasks/{id}" },
+		"missing target": func(_ *TaskRecord, marker *testidempotency.IdempotencyMarker) { marker.ReplayTarget = nil },
+		"wrong target": func(_ *TaskRecord, marker *testidempotency.IdempotencyMarker) {
 			marker.ReplayTarget.ID = ids.NewAt(ids.KindVolume, marker.CreatedAt, 100)
 		},
-		"response status": func(_ *TaskRecord, marker *IdempotencyMarker) { marker.Response.Status = 200 },
-		"response shape": func(_ *TaskRecord, marker *IdempotencyMarker) {
+		"response status": func(_ *TaskRecord, marker *testidempotency.IdempotencyMarker) { marker.Response.Status = 200 },
+		"response shape": func(_ *TaskRecord, marker *testidempotency.IdempotencyMarker) {
 			marker.Response.Body = []byte(`{"task_id":"` + marker.TaskID + `","extra":true}`)
 		},
-		"marker time": func(_ *TaskRecord, marker *IdempotencyMarker) { marker.UpdatedAt = marker.CreatedAt.Add(time.Second) },
+		"marker time": func(_ *TaskRecord, marker *testidempotency.IdempotencyMarker) {
+			marker.UpdatedAt = marker.CreatedAt.Add(time.Second)
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			initial, task, marker := volumeRemovalPublicationFixture(t)
@@ -374,13 +407,13 @@ func TestVolumeRemovalInitialPublicationRejectsOrphanedOperationRecords(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clearBackupRuntimeMutations(publication.mutations)
+	defer testkeyvalue.ClearMutationValues(publication.mutations)
 	for _, key := range []string{
 		removalrecord.CompletionKey(task.OperationID, 1), removalrecord.AttemptKey(task.OperationID, 2),
 	} {
 		t.Run(key, func(t *testing.T) {
 			backend := newMemoryTaskStore()
-			if _, err := backend.Transact(context.Background(), nil, []Mutation{{Type: MutationPut, Key: key, Value: []byte("occupied")}}); err != nil {
+			if _, err := backend.Transact(context.Background(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: []byte("occupied")}}); err != nil {
 				t.Fatal(err)
 			}
 			before := backend.revision
@@ -392,14 +425,16 @@ func TestVolumeRemovalInitialPublicationRejectsOrphanedOperationRecords(t *testi
 	}
 }
 
-func volumeRemovalPublicationFixture(t *testing.T) (removalrecord.InitialPublication, TaskRecord, IdempotencyMarker) {
+func volumeRemovalPublicationFixture(
+	t *testing.T,
+) (removalrecord.InitialPublication, TaskRecord, testidempotency.IdempotencyMarker) {
 	t.Helper()
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	task.Owner = TaskOwner{WorkspaceType: TaskWorkspaceTenant,
+	task.Owner = testtaskjournal.TaskOwner{WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
 		TenantID: ids.NewAt(ids.KindTenant, now, 20), ProjectID: ids.NewAt(ids.KindProject, now, 21),
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 22)}
-	task.Type = TaskRemove
+	task.Type = testtaskjournal.TaskRemove
 	task.Target = ids.NewAt(ids.KindVolume, now, 23)
 	task.TimeoutSeconds = removalrecord.TimeoutSeconds
 	task.IdempotencyKey = strings.Repeat("a", 128)
@@ -407,7 +442,10 @@ func volumeRemovalPublicationFixture(t *testing.T) (removalrecord.InitialPublica
 	marker.Locator.ScopeID = task.Owner.EnvironmentID
 	marker.Locator.Method = "DELETE"
 	marker.Locator.Route = "/volumes/{id}"
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetVolume, ID: task.Target}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetVolume,
+		ID:   task.Target,
+	}
 	runtime := removalrecord.Runtime{
 		OperationID: task.OperationID, EnvironmentID: task.Owner.EnvironmentID, VolumeID: task.Target,
 		Key: strings.Repeat("a", 255), DesiredRevisionID: task.ID, DesiredGeneration: uint64(task.RenderGeneration),

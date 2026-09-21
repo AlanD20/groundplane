@@ -7,6 +7,12 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testhierarchydeletionfinalization "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -38,27 +44,26 @@ func TestSecretRecoveryPinBlocksDeletionAdmissionDirectFinalizationAndHierarchy(
 	}
 	before := store.revision
 	result, err := admission.BeginSecretDeletionWithTask(
-		ctx, ProjectSecretOwner(project), current, tombstone, task, marker,
+		ctx, testsecrets.ProjectOwner(project), current, tombstone, task, marker,
 	)
 	if err != nil || !isKind(result.conflict, errs.KindResourceInUse) || store.revision != before {
 		t.Fatalf("pinned Secret deletion admission = %#v/%v", result, err)
 	}
-	if store.valueAt(taskKey(task.ID), store.revision) != nil {
+	if store.valueAt(testtaskjournal.TaskStorageKey(task.ID), store.revision) != nil {
 		t.Fatal("rejected pinned Secret deletion published a Task")
 	}
-	if _, err := secrets.DeleteSecret(ctx, ProjectSecretOwner(project), current); !isKind(
+	if _, err := secrets.DeleteSecret(ctx, testsecrets.ProjectOwner(project), current); !isKind(
 		err,
 		errs.KindResourceInUse,
 	) || store.revision != before {
 		t.Fatalf("pinned Secret direct finalization = %v", err)
 	}
-	hierarchy, err := newHierarchyDeletionRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := hierarchy.prepareHierarchyDeletionSecretFinalizer(ctx, HierarchyDeletionAction{
-		TargetID: current.Record.Secret.ID, TargetRevision: current.Revision,
-	}); !isKind(err, errs.KindResourceInUse) || store.revision != before {
+	if _, err := testhierarchydeletionfinalization.NewPreparer(store).Prepare(
+		ctx, testhierarchydeletion.HierarchyDeletionOperation{}, testhierarchydeletion.HierarchyDeletionAction{
+			ActionKind: testhierarchydeletion.HierarchyDeletionProjectSecretRemove,
+			TargetID:   current.Record.Secret.ID, TargetRevision: current.Revision,
+		},
+	); !isKind(err, errs.KindResourceInUse) || store.revision != before {
 		t.Fatalf("pinned Secret hierarchy finalization = %v", err)
 	}
 }
@@ -76,7 +81,7 @@ func TestSecretRecoveryPinBlocksDeletionRetry(t *testing.T) {
 	at := current.Record.Secret.UpdatedAt.Add(time.Second)
 	task, marker, tombstone := secretDeletionTestTask(t, current, project, at, 311)
 	result, err := secrets.BeginSecretDeletionWithTask(
-		ctx, ProjectSecretOwner(project), current, tombstone, task, marker,
+		ctx, testsecrets.ProjectOwner(project), current, tombstone, task, marker,
 	)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("unpinned initial Secret deletion = %#v/%v", result, err)
@@ -85,7 +90,7 @@ func TestSecretRecoveryPinBlocksDeletionRetry(t *testing.T) {
 		!found {
 		t.Fatalf("claim initial Secret deletion = %t/%v", found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusFailed, at.Add(2*time.Second)); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, at.Add(2*time.Second)); err != nil {
 		t.Fatalf("fail initial Secret deletion = %v", err)
 	}
 	seedSecretRecoveryPin(t, store, tasksecretpinrecord.Record{
@@ -101,13 +106,13 @@ func TestSecretRecoveryPinBlocksDeletionRetry(t *testing.T) {
 		"secret-recovery-pin-retry",
 	)
 	before := store.revision
-	if _, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker); !isKind(
+	if _, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker); !isKind(
 		err,
 		errs.KindResourceInUse,
 	) || store.revision != before {
 		t.Fatalf("pinned Secret deletion Retry = %v", err)
 	}
-	if store.valueAt(taskKey(retryID), store.revision) != nil {
+	if store.valueAt(testtaskjournal.TaskStorageKey(retryID), store.revision) != nil {
 		t.Fatal("rejected pinned Secret Retry published a Task")
 	}
 }
@@ -172,13 +177,13 @@ func TestMalformedSecretRecoveryPinsFailClosed(t *testing.T) {
 				OperationID: ids.New(ids.KindOperation), SecretID: current.Record.Secret.ID,
 				MetadataRevision: current.Revision, CiphertextSHA256: encrypted.CiphertextSHA256,
 			}
-			if _, err := store.Transact(ctx, nil, []Mutation{{
-				Type: MutationPut, Key: test.key(pin), Value: test.value(t, pin),
+			if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+				Type: testkeyvalue.MutationPut, Key: test.key(pin), Value: test.value(t, pin),
 			}}); err != nil {
 				t.Fatal(err)
 			}
 			before := store.revision
-			if _, err := secrets.DeleteSecret(ctx, ProjectSecretOwner(project), current); !isKind(
+			if _, err := secrets.DeleteSecret(ctx, testsecrets.ProjectOwner(project), current); !isKind(
 				err,
 				errs.KindInternal,
 			) || store.revision != before {
@@ -194,7 +199,7 @@ func TestMalformedSecretRecoveryPinsFailClosed(t *testing.T) {
 				t.Fatal(err)
 			}
 			result, err := admission.BeginSecretDeletionWithTask(
-				ctx, ProjectSecretOwner(project), current, tombstone, task, marker,
+				ctx, testsecrets.ProjectOwner(project), current, tombstone, task, marker,
 			)
 			if err != nil || !isKind(result.conflict, errs.KindInternal) ||
 				store.revision != before {
@@ -206,7 +211,7 @@ func TestMalformedSecretRecoveryPinsFailClosed(t *testing.T) {
 
 func secretRecoveryPinFixture(
 	t *testing.T,
-) (*memoryHierarchyStore, Versioned[ProjectRecord], *SecretRepository, Versioned[SecretRecord], SecretEncryptedValue) {
+) (*memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.ProjectRecord], *SecretRepository, testkeyvalue.Versioned[testsecrets.Record], testsecrets.EncryptedValue) {
 	t.Helper()
 	ctx := context.Background()
 	store, project := secretDeletionTestStore(t)
@@ -216,7 +221,7 @@ func secretRecoveryPinFixture(
 	}
 	at := time.Date(2026, 9, 14, 14, 0, 0, 0, time.UTC)
 	secretID := ids.NewAt(ids.KindSecret, at, 300)
-	record, err := NewProjectSecretRecord(
+	record, err := testsecrets.NewProjectRecord(
 		secretID,
 		project.Record.ID,
 		"RECOVERY_TOKEN",
@@ -228,7 +233,7 @@ func secretRecoveryPinFixture(
 		t.Fatal(err)
 	}
 	value := testSecretEncryptedValue(secretID, "opaque-recovery-ciphertext")
-	current, err := secrets.CreateSecret(ctx, ProjectSecretOwner(project), record, value)
+	current, err := secrets.CreateSecret(ctx, testsecrets.ProjectOwner(project), record, value)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,8 +250,8 @@ func seedSecretRecoveryPin(
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: tasksecretpinrecord.Key(pin.SecretID, pin.OperationID), Value: value,
+	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: tasksecretpinrecord.Key(pin.SecretID, pin.OperationID), Value: value,
 	}})
 	clear(value)
 	if err != nil || !result.Succeeded {

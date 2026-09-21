@@ -9,6 +9,12 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,7 +22,7 @@ type backupKeyRotationFixture struct {
 	repository  *BackupPolicyRepository
 	store       *memoryHierarchyStore
 	tasks       *TaskRepository
-	environment Versioned[EnvironmentRecord]
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
 	task        TaskRecord
 }
 
@@ -24,29 +30,29 @@ func newBackupKeyRotationFixture(t *testing.T) backupKeyRotationFixture {
 	t.Helper()
 	repository, store, environment, _ := backupPolicyRepositoryTestHierarchy(t)
 	now := taskJournalTime()
-	currentRecord := BackupKeyRecord{
+	currentRecord := testbackuppolicy.BackupKeyRecord{
 		EnvironmentID: environment.Record.ID,
 		Recipient:     newTestBackupRecipient(t),
 		KeyEra:        1,
 		CreatedAt:     now,
 		RotatedAt:     now,
 	}
-	currentValue := BackupKeyEncryptedValue{
+	currentValue := testbackuppolicy.BackupKeyEncryptedValue{
 		EnvironmentID: environment.Record.ID,
 		KeyEra:        1,
 		Ciphertext:    []byte("wrapped-current-identity"),
 	}
-	recordValue, err := encodeBackupKeyRecord(currentRecord)
+	recordValue, err := testbackuppolicy.EncodeBackupKeyRecord(currentRecord)
 	if err != nil {
 		t.Fatal(err)
 	}
-	encryptedValue, err := encodeBackupKeyEncryptedValue(currentValue)
+	encryptedValue, err := testbackuppolicy.EncodeBackupKeyEncryptedValue(currentValue)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: backupKeyKey(environment.Record.ID), Value: recordValue},
-		{Type: MutationPut, Key: backupKeyValueKey(environment.Record.ID), Value: encryptedValue},
+	if result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupKeyKey(environment.Record.ID), Value: recordValue},
+		{Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupKeyValueKey(environment.Record.ID), Value: encryptedValue},
 	}); err != nil || !result.Succeeded {
 		t.Fatalf("seed backup key = %#v, %v", result, err)
 	}
@@ -60,7 +66,7 @@ func newBackupKeyRotationFixture(t *testing.T) backupKeyRotationFixture {
 		OperationID:   operationID,
 		PlanID:        planID,
 		CreatedAt:     now,
-	}, BackupPolicyInitialKeyMaterial{
+	}, testbackuppolicymutations.BackupPolicyInitialKeyMaterial{
 		Recipient:  newTestBackupRecipient(t),
 		Ciphertext: []byte("wrapped-next-identity"),
 	})
@@ -70,14 +76,11 @@ func newBackupKeyRotationFixture(t *testing.T) backupKeyRotationFixture {
 	task := newTaskRecord(
 		taskID,
 		operationID,
-		prepared.Owner,
-		TaskActorOperator,
-		TaskRotate,
-		environment.Record.ID,
+		prepared.Owner, testtaskjournal.TaskActorOperator, testtaskjournal.TaskRotate, environment.Record.ID,
 		backupKeyRotationTimeoutSeconds,
 		now,
 	)
-	task.Executor = TaskExecutorController
+	task.Executor = testtaskjournal.TaskExecutorController
 	task.IdempotencyKey = "rotate-key-test-0001"
 	task.PlanID = planID
 	task.PlanHash = strings.Repeat("a", 64)
@@ -126,34 +129,49 @@ func TestBackupKeyRotationTerminalTransactionIsAtomicAndReplayable(t *testing.T)
 	terminalAt := fixture.task.CreatedAt.Add(2 * time.Second)
 	if _, err := failingTasks.AcknowledgeControllerTask(
 		ctx,
-		fixture.task.ID,
-		TaskStatusCompleted,
-		terminalAt,
+		fixture.task.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
 	); err == nil {
 		t.Fatal("AcknowledgeControllerTask() error = nil, want injected failure")
 	}
-	assertBackupKeyRotationState(t, fixture, TaskStatusRunning, 1, true, BackupKeyRotationPrepared)
+	assertBackupKeyRotationState(
+		t,
+		fixture,
+		testtaskjournal.TaskStatusRunning,
+		1,
+		true,
+		testbackupruntime.BackupKeyRotationPrepared,
+	)
 
 	terminal, err := failingTasks.AcknowledgeControllerTask(
 		ctx,
-		fixture.task.ID,
-		TaskStatusCompleted,
-		terminalAt,
+		fixture.task.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
 	)
-	if err != nil || terminal.Record.Status != TaskStatusCompleted {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask(retry) = %#v, %v", terminal, err)
 	}
-	assertBackupKeyRotationState(t, fixture, TaskStatusCompleted, 2, false, BackupKeyRotationApplied)
+	assertBackupKeyRotationState(
+		t,
+		fixture,
+		testtaskjournal.TaskStatusCompleted,
+		2,
+		false,
+		testbackupruntime.BackupKeyRotationApplied,
+	)
 	replay, err := failingTasks.AcknowledgeControllerTask(
 		ctx,
-		fixture.task.ID,
-		TaskStatusCompleted,
-		terminalAt,
+		fixture.task.ID, testtaskjournal.TaskStatusCompleted, terminalAt,
 	)
-	if err != nil || replay.Record.Status != TaskStatusCompleted {
+	if err != nil || replay.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask(replay) = %#v, %v", replay, err)
 	}
-	assertBackupKeyRotationState(t, fixture, TaskStatusCompleted, 2, false, BackupKeyRotationApplied)
+	assertBackupKeyRotationState(
+		t,
+		fixture,
+		testtaskjournal.TaskStatusCompleted,
+		2,
+		false,
+		testbackupruntime.BackupKeyRotationApplied,
+	)
 }
 
 // Rationale: the shared Environment lock must exclude overlapping rotation
@@ -166,7 +184,7 @@ func TestBackupKeyRotationLockExcludesOverlapAndHistoryRedactsIdentity(t *testin
 		OperationID:   ids.NewAt(ids.KindOperation, fixture.task.CreatedAt, 712),
 		PlanID:        ids.NewAt(ids.KindPlan, fixture.task.CreatedAt, 713),
 		CreatedAt:     fixture.task.CreatedAt,
-	}, BackupPolicyInitialKeyMaterial{
+	}, testbackuppolicymutations.BackupPolicyInitialKeyMaterial{
 		Recipient:  newTestBackupRecipient(t),
 		Ciphertext: []byte("wrapped-overlap"),
 	})
@@ -185,14 +203,14 @@ func TestBackupKeyRotationLockExcludesOverlapAndHistoryRedactsIdentity(t *testin
 // Rationale: every unsuccessful terminal state must release the lock while
 // retaining wrapped authority that an atomic retry can transfer to a new Task.
 func TestBackupKeyRotationTerminalFailureStatesRemainRetryable(t *testing.T) {
-	for _, status := range []TaskStatus{TaskStatusAborted, TaskStatusFailed, TaskStatusTimedOut} {
+	for _, status := range []testtaskjournal.TaskStatus{testtaskjournal.TaskStatusAborted, testtaskjournal.TaskStatusFailed, testtaskjournal.TaskStatusTimedOut} {
 		t.Run(string(status), func(t *testing.T) {
 			fixture := newBackupKeyRotationFixture(t)
 			ctx := context.Background()
 			terminalAt := fixture.task.CreatedAt.Add(2 * time.Second)
-			var terminal Versioned[TaskRecord]
+			var terminal testkeyvalue.Versioned[TaskRecord]
 			var err error
-			if status == TaskStatusAborted {
+			if status == testtaskjournal.TaskStatusAborted {
 				terminal, err = fixture.tasks.AbortPendingTask(ctx, fixture.task.ID, terminalAt)
 			} else {
 				if _, found, claimErr := fixture.tasks.ClaimNextControllerTask(
@@ -211,7 +229,7 @@ func TestBackupKeyRotationTerminalFailureStatesRemainRetryable(t *testing.T) {
 			if err != nil || terminal.Record.Status != status {
 				t.Fatalf("terminalize(%s) = %#v, %v", status, terminal, err)
 			}
-			assertBackupKeyRotationState(t, fixture, status, 1, false, BackupKeyRotationPrepared)
+			assertBackupKeyRotationState(t, fixture, status, 1, false, testbackupruntime.BackupKeyRotationPrepared)
 
 			retryAt := terminalAt.Add(time.Second)
 			retryID := ids.NewAt(ids.KindTask, retryAt, 720)
@@ -220,9 +238,7 @@ func TestBackupKeyRotationTerminalFailureStatesRemainRetryable(t *testing.T) {
 			result, err := fixture.tasks.RetryTask(
 				ctx,
 				fixture.task.ID,
-				retryID,
-				TaskActorOperator,
-				marker,
+				retryID, testtaskjournal.TaskActorOperator, marker,
 			)
 			if err != nil {
 				t.Fatalf("RetryTask(%s) error = %v", status, err)
@@ -232,29 +248,28 @@ func TestBackupKeyRotationTerminalFailureStatesRemainRetryable(t *testing.T) {
 				t.Fatalf("RetryTask(%s) outcome/conflict/error = %v/%v/%v", status, outcome, conflict, classifyErr)
 			}
 			retry, err := fixture.tasks.GetTask(ctx, retryID)
-			if err != nil || retry.Record.Status != TaskStatusPending ||
+			if err != nil || retry.Record.Status != testtaskjournal.TaskStatusPending ||
 				retry.Record.RetryOf != fixture.task.ID ||
 				retry.Record.OperationID != fixture.task.OperationID {
 				t.Fatalf("retry Task = %#v, %v", retry, err)
 			}
 			lock, err := fixture.store.Get(
-				ctx,
-				environmentOperationLockKey(fixture.environment.Record.ID),
+				ctx, testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID),
 			)
 			if err != nil || lock.Entry == nil {
 				t.Fatalf("retry operation lock = %#v, %v", lock, err)
 			}
-			key, found, err := fixture.repository.GetBackupKey(ctx, fixture.environment.Record.ID)
+			key, found, err := backupPolicyKeyReader(t, fixture.store).GetBackupKey(ctx, fixture.environment.Record.ID)
 			if err != nil || !found || key.Record.KeyEra != 1 {
 				t.Fatalf("retry current key = %#v, %v, %v", key, found, err)
 			}
 			clear(key.Encrypted.Ciphertext)
-			rotationValue, err := fixture.store.Get(ctx, backupKeyRotationKey(retryID))
+			rotationValue, err := fixture.store.Get(ctx, testbackupruntime.BackupKeyRotationKey(retryID))
 			if err != nil || rotationValue.Entry == nil {
 				t.Fatalf("retry rotation record = %#v, %v", rotationValue, err)
 			}
-			rotation, err := decodeBackupKeyRotationRecord(rotationValue.Entry.Value)
-			if err != nil || rotation.State != BackupKeyRotationPrepared ||
+			rotation, err := testbackupruntime.DecodeBackupKeyRotationRecord(rotationValue.Entry.Value)
+			if err != nil || rotation.State != testbackupruntime.BackupKeyRotationPrepared ||
 				rotation.CurrentKeyEra != 1 || rotation.NextKeyEra != 2 {
 				t.Fatalf("retry rotation = %#v, %v", rotation, err)
 			}
@@ -266,35 +281,53 @@ func TestBackupKeyRotationTerminalFailureStatesRemainRetryable(t *testing.T) {
 func assertBackupKeyRotationState(
 	t *testing.T,
 	fixture backupKeyRotationFixture,
-	wantTask TaskStatus,
+	wantTask testtaskjournal.TaskStatus,
 	wantEra int,
 	wantLock bool,
-	wantRotation BackupKeyRotationState,
+	wantRotation testbackupruntime.BackupKeyRotationState,
 ) {
 	t.Helper()
 	task, err := fixture.tasks.GetTask(context.Background(), fixture.task.ID)
 	if err != nil || task.Record.Status != wantTask {
 		t.Fatalf("Task state = %#v, %v; want %s", task, err, wantTask)
 	}
-	key, found, err := fixture.repository.GetBackupKey(context.Background(), fixture.environment.Record.ID)
+	key, found, err := backupPolicyKeyReader(
+		t,
+		fixture.store,
+	).GetBackupKey(context.Background(), fixture.environment.Record.ID)
 	if err != nil || !found || key.Record.KeyEra != wantEra || key.Encrypted.KeyEra != wantEra {
 		t.Fatalf("Backup key = %#v, %v, %v; want era %d", key, found, err, wantEra)
 	}
 	clear(key.Encrypted.Ciphertext)
-	lock, err := fixture.store.Get(context.Background(), environmentOperationLockKey(fixture.environment.Record.ID))
+	lock, err := fixture.store.Get(
+		context.Background(),
+		testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID),
+	)
 	if err != nil || (lock.Entry != nil) != wantLock {
 		t.Fatalf("operation lock = %#v, %v; want present %v", lock, err, wantLock)
 	}
-	rotationValue, err := fixture.store.Get(context.Background(), backupKeyRotationKey(fixture.task.ID))
+	rotationValue, err := fixture.store.Get(
+		context.Background(),
+		testbackupruntime.BackupKeyRotationKey(fixture.task.ID),
+	)
 	if err != nil || rotationValue.Entry == nil {
 		t.Fatalf("rotation record = %#v, %v", rotationValue, err)
 	}
-	rotation, err := decodeBackupKeyRotationRecord(rotationValue.Entry.Value)
+	rotation, err := testbackupruntime.DecodeBackupKeyRotationRecord(rotationValue.Entry.Value)
 	if err != nil || rotation.State != wantRotation {
 		t.Fatalf("rotation state = %#v, %v; want %s", rotation, err, wantRotation)
 	}
-	if wantRotation == BackupKeyRotationApplied && len(rotation.NextEncryptedIdentity) != 0 {
+	if wantRotation == testbackupruntime.BackupKeyRotationApplied && len(rotation.NextEncryptedIdentity) != 0 {
 		t.Fatalf("applied rotation retained wrapped identity: %d bytes", len(rotation.NextEncryptedIdentity))
 	}
 	clear(rotation.NextEncryptedIdentity)
+}
+
+func backupPolicyKeyReader(t *testing.T, store *memoryHierarchyStore) *testbackuppolicy.KeyRepository {
+	t.Helper()
+	repository, err := testbackuppolicy.NewKeyRepository(&releaseLogMemoryStore{store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return repository
 }

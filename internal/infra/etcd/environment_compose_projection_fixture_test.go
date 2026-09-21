@@ -3,11 +3,14 @@ package etcd
 import (
 	"crypto/sha256"
 
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
 
-func withTestEnvironmentComposeArtifact(projection EnvironmentComposeProjection) EnvironmentComposeProjection {
+func withTestEnvironmentComposeArtifact(
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+) testenvironmentprojection.EnvironmentComposeProjection {
 	canonicalYAML := []byte("services: {}\n")
 	digest := sha256.Sum256(canonicalYAML)
 	componentOwners := make(map[string]string)

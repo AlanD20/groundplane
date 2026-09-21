@@ -19,8 +19,10 @@ func blueprintAcknowledgedRuntime(
 	marker releases.ReleasePublicationMarker, task TaskRecord, assignment taskassignments.TaskAssignmentRecord,
 	member releases.ReleaseStagedMemberRef, result taskjournal.TaskResultRecord, terminalAt time.Time,
 ) ([]byte, error) {
-	if result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 || result.Diagnostic != taskjournal.TaskResultDiagnosticNone ||
-		result.ReconciliationRequired || result.ExecutionEpoch == 0 ||
+	if result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 ||
+		result.Diagnostic != taskjournal.TaskResultDiagnosticNone ||
+		result.ReconciliationRequired ||
+		result.ExecutionEpoch == 0 ||
 		result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		marker.CandidateReleaseDescriptor.PlanID != task.PlanID ||
 		hex.EncodeToString(marker.CandidateReleaseDescriptor.PlanHash) != task.PlanHash {

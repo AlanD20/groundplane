@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -17,7 +19,7 @@ func TestBlueprintTenCandidateProducerCompletes(t *testing.T) {
 	for _, count := range []int{10, 32} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
 			testBlueprintExecutedArtifact(t, false, false, func(fixture *etcd.ExecutedArtifactFixture,
-				resolver *controller.TaskPlanResolver, prior etcd.ReleaseRenderInput, _ domain.Intent,
+				resolver *testtaskplanning.TaskPlanResolver, prior testreleaserender.ReleaseRenderInput, _ domain.Intent,
 				applied *agentpb.ComposeArtifact) {
 				proveFullMixedProducer(t, fixture, resolver, prior, applied, false, false, count, 0, false)
 			})
@@ -29,7 +31,7 @@ func TestBlueprintTenCandidateProducerCompletes(t *testing.T) {
 // never execute an obsolete synthetic plan or reactivate source references.
 func TestBlueprintActualClosingHookReconnect(t *testing.T) {
 	testBlueprintExecutedArtifact(t, false, false, func(fixture *etcd.ExecutedArtifactFixture,
-		resolver *controller.TaskPlanResolver, prior etcd.ReleaseRenderInput, _ domain.Intent,
+		resolver *testtaskplanning.TaskPlanResolver, prior testreleaserender.ReleaseRenderInput, _ domain.Intent,
 		applied *agentpb.ComposeArtifact) {
 		proveFullMixedProducer(t, fixture, resolver, prior, applied, false, false, 1, 1, true)
 	})
@@ -39,7 +41,7 @@ func TestBlueprintActualClosingHookReconnect(t *testing.T) {
 // cardinality together, including the final bounded source-release fragment.
 func TestBlueprintMaximumCandidatesAndHooksComplete(t *testing.T) {
 	testBlueprintExecutedArtifact(t, false, false, func(fixture *etcd.ExecutedArtifactFixture,
-		resolver *controller.TaskPlanResolver, prior etcd.ReleaseRenderInput, _ domain.Intent,
+		resolver *testtaskplanning.TaskPlanResolver, prior testreleaserender.ReleaseRenderInput, _ domain.Intent,
 		applied *agentpb.ComposeArtifact) {
 		proveFullMixedProducer(t, fixture, resolver, prior, applied, false, false, 32, 16, false)
 	})
@@ -49,7 +51,7 @@ func TestBlueprintMaximumCandidatesAndHooksComplete(t *testing.T) {
 // its epoch and recovery digest, rather than persisting the normalized failure.
 func TestBlueprintHookRecoveryTerminalReport(t *testing.T) {
 	testBlueprintExecutedArtifact(t, false, false, func(fixture *etcd.ExecutedArtifactFixture,
-		resolver *controller.TaskPlanResolver, prior etcd.ReleaseRenderInput, _ domain.Intent,
+		resolver *testtaskplanning.TaskPlanResolver, prior testreleaserender.ReleaseRenderInput, _ domain.Intent,
 		applied *agentpb.ComposeArtifact) {
 		proveFullMixedProducer(t, fixture, resolver, prior, applied, false, true, 1, 1, false)
 	})
@@ -63,7 +65,7 @@ func TestBlueprintClosingHookTerminalFaults(t *testing.T) {
 	for _, fault := range []string{"compare-loss", "uncertain-commit"} {
 		t.Run(fault, func(t *testing.T) {
 			testBlueprintExecutedArtifact(t, false, false, func(fixture *etcd.ExecutedArtifactFixture,
-				resolver *controller.TaskPlanResolver, prior etcd.ReleaseRenderInput, _ domain.Intent,
+				resolver *testtaskplanning.TaskPlanResolver, prior testreleaserender.ReleaseRenderInput, _ domain.Intent,
 				applied *agentpb.ComposeArtifact) {
 				fixture.TerminalCommitFault = fault
 				proveFullMixedProducer(t, fixture, resolver, prior, applied, false, false, 10, 1, true)
@@ -73,7 +75,7 @@ func TestBlueprintClosingHookTerminalFaults(t *testing.T) {
 }
 
 func (resolver unexpectedHookEntryResolver) ResolveTaskMaterializationSource(
-	context.Context, string, etcd.TaskMaterializationSource,
+	context.Context, string, testtaskmaterialization.Source,
 ) ([]byte, error) {
 	resolver.t.Fatal("entry-free hook fixture unexpectedly requested an Entry value")
 	return nil, nil

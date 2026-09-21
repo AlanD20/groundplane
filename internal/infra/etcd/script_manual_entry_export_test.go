@@ -10,6 +10,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 )
 
 // PublishManualJourneyEntry publishes Entry metadata through the desired-state
@@ -19,7 +24,7 @@ func (fixture *ExecutedArtifactFixture) PublishManualJourneyEntry(
 	value string,
 	ciphertext []byte,
 	secretID string,
-) (*EntryValueGenerationRepository, *SecretRepository, EntryRecord) {
+) (*testentryvalues.Repository, *SecretRepository, testentries.Record) {
 	return fixture.publishJourneyEntry(t, value, ciphertext, secretID, "")
 }
 
@@ -27,16 +32,16 @@ func (fixture *ExecutedArtifactFixture) PublishManualJourneyEntry(
 // Entry acknowledgement path; it does not execute a host materialization.
 func (fixture *ExecutedArtifactFixture) PublishAppliedRemovalJourneyEntry(
 	t *testing.T, value string,
-) (*EntryValueGenerationRepository, *SecretRepository, EntryRecord) {
-	return fixture.publishJourneyEntry(t, value, nil, "", TaskResourceEntry)
+) (*testentryvalues.Repository, *SecretRepository, testentries.Record) {
+	return fixture.publishJourneyEntry(t, value, nil, "", testtaskjournal.TaskResourceEntry)
 }
 
 func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
 	t *testing.T, value string, ciphertext []byte, secretID, resourceKind string,
-) (*EntryValueGenerationRepository, *SecretRepository, EntryRecord) {
+) (*testentryvalues.Repository, *SecretRepository, testentries.Record) {
 	t.Helper()
 	ctx := context.Background()
-	values, err := newEntryValueGenerationRepository(fixture.store)
+	values, err := testentryvalues.New(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +62,7 @@ func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
 	if secretID != "" {
 		desired.Source = core.EntrySource{Kind: core.SourceSecretRef, SecretRef: secretID}
 	}
-	entry, err := NewBlueprintEntryRecord(
+	entry, err := testentries.NewBlueprintRecord(
 		fixture.Environment.Record.ID,
 		"manual-value",
 		desired,
@@ -68,7 +73,7 @@ func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
 	}
 	if desired.Secret {
 		digest := sha256.Sum256(ciphertext)
-		err = values.CreateSecret(ctx, SecretEntryValueGeneration{
+		err = values.CreateSecret(ctx, testentryvalues.SecretGeneration{
 			EnvironmentID: entry.EnvironmentID, EntryID: entry.Entry.ID, GenerationID: entry.CurrentValueGenerationID,
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextSHA256: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
@@ -76,7 +81,7 @@ func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
 		})
 	} else {
 		digest := sha256.Sum256([]byte(value))
-		err = values.CreatePlain(ctx, PlainEntryValueGeneration{
+		err = values.CreatePlain(ctx, testentryvalues.PlainGeneration{
 			EnvironmentID: entry.EnvironmentID, EntryID: entry.Entry.ID,
 			GenerationID: entry.CurrentValueGenerationID, Content: []byte(value),
 			PlaintextSHA256: hex.EncodeToString(digest[:]), CreatedAt: fixture.Environment.Record.CreatedAt,
@@ -91,7 +96,7 @@ func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
 	}
 	task := fixture.Task(t, 952)
 	if resourceKind != "" {
-		task.Params[TaskResourceKindParam] = resourceKind
+		task.Params[testtaskjournal.TaskResourceKindParam] = resourceKind
 	}
 	task.RenderGeneration = int32(current.Record.RenderGeneration + 1)
 	projection := current.Record
@@ -111,7 +116,7 @@ func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
 	}
 	published, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(ctx, owner)
 	if err != nil || !found || len(published.Record.Entries) != 1 ||
-		!equalEntryRecord(published.Record.Entries[0], entry) {
+		!testentries.EqualRecord(published.Record.Entries[0], entry) {
 		t.Fatal("published Entry metadata substituted its identity, generation, or desired fields")
 	}
 	if desired.Secret {
@@ -138,18 +143,20 @@ func (fixture *ExecutedArtifactFixture) publishJourneyEntry(
 		t.Fatalf("Entry projection claim = %t, %v", found, err)
 	}
 	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID,
-		claim.Assignment.Record.AssignmentID, TaskStatusCompleted,
-		TaskResultRecord{Kind: TaskResultCompose, ExecutionEpoch: 1, Diagnostic: TaskResultDiagnosticNone},
-		task.CreatedAt.Add(2*time.Second)); err != nil {
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	return values, secrets, entry
 }
 
-func (fixture *ExecutedArtifactFixture) CheckManualJourneyEntryReference(t *testing.T, entry EntryRecord, active bool) {
+func (fixture *ExecutedArtifactFixture) CheckManualJourneyEntryReference(
+	t *testing.T,
+	entry testentries.Record,
+	active bool,
+) {
 	t.Helper()
-	key := scriptSourceCountKey(ScriptSourceIdentity{
-		Kind: ScriptSourceEntryValue, EntryID: entry.Entry.ID, ValueGenerationID: entry.CurrentValueGenerationID,
+	key := testscriptsourceevidence.ScriptSourceCountKey(testscriptsourcereference.SourceIdentity{
+		Kind: testscriptsourcereference.SourceEntryValue, EntryID: entry.Entry.ID, ValueGenerationID: entry.CurrentValueGenerationID,
 	})
 	value := fixture.store.valueAt(key, fixture.store.revision)
 	if !active {
@@ -161,7 +168,7 @@ func (fixture *ExecutedArtifactFixture) CheckManualJourneyEntryReference(t *test
 	if value == nil {
 		t.Fatal("active Entry generation has no Script removal fence")
 	}
-	count, err := decodeScriptSourceCount(value.Value)
+	count, err := testscriptsourceevidence.DecodeScriptSourceCount(value.Value)
 	if err != nil || count.ReferencedExecutionCount != 1 {
 		t.Fatalf("Entry generation reference count = %v", err)
 	}

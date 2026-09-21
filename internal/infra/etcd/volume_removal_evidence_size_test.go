@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 )
 
@@ -16,11 +17,14 @@ func TestVolumeRemovalEvidenceTransactionSizeBounds(t *testing.T) {
 		suffix := strconv.Itoa(ordinal)
 		return "/" + strings.Repeat("k", 512-len(backend.root)-1-len(suffix)) + suffix
 	}
-	conditions := []Condition{{Key: key(0), ModRevision: 1}, {Key: key(1), ModRevision: 2}}
-	mutations := []Mutation{{Type: MutationPut, Key: key(1), Value: make([]byte, 16*1024)}}
+	conditions := []testkeyvalue.Condition{{Key: key(0), ModRevision: 1}, {Key: key(1), ModRevision: 2}}
+	mutations := []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key(1), Value: make([]byte, 16*1024)}}
 	for index := 0; index < 44; index++ {
-		conditions = append(conditions, Condition{Key: key(index + 2)})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key(index + 2), Value: make([]byte, 16*1024)})
+		conditions = append(conditions, testkeyvalue.Condition{Key: key(index + 2)})
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key(index + 2), Value: make([]byte, 16*1024)},
+		)
 	}
 	size, err := backend.VolumeRemovalEvidenceTransactionSize(conditions, mutations)
 	if err != nil || len(conditions)+len(mutations) != 91 || size != 808973 || size > 900*1024 {
@@ -48,7 +52,7 @@ func TestVolumeRemovalEvidenceTransactionSizeBounds(t *testing.T) {
 	}
 	mutations[0].Value = make([]byte, removalrecord.EvidenceRecordBytes)
 	for index := 0; index < 6; index++ {
-		conditions = append(conditions, Condition{Key: key(100 + index)})
+		conditions = append(conditions, testkeyvalue.Condition{Key: key(100 + index)})
 	}
 	if _, err := backend.VolumeRemovalEvidenceTransactionSize(conditions, mutations); err == nil {
 		t.Fatal("accepted more than 96 compare-and-mutation operations")

@@ -6,6 +6,13 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testhierarchydeletionfinalization "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,11 +22,11 @@ func TestEntryRemovalProtectsOlderScriptGenerationButAllowsEdit(t *testing.T) {
 	ctx := context.Background()
 	repository, store, environment, project, current, generations := entryDeletionTestState(t)
 	member := entryScriptTestMember(t, store, current.Record, generations[0])
-	authority, err := newScriptSourceReferenceAuthority(store)
+	authority, err := testscriptsourcepublication.NewAuthority(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := authority.Prepare(ctx, member.Reference.OperationID, []ScriptSourcePreparationMember{member}); err != nil {
+	if _, err := authority.Prepare(ctx, member.Reference.OperationID, []testscriptsourceevidence.ScriptSourcePreparationMember{member}); err != nil {
 		t.Fatal(err)
 	}
 	desired := current.Record.Entry
@@ -38,8 +45,7 @@ func TestEntryRemovalProtectsOlderScriptGenerationButAllowsEdit(t *testing.T) {
 		project,
 		current,
 		desired,
-		newID,
-		EntryValueGeneration{Plain: &value},
+		newID, testentries.EntryValueGeneration{Plain: &value},
 	)
 	if err != nil || updated.Record.CurrentValueGenerationID != newID {
 		t.Fatalf("retained generation blocked a new immutable value: %v", err)
@@ -69,16 +75,15 @@ func TestEntryRemovalProtectsOlderScriptGenerationButAllowsEdit(t *testing.T) {
 		store.revision != before {
 		t.Fatalf("direct Entry finalizer erased an older retained generation: %v", err)
 	}
-	hierarchy, err := newHierarchyDeletionRepository(store)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := hierarchy.prepareHierarchyDeletionEntryFinalizer(ctx, HierarchyDeletionAction{
-		TargetID: updated.Record.Entry.ID, TargetRevision: updated.Revision,
-	}); !isKind(err, errs.KindResourceInUse) || store.revision != before {
+	if _, err := testhierarchydeletionfinalization.NewPreparer(store).Prepare(
+		ctx, testhierarchydeletion.HierarchyDeletionOperation{}, testhierarchydeletion.HierarchyDeletionAction{
+			ActionKind: testhierarchydeletion.HierarchyDeletionEntryRemove,
+			TargetID:   updated.Record.Entry.ID, TargetRevision: updated.Revision,
+		},
+	); !isKind(err, errs.KindResourceInUse) || store.revision != before {
 		t.Fatalf("parent Entry finalizer ignored retained generation: %v", err)
 	}
-	if err := authority.Abandon(ctx, member.Reference.OperationID, []ScriptSourcePreparationMember{member}); err != nil {
+	if err := authority.Abandon(ctx, member.Reference.OperationID, []testscriptsourceevidence.ScriptSourcePreparationMember{member}); err != nil {
 		t.Fatal(err)
 	}
 	result, err = repository.BeginEntryDeletionWithTask(
@@ -118,14 +123,14 @@ func TestEntryScriptPreparationRejectsRetiringEntry(t *testing.T) {
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("initial Entry removal = %v / %v", err, result.conflict)
 	}
-	authority, err := newScriptSourceReferenceAuthority(store)
+	authority, err := testscriptsourcepublication.NewAuthority(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := authority.Prepare(ctx, member.Reference.OperationID, []ScriptSourcePreparationMember{member}); err == nil {
+	if _, err := authority.Prepare(ctx, member.Reference.OperationID, []testscriptsourceevidence.ScriptSourcePreparationMember{member}); err == nil {
 		t.Fatal("reserved an Entry after its deletion started")
 	}
-	if store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision) != nil {
+	if store.valueAt(testscriptsourceevidence.ScriptSourceCountKey(member.Reference.Source), store.revision) != nil {
 		t.Fatal("rejected Entry reservation left a count")
 	}
 }
@@ -133,30 +138,32 @@ func TestEntryScriptPreparationRejectsRetiringEntry(t *testing.T) {
 func entryScriptTestMember(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	entry EntryRecord,
+	entry testentries.Record,
 	generationID string,
-) ScriptSourcePreparationMember {
+) testscriptsourceevidence.ScriptSourcePreparationMember {
 	t.Helper()
-	key := plainEntryValueGenerationKey(entry.Entry.ID, generationID)
+	key := testentryvalues.PlainKey(entry.Entry.ID, generationID)
 	stored := store.valueAt(key, store.revision)
 	if stored == nil {
 		t.Fatal("Entry fixture generation is missing")
 	}
-	value, err := decodePlainEntryValueGeneration(stored.Value)
+	value, err := testentryvalues.DecodePlain(stored.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(value.Content)
-	return ScriptSourcePreparationMember{
-		Reference: ScriptSourceReference{
+	return testscriptsourceevidence.ScriptSourcePreparationMember{
+		Reference: testscriptsourcereference.Reference{
 			OperationID: ids.New(ids.KindOperation), ScriptExecutionID: ids.NewULID(),
-			Source: ScriptSourceIdentity{
-				Kind:              ScriptSourceEntryValue,
+			Source: testscriptsourcereference.SourceIdentity{
+				Kind:              testscriptsourcereference.SourceEntryValue,
 				EntryID:           entry.Entry.ID,
 				ValueGenerationID: generationID,
 			},
 			SourceOwnerID: entry.EnvironmentID, SourceModRevision: stored.ModRevision, SourceDigest: value.PlaintextSHA256,
 		},
-		Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: key}},
+		Evidence: testscriptsourceevidence.ScriptSourceEvidence{
+			Existing: &testscriptsourceevidence.ScriptExistingSourceEvidence{SourceKey: key},
+		},
 	}
 }

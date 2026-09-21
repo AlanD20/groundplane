@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 )
 
 // Rationale: the credential owner is always an Attach, including self-ownership
@@ -13,7 +14,7 @@ import (
 func TestNewPendingAttachRecordRejectsInvalidCredentialOwner(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.August, 22, 22, 0, 0, 0, time.UTC)
-	_, err := NewPendingAttachRecord(
+	_, err := testattachments.NewPendingAttachRecord(
 		ids.NewAt(ids.KindAttach, now, 1),
 		ids.NewAt(ids.KindEnvironment, now, 2),
 		"api-db",
@@ -38,8 +39,8 @@ func TestNewPendingAttachRecordRejectsInvalidCredentialOwner(t *testing.T) {
 func TestNewPendingAttachRecordRejectsNonCanonicalName(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, time.August, 22, 22, 0, 0, 0, time.UTC)
-	for _, name := range []string{"API DB", "api--db", "-api", strings.Repeat("a", MaximumAttachNameBytes+1)} {
-		_, err := NewPendingAttachRecord(
+	for _, name := range []string{"API DB", "api--db", "-api", strings.Repeat("a", testattachments.MaximumAttachNameBytes+1)} {
+		_, err := testattachments.NewPendingAttachRecord(
 			ids.NewAt(ids.KindAttach, now, 1),
 			ids.NewAt(ids.KindEnvironment, now, 2),
 			name,

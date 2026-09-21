@@ -41,7 +41,8 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 			"Project mutation identity is invalid",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject ||
 		marker.Locator.ScopeID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(

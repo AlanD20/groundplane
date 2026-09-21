@@ -7,6 +7,14 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,38 +32,31 @@ func TestBlueprintAttachPublicationCarriesCandidateSetAndBackingFences(t *testin
 		apiServiceID         = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 		workerServiceID      = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 	)
-	owner, err := NewPendingAttachRecord(
+	owner, err := testattachments.NewPendingAttachRecord(
 		ownerID, environmentID, "api-db", backingProjectID, backingEnvironmentID,
 		backingServiceID, backingNetworkID, apiServiceID, ownerID, nil, nil, taskID, now,
 	)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord(owner) error = %v", err)
 	}
-	dependent, err := NewPendingAttachRecord(
+	dependent, err := testattachments.NewPendingAttachRecord(
 		dependentID, environmentID, "worker-db", backingProjectID, backingEnvironmentID,
 		backingServiceID, backingNetworkID, workerServiceID, ownerID, nil, nil, taskID, now,
 	)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord(dependent) error = %v", err)
 	}
-	backingProject := Versioned[ProjectRecord]{
-		Record: ProjectRecord{ID: backingProjectID, Kind: ProjectKindBacking}, Revision: 11,
+	backingProject := testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
+		Record: testhierarchy.ProjectRecord{ID: backingProjectID, Kind: testhierarchy.ProjectKindBacking}, Revision: 11,
 	}
-	backingEnvironment := Versioned[EnvironmentRecord]{
-		Record: EnvironmentRecord{ID: backingEnvironmentID, ProjectID: backingProjectID}, Revision: 12,
+	backingEnvironment := testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+		Record: testhierarchy.EnvironmentRecord{ID: backingEnvironmentID, ProjectID: backingProjectID}, Revision: 12,
 	}
-	backingService := Versioned[ServiceRecord]{
-		Record: ServiceRecord{
-			EnvironmentID: backingEnvironmentID, BackingNetworkID: backingNetworkID,
-			Desired:         core.Service{ID: backingServiceID},
-			desiredFenceKey: environmentBlueprintHeadKey(backingEnvironmentID),
-		},
-		Revision: 13,
-	}
-	preparation, err := PrepareEnvironmentBlueprintAttachTask(
+	backingService := selectedServiceFixture(t, backingEnvironmentID, backingServiceID, backingNetworkID, 13)
+	preparation, err := testblueprintplanning.PrepareEnvironmentBlueprintAttachTask(
 		taskID,
 		environmentID,
-		[]EnvironmentBlueprintAttachCandidateInput{
+		[]testblueprintplanning.EnvironmentBlueprintAttachCandidateInput{
 			{
 				Record:             dependent,
 				BackingProject:     backingProject,
@@ -78,29 +79,33 @@ func TestBlueprintAttachPublicationCarriesCandidateSetAndBackingFences(t *testin
 	if got := preparation.Intent.Candidates[0].ID; got != ownerID {
 		t.Fatalf("first candidate = %q, want owner %q", got, ownerID)
 	}
-	publication, err := prepareBlueprintAttachTaskPublication(
-		Versioned[EnvironmentRecord]{Record: EnvironmentRecord{ID: environmentID}},
-		EnvironmentComposeProjection{DesiredServices: []EnvironmentServiceProjection{
-			{EnvironmentID: environmentID, Desired: core.Service{ID: apiServiceID, Name: "api"}},
-			{EnvironmentID: environmentID, Desired: core.Service{ID: workerServiceID, Name: "worker"}},
-		}},
-		TaskRecord{ID: taskID, Target: environmentID},
+	publication, err := testblueprintplanning.PrepareBlueprintAttachTaskPublication(
+		testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record: testhierarchy.EnvironmentRecord{ID: environmentID},
+		},
+		testenvironmentprojection.EnvironmentComposeProjection{
+			DesiredServices: []testservices.EnvironmentServiceProjection{
+				{EnvironmentID: environmentID, Desired: core.Service{ID: apiServiceID, Name: "api"}},
+				{EnvironmentID: environmentID, Desired: core.Service{ID: workerServiceID, Name: "worker"}},
+			},
+		},
+		testblueprintplanning.TaskIdentity{ID: taskID, Target: environmentID},
 		preparation,
 	)
 	if err != nil {
 		t.Fatalf("prepareBlueprintAttachTaskPublication() error = %v", err)
 	}
-	defer clearPreparedBlueprintAttachTaskPublication(publication)
+	defer testblueprintplanning.ClearPreparedBlueprintAttachTaskPublication(publication)
 	wantKeys := map[string]bool{
-		blueprintAttachTaskIntentKey(taskID):               false,
-		attachKey(ownerID):                                 false,
-		attachKey(dependentID):                             false,
-		attachCredentialByKey(ownerID, dependentID):        false,
-		attachServiceKey(apiServiceID, ownerID):            false,
-		attachServiceKey(workerServiceID, dependentID):     false,
-		attachBackingServiceKey(backingServiceID, ownerID): false,
+		testattachments.BlueprintAttachTaskIntentKey(taskID):               false,
+		testattachments.AttachKey(ownerID):                                 false,
+		testattachments.AttachKey(dependentID):                             false,
+		testattachments.AttachCredentialByKey(ownerID, dependentID):        false,
+		testattachments.AttachServiceKey(apiServiceID, ownerID):            false,
+		testattachments.AttachServiceKey(workerServiceID, dependentID):     false,
+		testattachments.AttachBackingServiceKey(backingServiceID, ownerID): false,
 	}
-	for _, mutation := range publication.mutations {
+	for _, mutation := range publication.Mutations() {
 		if _, wanted := wantKeys[mutation.Key]; wanted {
 			wantKeys[mutation.Key] = true
 		}
@@ -110,13 +115,13 @@ func TestBlueprintAttachPublicationCarriesCandidateSetAndBackingFences(t *testin
 			t.Fatalf("publication omitted mutation %q", key)
 		}
 	}
-	if err := validateIdempotencyPlanKeys(publication.conditions, publication.mutations); err != nil {
+	if err := validateIdempotencyPlanKeys(publication.Conditions(), publication.Mutations()); err != nil {
 		t.Fatalf("publication is not a valid idempotency plan: %v", err)
 	}
-	values := make([]*KeyValue, len(publication.conditions))
-	for index, condition := range publication.conditions {
+	values := make([]*testkeyvalue.KeyValue, len(publication.Conditions()))
+	for index, condition := range publication.Conditions() {
 		if condition.ModRevision > 0 {
-			values[index] = &KeyValue{ModRevision: condition.ModRevision}
+			values[index] = &testkeyvalue.KeyValue{ModRevision: condition.ModRevision}
 		}
 	}
 	if err := publicationClassifierOnly(publication)(17, values); err != nil {
@@ -128,12 +133,12 @@ func TestBlueprintAttachPublicationCarriesCandidateSetAndBackingFences(t *testin
 // Blueprint publication budget; the third candidate must be rejected early.
 func TestBlueprintAttachPreparationRejectsThirdNewCandidate(t *testing.T) {
 	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
-	inputs := make([]EnvironmentBlueprintAttachCandidateInput, 3)
+	inputs := make([]testblueprintplanning.EnvironmentBlueprintAttachCandidateInput, 3)
 	for index := range inputs {
 		attachID := fmt.Sprintf("att_01ARZ3NDEKTSV4RRFFQ69G5FA%c", 'V'+index)
-		inputs[index].Record = AttachRecord{ID: attachID}
+		inputs[index].Record = testattachments.Record{ID: attachID}
 	}
-	if _, err := PrepareEnvironmentBlueprintAttachTask(
+	if _, err := testblueprintplanning.PrepareEnvironmentBlueprintAttachTask(
 		"task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		"env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		inputs, true, now,
@@ -145,31 +150,34 @@ func TestBlueprintAttachPreparationRejectsThirdNewCandidate(t *testing.T) {
 func TestBlueprintAttachPreparationRequiresExactReadyRetainedGrantEvidence(t *testing.T) {
 	tests := []struct {
 		name   string
-		mutate func(*EnvironmentBlueprintAttachCandidateInput)
+		mutate func(*testblueprintplanning.EnvironmentBlueprintAttachCandidateInput)
 	}{
-		{name: "stale", mutate: func(input *EnvironmentBlueprintAttachCandidateInput) {
+		{name: "stale", mutate: func(input *testblueprintplanning.EnvironmentBlueprintAttachCandidateInput) {
 			input.RetainedGrantTargets[0].Revision = input.RetainedGrantTargets[0].ReadRevision + 1
 		}},
-		{name: "deleting", mutate: func(input *EnvironmentBlueprintAttachCandidateInput) {
+		{name: "deleting", mutate: func(input *testblueprintplanning.EnvironmentBlueprintAttachCandidateInput) {
 			input.RetainedGrantTargets[0].Record.Status = core.AttachDetaching
-			input.RetainedGrantTargets[0].Record.Operation = AttachOperationDetach
+			input.RetainedGrantTargets[0].Record.Operation = testattachments.AttachOperationDetach
 		}},
-		{name: "non-ready", mutate: func(input *EnvironmentBlueprintAttachCandidateInput) {
+		{name: "non-ready", mutate: func(input *testblueprintplanning.EnvironmentBlueprintAttachCandidateInput) {
 			input.RetainedGrantTargets[0].Record.Status = core.AttachPending
 		}},
-		{name: "dependent", mutate: func(input *EnvironmentBlueprintAttachCandidateInput) {
+		{name: "dependent", mutate: func(input *testblueprintplanning.EnvironmentBlueprintAttachCandidateInput) {
 			input.RetainedGrantTargets[0].Record.CredentialAttachID = "att_01ARZ3NDEKTSV4RRFFQ69G5FZZ"
 		}},
-		{name: "cross-environment", mutate: func(input *EnvironmentBlueprintAttachCandidateInput) {
-			input.RetainedGrantTargets[0].Record.EnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FZZ"
-		}},
-		{name: "wrong-backing", mutate: func(input *EnvironmentBlueprintAttachCandidateInput) {
+		{
+			name: "cross-environment",
+			mutate: func(input *testblueprintplanning.EnvironmentBlueprintAttachCandidateInput) {
+				input.RetainedGrantTargets[0].Record.EnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FZZ"
+			},
+		},
+		{name: "wrong-backing", mutate: func(input *testblueprintplanning.EnvironmentBlueprintAttachCandidateInput) {
 			input.RetainedGrantTargets[0].Record.BackingServiceID = "svc_01ARZ3NDEKTSV4RRFFQ69G5FZZ"
 		}},
-		{name: "missing", mutate: func(input *EnvironmentBlueprintAttachCandidateInput) {
+		{name: "missing", mutate: func(input *testblueprintplanning.EnvironmentBlueprintAttachCandidateInput) {
 			input.RetainedGrantTargets = nil
 		}},
-		{name: "duplicate", mutate: func(input *EnvironmentBlueprintAttachCandidateInput) {
+		{name: "duplicate", mutate: func(input *testblueprintplanning.EnvironmentBlueprintAttachCandidateInput) {
 			input.RetainedGrantTargets = append(input.RetainedGrantTargets, input.RetainedGrantTargets[0])
 		}},
 	}
@@ -186,15 +194,15 @@ func TestBlueprintAttachPreparationRequiresExactReadyRetainedGrantEvidence(t *te
 			for index := range retained {
 				retained[index].ReadRevision = readRevision
 			}
-			input := EnvironmentBlueprintAttachCandidateInput{
+			input := testblueprintplanning.EnvironmentBlueprintAttachCandidateInput{
 				Record: record, Facts: &facts,
 				BackingProject: scope.project, BackingEnvironment: scope.environment,
 				BackingService: scope.service, RetainedGrantTargets: retained,
 			}
 			test.mutate(&input)
 			before := fixture.store.revision
-			if _, err := PrepareEnvironmentBlueprintAttachTask(
-				task.ID, fixture.environment.Record.ID, []EnvironmentBlueprintAttachCandidateInput{input},
+			if _, err := testblueprintplanning.PrepareEnvironmentBlueprintAttachTask(
+				task.ID, fixture.environment.Record.ID, []testblueprintplanning.EnvironmentBlueprintAttachCandidateInput{input},
 				false, task.CreatedAt,
 			); !isKind(err, errs.KindValidationFailed) {
 				t.Fatalf("PrepareEnvironmentBlueprintAttachTask() error = %v, want validation", err)
@@ -221,7 +229,7 @@ func TestBlueprintAttachPublicationUsesRetainedCredentialOwnerEvidence(t *testin
 	)
 	owner.ReadRevision = fixture.store.revision
 	dependentID := ids.NewAt(ids.KindAttach, fixture.now, 8700)
-	dependent, err := NewPendingAttachRecord(
+	dependent, err := testattachments.NewPendingAttachRecord(
 		dependentID,
 		fixture.environment.Record.ID,
 		"retained-owner-dependent",
@@ -231,18 +239,16 @@ func TestBlueprintAttachPublicationUsesRetainedCredentialOwnerEvidence(t *testin
 		scope.service.Record.BackingNetworkID,
 		projection.DesiredServices[0].Desired.ID,
 		owner.Record.ID,
-		nil,
-		cloneAttachFactSets(owner.Record.FactSets),
-		task.ID,
+		nil, testattachments.CloneAttachFactSets(owner.Record.FactSets), task.ID,
 		task.CreatedAt,
 	)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord(dependent) error = %v", err)
 	}
-	preparation, err := PrepareEnvironmentBlueprintAttachTask(
+	preparation, err := testblueprintplanning.PrepareEnvironmentBlueprintAttachTask(
 		task.ID,
 		fixture.environment.Record.ID,
-		[]EnvironmentBlueprintAttachCandidateInput{{
+		[]testblueprintplanning.EnvironmentBlueprintAttachCandidateInput{{
 			Record: dependent, BackingProject: scope.project, BackingEnvironment: scope.environment,
 			BackingService: scope.service, RetainedCredentialOwner: &owner,
 		}},
@@ -252,25 +258,22 @@ func TestBlueprintAttachPublicationUsesRetainedCredentialOwnerEvidence(t *testin
 	if err != nil {
 		t.Fatalf("PrepareEnvironmentBlueprintAttachTask() error = %v", err)
 	}
-	publication, err := prepareBlueprintAttachTaskPublication(
+	publication, err := testblueprintplanning.PrepareBlueprintAttachTaskPublication(
 		fixture.environment,
 		projection,
-		task,
+		testblueprintplanning.TaskIdentity{ID: task.ID, Target: task.Target},
 		preparation,
 	)
 	if err != nil {
 		t.Fatalf("prepareBlueprintAttachTaskPublication() error = %v", err)
 	}
-	defer clearPreparedBlueprintAttachTaskPublication(publication)
-	wantConditions := map[string]Condition{
-		attachKey(owner.Record.ID): {
-			Key:         attachKey(owner.Record.ID),
-			ModRevision: owner.Revision,
-		},
-		deletionTombstoneKey("attach", owner.Record.ID):     {Key: deletionTombstoneKey("attach", owner.Record.ID)},
-		attachCredentialByKey(owner.Record.ID, dependentID): {Key: attachCredentialByKey(owner.Record.ID, dependentID)},
+	defer testblueprintplanning.ClearPreparedBlueprintAttachTaskPublication(publication)
+	wantConditions := map[string]testkeyvalue.Condition{testattachments.AttachKey(owner.Record.ID): {
+		Key:         testattachments.AttachKey(owner.Record.ID),
+		ModRevision: owner.Revision,
+	}, testdeletions.TombstoneKey("attach", owner.Record.ID): {Key: testdeletions.TombstoneKey("attach", owner.Record.ID)}, testattachments.AttachCredentialByKey(owner.Record.ID, dependentID): {Key: testattachments.AttachCredentialByKey(owner.Record.ID, dependentID)},
 	}
-	for _, condition := range publication.conditions {
+	for _, condition := range publication.Conditions() {
 		if wanted, exists := wantConditions[condition.Key]; exists && condition == wanted {
 			delete(wantConditions, condition.Key)
 		}
@@ -279,11 +282,11 @@ func TestBlueprintAttachPublicationUsesRetainedCredentialOwnerEvidence(t *testin
 		t.Fatalf("retained owner conditions missing: %#v", wantConditions)
 	}
 	wantMutations := map[string]bool{
-		attachKey(owner.Record.ID):                          false,
-		attachCredentialByKey(owner.Record.ID, dependentID): false,
+		testattachments.AttachKey(owner.Record.ID):                          false,
+		testattachments.AttachCredentialByKey(owner.Record.ID, dependentID): false,
 	}
-	for _, mutation := range publication.mutations {
-		if _, exists := wantMutations[mutation.Key]; exists && mutation.Type == MutationPut {
+	for _, mutation := range publication.Mutations() {
+		if _, exists := wantMutations[mutation.Key]; exists && mutation.Type == testkeyvalue.MutationPut {
 			wantMutations[mutation.Key] = true
 		}
 	}
@@ -294,11 +297,11 @@ func TestBlueprintAttachPublicationUsesRetainedCredentialOwnerEvidence(t *testin
 	}
 }
 
-func publicationClassifierOnly(publication preparedBlueprintAttachTaskPublication) idempotencyPlanClassifier {
-	return classifyEnvironmentBlueprintAttachPublication(
-		func(_ int64, values []*KeyValue) error {
+func publicationClassifierOnly(publication testblueprintplanning.AttachPublication) idempotencyPlanClassifier {
+	return testblueprintplanning.ClassifyEnvironmentBlueprintAttachPublication(
+		func(_ int64, values []*testkeyvalue.KeyValue) error {
 			if len(values) != 0 {
-				return stateConflict("unexpected base evidence", "test")
+				return testrecordcodec.StateConflict("unexpected base evidence", "test")
 			}
 			return nil
 		},

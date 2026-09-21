@@ -8,6 +8,16 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -61,8 +71,8 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	terminalAt := task.CreatedAt.Add(2 * time.Second)
-	terminal, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt)
-	if err != nil || terminal.Record.Status != TaskStatusCompleted {
+	terminal, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt)
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeControllerTask() = %#v/%v", terminal, err)
 	}
 	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != terminal.Revision {
@@ -72,10 +82,7 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 	if !isKind(err, errs.KindEntryNotFound) {
 		t.Fatalf("GetEntry(completed removal) error = %v", err)
 	}
-	for _, key := range []string{
-		entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
-		deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
-	} {
+	for _, key := range []string{testentries.EntryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID), testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEntry), current.Record.Entry.ID)} {
 		stored, getErr := store.Get(ctx, key)
 		if getErr != nil || stored.Entry != nil {
 			t.Fatalf("finalized key %s = %#v/%v", key, stored, getErr)
@@ -87,11 +94,11 @@ func TestEntryRepositoryCompletesNeverAppliedRemovalAtomically(t *testing.T) {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	terminalIntent, found, err := hierarchy.GetEntryRemovalIntent(ctx, task.ID)
-	if err != nil || !found || terminalIntent.Record.Status != TaskStatusCompleted ||
+	if err != nil || !found || terminalIntent.Record.Status != testtaskjournal.TaskStatusCompleted ||
 		terminalIntent.Record.TerminalAt == nil || !terminalIntent.Record.TerminalAt.Equal(terminalAt) {
 		t.Fatalf("GetEntryRemovalIntent(terminal) = %#v/%v/%v", terminalIntent, found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
 }
@@ -118,9 +125,9 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	failed, err := tasks.AcknowledgeControllerTask(
-		ctx, task.ID, TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
+		ctx, task.ID, testtaskjournal.TaskStatusFailed, task.CreatedAt.Add(2*time.Second),
 	)
-	if err != nil || failed.Record.Status != TaskStatusFailed {
+	if err != nil || failed.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeControllerTask(failed) = %#v/%v", failed, err)
 	}
 	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != failed.Revision {
@@ -130,7 +137,7 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 	retryAt := task.CreatedAt.Add(3 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 9001)
 	retryMarker := pendingRetryMarker(failed.Record, retryID, retryAt, "entry-retry-key-0001")
-	result, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
+	result, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -141,7 +148,7 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 	if epoch := mustEnvironmentMutationEpochRevision(t, store, environment.Record.ID); epoch != result.revision {
 		t.Fatalf("retried Entry deletion epoch = %d, want %d", epoch, result.revision)
 	}
-	replay, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
+	replay, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask(replay) error = %v", err)
 	}
@@ -162,7 +169,8 @@ func TestEntryRemovalFailureRetryAndAbortRetainState(t *testing.T) {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	retryIntent, found, err := hierarchy.GetEntryRemovalIntent(ctx, retryID)
-	if err != nil || !found || retryIntent.Record.Status != TaskStatusAborted || retryIntent.Record.TerminalAt == nil {
+	if err != nil || !found || retryIntent.Record.Status != testtaskjournal.TaskStatusAborted ||
+		retryIntent.Record.TerminalAt == nil {
 		t.Fatalf("GetEntryRemovalIntent(aborted retry) = %#v/%v/%v", retryIntent, found, err)
 	}
 }
@@ -204,15 +212,14 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 		ctx,
 		agentID,
 		1,
-		task.ID, taskAssignmentIDForTest(t, tasks,
+		task.ID, taskAssignmentIDForTest(
+			t,
+			tasks,
 
-			task.ID),
+			task.ID,
+		), testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, terminalAt)
 
-		TaskStatusCompleted,
-		TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone},
-		terminalAt)
-
-	if err != nil || terminal.Record.Status != TaskStatusCompleted {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeTask() = %#v/%v", terminal, err)
 	}
 	published := assertPublishedTaskConfiguration(t, store, task.ID)
@@ -225,20 +232,19 @@ func TestEntryRemovalPromotesAppliedProjectionAfterAgentSuccess(t *testing.T) {
 		t.Fatalf("GetEntry(completed removal) error = %v", err)
 	}
 	assertEntryGenerations(t, store, current.Record.Entry.ID, generationIDs, false)
-	projectionRead, err := store.Get(ctx, environmentComposeProjectionKey(environment.Record.ID))
+	projectionRead, err := store.Get(
+		ctx,
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+	)
 	if err != nil || projectionRead.Entry == nil {
 		t.Fatalf("Get(promoted projection) = %#v/%v", projectionRead, err)
 	}
-	promoted, err := decodeEnvironmentComposeProjection(projectionRead.Entry.Value)
+	promoted, err := testenvironmentprojection.DecodeEnvironmentComposeProjectionStorage(projectionRead.Entry.Value)
 	if err != nil || intent.CandidateProjection == nil ||
-		!sameEntryRemovalProjection(promoted, *intent.CandidateProjection) {
+		!testenvironmentchanges.SameEntryRemovalProjection(promoted, *intent.CandidateProjection) {
 		t.Fatalf("promoted projection = %#v/%v", promoted, err)
 	}
-	for _, key := range []string{
-		deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
-		componentTaskActiveEnvironmentKey(environment.Record.ID),
-		taskMaterializationWriterKey(environment.Record.ID),
-	} {
+	for _, key := range []string{testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEntry), current.Record.Entry.ID), testenvironmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID), testtaskjournal.TaskMaterializationWriterKey(environment.Record.ID)} {
 		stored, getErr := store.Get(ctx, key)
 		if getErr != nil || stored.Entry != nil {
 			t.Fatalf("finalized key %s = %#v/%v", key, stored, getErr)
@@ -276,11 +282,20 @@ func TestEntryRemovalFailureDoesNotPromoteConfiguration(t *testing.T) {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
 	terminal, err := tasks.AcknowledgeTask(
-		ctx, agentID, 1, task.ID, taskAssignmentIDForTest(t, tasks, task.ID), TaskStatusFailed,
-		TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticComposeFailed, ExitCode: 1},
+		ctx,
+		agentID,
+		1,
+		task.ID,
+		taskAssignmentIDForTest(t, tasks, task.ID),
+		testtaskjournal.TaskStatusFailed,
+		testtaskjournal.TaskResultRecord{
+			Kind:       testtaskjournal.TaskResultCompose,
+			Diagnostic: testtaskjournal.TaskResultDiagnosticComposeFailed,
+			ExitCode:   1,
+		},
 		task.CreatedAt.Add(2*time.Second),
 	)
-	if err != nil || terminal.Record.Status != TaskStatusFailed {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeTask(failed) = %#v/%v", terminal, err)
 	}
 	assertRuntimeConfigurationHead(t, store, published, false)
@@ -364,8 +379,7 @@ func TestEntryDeletionPublicationFencesLockAndKeepsReplayEpoch(t *testing.T) {
 
 func entryDeletionTestState(
 	t *testing.T,
-) (*EntryRepository, *memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord],
-	Versioned[EntryRecord], []string) {
+) (*EntryRepository, *memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], testkeyvalue.Versioned[testhierarchy.ProjectRecord], testkeyvalue.Versioned[testentries.Record], []string) {
 	t.Helper()
 	_, store, environment, project, _ := routeRepositoryTestHierarchy(t)
 	repository, err := newEntryRepository(store)
@@ -379,13 +393,13 @@ func entryDeletionTestState(
 		ID: entryID, Kind: core.EntryKindEnv, Key: "APP_ENV",
 		Source: core.EntrySource{Kind: core.SourceLiteral, Literal: "staging"}, Exposure: []string{"all"},
 	}
-	record, err := NewEntryRecord(environment.Record.ID, entry, firstID)
+	record, err := testentries.NewRecord(environment.Record.ID, entry, firstID)
 	if err != nil {
 		t.Fatalf("NewEntryRecord() error = %v", err)
 	}
 	first := testPlainGeneration(environment.Record.ID, entryID, firstID, "staging", now)
 	created, err := repository.CreateEntry(
-		context.Background(), environment, project, record, EntryValueGeneration{Plain: &first},
+		context.Background(), environment, project, record, testentries.EntryValueGeneration{Plain: &first},
 	)
 	if err != nil {
 		t.Fatalf("CreateEntry() error = %v", err)
@@ -394,7 +408,13 @@ func entryDeletionTestState(
 	entry.Source.Literal = "production"
 	second := testPlainGeneration(environment.Record.ID, entryID, secondID, "production", now.Add(time.Second))
 	current, err := repository.ReplaceEntry(
-		context.Background(), environment, project, created, entry, secondID, EntryValueGeneration{Plain: &second},
+		context.Background(),
+		environment,
+		project,
+		created,
+		entry,
+		secondID,
+		testentries.EntryValueGeneration{Plain: &second},
 	)
 	if err != nil {
 		t.Fatalf("ReplaceEntry() error = %v", err)
@@ -404,11 +424,11 @@ func entryDeletionTestState(
 
 func entryDeletionTestRecords(
 	t *testing.T,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
-	entry Versioned[EntryRecord],
-	projection *Versioned[EnvironmentComposeProjection],
-) (TaskRecord, IdempotencyMarker, DeletionTombstoneRecord, EntryRemovalIntent) {
+	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	entry testkeyvalue.Versioned[testentries.Record],
+	projection *testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection],
+) (TaskRecord, testidempotency.IdempotencyMarker, testdeletions.DeletionTombstoneRecord, testenvironmentchanges.EntryRemovalIntent) {
 	t.Helper()
 	createdAt := serviceRecordTestTime().Add(6 * time.Hour)
 	task := validTaskRecord(createdAt)
@@ -416,46 +436,50 @@ func entryDeletionTestRecords(
 	task.ID = ids.NewAt(ids.KindTask, createdAt, 9200)
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 9201)
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 9202)
-	task.Executor = TaskExecutorController
-	task.Type = TaskRemove
+	task.Executor = testtaskjournal.TaskExecutorController
+	task.Type = testtaskjournal.TaskRemove
 	task.Target = entry.Record.Entry.ID
 	task.Params = map[string]string{
-		TaskResourceKindParam: TaskResourceEntry, TaskEntryEnvironmentParam: entry.Record.EnvironmentID,
+		testtaskjournal.TaskResourceKindParam:     testtaskjournal.TaskResourceEntry,
+		testtaskjournal.TaskEntryEnvironmentParam: entry.Record.EnvironmentID,
 	}
 	task.TimeoutSeconds = 30
 	task.IdempotencyKey = "entry-remove-key-0001"
 	if projection != nil {
-		task.Executor = TaskExecutorAgent
+		task.Executor = testtaskjournal.TaskExecutorAgent
 		task.TimeoutSeconds = 120
 		task.RenderGeneration = int32(projection.Record.RenderGeneration + 1)
 		task.Params = map[string]string{
-			TaskEntryEnvironmentParam:           entry.Record.EnvironmentID,
-			TaskMaterializationEnvironmentParam: entry.Record.EnvironmentID,
-			EnvironmentDesiredRevisionParam:     projection.Record.RevisionID,
-			TaskComposeArtifactParam: ids.NewAt(
+			testtaskjournal.TaskEntryEnvironmentParam:           entry.Record.EnvironmentID,
+			testtaskjournal.TaskMaterializationEnvironmentParam: entry.Record.EnvironmentID,
+			testblueprints.EnvironmentDesiredRevisionParam:      projection.Record.RevisionID,
+			testtaskjournal.TaskComposeArtifactParam: ids.NewAt(
 				ids.KindConfig, createdAt, 9203,
 			),
-			TaskEntryTenantSlugParam:          "tenant",
-			TaskEntryProjectSlugParam:         project.Record.Slug,
-			TaskEntryEnvironmentNameParam:     environment.Record.Name,
-			TaskEntryAuthorizedVolumeDirParam: environment.Record.VolumeDir,
+			testtaskjournal.TaskEntryTenantSlugParam:          "tenant",
+			testtaskjournal.TaskEntryProjectSlugParam:         project.Record.Slug,
+			testtaskjournal.TaskEntryEnvironmentNameParam:     environment.Record.Name,
+			testtaskjournal.TaskEntryAuthorizedVolumeDirParam: environment.Record.VolumeDir,
 		}
 	}
 	marker := pendingTaskMarker(task)
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment, ScopeID: entry.Record.EnvironmentID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: entry.Record.EnvironmentID,
 		Method: http.MethodDelete, Route: "/entries/{id}", Key: task.IdempotencyKey,
 	}
-	replayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetEntry, ID: entry.Record.Entry.ID}
+	replayTarget := testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetEntry,
+		ID:   entry.Record.Entry.ID,
+	}
 	marker.ReplayTarget = &replayTarget
-	intent, err := NewEntryRemovalIntent(
+	intent, err := testenvironmentchanges.NewEntryRemovalIntent(
 		task.ID, entry.Record.EnvironmentID, entry.Record.Entry.ID, entry.Revision, projection, createdAt,
 	)
 	if err != nil {
 		t.Fatalf("NewEntryRemovalIntent() error = %v", err)
 	}
-	tombstone := DeletionTombstoneRecord{
-		TargetKind: DeletionTargetEntry, TargetID: entry.Record.Entry.ID, TargetRevision: entry.Revision,
+	tombstone := testdeletions.DeletionTombstoneRecord{
+		TargetKind: testdeletions.DeletionTargetEntry, TargetID: entry.Record.Entry.ID, TargetRevision: entry.Revision,
 		TaskID: task.ID, Phase: entryRemovalTombstonePhase(intent), CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	return task, marker, tombstone, intent
@@ -464,29 +488,29 @@ func entryDeletionTestRecords(
 func entryDeletionTestProjection(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	entry Versioned[EntryRecord],
-) Versioned[EnvironmentComposeProjection] {
+	entry testkeyvalue.Versioned[testentries.Record],
+) testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection] {
 	t.Helper()
-	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:    entry.Record.EnvironmentID,
 		RevisionID:       ids.NewAt(ids.KindTask, serviceRecordTestTime().Add(5*time.Hour), 9150),
 		RenderGeneration: 4,
-		Entries:          []EntryRecord{cloneEntryRecord(entry.Record)},
+		Entries:          []testentries.Record{testentries.CloneRecord(entry.Record)},
 	})
-	value, err := encodeEnvironmentComposeProjection(projection)
+	value, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
 	}
-	result, err := store.Transact(context.Background(), []Condition{{
-		Key: environmentComposeProjectionKey(entry.Record.EnvironmentID),
-	}}, []Mutation{{
-		Type: MutationPut, Key: environmentComposeProjectionKey(entry.Record.EnvironmentID), Value: value,
+	result, err := store.Transact(context.Background(), []testkeyvalue.Condition{{
+		Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(entry.Record.EnvironmentID),
+	}}, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(entry.Record.EnvironmentID), Value: value,
 	}})
 	clear(value)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed Environment projection = %#v/%v", result, err)
 	}
-	return Versioned[EnvironmentComposeProjection]{
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
 		Record: projection, Revision: result.Revision, ReadRevision: result.Revision,
 	}
 }
@@ -495,12 +519,12 @@ func assertEntryRemovalRetained(
 	t *testing.T,
 	repository *EntryRepository,
 	store *memoryHierarchyStore,
-	entry Versioned[EntryRecord],
+	entry testkeyvalue.Versioned[testentries.Record],
 	generationIDs []string,
 ) {
 	t.Helper()
 	visible, err := repository.GetEntry(context.Background(), entry.Record.Entry.ID)
-	if err != nil || !equalEntryRecord(visible.Record, entry.Record) {
+	if err != nil || !testentries.EqualRecord(visible.Record, entry.Record) {
 		t.Fatalf("GetEntry(retained) = %#v/%v", visible, err)
 	}
 	assertEntryGenerations(t, store, entry.Record.Entry.ID, generationIDs, true)
@@ -515,7 +539,7 @@ func assertEntryGenerations(
 ) {
 	t.Helper()
 	for _, generationID := range generationIDs {
-		stored, err := store.Get(context.Background(), plainEntryValueGenerationKey(entryID, generationID))
+		stored, err := store.Get(context.Background(), testentryvalues.PlainKey(entryID, generationID))
 		if err != nil || (stored.Entry != nil) != want {
 			t.Fatalf("Get(Entry generation %s) = %#v/%v, want present %t", generationID, stored, err, want)
 		}
@@ -530,15 +554,15 @@ type entryDeletionCloudflareRaceStore struct {
 
 func (store *entryDeletionCloudflareRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.beforeTransact != nil {
 		before := store.beforeTransact
 		store.beforeTransact = nil
 		store.injected = true
 		if err := before(); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 	}
 	return store.hierarchyStore.Transact(ctx, conditions, mutations)
@@ -548,21 +572,24 @@ func assertEntryRemovalPublicationAbsent(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker testidempotency.IdempotencyMarker,
 ) {
 	t.Helper()
 	keys := []string{
-		taskKey(task.ID), taskOperationIndexKey(task.OperationID, task.ID),
-		taskActiveOperationKey(task.OperationID), taskQueueKey(task.Executor, task.ID),
-		entryRemovalIntentKey(task.ID), deletionTombstoneKey(string(DeletionTargetEntry), task.Target),
+		testtaskjournal.TaskStorageKey(task.ID),
+		testtaskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+		testtaskjournal.TaskActiveOperationKey(task.OperationID),
+		testtaskjournal.TaskQueueKey(task.Executor, task.ID),
+		testenvironmentchanges.EntryRemovalIntentKey(task.ID),
+		testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEntry), task.Target),
 	}
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", err)
 	}
 	keys = append(keys, markerKey)
 	if marker.ReplayTarget != nil {
-		replayKey, replayErr := idempotencyReplayTargetKey(
+		replayKey, replayErr := testidempotency.IdempotencyReplayTargetKey(
 			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
 		)
 		if replayErr != nil {
@@ -582,21 +609,24 @@ func assertEntryRetryPublicationAbsent(
 	store *memoryHierarchyStore,
 	source TaskRecord,
 	retryID string,
-	marker IdempotencyMarker,
+	marker testidempotency.IdempotencyMarker,
 ) {
 	t.Helper()
 	keys := []string{
-		taskKey(retryID), taskOperationIndexKey(source.OperationID, retryID),
-		taskActiveOperationKey(source.OperationID), taskQueueKey(source.Executor, retryID),
-		entryRemovalIntentKey(retryID), deletionTombstoneKey(string(DeletionTargetEntry), source.Target),
+		testtaskjournal.TaskStorageKey(retryID),
+		testtaskjournal.TaskOperationIndexKey(source.OperationID, retryID),
+		testtaskjournal.TaskActiveOperationKey(source.OperationID),
+		testtaskjournal.TaskQueueKey(source.Executor, retryID),
+		testenvironmentchanges.EntryRemovalIntentKey(retryID),
+		testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEntry), source.Target),
 	}
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey(retry) error = %v", err)
 	}
 	keys = append(keys, markerKey)
 	if marker.ReplayTarget != nil {
-		replayKey, replayErr := idempotencyReplayTargetKey(
+		replayKey, replayErr := testidempotency.IdempotencyReplayTargetKey(
 			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
 		)
 		if replayErr != nil {

@@ -7,6 +7,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -43,12 +46,11 @@ func TestVolumeRuntimeDesiredPublicationIsAtomic(t *testing.T) {
 		resumed.Attempt.Ordinal != 1 || resumed.Pending != nil {
 		t.Fatal("publisher did not commit the exact initial runtime")
 	}
-	markerKey, err := etcd.CapabilityIdempotencyMarkerKey(fixture.Marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(fixture.Marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{removalrecord.OwnerKey(want.VolumeID), removalrecord.EnvironmentLockKey(want.EnvironmentID), removalrecord.AttemptKey(want.OperationID, 1),
-		etcd.CapabilityTaskKey(fixture.Task.ID), markerKey} {
+	for _, key := range []string{removalrecord.OwnerKey(want.VolumeID), removalrecord.EnvironmentLockKey(want.EnvironmentID), removalrecord.AttemptKey(want.OperationID, 1), testtaskjournal.TaskStorageKey(fixture.Task.ID), markerKey} {
 		read, err := fixture.Store.Get(ctx, key)
 		if err != nil || read.Entry == nil || read.Entry.ModRevision != resumed.Runtime.Revision {
 			t.Fatalf("removal companion was not atomic: %s: %v", key, err)
@@ -77,16 +79,16 @@ func TestVolumeRuntimeDesiredPublicationIsAtomic(t *testing.T) {
 // Rationale: a parent deletion epoch may change after removal preparation.
 // The whole desired/policy/runtime publication must lose that final commit race.
 func TestVolumeRuntimeDesiredPublicationRejectsChangedParentEpoch(t *testing.T) {
-	for _, kind := range []etcd.HierarchyDeletionTargetKind{etcd.HierarchyDeletionTargetProject, etcd.HierarchyDeletionTargetTenant} {
+	for _, kind := range []testhierarchydeletion.HierarchyDeletionTargetKind{testhierarchydeletion.HierarchyDeletionTargetProject, testhierarchydeletion.HierarchyDeletionTargetTenant} {
 		t.Run(string(kind), func(t *testing.T) {
 			fixture := etcd.NewVolumePolicyDesiredFixture(t)
 			fixture.PrepareRemovalRecords(t)
 			stageVolumePolicyDesired(t, fixture)
 			id := fixture.Task.Owner.ProjectID
-			if kind == etcd.HierarchyDeletionTargetTenant {
+			if kind == testhierarchydeletion.HierarchyDeletionTargetTenant {
 				id = fixture.Task.Owner.TenantID
 			}
-			fixture.ParentBeforePublication = &etcd.HierarchyCoordinationRecord{
+			fixture.ParentBeforePublication = &testhierarchydeletion.HierarchyCoordinationRecord{
 				Schema: 1, TargetKind: kind, TargetID: id, MutationEpoch: 99,
 			}
 			before := fixture.Revision()
@@ -137,7 +139,7 @@ func TestVolumeRuntimeDesiredPublicationRejectsLateOwner(t *testing.T) {
 // Rationale: a missing or corrupt parent epoch cannot provide deletion
 // exclusion, and a valid record for another parent is not this parent's authority.
 func TestVolumeRuntimeDesiredPublicationRejectsInvalidParentEpoch(t *testing.T) {
-	for _, kind := range []etcd.HierarchyDeletionTargetKind{etcd.HierarchyDeletionTargetProject, etcd.HierarchyDeletionTargetTenant} {
+	for _, kind := range []testhierarchydeletion.HierarchyDeletionTargetKind{testhierarchydeletion.HierarchyDeletionTargetProject, testhierarchydeletion.HierarchyDeletionTargetTenant} {
 		for _, change := range []string{"missing", "corrupt", "identity"} {
 			t.Run(string(kind)+"/"+change, func(t *testing.T) {
 				fixture := etcd.NewVolumePolicyDesiredFixture(t)

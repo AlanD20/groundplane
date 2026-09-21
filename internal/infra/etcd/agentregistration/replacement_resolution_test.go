@@ -1,4 +1,4 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +20,7 @@ func TestLocalAgentReplacementResolutionFencesLateCommit(t *testing.T) {
 			ctx := context.Background()
 			memory := newMemoryTaskStore()
 			store := &uncertainLocalAgentStore{memoryTaskStore: memory, committed: committed}
-			repository, err := newLocalAgentRepository(store)
+			repository, err := newRepository(store)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -81,30 +82,30 @@ func TestLocalAgentReplacementResolutionFencesLateCommit(t *testing.T) {
 type uncertainLocalAgentStore struct {
 	*memoryTaskStore
 	committed  bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []testkeyvalue.Condition
+	mutations  []testkeyvalue.Mutation
 }
 
 func (store *uncertainLocalAgentStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
-	if len(mutations) != 5 || mutations[3].Type != MutationDelete {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
+	if len(mutations) != 5 || mutations[3].Type != testkeyvalue.MutationDelete {
 		return store.memoryTaskStore.Transact(ctx, conditions, mutations)
 	}
-	store.conditions = append([]Condition(nil), conditions...)
-	store.mutations = make([]Mutation, len(mutations))
+	store.conditions = append([]testkeyvalue.Condition(nil), conditions...)
+	store.mutations = make([]testkeyvalue.Mutation, len(mutations))
 	for index, mutation := range mutations {
 		store.mutations[index] = mutation
 		store.mutations[index].Value = append([]byte(nil), mutation.Value...)
 	}
 	if store.committed {
 		if _, err := store.memoryTaskStore.Transact(ctx, conditions, mutations); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 	}
-	return TransactionResult{}, errs.New(
+	return testkeyvalue.TransactionResult{}, errs.New(
 		errs.KindStorageUnavailable,
 		"transaction response was lost",
 	)

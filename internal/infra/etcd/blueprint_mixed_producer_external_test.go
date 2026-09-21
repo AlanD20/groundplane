@@ -10,12 +10,18 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -69,7 +75,7 @@ func TestBlueprintMixedProducerPreservesServingServices(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			testBlueprintExecutedArtifact(t, addressable, false, func(fixture *etcd.ExecutedArtifactFixture,
-				resolver *controller.TaskPlanResolver, prior etcd.ReleaseRenderInput, _ domain.Intent,
+				resolver *testtaskplanning.TaskPlanResolver, prior testreleaserender.ReleaseRenderInput, _ domain.Intent,
 				applied *agentpb.ComposeArtifact) {
 				proveFullMixedProducer(t, fixture, resolver, prior, applied, addressable, false, 1, 0, false)
 			})
@@ -77,9 +83,16 @@ func TestBlueprintMixedProducerPreservesServingServices(t *testing.T) {
 	}
 }
 
-func proveFullMixedProducer(t *testing.T, fixture *etcd.ExecutedArtifactFixture, resolver *controller.TaskPlanResolver,
-	prior etcd.ReleaseRenderInput, applied *agentpb.ComposeArtifact, addressable, recoverMixed bool,
-	workerCount, hookCount int, reconnectHooks bool) {
+func proveFullMixedProducer(
+	t *testing.T,
+	fixture *etcd.ExecutedArtifactFixture,
+	resolver *testtaskplanning.TaskPlanResolver,
+	prior testreleaserender.ReleaseRenderInput,
+	applied *agentpb.ComposeArtifact,
+	addressable, recoverMixed bool,
+	workerCount, hookCount int,
+	reconnectHooks bool,
+) {
 	t.Helper()
 	ctx := context.Background()
 	if err := resolver.EnableReleasePlans(fixture.Ledger); err != nil {
@@ -98,7 +111,7 @@ func proveFullMixedProducer(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 	if err := resolver.EnableScriptPlans(scripts); err != nil {
 		t.Fatal(err)
 	}
-	artifacts, err := controller.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
+	artifacts, err := testtaskplanning.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +121,7 @@ func proveFullMixedProducer(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 		resolver,
 		artifacts,
 		sources,
-		fixture.ImageLookupAgent(t),
+		blueprintImageLookupAgent(t, fixture),
 		imageResolver,
 	)
 	if err != nil {
@@ -117,26 +130,26 @@ func proveFullMixedProducer(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 	worker := planning[0].Service.Record
 	worker.Desired.ID, worker.Desired.Name = ids.New(ids.KindService), "worker"
 	worker.Runtime.ServiceID, worker.Runtime.RuntimeIntent = worker.Desired.ID, core.ServiceRuntimeIntentRunning
-	changes := []etcd.EnvironmentBlueprintServiceChange{
+	changes := []testblueprints.EnvironmentBlueprintServiceChange{
 		{Current: &planning[0].Service, Record: planning[0].Service.Record}, {Record: worker},
 	}
 	for index := 1; index < workerCount; index++ {
 		next := worker
 		next.Desired.ID, next.Desired.Name = ids.New(ids.KindService), fmt.Sprintf("worker-%d", index)
 		next.Runtime.ServiceID = next.Desired.ID
-		changes = append(changes, etcd.EnvironmentBlueprintServiceChange{Record: next})
+		changes = append(changes, testblueprints.EnvironmentBlueprintServiceChange{Record: next})
 	}
 	if recoverMixed {
 		changes[0].Record.Desired.Replicas++
 	}
-	slices.SortFunc(changes, func(a, b etcd.EnvironmentBlueprintServiceChange) int {
+	slices.SortFunc(changes, func(a, b testblueprints.EnvironmentBlueprintServiceChange) int {
 		return strings.Compare(a.Record.Desired.Name, b.Record.Desired.Name)
 	})
 	project := &composetypes.Project{Name: "test", Services: composetypes.Services{}}
-	identities := make([]controller.ComposeResourceIdentity, 0, len(changes))
+	identities := make([]testcomposeidentity.Resource, 0, len(changes))
 	for _, change := range changes {
 		name := change.Record.Desired.Name
-		identities = append(identities, controller.ComposeResourceIdentity{ID: change.Record.Desired.ID, Name: name})
+		identities = append(identities, testcomposeidentity.Resource{ID: change.Record.Desired.ID, Name: name})
 		definition := composetypes.ServiceConfig{Name: name, Image: prior.CandidateWorkload.RequestedReference,
 			NetworkMode: "none", HealthCheck: &composetypes.HealthCheckConfig{Test: []string{"CMD", "true"}}}
 		if hookCount > 0 && name == worker.Desired.Name {
@@ -151,7 +164,7 @@ func proveFullMixedProducer(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 		Name:     project.Name,
 		Services: composetypes.Services{"api": project.Services["api"]},
 	}
-	slices.SortFunc(identities, func(a, b controller.ComposeResourceIdentity) int {
+	slices.SortFunc(identities, func(a, b testcomposeidentity.Resource) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 	if recoverMixed {
@@ -178,12 +191,14 @@ func proveFullMixedProducer(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 	}
 	task.RenderGeneration = 3
 	artifactID := ids.New(ids.KindConfig)
-	task.Params[controller.EnvironmentBlueprintArtifactParam] = artifactID
+	task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
 	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(taskcontract.BlueprintComposeProcedureNone)
-	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{Project: project, ArtifactID: artifactID,
-		ProjectOwnerKind: controller.ComposeProjectOwnerTenant, TenantID: prior.TenantID, ProjectID: prior.ProjectID,
-		EnvironmentID: prior.EnvironmentID, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
-		AuthorizedVolumeDir: prior.AuthorizedVolumeDir, Identities: controller.ComposeIdentitySnapshot{Services: identities}})
+	artifact, err := testcomposerender.RenderCompose(
+		testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
+			ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: prior.TenantID, ProjectID: prior.ProjectID,
+			EnvironmentID: prior.EnvironmentID, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
+			AuthorizedVolumeDir: prior.AuthorizedVolumeDir, Identities: testcomposeidentity.Snapshot{Services: identities}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +218,7 @@ func proveFullMixedProducer(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 	}
 	projection.DesiredServices = projection.DesiredServices[:1:1]
 	for _, change := range changes[1:] {
-		projection.DesiredServices = append(projection.DesiredServices, etcd.EnvironmentServiceProjection{
+		projection.DesiredServices = append(projection.DesiredServices, testservices.EnvironmentServiceProjection{
 			EnvironmentID: prior.EnvironmentID, Desired: change.Record.Desired,
 		})
 	}
@@ -267,23 +282,46 @@ func proveFullMixedProducer(t *testing.T, fixture *etcd.ExecutedArtifactFixture,
 		return
 	}
 	if recoverMixed {
-		fixture.ProveMixedMemberRecovery(t, agentID, claim, prepared.Plan, prior.ServiceID, prior.ReleaseID,
-			func(recovery etcd.TaskAssignment, expected etcd.TaskResultRecord) etcd.TaskResultRecord {
+		fixture.ProveMixedMemberRecovery(
+			t,
+			agentID,
+			claim,
+			prepared.Plan,
+			prior.ServiceID,
+			prior.ReleaseID,
+			func(recovery etcd.TaskAssignment, expected testtaskjournal.TaskResultRecord) testtaskjournal.TaskResultRecord {
 				return executeMixedWorkerRecovery(t, fixture, recovery, prepared.Plan, expected)
-			})
+			},
+		)
 		return
 	}
-	result := etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, ExecutionEpoch: 1,
-		Diagnostic: etcd.TaskResultDiagnosticNone}
-	completed, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID,
-		etcd.TaskStatusCompleted, result, task.CreatedAt.Add(time.Minute))
-	if err != nil || completed.Record.Status != etcd.TaskStatusCompleted {
+	result := testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1,
+		Diagnostic: testtaskjournal.TaskResultDiagnosticNone}
+	completed, err := fixture.Tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		1,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		result,
+		task.CreatedAt.Add(time.Minute),
+	)
+	if err != nil || completed.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("full producer terminal completion: %s %v", completed.Record.Status, err)
 	}
-	replayedTerminal, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID,
-		claim.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted, result, task.CreatedAt.Add(2*time.Minute))
+	replayedTerminal, err := fixture.Tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		1,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		result,
+		task.CreatedAt.Add(2*time.Minute),
+	)
 	if err != nil || replayedTerminal.Revision != completed.Revision ||
-		replayedTerminal.Record.Status != etcd.TaskStatusCompleted {
+		replayedTerminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("full producer terminal replay changed authority: %v", err)
 	}
 	latest, found, err := fixture.Hierarchy.GetEnvironmentAppliedComposeProjection(ctx, task.Target)
@@ -306,7 +344,7 @@ func TestBlueprintMixedProducerRecoversServingAndFirstCandidate(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			testBlueprintExecutedArtifact(t, addressable, false, func(fixture *etcd.ExecutedArtifactFixture,
-				resolver *controller.TaskPlanResolver, prior etcd.ReleaseRenderInput, _ domain.Intent,
+				resolver *testtaskplanning.TaskPlanResolver, prior testreleaserender.ReleaseRenderInput, _ domain.Intent,
 				applied *agentpb.ComposeArtifact) {
 				proveFullMixedProducer(t, fixture, resolver, prior, applied, addressable, true, 1, 0, false)
 			})

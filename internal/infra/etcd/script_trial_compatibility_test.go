@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 )
 
 // This is the strict Script wire shape in the deployed pre-order/context
@@ -24,38 +26,6 @@ type predecessorScriptRecord struct {
 	} `json:"desired"`
 }
 
-// Rationale: startup's unpublished-source cleanup is permitted before trial
-// qualification. Its count rewrite must not add forward-only Script metadata.
-func TestScriptTrialCleanupPreservesPredecessorWireShape(t *testing.T) {
-	store, sources, _, _, _ := manualScriptLifecycleFixture(t)
-	record := sources.Script.Record
-	key := scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
-	value := store.valueAt(key, store.revision)
-	if value == nil {
-		t.Fatal("missing actual Script primary")
-	}
-	source := ScriptSourceIdentity{
-		Kind: ScriptSourceBody, EnvironmentID: record.EnvironmentID,
-		ScriptID: record.Desired.ID, ScriptSetGeneration: record.ScriptSetGeneration,
-	}
-	adapter := &scriptSourceReferenceStore{}
-	prepared, err := adapter.AdjustScriptPrimary(value.Value, source, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(prepared)
-	cleaned, err := adapter.AdjustScriptPrimary(prepared, source, -1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(cleaned)
-	for _, encoded := range [][]byte{value.Value, prepared, cleaned} {
-		if _, err := decodeEnvelope[predecessorScriptRecord](encoded, "script"); err != nil {
-			t.Fatalf("count-only cleanup introduced predecessor-incompatible fields: %v", err)
-		}
-	}
-}
-
 // Rationale: additive JSON fields are not automatically rollback-compatible:
 // authoring nondefault metadata must remain outside an unfinished native trial.
 func TestScriptTrialAuthoredMetadataRequiresQualifiedWriter(t *testing.T) {
@@ -67,15 +37,15 @@ func TestScriptTrialAuthoredMetadataRequiresQualifiedWriter(t *testing.T) {
 		} else {
 			record.Desired.Order = 42
 		}
-		encoded, err := encodeScriptRecord(record)
+		encoded, err := testscripts.EncodeRecord(record)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer clear(encoded)
-		if _, err := decodeEnvelope[predecessorScriptRecord](encoded, "script"); err == nil {
+		if _, err := testrecordcodec.Decode[predecessorScriptRecord](encoded, "script"); err == nil {
 			t.Fatal("strict predecessor unexpectedly accepted new metadata")
 		}
-		if _, err := decodeScriptRecord(encoded); err != nil {
+		if _, err := testscripts.DecodeRecord(encoded); err != nil {
 			t.Fatal(err)
 		}
 	}

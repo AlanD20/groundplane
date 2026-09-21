@@ -2,6 +2,9 @@ package etcd
 
 import (
 	"context"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"testing"
 	"time"
 )
@@ -14,12 +17,12 @@ const (
 func seedTaskRepositoryRunningTask(t *testing.T, store *memoryTaskStore, task TaskRecord) {
 	t.Helper()
 	running := task
-	if task.Status == TaskStatusPending {
+	if task.Status == testtaskjournal.TaskStatusPending {
 		var err error
-		running, err = transitionTaskStatus(
+		running, err = TransitionTaskStatus(
 			task,
-			TaskStatusPending,
-			TaskStatusRunning,
+			testtaskjournal.TaskStatusPending,
+			testtaskjournal.TaskStatusRunning,
 			task.UpdatedAt.Add(time.Nanosecond),
 		)
 		if err != nil {
@@ -27,27 +30,35 @@ func seedTaskRepositoryRunningTask(t *testing.T, store *memoryTaskStore, task Ta
 		}
 	}
 	seedTaskRepositoryTask(t, store, running)
-	assignment := TaskAssignmentRecord{
+	assignment := testtaskassignments.TaskAssignmentRecord{
 		AssignmentID: taskEventTestAssignmentID,
-		TaskID:       running.ID, Executor: TaskExecutorAgent,
+		TaskID:       running.ID, Executor: testtaskjournal.TaskExecutorAgent,
 		AgentID: taskEventTestAgentID, AgentGeneration: 1,
 		ClaimedTaskRevision: 1, AssignedAt: *running.StartedAt,
 		Deadline:         running.StartedAt.Add(time.Duration(running.TimeoutSeconds) * time.Second),
 		RecoveryDeadline: running.StartedAt.Add(2 * time.Duration(running.TimeoutSeconds) * time.Second),
-		ExecutionMode:    TaskExecutionModeForward, ExecutionEpoch: 1,
+		ExecutionMode:    testtaskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
-	value, err := encodeTaskAssignment(assignment)
+	value, err := testtaskassignments.EncodeTaskAssignment(assignment)
 	if err != nil {
 		t.Fatalf("encode seeded Task assignment: %v", err)
 	}
-	result, err := store.Transact(context.Background(), []Condition{
-		{Key: taskAssignmentKey(taskEventTestAgentID, running.ID)},
-		{Key: taskAssignmentIndexKey(running.ID)},
-		{Key: taskTimeoutIndexKey(running.ID, assignment.Deadline)},
-	}, []Mutation{
-		{Type: MutationPut, Key: taskAssignmentKey(taskEventTestAgentID, running.ID), Value: value},
-		{Type: MutationPut, Key: taskAssignmentIndexKey(running.ID), Value: value},
-		{Type: MutationPut, Key: taskTimeoutIndexKey(running.ID, assignment.Deadline), Value: value},
+	result, err := store.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testtaskjournal.TaskAssignmentKey(taskEventTestAgentID, running.ID)},
+		{Key: testtaskjournal.TaskAssignmentIndexKey(running.ID)},
+		{Key: testtaskjournal.TaskTimeoutIndexKey(running.ID, assignment.Deadline)},
+	}, []testkeyvalue.Mutation{
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskAssignmentKey(taskEventTestAgentID, running.ID),
+			Value: value,
+		},
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskAssignmentIndexKey(running.ID), Value: value},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskTimeoutIndexKey(running.ID, assignment.Deadline),
+			Value: value,
+		},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed Task assignment = %#v, %v", result, err)

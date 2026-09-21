@@ -33,7 +33,8 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	if err := entryrecord.ValidateEntryVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.Record.EnvironmentID ||
 		marker.ReplayTarget == nil ||

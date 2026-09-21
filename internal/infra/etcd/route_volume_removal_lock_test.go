@@ -7,6 +7,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,8 +23,14 @@ func TestRouteFailedRemovalReplayIgnoresLaterVolumeRemovalLock(t *testing.T) {
 	defer cancel()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1170, "/replay/*")
-	projection := routeDeletionTestProjection(t, store, environment, project, target,
-		Versioned[RouteRecord]{Record: record})
+	projection := routeDeletionTestProjection(
+		t,
+		store,
+		environment,
+		project,
+		target,
+		testkeyvalue.Versioned[testroutes.Record]{Record: record},
+	)
 	current, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -42,14 +53,14 @@ func TestRouteFailedRemovalReplayIgnoresLaterVolumeRemovalLock(t *testing.T) {
 		t.Fatalf("claim: %v/%v", found, err)
 	}
 	at := task.CreatedAt.Add(2 * time.Second)
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusFailed, at); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, at); err != nil {
 		t.Fatal(err)
 	}
 	putSpecializedRemovalLock(t, store, removalrecord.Owner{EnvironmentID: environment.Record.ID,
 		VolumeID: ids.New(ids.KindVolume), OperationID: ids.New(ids.KindOperation)})
 	before := store.revision
-	replayed, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusFailed, at)
-	if err != nil || replayed.Record.Status != TaskStatusFailed || store.revision != before {
+	replayed, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusFailed, at)
+	if err != nil || replayed.Record.Status != testtaskjournal.TaskStatusFailed || store.revision != before {
 		t.Fatalf("failed acknowledgement replay changed state or rejected later lock: %v", err)
 	}
 }
@@ -64,31 +75,39 @@ func TestRouteMutationPublicationExcludesVolumeRemovalLock(t *testing.T) {
 			record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1160, "/lock/*")
 			// Match the existing Route mutation fixture's independent Service authority.
 			fenceKey := "/v1/test/route-service-fences/" + target.Record.Desired.ID
-			fence, err := store.Transact(ctx, nil, []Mutation{{
-				Type: MutationPut, Key: fenceKey, Value: []byte(target.Record.Desired.ID),
+			fence, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+				Type: testkeyvalue.MutationPut, Key: fenceKey, Value: []byte(target.Record.Desired.ID),
 			}})
 			if err != nil || !fence.Succeeded {
 				t.Fatalf("Service fence: %v", err)
 			}
-			target.Record.desiredFenceKey = fenceKey
+			target = refenceServiceFixture(t, store, target, fenceKey, fence.Revision)
 			target.Revision, target.ReadRevision = fence.Revision, fence.Revision
 			at := serviceRecordTestTime().Add(3 * time.Hour)
 			task := validTaskRecord(at)
 			task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
-			task.Executor, task.Type, task.Target = TaskExecutorController, TaskCreate, record.Desired.ID
+			task.Executor, task.Type, task.Target = testtaskjournal.TaskExecutorController, testtaskjournal.TaskCreate, record.Desired.ID
 			task.Params = map[string]string{
-				TaskResourceKindParam: TaskResourceRoute, TaskRouteEnvironmentParam: environment.Record.ID,
+				testtaskjournal.TaskResourceKindParam:     testtaskjournal.TaskResourceRoute,
+				testtaskjournal.TaskRouteEnvironmentParam: environment.Record.ID,
 			}
 			task.IdempotencyKey = "route-create-removal-lock"
-			intent, err := NewRouteMutationIntent(task.ID, task.OperationID, environment.Record.ID,
-				record, nil, nil, at)
+			intent, err := testenvironmentchanges.NewRouteMutationIntent(
+				task.ID,
+				task.OperationID,
+				environment.Record.ID,
+				record,
+				nil,
+				nil,
+				at,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			marker, err := NewCompletedDirectIdempotencyMarker(IdempotencyLocator{
-				ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+			marker, err := testidempotency.NewCompletedDirectIdempotencyMarker(testidempotency.IdempotencyLocator{
+				ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
 				Method: http.MethodPost, Route: "/routes", Key: task.IdempotencyKey,
-			}, testDirectMarker().Intent, IdempotencyResponse{
+			}, testDirectMarker().Intent, testidempotency.IdempotencyResponse{
 				Status: http.StatusAccepted, ContentKind: "application/json",
 				Body: []byte(`{"route":{"id":"` + record.Desired.ID + `"},"task_id":"` + task.ID + `"}`),
 			}, at)
@@ -143,8 +162,14 @@ func TestRouteRemovalPublicationsExcludeVolumeRemovalLock(t *testing.T) {
 				defer cancel()
 				repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 				record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1150, "/lock/*")
-				projection := routeDeletionTestProjection(t, store, environment, project, target,
-					Versioned[RouteRecord]{Record: record})
+				projection := routeDeletionTestProjection(
+					t,
+					store,
+					environment,
+					project,
+					target,
+					testkeyvalue.Versioned[testroutes.Record]{Record: record},
+				)
 				current, err := repository.GetRoute(ctx, record.Desired.ID)
 				if err != nil {
 					t.Fatal(err)
@@ -193,8 +218,12 @@ func TestRouteRemovalPublicationsExcludeVolumeRemovalLock(t *testing.T) {
 						t.Fatalf("claim: %v/%v", found, err)
 					}
 					publish = func() error {
-						_, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted,
-							task.CreatedAt.Add(2*time.Second))
+						_, err := tasks.AcknowledgeControllerTask(
+							ctx,
+							task.ID,
+							testtaskjournal.TaskStatusCompleted,
+							task.CreatedAt.Add(2*time.Second),
+						)
 						return err
 					}
 				}

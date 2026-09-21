@@ -30,7 +30,8 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if ids.Validate(ids.KindTask, sourceTaskID) != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "source task id is invalid")
 	}
-	if retry.RetryOf != sourceTaskID || retry.Executor != taskjournal.TaskExecutorController || retry.Type != taskjournal.TaskCreate ||
+	if retry.RetryOf != sourceTaskID || retry.Executor != taskjournal.TaskExecutorController ||
+		retry.Type != taskjournal.TaskCreate ||
 		retry.Status != taskjournal.TaskStatusPending ||
 		retry.IdempotencyKey == "" ||
 		len(retry.Params) != 2 ||

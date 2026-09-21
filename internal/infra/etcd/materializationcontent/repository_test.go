@@ -223,7 +223,7 @@ func generatedEnvironmentRecord(content []byte) taskmaterialization.Record {
 
 func mustRepository(t *testing.T, store Store) *Repository {
 	t.Helper()
-	repository, err := NewRepository(store)
+	repository, err := newRepository(store)
 	if err != nil {
 		t.Fatalf("NewRepository = %v", err)
 	}

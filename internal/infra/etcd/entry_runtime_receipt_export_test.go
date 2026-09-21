@@ -8,6 +8,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -16,8 +19,8 @@ import (
 // SeedEntryAcknowledgedRuntime models the receipt written by the successful
 // native operation represented by the fixture's already-sealed artifacts.
 func (fixture *ExecutedArtifactFixture) SeedEntryAcknowledgedRuntime(
-	t *testing.T, render ReleaseRenderInput, artifacts []*agentpb.ComposeArtifact,
-) Versioned[serviceruntimerecord.Record] {
+	t *testing.T, render testreleaserender.ReleaseRenderInput, artifacts []*agentpb.ComposeArtifact,
+) testkeyvalue.Versioned[serviceruntimerecord.Record] {
 	t.Helper()
 	if len(artifacts) < 1 || len(artifacts) > 2 {
 		t.Fatal("Entry receipt fixture requires one current and at most one retained artifact")
@@ -51,7 +54,7 @@ func (fixture *ExecutedArtifactFixture) SeedEntryAcknowledgedRuntime(
 	if err := serviceruntimerecord.Validate(record); err != nil {
 		t.Fatal(err)
 	}
-	value, err := encodeReleaseRecord("service-acknowledged-runtime", record)
+	value, err := testreleases.EncodeReleaseRecord("service-acknowledged-runtime", record)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +62,11 @@ func (fixture *ExecutedArtifactFixture) SeedEntryAcknowledgedRuntime(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Versioned[serviceruntimerecord.Record]{Record: record, Revision: revision, ReadRevision: revision}
+	return testkeyvalue.Versioned[serviceruntimerecord.Record]{
+		Record:       record,
+		Revision:     revision,
+		ReadRevision: revision,
+	}
 }
 
 // AdvanceAcknowledgedRuntime rewrites byte-identical authority at a new

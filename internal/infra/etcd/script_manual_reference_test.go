@@ -7,6 +7,18 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -15,7 +27,7 @@ import (
 // counting a repeated mount only once rather than pinning only the Script body.
 func TestManualScriptSourceMembersPrepareExactRunnerSources(t *testing.T) {
 	store, sources, execution, snapshotRevision := manualScriptReferenceFixture(t)
-	members, err := (&ScriptRepository{store: store}).manualScriptSourceMembers(
+	members, err := (composeScriptRepository(store)).manualScriptSourceMembers(
 		context.Background(), sources, execution, snapshotRevision,
 	)
 	if err != nil {
@@ -24,23 +36,26 @@ func TestManualScriptSourceMembersPrepareExactRunnerSources(t *testing.T) {
 	if len(members) != 6 {
 		t.Fatalf("source memberships = %d, want body, snapshot, Service, Release, Network, Volume", len(members))
 	}
-	authority, err := newScriptSourceReferenceAuthority(store)
+	authority, err := testscriptsourcepublication.NewAuthority(store)
 	if err != nil {
 		t.Fatal(err)
 	}
 	prepared, err := authority.Prepare(context.Background(), execution.OperationID, members)
-	if err != nil || prepared.membershipCount != 6 {
+	if err != nil || prepared.MembershipCount() != 6 {
 		t.Fatalf("prepare complete manual sources = %#v, %v", prepared, err)
 	}
 	for _, member := range members {
 		if member.Evidence.Existing == nil || member.Evidence.Staged != nil {
 			t.Fatalf("manual source is not fixed existing evidence: %#v", member.Reference.Source)
 		}
-		countValue := store.valueAt(scriptSourceCountKey(member.Reference.Source), store.revision)
+		countValue := store.valueAt(
+			testscriptsourceevidence.ScriptSourceCountKey(member.Reference.Source),
+			store.revision,
+		)
 		if countValue == nil {
 			t.Fatalf("source has no removal fence: %#v", member.Reference.Source)
 		}
-		count, decodeErr := decodeScriptSourceCount(countValue.Value)
+		count, decodeErr := testscriptsourceevidence.DecodeScriptSourceCount(countValue.Value)
 		if decodeErr != nil || count.ReferencedExecutionCount != 1 {
 			t.Fatalf("source execution count = %#v, %v", count, decodeErr)
 		}
@@ -54,7 +69,7 @@ func TestManualScriptServiceSnapshotMembershipRejectsSubstitution(t *testing.T) 
 		t.Run(change, func(t *testing.T) {
 			ctx := context.Background()
 			store, sources, execution, snapshotRevision := manualScriptReferenceFixture(t)
-			members, err := (&ScriptRepository{store: store}).manualScriptSourceMembers(
+			members, err := (composeScriptRepository(store)).manualScriptSourceMembers(
 				ctx,
 				sources,
 				execution,
@@ -66,12 +81,15 @@ func TestManualScriptServiceSnapshotMembershipRejectsSubstitution(t *testing.T) 
 			found := false
 			for index := range members {
 				member := &members[index]
-				if member.Reference.Source.Kind != ScriptSourceService {
+				if member.Reference.Source.Kind != testscriptsourcereference.SourceService {
 					continue
 				}
 				found = true
-				if member.Evidence.Existing.SourceKey != scriptRunnerSnapshotKey(execution.SnapshotID) ||
-					member.Reference.SourceModRevision != snapshotRevision || member.Reference.SourceDigest != execution.SnapshotSHA256 {
+				if member.Evidence.Existing.SourceKey != testscriptexecutions.ScriptRunnerSnapshotKey(
+					execution.SnapshotID,
+				) ||
+					member.Reference.SourceModRevision != snapshotRevision ||
+					member.Reference.SourceDigest != execution.SnapshotSHA256 {
 					t.Fatal("manual Service was not pinned to its sealed snapshot")
 				}
 				switch change {
@@ -86,7 +104,7 @@ func TestManualScriptServiceSnapshotMembershipRejectsSubstitution(t *testing.T) 
 			if !found {
 				t.Fatal("manual Service membership absent")
 			}
-			authority, err := newScriptSourceReferenceAuthority(store)
+			authority, err := testscriptsourcepublication.NewAuthority(store)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -113,7 +131,7 @@ func TestManualScriptSourceMembersRejectUnsealedSnapshot(t *testing.T) {
 			case "execution":
 				execution.ID = scriptSourceReferenceExecutionID(scriptSourceReferenceTestTime(), 99)
 			}
-			members, err := (&ScriptRepository{store: store}).manualScriptSourceMembers(
+			members, err := (composeScriptRepository(store)).manualScriptSourceMembers(
 				context.Background(), sources, execution, revision,
 			)
 			if err == nil || len(members) != 0 {
@@ -143,13 +161,13 @@ func TestManualScriptSourceMembersRetainBackingNetworkOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: scriptRunnerSnapshotKey(execution.SnapshotID), Value: value,
+	seed, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testscriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID), Value: value,
 	}})
 	if err != nil || !seed.Succeeded {
 		t.Fatalf("seed backing Network snapshot = %#v, %v", seed, err)
 	}
-	members, err := (&ScriptRepository{store: store}).manualScriptSourceMembers(
+	members, err := (composeScriptRepository(store)).manualScriptSourceMembers(
 		context.Background(),
 		sources,
 		execution,
@@ -158,22 +176,26 @@ func TestManualScriptSourceMembersRetainBackingNetworkOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	authority, err := newScriptSourceReferenceAuthority(store)
+	authority, err := testscriptsourcepublication.NewAuthority(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, member := range members {
-		if member.Reference.Source.Kind != ScriptSourceNetwork {
+	for index, member := range members {
+		if member.Reference.Source.Kind != testscriptsourcereference.SourceNetwork {
 			continue
 		}
 		if member.Reference.SourceOwnerID != backingID {
 			t.Fatalf("backing Network owner = %s, want %s", member.Reference.SourceOwnerID, backingID)
 		}
-		if _, err := authority.validateMembers(context.Background(), execution.OperationID, []ScriptSourcePreparationMember{member}, true); err != nil {
+		exactOperationID := ids.NewAt(ids.KindOperation, scriptSourceReferenceTestTime(), int64(180+index))
+		member.Reference.OperationID = exactOperationID
+		if _, err := authority.Prepare(context.Background(), exactOperationID, []testscriptsourceevidence.ScriptSourcePreparationMember{member}); err != nil {
 			t.Fatalf("exact backing Network owner rejected: %v", err)
 		}
+		forgedOperationID := ids.NewAt(ids.KindOperation, scriptSourceReferenceTestTime(), int64(190+index))
+		member.Reference.OperationID = forgedOperationID
 		member.Reference.SourceOwnerID = execution.EnvironmentID
-		if _, err := authority.validateMembers(context.Background(), execution.OperationID, []ScriptSourcePreparationMember{member}, true); err == nil {
+		if _, err := authority.Prepare(context.Background(), forgedOperationID, []testscriptsourceevidence.ScriptSourcePreparationMember{member}); err == nil {
 			t.Fatal("forged consumer ownership accepted for backing Network")
 		}
 	}
@@ -189,7 +211,7 @@ func TestManualScriptSourceMembersRetainResolvedEntryAndSecret(t *testing.T) {
 	secretID, projectID := ids.NewAt(ids.KindSecret, at, 93), ids.NewAt(ids.KindProject, at, 94)
 	ciphertext := []byte("test-only encrypted bytes")
 	cipherDigest := scriptSourceReferenceBytesDigest(ciphertext)
-	generation, err := encodeSecretEntryValueGeneration(SecretEntryValueGeneration{
+	generation, err := testentryvalues.EncodeSecret(testentryvalues.SecretGeneration{
 		EnvironmentID: execution.EnvironmentID, EntryID: entryID, GenerationID: generationID,
 		EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextSHA256: cipherDigest, Ciphertext: ciphertext, CreatedAt: at,
@@ -197,32 +219,32 @@ func TestManualScriptSourceMembersRetainResolvedEntryAndSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret, err := NewProjectSecretRecord(secretID, projectID, "MANUAL_TEST", core.SecretKindEnvVar, "", at)
+	secret, err := testsecrets.NewProjectRecord(secretID, projectID, "MANUAL_TEST", core.SecretKindEnvVar, "", at)
 	if err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := encodeSecretRecord(secret)
+	metadata, err := testsecrets.EncodeRecord(secret)
 	if err != nil {
 		t.Fatal(err)
 	}
-	secretValue, err := encodeSecretEncryptedValue(SecretEncryptedValue{
+	secretValue, err := testsecrets.EncodeEncryptedValue(testsecrets.EncryptedValue{
 		SecretID: secretID, EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextSHA256: cipherDigest, Ciphertext: ciphertext,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: secretEntryValueGenerationKey(entryID, generationID), Value: generation},
-		{Type: MutationPut, Key: secretRecordKey(secretID), Value: metadata},
-		{Type: MutationPut, Key: secretValueKey(secretID), Value: secretValue},
+	seed, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testentryvalues.SecretKey(entryID, generationID), Value: generation},
+		{Type: testkeyvalue.MutationPut, Key: testsecrets.RecordKey(secretID), Value: metadata},
+		{Type: testkeyvalue.MutationPut, Key: testsecrets.ValueKey(secretID), Value: secretValue},
 	})
 	if err != nil || !seed.Succeeded {
 		t.Fatalf("seed encrypted sources = %#v, %v", seed, err)
 	}
 	sources.Revision = seed.Revision
 	sources.Project.Record.ID = projectID
-	sources.DesiredProjection.Record.Entries = []EntryRecord{{
+	sources.DesiredProjection.Record.Entries = []testentries.Record{{
 		EnvironmentID: execution.EnvironmentID, CurrentValueGenerationID: generationID,
 		Entry: core.EnvEntry{ID: entryID, Kind: core.EntryKindEnv, Key: "MANUAL_TEST", Secret: true,
 			Source: core.EntrySource{Kind: core.SourceSecretRef, SecretRef: secretID}, Exposure: []string{"all"}},
@@ -244,13 +266,13 @@ func TestManualScriptSourceMembersRetainResolvedEntryAndSecret(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	preparedSnapshot, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: scriptRunnerSnapshotKey(execution.SnapshotID), Value: encoded,
+	preparedSnapshot, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testscriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID), Value: encoded,
 	}})
 	if err != nil || !preparedSnapshot.Succeeded {
 		t.Fatalf("seed resolved snapshot = %#v, %v", preparedSnapshot, err)
 	}
-	repository := &ScriptRepository{store: store}
+	repository := composeScriptRepository(store)
 	members, err := repository.manualScriptSourceMembers(
 		context.Background(),
 		sources,
@@ -260,7 +282,7 @@ func TestManualScriptSourceMembersRetainResolvedEntryAndSecret(t *testing.T) {
 	if err != nil || len(members) != 8 {
 		t.Fatalf("resolved Entry and Secret source set = %d, %v", len(members), err)
 	}
-	authority, err := newScriptSourceReferenceAuthority(store)
+	authority, err := testscriptsourcepublication.NewAuthority(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,8 +290,8 @@ func TestManualScriptSourceMembersRetainResolvedEntryAndSecret(t *testing.T) {
 		t.Fatalf("reserve resolved encrypted sources: %v", err)
 	}
 	for _, member := range members {
-		if member.Reference.Source.Kind == ScriptSourceEntryValue ||
-			member.Reference.Source.Kind == ScriptSourceSecretValue {
+		if member.Reference.Source.Kind == testscriptsourcereference.SourceEntryValue ||
+			member.Reference.Source.Kind == testscriptsourcereference.SourceSecretValue {
 			if member.Reference.SourceDigest != cipherDigest {
 				t.Fatalf("encrypted source did not retain ciphertext authority: %#v", member.Reference.Source)
 			}
@@ -284,7 +306,7 @@ func TestManualScriptSourceMembersRetainResolvedEntryAndSecret(t *testing.T) {
 
 func manualScriptReferenceFixture(
 	t *testing.T,
-) (*memoryHierarchyStore, ScriptExecutionSources, ScriptExecutionRecord, int64) {
+) (*memoryHierarchyStore, testscriptsourcequeries.ScriptExecutionSources, testscriptexecutions.ScriptExecutionRecord, int64) {
 	t.Helper()
 	store, _, operationID, baseline := scriptSourceReferenceFixture(t)
 	at := scriptSourceReferenceTestTime()
@@ -302,12 +324,12 @@ func manualScriptReferenceFixture(
 		Workspace: domain.Workspace{Kind: domain.WorkspaceTenant, TenantID: ids.NewAt(ids.KindTenant, at, 79),
 			ProjectID: ids.NewAt(ids.KindProject, at, 80), EnvironmentID: environmentID},
 	}
-	releaseValue, err := encodeEnvelope("release-intent", intent)
+	releaseValue, err := testrecordcodec.Encode("release-intent", intent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: releaseIntentStagingKey("", releaseID), Value: releaseValue,
+	seed, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testreleases.ReleaseIntentStagingKey("", releaseID), Value: releaseValue,
 	}})
 	if err != nil || !seed.Succeeded {
 		t.Fatalf("seed Release = %#v, %v", seed, err)
@@ -322,7 +344,7 @@ func manualScriptReferenceFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution := ScriptExecutionRecord{
+	execution := testscriptexecutions.ScriptExecutionRecord{
 		ID: executionID, SnapshotID: snapshotID, OperationID: operationID,
 		EnvironmentID: environmentID, ServiceID: service.Source.ServiceID, ReleaseID: releaseID,
 		ScriptID: body.Source.ScriptID, ScriptGeneration: body.Source.BodyGeneration,
@@ -333,18 +355,18 @@ func manualScriptReferenceFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshotSeed, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: scriptRunnerSnapshotKey(snapshotID), Value: encoded,
+	snapshotSeed, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testscriptexecutions.ScriptRunnerSnapshotKey(snapshotID), Value: encoded,
 	}})
 	if err != nil || !snapshotSeed.Succeeded {
 		t.Fatalf("seed snapshot = %#v, %v", snapshotSeed, err)
 	}
-	sources := ScriptExecutionSources{
+	sources := testscriptsourcequeries.ScriptExecutionSources{
 		Revision: seed.Revision,
-		Script: Versioned[ScriptRecord]{
-			Record: ScriptRecord{ScriptSetGeneration: body.Source.ScriptSetGeneration},
+		Script: testkeyvalue.Versioned[testscripts.Record]{
+			Record: testscripts.Record{ScriptSetGeneration: body.Source.ScriptSetGeneration},
 		},
-		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{Revision: body.SourceModRevision},
+		BodyGeneration: testkeyvalue.Versioned[testscripts.BodyGenerationRecord]{Revision: body.SourceModRevision},
 	}
 	return store, sources, execution, snapshotSeed.Revision
 }

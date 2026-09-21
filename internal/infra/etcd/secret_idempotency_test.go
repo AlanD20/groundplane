@@ -8,6 +8,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
 
 // Rationale: a successful protected create must make redacted metadata,
@@ -21,7 +23,7 @@ func TestSecretIdempotentCreateCommitsValueAndReplays(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 22, 18, 0, 0, 0, time.UTC)
 	id := ids.NewAt(ids.KindSecret, now, 50)
-	record, err := NewProjectSecretRecord(
+	record, err := testsecrets.NewProjectRecord(
 		id,
 		project.Record.ID,
 		"API_TOKEN",
@@ -33,14 +35,14 @@ func TestSecretIdempotentCreateCommitsValueAndReplays(t *testing.T) {
 		t.Fatalf("NewProjectSecretRecord() error = %v", err)
 	}
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeProject, ScopeID: project.Record.ID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeProject, ScopeID: project.Record.ID,
 		Method: http.MethodPost, Route: "/secrets", Key: "secret-create-key-0001",
 	}
 	marker.Response.Status = http.StatusCreated
 	value := testSecretEncryptedValue(id, "encrypted-value")
 	result, err := repository.CreateSecretIdempotent(
-		context.Background(), ProjectSecretOwner(project), record, value, marker,
+		context.Background(), testsecrets.ProjectOwner(project), record, value, marker,
 	)
 	if err != nil {
 		t.Fatalf("CreateSecretIdempotent() error = %v", err)
@@ -59,7 +61,7 @@ func TestSecretIdempotentCreateCommitsValueAndReplays(t *testing.T) {
 	}
 	clear(storedValue.Ciphertext)
 	replay, err := repository.CreateSecretIdempotent(
-		context.Background(), ProjectSecretOwner(project), record, value, marker,
+		context.Background(), testsecrets.ProjectOwner(project), record, value, marker,
 	)
 	if err != nil {
 		t.Fatalf("CreateSecretIdempotent(replay) error = %v", err)
@@ -81,19 +83,19 @@ func TestSecretIdempotentPlatformCreateCommitsValueAndReplays(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 22, 18, 30, 0, 0, time.UTC)
 	id := ids.NewAt(ids.KindSecret, now, 51)
-	record, err := NewPlatformSecretRecord(id, "API_TOKEN", core.SecretKindEnvVar, "", now)
+	record, err := testsecrets.NewPlatformRecord(id, "API_TOKEN", core.SecretKindEnvVar, "", now)
 	if err != nil {
 		t.Fatalf("NewPlatformSecretRecord() error = %v", err)
 	}
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopePlatform, ScopeID: "-",
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopePlatform, ScopeID: "-",
 		Method: http.MethodPost, Route: "/secrets", Key: "secret-create-key-0002",
 	}
 	marker.Response.Status = http.StatusCreated
 	value := testSecretEncryptedValue(id, "encrypted-platform-value")
 	result, err := repository.CreateSecretIdempotent(
-		context.Background(), PlatformSecretOwner(), record, value, marker,
+		context.Background(), testsecrets.PlatformOwner(), record, value, marker,
 	)
 	if err != nil {
 		t.Fatalf("CreateSecretIdempotent() error = %v", err)
@@ -112,7 +114,7 @@ func TestSecretIdempotentPlatformCreateCommitsValueAndReplays(t *testing.T) {
 	}
 	clear(storedValue.Ciphertext)
 	replay, err := repository.CreateSecretIdempotent(
-		context.Background(), PlatformSecretOwner(), record, value, marker,
+		context.Background(), testsecrets.PlatformOwner(), record, value, marker,
 	)
 	if err != nil {
 		t.Fatalf("CreateSecretIdempotent(replay) error = %v", err)

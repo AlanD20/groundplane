@@ -10,6 +10,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -26,13 +31,15 @@ func TestNativeRecreateRecoveryProofWithStableProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignment := TaskAssignmentRecord{RestorationAuthority: &ReleaseRestorationAuthority{
-		Candidates: []ReleaseRestorationCandidate{
-			{ServiceID: "service", Target: ReleaseRestorationServingPredecessor},
+	assignment := testtaskassignments.TaskAssignmentRecord{
+		RestorationAuthority: &testtaskassignments.ReleaseRestorationAuthority{
+			Candidates: []testtaskassignments.ReleaseRestorationCandidate{
+				{ServiceID: "service", Target: testtaskassignments.ReleaseRestorationServingPredecessor},
+			},
+			AppliedPredecessor: &testtaskassignments.ReleaseAppliedPredecessorAuthority{ComposeArtifact: encoded},
 		},
-		AppliedPredecessor: &ReleaseAppliedPredecessorAuthority{ComposeArtifact: encoded},
-	}}
-	result := TaskResultRecord{RecreateEvidence: []TaskRecreateEvidence{{
+	}
+	result := testtaskjournal.TaskResultRecord{RecreateEvidence: []testtaskjournal.TaskRecreateEvidence{{
 		ServiceID: "service", ArtifactID: "prior", ReleaseID: "release", Target: "singleton", Compensated: true,
 	}}}
 	if err := validateReleaseRecoveryProof(assignment, nil, result, []releaseRecoveryProofExpectation{{kind: releaseRecoveryProofRecreate, priorTopologyArtifactID: "prior"}}); err != nil {
@@ -52,7 +59,7 @@ func TestRecoveryProxyMismatchIdentifiesFailedCheck(t *testing.T) {
 				result.ProxyEvidence[0].ConfigSHA256 = strings.Repeat("f", 64)
 			}
 			_, err := fixture.repository.releaseRecoveryAcknowledgementAtRevision(t.Context(),
-				fixture.claim.Task.Record, assignment, TaskStatusCompleted, result, revision)
+				fixture.claim.Task.Record, assignment, testtaskjournal.TaskStatusCompleted, result, revision)
 			if err == nil || !strings.Contains(err.Error(), "proxy "+field+" differs from native predecessor") {
 				t.Fatalf("mismatch did not identify %s: %v", field, err)
 			}
@@ -73,12 +80,12 @@ func TestOrdinaryRecoveryProofSelectionAndSourceCAS(t *testing.T) {
 			switch variation {
 			case "bluegreen-recreate":
 				result.ProxyEvidence = nil
-				result.RecreateEvidence = []TaskRecreateEvidence{{ServiceID: fixture.serviceID}}
+				result.RecreateEvidence = []testtaskjournal.TaskRecreateEvidence{{ServiceID: fixture.serviceID}}
 			case "proxy-only":
 				result.RecreateEvidence = nil
-				result.ProxyEvidence = []TaskProxyEvidence{{ServiceID: fixture.serviceID}}
+				result.ProxyEvidence = []testtaskjournal.TaskProxyEvidence{{ServiceID: fixture.serviceID}}
 			case "mixed":
-				result.ProxyEvidence = []TaskProxyEvidence{{ServiceID: fixture.serviceID}}
+				result.ProxyEvidence = []testtaskjournal.TaskProxyEvidence{{ServiceID: fixture.serviceID}}
 			case "artifact":
 				result.RecreateEvidence[0].ArtifactID = fixture.artifactID
 			case "captured-artifact":
@@ -95,8 +102,7 @@ func TestOrdinaryRecoveryProofSelectionAndSourceCAS(t *testing.T) {
 				result.RecreateEvidence[0].Target = "blue"
 			case "render-digest":
 				read, err := fixture.repository.store.GetMany(
-					ctx,
-					GetManyRequest{Keys: []string{renderKey}, Revision: revision},
+					ctx, testkeyvalue.GetManyRequest{Keys: []string{renderKey}, Revision: revision},
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -110,7 +116,7 @@ func TestOrdinaryRecoveryProofSelectionAndSourceCAS(t *testing.T) {
 				txn, err := fixture.repository.store.Transact(
 					ctx,
 					nil,
-					[]Mutation{{Type: MutationPut, Key: renderKey, Value: changed}},
+					[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: renderKey, Value: changed}},
 				)
 				if err != nil {
 					t.Fatal(err)
@@ -118,7 +124,7 @@ func TestOrdinaryRecoveryProofSelectionAndSourceCAS(t *testing.T) {
 				revision = txn.Revision
 			}
 			ack, err := fixture.repository.releaseRecoveryAcknowledgementAtRevision(
-				ctx, fixture.claim.Task.Record, assignment, TaskStatusCompleted, result, revision,
+				ctx, fixture.claim.Task.Record, assignment, testtaskjournal.TaskStatusCompleted, result, revision,
 			)
 			valid := variation == "exact" || variation == "bluegreen" || variation == "replace" || variation == "prune"
 			if !valid {
@@ -135,17 +141,20 @@ func TestOrdinaryRecoveryProofSelectionAndSourceCAS(t *testing.T) {
 			}
 			if variation == "replace" || variation == "prune" {
 				read, err := fixture.repository.store.GetMany(
-					ctx,
-					GetManyRequest{Keys: []string{renderKey}, Revision: revision},
+					ctx, testkeyvalue.GetManyRequest{Keys: []string{renderKey}, Revision: revision},
 				)
 				if err != nil {
 					t.Fatal(err)
 				}
-				mutation := Mutation{Type: MutationPut, Key: renderKey, Value: read.Values[0].Value}
-				if variation == "prune" {
-					mutation.Type = MutationDelete
+				mutation := testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   renderKey,
+					Value: read.Values[0].Value,
 				}
-				if _, err := fixture.repository.store.Transact(ctx, nil, []Mutation{mutation}); err != nil {
+				if variation == "prune" {
+					mutation.Type = testkeyvalue.MutationDelete
+				}
+				if _, err := fixture.repository.store.Transact(ctx, nil, []testkeyvalue.Mutation{mutation}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -160,7 +169,7 @@ func TestOrdinaryRecoveryProofSelectionAndSourceCAS(t *testing.T) {
 func recoveryProofFixture(
 	t *testing.T,
 	blueGreen bool,
-) (ordinaryReleaseClaimFixture, TaskAssignmentRecord, TaskResultRecord, int64, string) {
+) (ordinaryReleaseClaimFixture, testtaskassignments.TaskAssignmentRecord, testtaskjournal.TaskResultRecord, int64, string) {
 	t.Helper()
 	f := newOrdinaryReleaseClaimFixtureForTarget(t, true)
 	task, assignment := f.claim.Task.Record, f.claim.Assignment.Record
@@ -206,8 +215,8 @@ func recoveryProofFixture(
 	}
 	digest := sha256.Sum256(encoded)
 	authority := assignment.RestorationAuthority
-	authority.Candidates[0].Target = ReleaseRestorationServingPredecessor
-	authority.AppliedPredecessor = &ReleaseAppliedPredecessorAuthority{
+	authority.Candidates[0].Target = testtaskassignments.ReleaseRestorationServingPredecessor
+	authority.AppliedPredecessor = &testtaskassignments.ReleaseAppliedPredecessorAuthority{
 		KeyRevision:           1,
 		RevisionID:            ids.NewAt(ids.KindTask, f.now, 202),
 		RenderGeneration:      1,
@@ -220,10 +229,10 @@ func recoveryProofFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	authority.NativePredecessors = []ReleaseNativePredecessorAuthority{{
+	authority.NativePredecessors = []testtaskassignments.ReleaseNativePredecessorAuthority{{
 		ServiceID: f.serviceID, CurrentArtifact: nativeBytes,
 	}}
-	assignment.RestorationAuthoritySHA256, err = releaseRestorationAuthoritySHA256(*authority)
+	assignment.RestorationAuthoritySHA256, err = testtaskassignments.ReleaseRestorationAuthoritySHA256(*authority)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +259,7 @@ func recoveryProofFixture(
 		render.Strategy, render.Slot, render.CandidateTarget = domain.StrategyBlueGreen, domain.SlotBlue, domain.WorkloadBlue
 		render.CandidateWorkload.ReplicaCount, render.PriorWorkload.ReplicaCount = 1, 1
 	}
-	raw, err := EncodeReleaseRenderInput(render)
+	raw, err := testreleaserender.EncodeReleaseRenderInput(render)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,9 +295,12 @@ func recoveryProofFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	publication := task.Params[TaskReleasePublicationParam]
-	manifest := ReleaseStagedManifest{PublicationID: publication, OperationID: task.OperationID, CreatedAt: f.now,
-		Members: []ReleaseStagedMemberRef{
+	publication := task.Params[testreleaserender.TaskReleasePublicationParam]
+	manifest := testreleases.ReleaseStagedManifest{
+		PublicationID: publication,
+		OperationID:   task.OperationID,
+		CreatedAt:     f.now,
+		Members: []testreleases.ReleaseStagedMemberRef{
 			{
 				ServiceID:        f.serviceID,
 				ReleaseID:        f.releaseID,
@@ -296,7 +308,8 @@ func recoveryProofFixture(
 				RenderDigest:     renderDigest,
 				CheckpointDigest: strings.Repeat("d", 64),
 			},
-		}}
+		},
+	}
 	manifest.Digest, err = blueprintCandidateManifestDigest(manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -316,7 +329,7 @@ func recoveryProofFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	marker := ReleasePublicationMarker{
+	marker := testreleases.ReleasePublicationMarker{
 		PublicationID:  publication,
 		OperationID:    task.OperationID,
 		ManifestDigest: manifest.Digest,
@@ -328,12 +341,12 @@ func recoveryProofFixture(
 			ProcedureBytes: procedureBytes,
 		},
 	}
-	primary := TaskResultRecord{ExecutionEpoch: 1, ReconciliationRequired: true}
-	primaryDigest, err := canonicalPrimaryReportSHA256(TaskStatusFailed, primary)
+	primary := testtaskjournal.TaskResultRecord{ExecutionEpoch: 1, ReconciliationRequired: true}
+	primaryDigest, err := testtaskassignments.CanonicalPrimaryReportSHA256(testtaskjournal.TaskStatusFailed, primary)
 	if err != nil {
 		t.Fatal(err)
 	}
-	recovery := releaseRecoveryRecord{
+	recovery := testtaskassignments.ReleaseRecoveryRecord{
 		Schema:                     1,
 		TaskID:                     task.ID,
 		AssignmentID:               assignment.AssignmentID,
@@ -341,7 +354,7 @@ func recoveryProofFixture(
 		PlanHash:                   task.PlanHash,
 		RestorationAuthoritySHA256: assignment.RestorationAuthoritySHA256,
 		PrimaryReportSHA256:        primaryDigest,
-		PrimaryStatus:              TaskStatusFailed,
+		PrimaryStatus:              testtaskjournal.TaskStatusFailed,
 		PrimaryResult:              primary,
 		RecoveryDeadline:           assignment.RecoveryDeadline,
 		RecoveryStepIDs: []string{
@@ -349,36 +362,36 @@ func recoveryProofFixture(
 			task.Steps[2].ID,
 		},
 		Cursor:           2,
-		Phase:            ReleaseRecoveryPhaseProven,
+		Phase:            testtaskassignments.ReleaseRecoveryPhaseProven,
 		EvidenceRevision: 1,
 	}
-	assignment.ExecutionMode, assignment.ExecutionEpoch = TaskExecutionModeRecoveryOnly, 2
-	assignment.ReleaseRecoveryRecordSHA256, err = releaseRecoveryRecordSHA256(recovery)
+	assignment.ExecutionMode, assignment.ExecutionEpoch = testtaskassignments.TaskExecutionModeRecoveryOnly, 2
+	assignment.ReleaseRecoveryRecordSHA256, err = testtaskassignments.ReleaseRecoveryRecordSHA256(recovery)
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerBytes, err := encodeReleaseRecord("release-publication", marker)
+	markerBytes, err := testreleases.EncodeReleaseRecord("release-publication", marker)
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifestBytes, err := encodeReleaseRecord("release-staged-manifest", manifest)
+	manifestBytes, err := testreleases.EncodeReleaseRecord("release-staged-manifest", manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	intentBytes, err := encodeReleaseRecord("release-intent", intent)
+	intentBytes, err := testreleases.EncodeReleaseRecord("release-intent", intent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	renderBytes, err := encodeReleaseRecord("release-render-input", raw)
+	renderBytes, err := testreleases.EncodeReleaseRecord("release-render-input", raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	recoveryBytes, err := encodeReleaseRecoveryRecord(recovery)
+	recoveryBytes, err := testtaskassignments.EncodeReleaseRecoveryRecord(recovery)
 	if err != nil {
 		t.Fatal(err)
 	}
-	renderKey := releaseRenderInputStagingKey(publication, f.releaseID)
-	head := ReleaseOperationHead{
+	renderKey := testreleases.ReleaseRenderInputStagingKey(publication, f.releaseID)
+	head := testreleases.ReleaseOperationHead{
 		OperationID:   task.OperationID,
 		PublicationID: publication,
 		EnvironmentID: task.Owner.EnvironmentID,
@@ -392,23 +405,33 @@ func recoveryProofFixture(
 		CreatedAt: f.now,
 		UpdatedAt: f.now,
 	}
-	headBytes, err := encodeReleaseRecord("release-operation", head)
+	headBytes, err := testreleases.EncodeReleaseRecord("release-operation", head)
 	if err != nil {
 		t.Fatal(err)
 	}
-	txn, err := f.repository.store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: releaseOperationKey(task.OperationID), Value: headBytes},
-		{Type: MutationPut, Key: releasePublicationKey(publication), Value: markerBytes},
-		{Type: MutationPut, Key: releaseManifestStagingKey(publication), Value: manifestBytes},
-		{Type: MutationPut, Key: releaseIntentStagingKey(publication, f.releaseID), Value: intentBytes},
-		{Type: MutationPut, Key: renderKey, Value: renderBytes},
-		{Type: MutationPut, Key: releaseRecoveryKey(task.ID), Value: recoveryBytes},
+	txn, err := f.repository.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testreleases.ReleaseOperationKey(task.OperationID), Value: headBytes},
+		{Type: testkeyvalue.MutationPut, Key: testreleases.ReleasePublicationKey(publication), Value: markerBytes},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleases.ReleaseManifestStagingKey(publication),
+			Value: manifestBytes,
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleases.ReleaseIntentStagingKey(publication, f.releaseID),
+			Value: intentBytes,
+		},
+		{Type: testkeyvalue.MutationPut, Key: renderKey, Value: renderBytes},
+		{Type: testkeyvalue.MutationPut, Key: testtaskassignments.ReleaseRecoveryKey(task.ID), Value: recoveryBytes},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := TaskResultRecord{ExecutionEpoch: 2, ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,
-		RecreateEvidence: []TaskRecreateEvidence{
+	result := testtaskjournal.TaskResultRecord{
+		ExecutionEpoch:              2,
+		ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,
+		RecreateEvidence: []testtaskjournal.TaskRecreateEvidence{
 			{
 				ServiceID:   f.serviceID,
 				ReleaseID:   priorRelease,
@@ -416,10 +439,11 @@ func recoveryProofFixture(
 				Target:      "singleton",
 				Compensated: true,
 			},
-		}}
+		},
+	}
 	if blueGreen {
 		result.RecreateEvidence = nil
-		result.ProxyEvidence = []TaskProxyEvidence{{ServiceID: f.serviceID, ReleaseID: priorRelease,
+		result.ProxyEvidence = []testtaskjournal.TaskProxyEvidence{{ServiceID: f.serviceID, ReleaseID: priorRelease,
 			Target: "singleton", Compensated: true, ConfigSHA256: hex.EncodeToString(configDigest[:]), ProxyGeneration: 1}}
 	}
 	return f, assignment, result, txn.Revision, renderKey

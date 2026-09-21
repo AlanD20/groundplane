@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: Host update history must include queued/preparation-failed Tasks,
@@ -25,8 +27,8 @@ func TestLatestControllerUpdateUsesDurableTaskHistory(t *testing.T) {
 	for index := range 2 {
 		task := validTaskRecord(now.Add(time.Duration(index) * time.Second))
 		task.ID, task.OperationID = ids.New(ids.KindTask), ids.New(ids.KindOperation)
-		task.Owner, task.Executor, task.Type, task.Target = PlatformTaskOwner(), TaskExecutorController, TaskUpdate, "controller"
-		task.Params = map[string]string{TaskResourceKindParam: TaskResourceController}
+		task.Owner, task.Executor, task.Type, task.Target = testtaskjournal.PlatformTaskOwner(), testtaskjournal.TaskExecutorController, testtaskjournal.TaskUpdate, "controller"
+		task.Params = map[string]string{testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceController}
 		marker := pendingRetryMarker(task, task.ID, task.CreatedAt, "native-history-key-"+task.ID)
 		if _, err := repository.CreateTask(ctx, task, marker); err != nil {
 			t.Fatal(err)
@@ -34,10 +36,10 @@ func TestLatestControllerUpdateUsesDurableTaskHistory(t *testing.T) {
 		newest = task
 	}
 	got, found, err := repository.LatestControllerUpdate(ctx)
-	if err != nil || !found || got.Record.ID != newest.ID || got.Record.Status != TaskStatusPending {
+	if err != nil || !found || got.Record.ID != newest.ID || got.Record.Status != testtaskjournal.TaskStatusPending {
 		t.Fatalf("latest update = %#v, %t, %v", got, found, err)
 	}
-	if _, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: taskKey(newest.ID)}}); err != nil {
+	if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: testtaskjournal.TaskStorageKey(newest.ID)}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := repository.LatestControllerUpdate(ctx); err == nil {
@@ -55,15 +57,15 @@ func TestNativeControllerUpdateHistoryPrunesWithTask(t *testing.T) {
 	}
 	ctx := context.Background()
 	task := validTaskRecord(taskJournalTime())
-	task.Owner, task.Executor, task.Type, task.Target = PlatformTaskOwner(), TaskExecutorController, TaskUpdate, "controller"
-	task.Params = map[string]string{TaskResourceKindParam: TaskResourceController}
+	task.Owner, task.Executor, task.Type, task.Target = testtaskjournal.PlatformTaskOwner(), testtaskjournal.TaskExecutorController, testtaskjournal.TaskUpdate, "controller"
+	task.Params = map[string]string{testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceController}
 	createLifecycleTask(t, repository, task)
 	terminal, err := repository.AbortPendingTask(ctx, task.ID, task.CreatedAt.Add(time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
 	pruneAt := terminal.Record.RetainUntil.Add(time.Nanosecond)
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}

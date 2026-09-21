@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,27 +19,39 @@ func TestConnectorArtifactReferenceClassificationRejectsMalformedIndexes(t *test
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 2707)
 	indexedPointID := ids.NewAt(ids.KindRecoveryPoint, now, 2708)
 	otherPointID := ids.NewAt(ids.KindRecoveryPoint, now, 2709)
-	pointKey, err := backupRecoveryPointConnectorIndexKey(connectorID, indexedPointID)
+	pointKey, err := testbackupruntime.BackupRecoveryPointConnectorIndexKey(connectorID, indexedPointID)
 	if err != nil {
 		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
 	}
-	orphanKey, err := backupOrphanConnectorIndexKey(connectorID, indexedPointID)
+	orphanKey, err := testbackupruntime.BackupOrphanConnectorIndexKey(connectorID, indexedPointID)
 	if err != nil {
 		t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
 	}
 	tests := []struct {
 		name  string
 		index int
-		value KeyValue
+		value testkeyvalue.KeyValue
 	}{
-		{name: "Recovery Point invalid raw id", index: 1, value: KeyValue{Key: pointKey, Value: []byte("not-a-point")}},
+		{
+			name:  "Recovery Point invalid raw id",
+			index: 1,
+			value: testkeyvalue.KeyValue{Key: pointKey, Value: []byte("not-a-point")},
+		},
 		{
 			name:  "Recovery Point key value mismatch",
 			index: 1,
-			value: KeyValue{Key: pointKey, Value: []byte(otherPointID)},
+			value: testkeyvalue.KeyValue{Key: pointKey, Value: []byte(otherPointID)},
 		},
-		{name: "orphan invalid raw id", index: 2, value: KeyValue{Key: orphanKey, Value: []byte("not-a-point")}},
-		{name: "orphan key value mismatch", index: 2, value: KeyValue{Key: orphanKey, Value: []byte(otherPointID)}},
+		{
+			name:  "orphan invalid raw id",
+			index: 2,
+			value: testkeyvalue.KeyValue{Key: orphanKey, Value: []byte("not-a-point")},
+		},
+		{
+			name:  "orphan key value mismatch",
+			index: 2,
+			value: testkeyvalue.KeyValue{Key: orphanKey, Value: []byte(otherPointID)},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

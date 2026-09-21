@@ -186,7 +186,8 @@ func validateEnvironmentVolumeRemovalRootMarker(
 	runtime removalrecord.Runtime,
 ) error {
 	marker, err := idempotencyrecord.DecodeIdempotencyMarker(value, volumeRemovalRootLocator(runtime))
-	if err != nil || marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if err != nil || marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != runtime.OriginTaskID ||
 		marker.Locator != volumeRemovalRootLocator(runtime) ||
 		marker.Response.Status != http.StatusAccepted ||

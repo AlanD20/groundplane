@@ -3,13 +3,15 @@ package etcd
 import (
 	"context"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // VolumeEvidenceStageAudit uses the production physical-key encoder over the
 // existing MVCC fixture. Faults affect only this test store's next operation.
 type VolumeEvidenceStageAudit struct {
-	Store
+	testkeyvalue.Store
+
 	BeforeCommit        func()
 	LoseResponse        bool
 	ReportedRowOverhead int
@@ -20,12 +22,12 @@ type VolumeEvidenceStageAudit struct {
 	WrittenKeys         []string
 }
 
-func NewVolumeEvidenceStageAudit(backend Store) *VolumeEvidenceStageAudit {
+func NewVolumeEvidenceStageAudit(backend testkeyvalue.Store) *VolumeEvidenceStageAudit {
 	return &VolumeEvidenceStageAudit{Store: backend, SizedRows: make(map[int]int)}
 }
 
 func (audit *VolumeEvidenceStageAudit) VolumeRemovalEvidenceTransactionSize(
-	conditions []Condition, mutations []Mutation,
+	conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
 ) (int, error) {
 	size, err := (&store{root: "/groundplane"}).VolumeRemovalEvidenceTransactionSize(conditions, mutations)
 	if err != nil {
@@ -38,11 +40,11 @@ func (audit *VolumeEvidenceStageAudit) VolumeRemovalEvidenceTransactionSize(
 }
 
 func (audit *VolumeEvidenceStageAudit) Transact(
-	ctx context.Context, conditions []Condition, mutations []Mutation,
-) (TransactionResult, error) {
+	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	size, err := (&store{root: "/groundplane"}).VolumeRemovalEvidenceTransactionSize(conditions, mutations)
 	if err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	audit.Comparisons, audit.Mutations, audit.WireBytes = len(conditions), len(mutations), size
 	audit.WrittenKeys = nil
@@ -57,7 +59,7 @@ func (audit *VolumeEvidenceStageAudit) Transact(
 	result, err := audit.Store.Transact(ctx, conditions, mutations)
 	if err == nil && result.Succeeded && audit.LoseResponse {
 		audit.LoseResponse = false
-		return TransactionResult{}, errs.New(errs.KindRequestFailed, "lost evidence staging response")
+		return testkeyvalue.TransactionResult{}, errs.New(errs.KindRequestFailed, "lost evidence staging response")
 	}
 	return result, err
 }

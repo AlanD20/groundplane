@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: the running set is execution authority, not desired state. Storage,
@@ -14,32 +16,49 @@ func TestEntryTaskRuntimeSurvivesJournalAndRetry(t *testing.T) {
 	for _, running := range [][]string{{}, {ids.New(ids.KindService)}} {
 		task := entryRuntimeJournalTask(t, running)
 		if len(running) != 0 {
-			task.EntryRuntime.Updates = []EntryRuntimeUpdate{{ServiceID: running[0], PreviousRevision: 11,
-				CurrentArtifactID: ids.New(ids.KindConfig), RetainedPriorArtifactID: ids.New(ids.KindConfig)}}
+			task.EntryRuntime.Updates = []testtaskjournal.EntryRuntimeUpdate{
+				{ServiceID: running[0], PreviousRevision: 11,
+					CurrentArtifactID: ids.New(ids.KindConfig), RetainedPriorArtifactID: ids.New(ids.KindConfig)},
+			}
 		}
-		encoded, err := encodeTaskRecord(task)
+		encoded, err := EncodeTaskRecord(task)
 		if err != nil {
 			t.Fatal(err)
 		}
-		restored, err := decodeTaskRecord(encoded)
+		restored, err := DecodeTaskRecord(encoded)
 		if err != nil || restored.EntryRuntime == nil || restored.EntryRuntime.RunningServiceIDs == nil ||
 			!slices.Equal(restored.EntryRuntime.RunningServiceIDs, running) ||
 			!slices.Equal(restored.EntryRuntime.Updates, task.EntryRuntime.Updates) {
 			t.Fatal("stored Entry running set changed", err)
 		}
-		reencoded, err := encodeTaskRecord(restored)
+		reencoded, err := EncodeTaskRecord(restored)
 		if err != nil || !bytes.Equal(encoded, reencoded) {
 			t.Fatal("Entry runtime codec is not canonical", err)
 		}
-		failed, err := transitionTaskStatus(restored, TaskStatusPending, TaskStatusRunning, task.CreatedAt.Add(1))
+		failed, err := TransitionTaskStatus(
+			restored,
+			testtaskjournal.TaskStatusPending,
+			testtaskjournal.TaskStatusRunning,
+			task.CreatedAt.Add(1),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		failed, err = transitionTaskStatus(failed, TaskStatusRunning, TaskStatusFailed, task.CreatedAt.Add(2))
+		failed, err = TransitionTaskStatus(
+			failed,
+			testtaskjournal.TaskStatusRunning,
+			testtaskjournal.TaskStatusFailed,
+			task.CreatedAt.Add(2),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		retry, err := cloneRetryTask(failed, ids.New(ids.KindTask), TaskActorOperator, task.CreatedAt.Add(3))
+		retry, err := CloneRetryTask(
+			failed,
+			ids.New(ids.KindTask),
+			testtaskjournal.TaskActorOperator,
+			task.CreatedAt.Add(3),
+		)
 		if err != nil || retry.EntryRuntime == nil || retry.EntryRuntime.RunningServiceIDs == nil ||
 			!slices.Equal(retry.EntryRuntime.RunningServiceIDs, running) ||
 			!slices.Equal(retry.EntryRuntime.Updates, task.EntryRuntime.Updates) {
@@ -78,31 +97,31 @@ func TestEntryTaskRuntimeRejectsMissingAndMalformedAuthority(t *testing.T) {
 		{"foreign kind", func(task *TaskRecord) { task.EntryRuntime.RunningServiceIDs = []string{task.ID} }},
 		{"duplicate", func(task *TaskRecord) { task.EntryRuntime.RunningServiceIDs = []string{first, first} }},
 		{"unsorted", func(task *TaskRecord) { task.EntryRuntime.RunningServiceIDs = []string{ordered[1], ordered[0]} }},
-		{"foreign task", func(task *TaskRecord) { task.Type = TaskCreate }},
-		{"foreign executor", func(task *TaskRecord) { task.Executor = TaskExecutorController }},
+		{"foreign task", func(task *TaskRecord) { task.Type = testtaskjournal.TaskCreate }},
+		{"foreign executor", func(task *TaskRecord) { task.Executor = testtaskjournal.TaskExecutorController }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			task := entryRuntimeJournalTask(t, []string{})
 			test.change(&task)
-			if _, err := encodeTaskRecord(task); err == nil {
+			if _, err := EncodeTaskRecord(task); err == nil {
 				t.Fatal("malformed capture was encoded")
 			}
-			encoded, err := encodeEnvelope("task", taskRecordToData(task))
+			encoded, err := testrecordcodec.Encode("task", taskRecordToData(task))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := decodeTaskRecord(encoded); err == nil {
+			if _, err := DecodeTaskRecord(encoded); err == nil {
 				t.Fatal("malformed stored capture was accepted")
 			}
 		})
 	}
 	task := entryRuntimeJournalTask(t, []string{})
 	task.EntryRuntime = nil
-	encoded, err := encodeTaskRecord(task)
+	encoded, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored, err := decodeTaskRecord(encoded)
+	restored, err := DecodeTaskRecord(encoded)
 	if err != nil || restored.EntryRuntime != nil {
 		t.Fatal("historical capture was invented", err)
 	}
@@ -115,9 +134,12 @@ func entryRuntimeJournalTask(t *testing.T, running []string) TaskRecord {
 	t.Helper()
 	task := validTaskRecord(taskJournalTime())
 	task.Target = ids.New(ids.KindEnvironment)
-	task.Params = map[string]string{TaskResourceKindParam: TaskResourceEntry, TaskEntryRuntimeEpochParam: "7"}
-	task.EntryRuntime = &EntryTaskRuntime{
-		RunningServiceIDs: slices.Clone(running), Updates: []EntryRuntimeUpdate{},
+	task.Params = map[string]string{
+		testtaskjournal.TaskResourceKindParam:      testtaskjournal.TaskResourceEntry,
+		testtaskjournal.TaskEntryRuntimeEpochParam: "7",
+	}
+	task.EntryRuntime = &testtaskjournal.EntryTaskRuntime{
+		RunningServiceIDs: slices.Clone(running), Updates: []testtaskjournal.EntryRuntimeUpdate{},
 	}
 	return task
 }

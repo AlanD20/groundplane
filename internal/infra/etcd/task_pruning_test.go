@@ -7,6 +7,15 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func TestTaskPruningRetainsOwnedEnvironmentDeletionRetrySource(t *testing.T) {
@@ -22,8 +31,8 @@ func TestTaskPruningRetainsOwnedEnvironmentDeletionRetrySource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
-	pruneAt := terminalAt.Add(TaskRetention).Add(time.Nanosecond)
-	idempotency, err := newIdempotencyRepository(fixture.store)
+	pruneAt := terminalAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
+	idempotency, err := NewIdempotencyRepository(fixture.store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
@@ -35,28 +44,22 @@ func TestTaskPruningRetainsOwnedEnvironmentDeletionRetrySource(t *testing.T) {
 	}
 	assertEnvironmentDeletionCompanion(
 		t,
-		fixture.store,
-		taskRetentionIndexKey(terminal.Record.ID, *terminal.Record.RetainUntil),
-		false,
+		fixture.store, testtaskjournal.TaskRetentionIndexKey(terminal.Record.ID, *terminal.Record.RetainUntil), false,
 	)
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(terminal.Record.ID), true)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(terminal.Record.ID), true)
 	assertEnvironmentDeletionCompanion(
 		t,
 		fixture.store,
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
+		testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEnvironment), fixture.environment.Record.ID),
 		true,
 	)
 	assertEnvironmentDeletionCompanion(
 		t,
-		fixture.store,
-		environmentOperationLockKey(fixture.environment.Record.ID),
-		true,
+		fixture.store, testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID), true,
 	)
 	assertEnvironmentDeletionCompanion(
 		t,
-		fixture.store,
-		environmentDeletionIntentKey(fixture.task.OperationID),
-		true,
+		fixture.store, testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID), true,
 	)
 }
 
@@ -86,7 +89,7 @@ func TestTaskPruningRetainedEnvironmentDeletionDoesNotStarveLaterTask(t *testing
 		t.Fatalf("AbortPendingTask(unrelated) error = %v", err)
 	}
 	pruneAt := unrelatedTerminal.Record.RetainUntil.Add(time.Nanosecond)
-	idempotency, err := newIdempotencyRepository(fixture.store)
+	idempotency, err := NewIdempotencyRepository(fixture.store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
@@ -104,18 +107,21 @@ func TestTaskPruningRetainedEnvironmentDeletionDoesNotStarveLaterTask(t *testing
 	}
 	assertEnvironmentDeletionCompanion(
 		t,
-		fixture.store,
-		taskRetentionIndexKey(
+		fixture.store, testtaskjournal.TaskRetentionIndexKey(
 			deletionTerminal.Record.ID,
 			*deletionTerminal.Record.RetainUntil,
-		),
-		false,
+		), false,
 	)
 	if count, err := fixture.tasks.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(unrelated) = %d, %v", count, err)
 	}
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(deletionTerminal.Record.ID), true)
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(unrelated.ID), false)
+	assertEnvironmentDeletionCompanion(
+		t,
+		fixture.store,
+		testtaskjournal.TaskStorageKey(deletionTerminal.Record.ID),
+		true,
+	)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(unrelated.ID), false)
 }
 
 func TestTaskPruningEnvironmentDeletionRetryRequeuesSource(t *testing.T) {
@@ -135,7 +141,7 @@ func TestTaskPruningEnvironmentDeletionRetryRequeuesSource(t *testing.T) {
 		t.Fatalf("AbortPendingTask(source) error = %v", err)
 	}
 	firstPruneAt := terminal.Record.RetainUntil.Add(time.Nanosecond)
-	idempotency, err := newIdempotencyRepository(fixture.store)
+	idempotency, err := NewIdempotencyRepository(fixture.store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
@@ -145,7 +151,7 @@ func TestTaskPruningEnvironmentDeletionRetryRequeuesSource(t *testing.T) {
 	if count, err := fixture.tasks.PruneExpiredTasks(ctx, firstPruneAt); err != nil || count != 0 {
 		t.Fatalf("PruneExpiredTasks(retained source) = %d, %v", count, err)
 	}
-	retentionKey := taskRetentionIndexKey(terminal.Record.ID, *terminal.Record.RetainUntil)
+	retentionKey := testtaskjournal.TaskRetentionIndexKey(terminal.Record.ID, *terminal.Record.RetainUntil)
 	assertEnvironmentDeletionCompanion(t, fixture.store, retentionKey, false)
 
 	retryAt := firstPruneAt.Add(time.Second)
@@ -159,9 +165,7 @@ func TestTaskPruningEnvironmentDeletionRetryRequeuesSource(t *testing.T) {
 	retryResult, err := fixture.tasks.RetryTask(
 		ctx,
 		terminal.Record.ID,
-		retryID,
-		TaskActorOperator,
-		marker,
+		retryID, testtaskjournal.TaskActorOperator, marker,
 	)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
@@ -191,33 +195,32 @@ func TestTaskPruningEnvironmentDeletionRetryRequeuesSource(t *testing.T) {
 	); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(source with active retry) = %d, %v", count, err)
 	}
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(terminal.Record.ID), false)
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(retryID), true)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(terminal.Record.ID), false)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(retryID), true)
 	if count, err := fixture.tasks.PruneExpiredTasks(ctx, finalPruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(unrelated after source) = %d, %v", count, err)
 	}
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(unrelated.ID), false)
-	assertEnvironmentDeletionCompanion(t, fixture.store, taskKey(retryID), true)
-	active := fixture.mustGet(t, taskActiveOperationKey(fixture.task.OperationID))
-	activeTaskID, err := decodeTaskReference(active.Value)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(unrelated.ID), false)
+	assertEnvironmentDeletionCompanion(t, fixture.store, testtaskjournal.TaskStorageKey(retryID), true)
+	active := fixture.mustGet(t, testtaskjournal.TaskActiveOperationKey(fixture.task.OperationID))
+	activeTaskID, err := testidempotency.DecodeTaskReference(active.Value)
 	if err != nil || activeTaskID != retryID {
 		t.Fatalf("active Environment deletion retry = %q, %v", activeTaskID, err)
 	}
 	tombstoneEntry := fixture.mustGet(
-		t,
-		deletionTombstoneKey(string(DeletionTargetEnvironment), fixture.environment.Record.ID),
+		t, testdeletions.TombstoneKey(string(testdeletions.DeletionTargetEnvironment), fixture.environment.Record.ID),
 	)
-	tombstone, err := decodeDeletionTombstone(tombstoneEntry.Value)
+	tombstone, err := testdeletions.DecodeDeletionTombstone(tombstoneEntry.Value)
 	if err != nil || tombstone.TaskID != retryID {
 		t.Fatalf("Environment deletion retry tombstone = %#v, %v", tombstone, err)
 	}
-	lockEntry := fixture.mustGet(t, environmentOperationLockKey(fixture.environment.Record.ID))
+	lockEntry := fixture.mustGet(t, testhierarchy.EnvironmentOperationLockKey(fixture.environment.Record.ID))
 	lock, err := decodeEnvironmentOperationLock(lockEntry, fixture.environment.Record.ID)
 	if err != nil || lock.TaskID != retryID {
 		t.Fatalf("Environment deletion retry lock = %#v, %v", lock, err)
 	}
-	intentEntry := fixture.mustGet(t, environmentDeletionIntentKey(fixture.task.OperationID))
-	intent, err := decodeEnvironmentDeletionIntent(intentEntry.Value)
+	intentEntry := fixture.mustGet(t, testdeletions.EnvironmentDeletionIntentKey(fixture.task.OperationID))
+	intent, err := testdeletions.DecodeEnvironmentDeletionIntent(intentEntry.Value)
 	if err != nil || intent.TaskID != retryID {
 		t.Fatalf("Environment deletion retry intent = %#v, %v", intent, err)
 	}
@@ -237,7 +240,7 @@ func TestTaskPruningWaitsForMarkerAndRemovesComponentIntent(t *testing.T) {
 	now := taskJournalTime().Add(50 * time.Second)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1501)
 	task := validTaskRecord(now)
-	task.Type = TaskUpdate
+	task.Type = testtaskjournal.TaskUpdate
 	task.Target = environmentID
 	pinComponentTaskDesiredRevision(&task)
 	createLifecycleTask(t, repository, task)
@@ -248,12 +251,12 @@ func TestTaskPruningWaitsForMarkerAndRemovesComponentIntent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
-	pruneAt := terminalAt.Add(TaskRetention).Add(time.Nanosecond)
+	pruneAt := terminalAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 0 {
 		t.Fatalf("PruneExpiredTasks(before marker) = %d, %v", count, err)
 	}
-	assertTaskLifecycleValue(t, store, taskKey(task.ID), true)
-	idempotency, err := newIdempotencyRepository(store)
+	assertTaskLifecycleValue(t, store, testtaskjournal.TaskStorageKey(task.ID), true)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
@@ -263,16 +266,14 @@ func TestTaskPruningWaitsForMarkerAndRemovesComponentIntent(t *testing.T) {
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks() = %d, %v", count, err)
 	}
-	assertTaskLifecycleValue(t, store, taskKey(task.ID), false)
-	assertTaskLifecycleValue(t, store, taskOperationIndexKey(task.OperationID, task.ID), false)
-	assertTaskLifecycleValue(t, store, taskWorkspacePlatformIndexKey(task.ID), false)
-	assertTaskLifecycleValue(t, store, componentTaskIntentKey(task.ID), false)
-	assertTaskLifecycleValue(t, store, taskPruneIntentKey(task.ID), false)
+	assertTaskLifecycleValue(t, store, testtaskjournal.TaskStorageKey(task.ID), false)
+	assertTaskLifecycleValue(t, store, testtaskjournal.TaskOperationIndexKey(task.OperationID, task.ID), false)
+	assertTaskLifecycleValue(t, store, testtaskjournal.TaskWorkspacePlatformIndexKey(task.ID), false)
+	assertTaskLifecycleValue(t, store, testenvironmentchanges.ComponentTaskIntentKey(task.ID), false)
+	assertTaskLifecycleValue(t, store, testtaskjournal.TaskPruneIntentKey(task.ID), false)
 	assertTaskLifecycleValue(
 		t,
-		store,
-		taskRetentionIndexKey(task.ID, *terminal.Record.RetainUntil),
-		false,
+		store, testtaskjournal.TaskRetentionIndexKey(task.ID, *terminal.Record.RetainUntil), false,
 	)
 }
 
@@ -295,7 +296,7 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
 	for ordinal := uint64(1); ordinal <= 128; ordinal++ {
-		input := taskEventInput(task.ID, ordinal, TaskEventStateRunning)
+		input := taskEventInput(task.ID, ordinal, testtaskjournal.TaskEventStateRunning)
 		input.Identity.AssignmentID = claim.Assignment.Record.AssignmentID
 		input.Identity.AgentID = agentID
 		input.Identity.AgentGeneration = 4
@@ -310,14 +311,13 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 	terminalAt := now.Add(3 * time.Minute)
 	terminal, err := repository.AcknowledgeTask(
 		ctx, agentID, 4, task.ID, taskAssignmentIDForTest(t, repository,
-			task.ID),
-		TaskStatusCompleted, completedComposeTaskResult(), terminalAt)
+			task.ID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(), terminalAt)
 
 	if err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
-	pruneAt := terminalAt.Add(TaskRetention).Add(time.Nanosecond)
-	idempotency, err := newIdempotencyRepository(store)
+	pruneAt := terminalAt.Add(testtaskjournal.TaskRetention).Add(time.Nanosecond)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
@@ -328,26 +328,23 @@ func TestTaskPruningCheckpointsMaximumTransactionBatch(t *testing.T) {
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks() = %d, %v", count, err)
 	}
-	if store.maximumOperations != maximumTransactionOperations {
+	if store.maximumOperations != testkeyvalue.MaximumOperations {
 		t.Fatalf(
 			"maximum prune transaction operations = %d, want %d",
-			store.maximumOperations,
-			maximumTransactionOperations,
+			store.maximumOperations, testkeyvalue.MaximumOperations,
 		)
 	}
-	assertTaskLifecycleValue(t, store.memoryTaskStore, taskKey(task.ID), false)
+	assertTaskLifecycleValue(t, store.memoryTaskStore, testtaskjournal.TaskStorageKey(task.ID), false)
 	assertTaskLifecycleValue(
 		t,
-		store.memoryTaskStore,
-		taskWorkspacePlatformIndexKey(task.ID),
-		false,
+		store.memoryTaskStore, testtaskjournal.TaskWorkspacePlatformIndexKey(task.ID), false,
 	)
-	assertTaskLifecycleValue(t, store.memoryTaskStore, taskPruneIntentKey(task.ID), false)
+	assertTaskLifecycleValue(t, store.memoryTaskStore, testtaskjournal.TaskPruneIntentKey(task.ID), false)
 	if terminal.Record.EventCount != 128 {
 		t.Fatalf("terminal EventCount = %d, want 128", terminal.Record.EventCount)
 	}
-	for _, prefix := range []string{taskEventScopePrefix(task.ID), taskEventDedupScopePrefix(task.ID)} {
-		page, err := store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1})
+	for _, prefix := range []string{testtaskjournal.TaskEventScopePrefix(task.ID), testtaskjournal.TaskEventDedupScopePrefix(task.ID)} {
+		page, err := store.Range(ctx, testkeyvalue.RangeRequest{Prefix: prefix, Limit: 1})
 		if err != nil || len(page.Values) != 0 {
 			t.Fatalf("remaining Task subordinate records under %s = %#v, %v", prefix, page, err)
 		}
@@ -369,18 +366,18 @@ func TestTaskPruningRemovesAttachInputOnlyAfterFinalPlanReference(t *testing.T) 
 	firstTaskID := ids.NewAt(ids.KindTask, now, 1702)
 	lastTaskID := ids.NewAt(ids.KindTask, now, 1703)
 	input := taskPruningAttachRenderInput(now, planID)
-	inputValue, err := encodeAttachTaskRenderInput(input)
+	inputValue, err := testattachrender.EncodeAttachTaskRenderInput(input)
 	if err != nil {
 		t.Fatalf("encodeAttachTaskRenderInput() error = %v", err)
 	}
-	seedTaskRepositoryValue(t, store, attachTaskRenderInputKey(planID), inputValue)
-	lastReference, err := encodeTaskReference(lastTaskID)
+	seedTaskRepositoryValue(t, store, testattachrender.AttachTaskRenderInputKey(planID), inputValue)
+	lastReference, err := testidempotency.EncodeTaskReference(lastTaskID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
-	lastReferenceKey := attachTaskPlanReferenceKey(planID, lastTaskID)
+	lastReferenceKey := testattachrender.AttachTaskPlanReferenceKey(planID, lastTaskID)
 	seedTaskRepositoryValue(t, store, lastReferenceKey, lastReference)
-	firstIntentValue, err := encodeTaskPruneIntent(taskPruneIntent{
+	firstIntentValue, err := testtaskjournal.EncodePruneIntent(testtaskjournal.PruneIntent{
 		TaskID: firstTaskID, TaskRevision: 1,
 		BackupCheckpointCursorsComplete:        true,
 		BackupCheckpointDeduplicationsComplete: true,
@@ -390,17 +387,17 @@ func TestTaskPruningRemovesAttachInputOnlyAfterFinalPlanReference(t *testing.T) 
 	if err != nil {
 		t.Fatalf("encodeTaskPruneIntent(first) error = %v", err)
 	}
-	seedTaskRepositoryValue(t, store, taskPruneIntentKey(firstTaskID), firstIntentValue)
+	seedTaskRepositoryValue(t, store, testtaskjournal.TaskPruneIntentKey(firstTaskID), firstIntentValue)
 	if count, err := repository.PruneExpiredTasks(ctx, now); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(first) = %d, %v", count, err)
 	}
-	assertTaskLifecycleValue(t, store, attachTaskRenderInputKey(planID), true)
+	assertTaskLifecycleValue(t, store, testattachrender.AttachTaskRenderInputKey(planID), true)
 
 	referenceResult, err := store.Get(ctx, lastReferenceKey)
 	if err != nil || referenceResult.Entry == nil {
 		t.Fatalf("Get(last plan reference) = %#v, %v", referenceResult, err)
 	}
-	lastIntentValue, err := encodeTaskPruneIntent(taskPruneIntent{
+	lastIntentValue, err := testtaskjournal.EncodePruneIntent(testtaskjournal.PruneIntent{
 		TaskID: lastTaskID, TaskRevision: 1,
 		BackupCheckpointCursorsComplete:        true,
 		BackupCheckpointDeduplicationsComplete: true,
@@ -410,12 +407,12 @@ func TestTaskPruningRemovesAttachInputOnlyAfterFinalPlanReference(t *testing.T) 
 	if err != nil {
 		t.Fatalf("encodeTaskPruneIntent(last) error = %v", err)
 	}
-	transaction, err := store.Transact(ctx, []Condition{
+	transaction, err := store.Transact(ctx, []testkeyvalue.Condition{
 		{Key: lastReferenceKey, ModRevision: referenceResult.Entry.ModRevision},
-		{Key: taskPruneIntentKey(lastTaskID)},
-	}, []Mutation{
-		{Type: MutationDelete, Key: lastReferenceKey},
-		{Type: MutationPut, Key: taskPruneIntentKey(lastTaskID), Value: lastIntentValue},
+		{Key: testtaskjournal.TaskPruneIntentKey(lastTaskID)},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationDelete, Key: lastReferenceKey},
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskPruneIntentKey(lastTaskID), Value: lastIntentValue},
 	})
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("publish final prune intent = %#v, %v", transaction, err)
@@ -423,21 +420,21 @@ func TestTaskPruningRemovesAttachInputOnlyAfterFinalPlanReference(t *testing.T) 
 	if count, err := repository.PruneExpiredTasks(ctx, now); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(last) = %d, %v", count, err)
 	}
-	assertTaskLifecycleValue(t, store, attachTaskRenderInputKey(planID), false)
+	assertTaskLifecycleValue(t, store, testattachrender.AttachTaskRenderInputKey(planID), false)
 }
 
-func taskPruningAttachRenderInput(now time.Time, planID string) AttachTaskRenderInput {
+func taskPruningAttachRenderInput(now time.Time, planID string) testattachrender.AttachTaskRenderInput {
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1713)
 	serviceID := ids.NewAt(ids.KindService, now, 1717)
 	revisionID := ids.NewAt(ids.KindTask, now, 1715)
-	runtime := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+	runtime := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
-		DesiredServices: []EnvironmentServiceProjection{{
+		DesiredServices: []testservices.EnvironmentServiceProjection{{
 			EnvironmentID: environmentID,
 			Desired:       core.Service{ID: serviceID, Name: "app", Image: "example/app:latest"},
 		}},
 	})
-	return AttachTaskRenderInput{
+	return testattachrender.AttachTaskRenderInput{
 		PlanID:                   planID,
 		AttachID:                 ids.NewAt(ids.KindAttach, now, 1710),
 		AttachName:               "database",
@@ -457,7 +454,7 @@ func taskPruningAttachRenderInput(now time.Time, planID string) AttachTaskRender
 		EnvironmentEpochRevision: 1,
 		RuntimeProjection:        runtime,
 		RunningServiceIDs:        []string{serviceID},
-		Services: []AttachTaskServiceSnapshot{
+		Services: []testattachrender.AttachTaskServiceSnapshot{
 			{ID: serviceID, Name: "app"},
 		},
 		ConsumerServiceIDs: []string{serviceID},
@@ -472,9 +469,9 @@ type taskPruneOperationStore struct {
 
 func (store *taskPruneOperationStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.trackPruning && len(conditions)+len(mutations) > store.maximumOperations {
 		store.maximumOperations = len(conditions) + len(mutations)
 	}

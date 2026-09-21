@@ -179,7 +179,8 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Task.Params[taskjournal.TaskBackingServiceVolumeDirectoryParam] != creation.Environment.VolumeDir {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation Task is invalid")
 	}
-	if creation.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || creation.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if creation.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		creation.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		creation.Marker.TaskID != creation.Task.ID ||
 		creation.Marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform ||
 		creation.Marker.Locator.ScopeID != "-" ||

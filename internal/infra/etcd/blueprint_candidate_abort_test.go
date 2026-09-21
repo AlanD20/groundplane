@@ -7,6 +7,13 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	ref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -35,7 +42,7 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 		assertBlueprintPendingAbortReleaseStarted(t, published)
 		tasks, _ = newTaskRepository(published.store)
 		terminal, err := tasks.AbortPendingTask(context.Background(), published.task.ID, terminalAt)
-		if err != nil || terminal.Record.Status != TaskStatusAborted {
+		if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusAborted {
 			t.Fatalf("AbortPendingTask(resume) = %#v, %v", terminal, err)
 		}
 		assertBlueprintPendingAbortReleased(t, published)
@@ -120,24 +127,31 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 	t.Run("controller cleanup discriminator is exact and Blueprint-only", func(t *testing.T) {
 		at := scriptSourceReferenceTestTime()
 		record := scriptCheckpointTestRecord(at)
-		outcome := ScriptOutcomeEvidence{Reason: ScriptOutcomeAbortBeforeStart, ObservedAt: at.Add(time.Second)}
-		cleanup := ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
+		outcome := testscriptexecutions.ScriptOutcomeEvidence{
+			Reason:     testscriptexecutions.ScriptOutcomeAbortBeforeStart,
+			ObservedAt: at.Add(time.Second),
+		}
+		cleanup := testscriptexecutions.ScriptCleanupEvidence{
+			ContainerAbsent:          true,
+			BodyAbsent:               true,
+			ExecutionDirectoryAbsent: true,
+		}
 		digest, err := scriptControllerCleanupSHA256(outcome, cleanup)
 		if err != nil {
 			t.Fatal(err)
 		}
-		record.State = ScriptExecutionCleanupProven
+		record.State = testscriptexecutions.ScriptExecutionCleanupProven
 		record.Outcome = &outcome
 		record.Cleanup = &cleanup
 		record.LastCheckpointSHA256 = digest
 		record.ActiveReference = false
 		record.UpdatedAt = outcome.ObservedAt
-		if validateScriptExecutionRecord(record) == nil {
+		if testscriptexecutions.ValidateScriptExecutionRecord(record) == nil {
 			t.Fatal("assignmentless cleanup without Controller authority accepted")
 		}
-		for _, taskType := range []TaskType{TaskScript, TaskDeploy, TaskRollback} {
+		for _, taskType := range []testtaskjournal.TaskType{testtaskjournal.TaskScript, testtaskjournal.TaskDeploy, testtaskjournal.TaskRollback} {
 			manualRecord := scriptCheckpointTestRecord(at)
-			nonBlueprint := TaskRecord{Type: taskType, Status: TaskStatusPending}
+			nonBlueprint := TaskRecord{Type: taskType, Status: testtaskjournal.TaskStatusPending}
 			if _, transitionErr := abortScriptExecutionBeforeStart(
 				manualRecord,
 				nonBlueprint,
@@ -147,9 +161,9 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 				t.Fatalf("%s Controller cleanup transition error = %v", taskType, transitionErr)
 			}
 		}
-		record.ControllerCleanup = ScriptControllerCleanupBlueprintPendingAbort
+		record.ControllerCleanup = testscriptexecutions.ScriptControllerCleanupBlueprintPendingAbort
 		record.StartAuthorized = true
-		if validateScriptExecutionRecord(record) == nil {
+		if testscriptexecutions.ValidateScriptExecutionRecord(record) == nil {
 			t.Fatal("Controller cleanup discriminator outside exact shape accepted")
 		}
 	})
@@ -169,11 +183,17 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 			t.Fatal(err)
 		}
 		steps, _ := releaseHookExecutionSteps(published.task)
-		read, err := published.store.Get(context.Background(), scriptExecutionKey(steps[0].executionID))
+		read, err := published.store.Get(
+			context.Background(),
+			testscriptexecutions.ScriptExecutionKey(steps[0].executionID),
+		)
 		if err != nil || read.Entry == nil {
 			t.Fatalf("Script execution = %#v, %v", read, err)
 		}
-		record, err := decodeEnvelope[ScriptExecutionRecord](read.Entry.Value, "script-execution")
+		record, err := testrecordcodec.Decode[testscriptexecutions.ScriptExecutionRecord](
+			read.Entry.Value,
+			"script-execution",
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,12 +204,12 @@ func TestAbortPendingBlueprintReleasesScriptExecutionAuthorityBeforeTerminalizat
 		if err != nil {
 			t.Fatal(err)
 		}
-		value, err := encodeEnvelope("script-execution", record)
+		value, err := testrecordcodec.Encode("script-execution", record)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = published.store.Transact(context.Background(), nil, []Mutation{{
-			Type: MutationPut, Key: read.Entry.Key, Value: value,
+		_, err = published.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: read.Entry.Key, Value: value,
 		}})
 		clear(value)
 		if err != nil {
@@ -210,11 +230,11 @@ func tamperBlueprintPendingAbortRoot(
 ) {
 	t.Helper()
 	ctx := context.Background()
-	read, err := published.store.Get(ctx, scriptSourceRootKey(published.task.OperationID))
+	read, err := published.store.Get(ctx, testscriptsourceevidence.ScriptSourceRootKey(published.task.OperationID))
 	if err != nil || read.Entry == nil {
 		t.Fatalf("source root = %#v, %v", read, err)
 	}
-	root, err := decodeScriptOperationSourceRoot(read.Entry.Value)
+	root, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(read.Entry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,13 +243,13 @@ func tamperBlueprintPendingAbortRoot(
 	} else {
 		root.MembershipCount++
 	}
-	value, err := encodeEnvelope("script-operation-source-root", root)
+	value, err := testrecordcodec.Encode("script-operation-source-root", root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := published.store.Transact(ctx, []Condition{{
+	result, err := published.store.Transact(ctx, []testkeyvalue.Condition{{
 		Key: read.Entry.Key, ModRevision: read.Entry.ModRevision,
-	}}, []Mutation{{Type: MutationPut, Key: read.Entry.Key, Value: value}})
+	}}, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: read.Entry.Key, Value: value}})
 	clear(value)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("tamper source root = %#v, %v", result, err)
@@ -239,22 +259,22 @@ func tamperBlueprintPendingAbortRoot(
 func assertBlueprintPendingAbortReleaseStarted(t *testing.T, published environmentBlueprintAtomicPublication) {
 	t.Helper()
 	ctx := context.Background()
-	rootRead, err := published.store.Get(ctx, scriptSourceRootKey(published.task.OperationID))
+	rootRead, err := published.store.Get(ctx, testscriptsourceevidence.ScriptSourceRootKey(published.task.OperationID))
 	if err != nil || rootRead.Entry == nil {
 		t.Fatalf("releasing source root = %#v, %v", rootRead, err)
 	}
-	root, err := decodeScriptOperationSourceRoot(rootRead.Entry.Value)
-	if err != nil || root.Phase != ScriptOperationSourceReleasing ||
-		root.ReleasePath != ScriptSourceReleaseNormal || root.RetryDisposition != ScriptRetryDispositionAbandoned ||
+	root, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(rootRead.Entry.Value)
+	if err != nil || root.Phase != testscriptsourceevidence.ScriptOperationSourceReleasing ||
+		root.ReleasePath != testscriptsourceevidence.ScriptSourceReleaseNormal || root.RetryDisposition != ref.RetryDispositionAbandoned ||
 		root.ReleaseCursor == 0 || root.ReleaseCursor >= root.MembershipCount {
 		t.Fatalf("releasing source root = %#v, %v", root, err)
 	}
-	pending, err := published.store.Get(ctx, taskKey(published.task.ID))
+	pending, err := published.store.Get(ctx, testtaskjournal.TaskStorageKey(published.task.ID))
 	if err != nil || pending.Entry == nil {
 		t.Fatalf("pending Task = %#v, %v", pending, err)
 	}
-	record, err := decodeTaskRecord(pending.Entry.Value)
-	if err != nil || record.Status != TaskStatusPending {
+	record, err := DecodeTaskRecord(pending.Entry.Value)
+	if err != nil || record.Status != testtaskjournal.TaskStatusPending {
 		t.Fatalf("Task during release = %#v, %v", record, err)
 	}
 }
@@ -262,17 +282,20 @@ func assertBlueprintPendingAbortReleaseStarted(t *testing.T, published environme
 func assertBlueprintPendingAbortReleased(t *testing.T, published environmentBlueprintAtomicPublication) {
 	t.Helper()
 	ctx := context.Background()
-	root, err := published.store.Get(ctx, scriptSourceRootKey(published.task.OperationID))
+	root, err := published.store.Get(ctx, testscriptsourceevidence.ScriptSourceRootKey(published.task.OperationID))
 	if err != nil || root.Entry != nil {
 		t.Fatalf("released source root = %#v, %v", root, err)
 	}
 	steps, _ := releaseHookExecutionSteps(published.task)
 	for _, step := range steps {
-		read, getErr := published.store.Get(ctx, scriptExecutionKey(step.executionID))
+		read, getErr := published.store.Get(ctx, testscriptexecutions.ScriptExecutionKey(step.executionID))
 		if getErr != nil || read.Entry == nil {
 			t.Fatalf("Script execution %q = %#v, %v", step.executionID, read, getErr)
 		}
-		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](read.Entry.Value, "script-execution")
+		record, decodeErr := testrecordcodec.Decode[testscriptexecutions.ScriptExecutionRecord](
+			read.Entry.Value,
+			"script-execution",
+		)
 		if decodeErr != nil || record.Outcome == nil || !pendingScriptAbortExecutionMatches(
 			record, published.task, step, record.Outcome.ObservedAt,
 		) {
@@ -284,10 +307,10 @@ func assertBlueprintPendingAbortReleased(t *testing.T, published environmentBlue
 func captureSuccessorScriptSource(
 	t *testing.T,
 	published environmentBlueprintAtomicPublication,
-) (string, ScriptSourcePreparationMember) {
+) (string, testscriptsourceevidence.ScriptSourcePreparationMember) {
 	t.Helper()
 	ctx := context.Background()
-	page, err := published.store.Range(ctx, RangeRequest{
+	page, err := published.store.Range(ctx, testkeyvalue.RangeRequest{
 		Prefix: ref.ReversePrefix(published.task.OperationID), Limit: 128,
 	})
 	if err != nil {
@@ -295,11 +318,11 @@ func captureSuccessorScriptSource(
 	}
 	successorOperationID := ids.NewAt(ids.KindOperation, published.task.CreatedAt, 9100)
 	for _, value := range page.Values {
-		reference, decodeErr := decodeEnvelope[ScriptSourceReference](value.Value, "script-source-reference")
-		if decodeErr != nil || reference.Source.Kind != ScriptSourceService {
+		reference, decodeErr := testrecordcodec.Decode[ref.Reference](value.Value, "script-source-reference")
+		if decodeErr != nil || reference.Source.Kind != ref.SourceService {
 			continue
 		}
-		sourceKey := serviceRuntimeKey(reference.Source.ServiceID)
+		sourceKey := testservices.ServiceRuntimeKey(reference.Source.ServiceID)
 		source, getErr := published.store.Get(ctx, sourceKey)
 		if getErr != nil || source.Entry == nil {
 			t.Fatalf("successor source = %#v, %v", source, getErr)
@@ -307,28 +330,34 @@ func captureSuccessorScriptSource(
 		reference.OperationID = successorOperationID
 		reference.ScriptExecutionID = scriptSourceReferenceExecutionID(published.task.CreatedAt, 201)
 		reference.SourceModRevision = source.Entry.ModRevision
-		return successorOperationID, ScriptSourcePreparationMember{
+		return successorOperationID, testscriptsourceevidence.ScriptSourcePreparationMember{
 			Reference: reference,
-			Evidence:  ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: sourceKey}},
+			Evidence: testscriptsourceevidence.ScriptSourceEvidence{
+				Existing: &testscriptsourceevidence.ScriptExistingSourceEvidence{SourceKey: sourceKey},
+			},
 		}
 	}
 	t.Fatal("Blueprint source set has no reusable Service source")
-	return "", ScriptSourcePreparationMember{}
+	return "", testscriptsourceevidence.ScriptSourcePreparationMember{}
 }
 
 func publishSuccessorScriptSourceRoot(
 	t *testing.T,
 	published environmentBlueprintAtomicPublication,
 	operationID string,
-	member ScriptSourcePreparationMember,
+	member testscriptsourceevidence.ScriptSourcePreparationMember,
 ) {
 	t.Helper()
 	ctx := context.Background()
-	authority, err := newScriptSourceReferenceAuthority(published.store)
+	authority, err := testscriptsourcepublication.NewAuthority(published.store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := authority.Prepare(ctx, operationID, []ScriptSourcePreparationMember{member})
+	prepared, err := authority.Prepare(
+		ctx,
+		operationID,
+		[]testscriptsourceevidence.ScriptSourcePreparationMember{member},
+	)
 	if err != nil {
 		t.Fatalf("Prepare(successor) error = %v", err)
 	}
@@ -337,7 +366,7 @@ func publishSuccessorScriptSourceRoot(
 		t.Fatalf("FinalPublicationFragment(successor) error = %v", err)
 	}
 	defer fragment.Clear()
-	result, err := published.store.Transact(ctx, fragment.conditions, fragment.mutations)
+	result, err := published.store.Transact(ctx, fragment.Conditions(), fragment.Mutations())
 	if err != nil || !result.Succeeded {
 		t.Fatalf("successor source-root publication = %#v, %v", result, err)
 	}

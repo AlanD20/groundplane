@@ -9,6 +9,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -25,18 +30,18 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	projectID := hierarchyTestID(ids.KindProject, 2)
 	environmentID := hierarchyTestID(ids.KindEnvironment, 3)
 
-	tenant, err := repository.CreateTenant(ctx, TenantRecord{ID: tenantID, Slug: "acme", Name: "Acme"})
+	tenant, err := repository.CreateTenant(ctx, testhierarchy.TenantRecord{ID: tenantID, Slug: "acme", Name: "Acme"})
 	if err != nil {
 		t.Fatalf("CreateTenant(): %v", err)
 	}
-	project, err := repository.CreateProject(ctx, ProjectRecord{
-		ID: projectID, TenantID: tenantID, Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+	project, err := repository.CreateProject(ctx, testhierarchy.ProjectRecord{
+		ID: projectID, TenantID: tenantID, Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 	})
 	if err != nil {
 		t.Fatalf("CreateProject(): %v", err)
 	}
-	environment, err := repository.CreateEnvironment(ctx, EnvironmentRecord{NetworkPool: "10.40.0.0/16",
-		ProvisioningState: EnvironmentProvisioningReady,
+	environment, err := repository.CreateEnvironment(ctx, testhierarchy.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ID:                environmentID, ProjectID: projectID, Name: "production",
 		VolumeDir: "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
@@ -45,20 +50,30 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateEnvironment(): %v", err)
 	}
-	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetTenant, tenant.Record.ID, tenant.Revision)
-	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetProject, project.Record.ID, project.Revision)
 	assertHierarchyCoordinationRecord(
 		t,
 		store,
-		HierarchyDeletionTargetEnvironment,
-		environment.Record.ID,
+		testhierarchydeletion.HierarchyDeletionTargetTenant,
+		tenant.Record.ID,
+		tenant.Revision,
+	)
+	assertHierarchyCoordinationRecord(
+		t,
+		store,
+		testhierarchydeletion.HierarchyDeletionTargetProject,
+		project.Record.ID,
+		project.Revision,
+	)
+	assertHierarchyCoordinationRecord(
+		t,
+		store, testhierarchydeletion.HierarchyDeletionTargetEnvironment, environment.Record.ID,
 		environment.Revision,
 	)
-	epochResult, err := repository.store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
+	epochResult, err := repository.store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(environment.Record.ID))
 	if err != nil || epochResult.Entry == nil || epochResult.Entry.ModRevision != environment.Revision {
 		t.Fatalf("Environment mutation epoch = %#v, %v", epochResult, err)
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(epochResult.Entry.Value)
+	epoch, err := testbackupruntime.DecodeEnvironmentMutationEpochRecord(epochResult.Entry.Value)
 	if err != nil || epoch.EnvironmentID != environment.Record.ID {
 		t.Fatalf("decoded Environment mutation epoch = %#v, %v", epoch, err)
 	}
@@ -95,7 +110,7 @@ func TestHierarchyCreateResolveAndRenamePreserveIdentity(t *testing.T) {
 		t.Fatalf("RenameTenantProject(): %v", err)
 	}
 	if renamedProject.Record.ID != projectID || renamedProject.Record.TenantID != tenantID ||
-		renamedProject.Record.Name != "Console" || renamedProject.Record.Kind != ProjectKindTenant {
+		renamedProject.Record.Name != "Console" || renamedProject.Record.Kind != testhierarchy.ProjectKindTenant {
 		t.Fatalf("renamed project changed identity: %+v", renamedProject.Record)
 	}
 	if _, err := repository.ResolveTenantProject(
@@ -130,7 +145,7 @@ func TestHierarchyScopedSlugUniquenessIsAtomic(t *testing.T) {
 	ctx := context.Background()
 	tenantA := hierarchyTestID(ids.KindTenant, 10)
 	tenantB := hierarchyTestID(ids.KindTenant, 11)
-	for _, tenant := range []TenantRecord{
+	for _, tenant := range []testhierarchy.TenantRecord{
 		{ID: tenantA, Slug: "a", Name: "A"},
 		{ID: tenantB, Slug: "b", Name: "B"},
 	} {
@@ -156,23 +171,23 @@ func TestHierarchyScopedSlugUniquenessIsAtomic(t *testing.T) {
 	if current, err := repository.ResolveTenant(ctx, "b"); err != nil || current.Record.ID != tenantB {
 		t.Fatalf("ResolveTenant(original after collision) = %+v, %v", current, err)
 	}
-	if _, err := repository.CreateTenant(ctx, TenantRecord{
+	if _, err := repository.CreateTenant(ctx, testhierarchy.TenantRecord{
 		ID: hierarchyTestID(ids.KindTenant, 12), Slug: "a", Name: "Duplicate",
 	}); !errors.Is(err, errs.New(errs.KindSlugConflict, "")) {
 		t.Fatalf("CreateTenant(duplicate slug) error = %v, want slug.conflict", err)
 	}
 	for index, tenantID := range []string{tenantA, tenantB} {
-		_, err := repository.CreateProject(ctx, ProjectRecord{
+		_, err := repository.CreateProject(ctx, testhierarchy.ProjectRecord{
 			ID: hierarchyTestID(ids.KindProject, int64(20+index)), TenantID: tenantID,
-			Slug: "shared-name", Name: "Shared Name", Kind: ProjectKindTenant,
+			Slug: "shared-name", Name: "Shared Name", Kind: testhierarchy.ProjectKindTenant,
 		})
 		if err != nil {
 			t.Fatalf("CreateProject(scope %s): %v", tenantID, err)
 		}
 	}
-	if _, err := repository.CreateProject(ctx, ProjectRecord{
+	if _, err := repository.CreateProject(ctx, testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 22), TenantID: tenantA,
-		Slug: "shared-name", Name: "Duplicate", Kind: ProjectKindTenant,
+		Slug: "shared-name", Name: "Duplicate", Kind: testhierarchy.ProjectKindTenant,
 	}); !errors.Is(err, errs.New(errs.KindSlugConflict, "")) {
 		t.Fatalf("CreateProject(duplicate scoped slug) error = %v, want slug.conflict", err)
 	}
@@ -186,9 +201,9 @@ func TestHierarchyOwnerMustExistAtCreateCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository(): %v", err)
 	}
-	_, err = repository.CreateProject(context.Background(), ProjectRecord{
+	_, err = repository.CreateProject(context.Background(), testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 31), TenantID: hierarchyTestID(ids.KindTenant, 30),
-		Slug: "orphan", Name: "Orphan", Kind: ProjectKindTenant,
+		Slug: "orphan", Name: "Orphan", Kind: testhierarchy.ProjectKindTenant,
 	})
 	if !errors.Is(err, errs.New(errs.KindTenantNotFound, "")) {
 		t.Fatalf("CreateProject(orphan) error = %v, want tenant.not_found", err)
@@ -207,7 +222,7 @@ func TestHierarchyPaginationPinsRevisionAndOrdersByID(t *testing.T) {
 	firstID := hierarchyTestID(ids.KindTenant, 40)
 	secondID := hierarchyTestID(ids.KindTenant, 41)
 	fourthID := hierarchyTestID(ids.KindTenant, 43)
-	for _, record := range []TenantRecord{
+	for _, record := range []testhierarchy.TenantRecord{
 		{ID: fourthID, Slug: "fourth", Name: "Fourth"},
 		{ID: firstID, Slug: "first", Name: "First"},
 		{ID: secondID, Slug: "second", Name: "Second"},
@@ -216,7 +231,7 @@ func TestHierarchyPaginationPinsRevisionAndOrdersByID(t *testing.T) {
 			t.Fatalf("CreateTenant(%s): %v", record.ID, err)
 		}
 	}
-	pageOne, err := repository.ListTenants(ctx, PageRequest{Limit: 2})
+	pageOne, err := repository.ListTenants(ctx, testkeyvalue.PageRequest{Limit: 2})
 	if err != nil {
 		t.Fatalf("ListTenants(first page): %v", err)
 	}
@@ -227,10 +242,10 @@ func TestHierarchyPaginationPinsRevisionAndOrdersByID(t *testing.T) {
 		t.Fatal("first page cursor is empty")
 	}
 	thirdID := hierarchyTestID(ids.KindTenant, 42)
-	if _, err := repository.CreateTenant(ctx, TenantRecord{ID: thirdID, Slug: "third", Name: "Third"}); err != nil {
+	if _, err := repository.CreateTenant(ctx, testhierarchy.TenantRecord{ID: thirdID, Slug: "third", Name: "Third"}); err != nil {
 		t.Fatalf("CreateTenant(third): %v", err)
 	}
-	pageTwo, err := repository.ListTenants(ctx, PageRequest{Limit: 2, Cursor: pageOne.NextCursor})
+	pageTwo, err := repository.ListTenants(ctx, testkeyvalue.PageRequest{Limit: 2, Cursor: pageOne.NextCursor})
 	if err != nil {
 		t.Fatalf("ListTenants(second page): %v", err)
 	}
@@ -240,7 +255,7 @@ func TestHierarchyPaginationPinsRevisionAndOrdersByID(t *testing.T) {
 	if pageTwo.Revision != pageOne.Revision {
 		t.Fatalf("second page revision = %d, want %d", pageTwo.Revision, pageOne.Revision)
 	}
-	if _, err := repository.ListTenants(ctx, PageRequest{
+	if _, err := repository.ListTenants(ctx, testkeyvalue.PageRequest{
 		Limit: 1, Cursor: pageOne.NextCursor,
 	}); !errors.Is(err, errs.New(errs.KindMalformedRequest, "")) {
 		t.Fatalf("ListTenants(query mismatch) error = %v, want validation.failed", err)
@@ -257,28 +272,28 @@ func TestHierarchyIndexedPaginationReadsPrimariesAtPinnedRevision(t *testing.T) 
 	}
 	ctx := context.Background()
 	tenantID := hierarchyTestID(ids.KindTenant, 70)
-	if _, err := repository.CreateTenant(ctx, TenantRecord{
+	if _, err := repository.CreateTenant(ctx, testhierarchy.TenantRecord{
 		ID: tenantID, Slug: "indexed", Name: "Indexed",
 	}); err != nil {
 		t.Fatalf("CreateTenant(): %v", err)
 	}
 	firstProjectID := hierarchyTestID(ids.KindProject, 71)
 	secondProjectID := hierarchyTestID(ids.KindProject, 72)
-	for _, project := range []ProjectRecord{
+	for _, project := range []testhierarchy.ProjectRecord{
 		{
 			ID: firstProjectID, TenantID: tenantID, Slug: "first", Name: "First",
-			Kind: ProjectKindTenant,
+			Kind: testhierarchy.ProjectKindTenant,
 		},
 		{
 			ID: secondProjectID, TenantID: tenantID, Slug: "second", Name: "Second",
-			Kind: ProjectKindTenant,
+			Kind: testhierarchy.ProjectKindTenant,
 		},
 	} {
 		if _, err := repository.CreateProject(ctx, project); err != nil {
 			t.Fatalf("CreateProject(%s): %v", project.ID, err)
 		}
 	}
-	pageOne, err := repository.ListTenantProjects(ctx, tenantID, PageRequest{Limit: 1})
+	pageOne, err := repository.ListTenantProjects(ctx, tenantID, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil {
 		t.Fatalf("ListTenantProjects(first page): %v", err)
 	}
@@ -291,7 +306,7 @@ func TestHierarchyIndexedPaginationReadsPrimariesAtPinnedRevision(t *testing.T) 
 	); err != nil {
 		t.Fatalf("RenameTenantProject(second): %v", err)
 	}
-	pageTwo, err := repository.ListTenantProjects(ctx, tenantID, PageRequest{
+	pageTwo, err := repository.ListTenantProjects(ctx, tenantID, testkeyvalue.PageRequest{
 		Limit: 1, Cursor: pageOne.NextCursor,
 	})
 	if err != nil {
@@ -300,7 +315,7 @@ func TestHierarchyIndexedPaginationReadsPrimariesAtPinnedRevision(t *testing.T) 
 	if len(pageTwo.Items) != 1 || pageTwo.Items[0].Record.Slug != "second" {
 		t.Fatalf("pinned second page = %+v, want pre-rename primary", pageTwo.Items)
 	}
-	fresh, err := repository.ListTenantProjects(ctx, tenantID, PageRequest{Limit: 2})
+	fresh, err := repository.ListTenantProjects(ctx, tenantID, testkeyvalue.PageRequest{Limit: 2})
 	if err != nil {
 		t.Fatalf("ListTenantProjects(fresh): %v", err)
 	}
@@ -322,7 +337,7 @@ func TestHierarchyRenameCannotCommitAfterDeletionBegins(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			base := newMemoryHierarchyStore()
 			id := hierarchyTestID(ids.KindTenant, 90)
-			tombstone := deletionTombstoneKey("tenant", id)
+			tombstone := testdeletions.TombstoneKey("tenant", id)
 			store := hierarchyStore(base)
 			if test.inject {
 				store = &deletionRaceHierarchyStore{memoryHierarchyStore: base, tombstoneKey: tombstone}
@@ -331,15 +346,15 @@ func TestHierarchyRenameCannotCommitAfterDeletionBegins(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newHierarchyRepository(): %v", err)
 			}
-			created, err := repository.CreateTenant(context.Background(), TenantRecord{
+			created, err := repository.CreateTenant(context.Background(), testhierarchy.TenantRecord{
 				ID: id, Slug: "before", Name: "Display Name",
 			})
 			if err != nil {
 				t.Fatalf("CreateTenant(): %v", err)
 			}
 			if !test.inject {
-				seedHierarchyTest(t, base, []Mutation{{
-					Type: MutationPut, Key: tombstone, Value: []byte(`{"phase":"requested"}`),
+				seedHierarchyTest(t, base, []testkeyvalue.Mutation{{
+					Type: testkeyvalue.MutationPut, Key: tombstone, Value: []byte(`{"phase":"requested"}`),
 				}})
 			}
 			_, err = repository.RenameTenant(context.Background(), id, created.Revision, "after")
@@ -372,9 +387,9 @@ func TestHierarchyRejectsCorruptDurableEnvelope(t *testing.T) {
 		t.Fatalf("newHierarchyRepository(): %v", err)
 	}
 	id := hierarchyTestID(ids.KindTenant, 50)
-	_, err = store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut,
-		Key:  tenantKey(id),
+	_, err = store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut,
+		Key:  testhierarchy.TenantKey(id),
 		Value: []byte(`{"schema":1,"kind":"tenant","data":{"id":"` + id +
 			`","slug":"broken","slug":"duplicate","name":"Broken"}}`),
 	}})
@@ -398,11 +413,17 @@ func TestHierarchyRejectsRecordIDMismatchOnEveryReadPath(t *testing.T) {
 		}
 		keyID := hierarchyTestID(ids.KindTenant, 80)
 		valueID := hierarchyTestID(ids.KindTenant, 81)
-		value, err := encodeTenant(TenantRecord{ID: valueID, Slug: "wrong", Name: "Wrong"})
+		value, err := testhierarchy.EncodeTenant(testhierarchy.TenantRecord{ID: valueID, Slug: "wrong", Name: "Wrong"})
 		if err != nil {
 			t.Fatalf("encodeTenant(): %v", err)
 		}
-		seedHierarchyTest(t, store, []Mutation{{Type: MutationPut, Key: tenantKey(keyID), Value: value}})
+		seedHierarchyTest(
+			t,
+			store,
+			[]testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantKey(keyID), Value: value},
+			},
+		)
 		_, err = repository.GetTenant(context.Background(), keyID)
 		assertInternalHierarchyError(t, err)
 	})
@@ -415,13 +436,15 @@ func TestHierarchyRejectsRecordIDMismatchOnEveryReadPath(t *testing.T) {
 		}
 		keyID := hierarchyTestID(ids.KindTenant, 82)
 		valueID := hierarchyTestID(ids.KindTenant, 83)
-		value, err := encodeTenant(TenantRecord{ID: valueID, Slug: "indexed", Name: "Indexed"})
+		value, err := testhierarchy.EncodeTenant(
+			testhierarchy.TenantRecord{ID: valueID, Slug: "indexed", Name: "Indexed"},
+		)
 		if err != nil {
 			t.Fatalf("encodeTenant(): %v", err)
 		}
-		seedHierarchyTest(t, store, []Mutation{
-			{Type: MutationPut, Key: tenantKey(keyID), Value: value},
-			{Type: MutationPut, Key: tenantSlugKey("indexed"), Value: []byte(keyID)},
+		seedHierarchyTest(t, store, []testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantKey(keyID), Value: value},
+			{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantSlugKey("indexed"), Value: []byte(keyID)},
 		})
 		_, err = repository.ResolveTenant(context.Background(), "indexed")
 		assertInternalHierarchyError(t, err)
@@ -435,12 +458,20 @@ func TestHierarchyRejectsRecordIDMismatchOnEveryReadPath(t *testing.T) {
 		}
 		keyID := hierarchyTestID(ids.KindTenant, 84)
 		valueID := hierarchyTestID(ids.KindTenant, 85)
-		value, err := encodeTenant(TenantRecord{ID: valueID, Slug: "listed", Name: "Listed"})
+		value, err := testhierarchy.EncodeTenant(
+			testhierarchy.TenantRecord{ID: valueID, Slug: "listed", Name: "Listed"},
+		)
 		if err != nil {
 			t.Fatalf("encodeTenant(): %v", err)
 		}
-		seedHierarchyTest(t, store, []Mutation{{Type: MutationPut, Key: tenantKey(keyID), Value: value}})
-		_, err = repository.ListTenants(context.Background(), PageRequest{})
+		seedHierarchyTest(
+			t,
+			store,
+			[]testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationPut, Key: testhierarchy.TenantKey(keyID), Value: value},
+			},
+		)
+		_, err = repository.ListTenants(context.Background(), testkeyvalue.PageRequest{})
 		assertInternalHierarchyError(t, err)
 	})
 
@@ -453,18 +484,22 @@ func TestHierarchyRejectsRecordIDMismatchOnEveryReadPath(t *testing.T) {
 		tenantID := hierarchyTestID(ids.KindTenant, 86)
 		keyID := hierarchyTestID(ids.KindProject, 87)
 		valueID := hierarchyTestID(ids.KindProject, 88)
-		record := ProjectRecord{
-			ID: valueID, TenantID: tenantID, Slug: "owned", Name: "Owned", Kind: ProjectKindTenant,
+		record := testhierarchy.ProjectRecord{
+			ID: valueID, TenantID: tenantID, Slug: "owned", Name: "Owned", Kind: testhierarchy.ProjectKindTenant,
 		}
-		value, err := encodeProject(record)
+		value, err := testhierarchy.EncodeProject(record)
 		if err != nil {
 			t.Fatalf("encodeProject(): %v", err)
 		}
-		seedHierarchyTest(t, store, []Mutation{
-			{Type: MutationPut, Key: projectKey(keyID), Value: value},
-			{Type: MutationPut, Key: projectTenantOwnerPrefix(tenantID) + keyID, Value: []byte(keyID)},
+		seedHierarchyTest(t, store, []testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testhierarchy.ProjectKey(keyID), Value: value},
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testhierarchy.ProjectTenantOwnerPrefix(tenantID) + keyID,
+				Value: []byte(keyID),
+			},
 		})
-		_, err = repository.ListTenantProjects(context.Background(), tenantID, PageRequest{})
+		_, err = repository.ListTenantProjects(context.Background(), tenantID, testkeyvalue.PageRequest{})
 		assertInternalHierarchyError(t, err)
 	})
 }
@@ -479,13 +514,13 @@ func TestHierarchyRejectsStandaloneBackingEnvironmentCreation(t *testing.T) {
 	}
 	ctx := context.Background()
 	projectID := hierarchyTestID(ids.KindProject, 60)
-	if _, err := repository.CreateProject(ctx, ProjectRecord{
-		ID: projectID, Slug: "postgres", Name: "Postgres", Kind: ProjectKindBacking,
+	if _, err := repository.CreateProject(ctx, testhierarchy.ProjectRecord{
+		ID: projectID, Slug: "postgres", Name: "Postgres", Kind: testhierarchy.ProjectKindBacking,
 	}); err != nil {
 		t.Fatalf("CreateProject(backing): %v", err)
 	}
-	_, err = repository.CreateEnvironment(ctx, EnvironmentRecord{NetworkPool: "10.40.0.0/16",
-		ProvisioningState: EnvironmentProvisioningReady,
+	_, err = repository.CreateEnvironment(ctx, testhierarchy.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ID:                hierarchyTestID(ids.KindEnvironment, 61), ProjectID: projectID, Name: "main",
 		VolumeDir: "/var/lib/groundplane/vol/platform/" + projectID + "/" + hierarchyTestID(ids.KindEnvironment, 61),
@@ -496,7 +531,7 @@ func TestHierarchyRejectsStandaloneBackingEnvironmentCreation(t *testing.T) {
 	}
 }
 
-func tenantIDs(items []Versioned[TenantRecord]) []string {
+func tenantIDs(items []testkeyvalue.Versioned[testhierarchy.TenantRecord]) []string {
 	result := make([]string, len(items))
 	for index, item := range items {
 		result[index] = item.Record.ID
@@ -504,7 +539,7 @@ func tenantIDs(items []Versioned[TenantRecord]) []string {
 	return result
 }
 
-func seedHierarchyTest(t *testing.T, store *memoryHierarchyStore, mutations []Mutation) {
+func seedHierarchyTest(t *testing.T, store *memoryHierarchyStore, mutations []testkeyvalue.Mutation) {
 	t.Helper()
 	if _, err := store.Transact(context.Background(), nil, mutations); err != nil {
 		t.Fatalf("seed hierarchy store: %v", err)
@@ -541,15 +576,15 @@ type deletionRaceHierarchyStore struct {
 
 func (store *deletionRaceHierarchyStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	result, err := store.memoryHierarchyStore.GetMany(ctx, request)
 	if err != nil || store.injected || !containsHierarchyKey(request.Keys, store.tombstoneKey) {
 		return result, err
 	}
 	store.injected = true
-	_, err = store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: store.tombstoneKey, Value: []byte(`{"phase":"requested"}`),
+	_, err = store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: store.tombstoneKey, Value: []byte(`{"phase":"requested"}`),
 	}})
 	return result, err
 }
@@ -570,47 +605,50 @@ func newMemoryHierarchyStore() *memoryHierarchyStore {
 func assertHierarchyCoordinationRecord(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	targetKind HierarchyDeletionTargetKind,
+	targetKind testhierarchydeletion.HierarchyDeletionTargetKind,
 	targetID string,
 	wantRevision int64,
 ) {
 	t.Helper()
-	result, err := store.Get(context.Background(), HierarchyCoordinationKey(string(targetKind), targetID))
+	result, err := store.Get(
+		context.Background(),
+		testhierarchydeletion.HierarchyCoordinationKey(string(targetKind), targetID),
+	)
 	if err != nil || result.Entry == nil || result.Entry.ModRevision != wantRevision {
 		t.Fatalf("hierarchy coordination %s/%s = %#v, %v", targetKind, targetID, result, err)
 	}
-	record, err := decodeHierarchyCoordination(result.Entry.Value)
+	record, err := testhierarchydeletion.DecodeHierarchyCoordination(result.Entry.Value)
 	if err != nil || record.TargetKind != targetKind || record.TargetID != targetID || record.MutationEpoch != 1 {
 		t.Fatalf("decoded hierarchy coordination %s/%s = %#v, %v", targetKind, targetID, record, err)
 	}
 }
 
-func (store *memoryHierarchyStore) Get(_ context.Context, key string) (*GetResult, error) {
+func (store *memoryHierarchyStore) Get(_ context.Context, key string) (*testkeyvalue.GetResult, error) {
 	value := store.valueAt(key, store.revision)
-	return &GetResult{Entry: value, ReadRevision: store.revision}, nil
+	return &testkeyvalue.GetResult{Entry: value, ReadRevision: store.revision}, nil
 }
 
 func (store *memoryHierarchyStore) GetMany(
 	_ context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	revision := request.Revision
 	if revision == 0 {
 		revision = store.revision
 	}
-	values := make([]*KeyValue, len(request.Keys))
+	values := make([]*testkeyvalue.KeyValue, len(request.Keys))
 	for index, key := range request.Keys {
 		values[index] = store.valueAt(key, revision)
 	}
-	return &GetManyResult{
+	return &testkeyvalue.GetManyResult{
 		Values: values, ReadRevision: revision, ResponseRevision: store.revision,
 	}, nil
 }
 
 func (store *memoryHierarchyStore) Range(
 	_ context.Context,
-	request RangeRequest,
-) (*RangeResult, error) {
+	request testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	revision := request.Revision
 	if revision == 0 {
 		revision = store.revision
@@ -629,29 +667,29 @@ func (store *memoryHierarchyStore) Range(
 	if more {
 		keys = keys[:request.Limit]
 	}
-	values := make([]KeyValue, 0, len(keys))
+	values := make([]testkeyvalue.KeyValue, 0, len(keys))
 	for _, key := range keys {
 		value := store.valueAt(key, revision)
 		values = append(values, *value)
 	}
-	return &RangeResult{
+	return &testkeyvalue.RangeResult{
 		Values: values, ReadRevision: revision, ResponseRevision: store.revision, More: more,
 	}, nil
 }
 
 func (store *memoryHierarchyStore) MeasureTransaction(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionBudget, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionBudget, error) {
 	return MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
 }
 
 func (store *memoryHierarchyStore) Transact(
 	_ context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	for _, condition := range conditions {
 		value := store.valueAt(condition.Key, store.revision)
 		actualRevision := int64(0)
@@ -659,18 +697,18 @@ func (store *memoryHierarchyStore) Transact(
 			actualRevision = value.ModRevision
 		}
 		if actualRevision != condition.ModRevision {
-			failureReads := make([]*KeyValue, len(conditions))
+			failureReads := make([]*testkeyvalue.KeyValue, len(conditions))
 			for index, failedCondition := range conditions {
 				failureReads[index] = store.valueAt(failedCondition.Key, store.revision)
 			}
-			return TransactionResult{
+			return testkeyvalue.TransactionResult{
 				Succeeded: false, Revision: store.revision, FailureReads: failureReads,
 			}, nil
 		}
 	}
 	store.revision++
 	for _, mutation := range mutations {
-		if mutation.Type == MutationDelete && mutation.Prefix {
+		if mutation.Type == testkeyvalue.MutationDelete && mutation.Prefix {
 			for key := range store.history {
 				if strings.HasPrefix(key, mutation.Key) {
 					store.history[key] = append(
@@ -683,27 +721,27 @@ func (store *memoryHierarchyStore) Transact(
 		}
 		version := memoryVersion{revision: store.revision}
 		switch mutation.Type {
-		case MutationPut:
+		case testkeyvalue.MutationPut:
 			version.present = true
 			version.value = append([]byte(nil), mutation.Value...)
-		case MutationDelete:
+		case testkeyvalue.MutationDelete:
 		default:
-			return TransactionResult{}, errs.New(errs.KindInternal, "fake store received invalid mutation")
+			return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "fake store received invalid mutation")
 		}
 		store.history[mutation.Key] = append(store.history[mutation.Key], version)
 	}
-	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
+	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
 func (store *memoryHierarchyStore) TransactEnvironmentBlueprint(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	return store.Transact(ctx, conditions, mutations)
 }
 
-func (store *memoryHierarchyStore) valueAt(key string, revision int64) *KeyValue {
+func (store *memoryHierarchyStore) valueAt(key string, revision int64) *testkeyvalue.KeyValue {
 	versions := store.history[key]
 	for index := len(versions) - 1; index >= 0; index-- {
 		version := versions[index]
@@ -717,7 +755,7 @@ func (store *memoryHierarchyStore) valueAt(key string, revision int64) *KeyValue
 		for previous := index; previous >= 0 && versions[previous].present; previous-- {
 			keyVersion++
 		}
-		return &KeyValue{
+		return &testkeyvalue.KeyValue{
 			Key: key, Value: append([]byte(nil), version.value...),
 			Version: keyVersion, ModRevision: version.revision,
 		}

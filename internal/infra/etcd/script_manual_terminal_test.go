@@ -7,12 +7,15 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: success, failure after start, and running Abort are all
 // non-retryable and may terminalize only with exact cleanup and source release.
 func TestManualScriptTerminalReleasesSources(t *testing.T) {
-	for _, status := range []TaskStatus{TaskStatusCompleted, TaskStatusFailed, TaskStatusAborted} {
+	for _, status := range []testtaskjournal.TaskStatus{testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskStatusFailed, testtaskjournal.TaskStatusAborted} {
 		t.Run(string(status), func(t *testing.T) {
 			store, scripts, tasks, assignment, execution := claimedManualScriptFixture(t)
 			manualScriptCleanupCheckpoints(t, scripts, assignment, execution, status)
@@ -23,7 +26,10 @@ func TestManualScriptTerminalReleasesSources(t *testing.T) {
 			if err != nil || terminal.Record.Status != status {
 				t.Fatalf("manual terminal acknowledgement = %s, %v", terminal.Record.Status, err)
 			}
-			if store.valueAt(scriptSourceRootKey(execution.OperationID), store.revision) != nil {
+			if store.valueAt(
+				testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID),
+				store.revision,
+			) != nil {
 				t.Fatal("terminal manual Task retained its immutable source root")
 			}
 			script, err := scripts.GetScript(context.Background(), execution.ScriptID)
@@ -31,7 +37,8 @@ func TestManualScriptTerminalReleasesSources(t *testing.T) {
 				t.Fatalf("terminal Script references = %d, %v", script.Record.ActiveReferences, err)
 			}
 			closed, err := scripts.GetScriptExecution(context.Background(), execution.ID)
-			if err != nil || closed.Record.ActiveReference || closed.Record.State != ScriptExecutionCleanupProven {
+			if err != nil || closed.Record.ActiveReference ||
+				closed.Record.State != testscriptexecutions.ScriptExecutionCleanupProven {
 				t.Fatalf("terminal execution retained active authority: %v", err)
 			}
 			revision := store.revision
@@ -62,26 +69,23 @@ func TestManualScriptTerminalRejectsMissingCleanup(t *testing.T) {
 		assignment.Assignment.Record.AgentID,
 		1,
 		assignment.Task.Record.ID,
-		assignment.Assignment.Record.AssignmentID,
-		TaskStatusCompleted,
-		manualScriptTerminalResult(
-			assignment,
-			TaskStatusCompleted,
+		assignment.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, manualScriptTerminalResult(
+			assignment, testtaskjournal.TaskStatusCompleted,
 		),
 		assignment.Task.Record.CreatedAt.Add(20*time.Second),
 	)
 	if err == nil || store.revision != revision ||
-		store.valueAt(scriptSourceRootKey(execution.OperationID), store.revision) == nil {
+		store.valueAt(testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID), store.revision) == nil {
 		t.Fatalf("terminal report without cleanup was accepted: %v", err)
 	}
 }
 
 func claimedManualScriptFixture(
 	t *testing.T,
-) (*memoryHierarchyStore, *ScriptRepository, *TaskRepository, TaskAssignment, ScriptExecutionRecord) {
+) (*memoryHierarchyStore, *ScriptRepository, *TaskRepository, TaskAssignment, testscriptexecutions.ScriptExecutionRecord) {
 	t.Helper()
 	store, sources, execution, task, marker := manualScriptLifecycleFixture(t)
-	scripts := &ScriptRepository{store: store}
+	scripts := composeScriptRepository(store)
 	result, err := scripts.PublishExecutionWithTask(context.Background(), sources, execution, task, marker)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("publish manual execution = %#v, %v", result, err)
@@ -98,11 +102,17 @@ func claimedManualScriptFixture(
 	return store, scripts, tasks, assignment, execution
 }
 
-func manualScriptTerminalResult(assignment TaskAssignment, status TaskStatus) TaskResultRecord {
-	result := TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
-		ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch}
-	if status == TaskStatusFailed {
-		result.ExitCode, result.FailedStepID, result.Diagnostic = 7, assignment.Task.Record.Steps[0].ID, TaskResultDiagnosticComposeFailed
+func manualScriptTerminalResult(
+	assignment TaskAssignment,
+	status testtaskjournal.TaskStatus,
+) testtaskjournal.TaskResultRecord {
+	result := testtaskjournal.TaskResultRecord{
+		Kind:           testtaskjournal.TaskResultCompose,
+		Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+		ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch,
+	}
+	if status == testtaskjournal.TaskStatusFailed {
+		result.ExitCode, result.FailedStepID, result.Diagnostic = 7, assignment.Task.Record.Steps[0].ID, testtaskjournal.TaskResultDiagnosticComposeFailed
 	}
 	return result
 }
@@ -111,61 +121,64 @@ func manualScriptCleanupCheckpoints(
 	t *testing.T,
 	scripts *ScriptRepository,
 	assignment TaskAssignment,
-	execution ScriptExecutionRecord,
-	status TaskStatus,
+	execution testscriptexecutions.ScriptExecutionRecord,
+	status testtaskjournal.TaskStatus,
 ) {
 	t.Helper()
 	exitCode := int32(0)
-	if status == TaskStatusFailed {
+	if status == testtaskjournal.TaskStatusFailed {
 		exitCode = 7
 	}
-	outcome := &ScriptOutcomeEvidence{Reason: ScriptOutcomeNormalExit, ExitCode: &exitCode,
-		ObservedAt: assignment.Task.Record.CreatedAt.Add(5 * time.Second)}
-	if status == TaskStatusAborted {
-		outcome.Reason, outcome.ExitCode = ScriptOutcomeAbort, nil
+	outcome := &testscriptexecutions.ScriptOutcomeEvidence{
+		Reason:     testscriptexecutions.ScriptOutcomeNormalExit,
+		ExitCode:   &exitCode,
+		ObservedAt: assignment.Task.Record.CreatedAt.Add(5 * time.Second),
+	}
+	if status == testtaskjournal.TaskStatusAborted {
+		outcome.Reason, outcome.ExitCode = testscriptexecutions.ScriptOutcomeAbort, nil
 	}
 	checkpoints := []struct {
-		state    ScriptExecutionState
-		evidence ScriptCheckpointEvidence
+		state    testscriptexecutions.ScriptExecutionState
+		evidence testscriptexecutions.ScriptCheckpointEvidence
 	}{
+		{testscriptexecutions.ScriptExecutionStartAuthorized, testscriptexecutions.ScriptCheckpointEvidence{
+			Kind:            testscriptexecutions.ScriptCheckpointEvidenceStartAuthorized,
+			StartAuthorized: &testscriptexecutions.ScriptStartAuthorizedEvidence{},
+		},
+		},
+		{testscriptexecutions.ScriptExecutionBodyPrepared, testscriptexecutions.ScriptCheckpointEvidence{
+			Kind: testscriptexecutions.ScriptCheckpointEvidenceBodyPrepared,
+			BodyPrepared: &testscriptexecutions.ScriptBodyPreparedEvidence{
+				BodySHA256: execution.BodySHA256, UID: 65534, GID: 65534, Device: 10, Inode: 20, Leaf: "body",
+			},
+		},
+		},
+		{testscriptexecutions.ScriptExecutionContainerCreated, testscriptexecutions.ScriptCheckpointEvidence{
+			Kind: testscriptexecutions.ScriptCheckpointEvidenceContainerCreated,
+			ContainerCreated: &testscriptexecutions.ScriptContainerCreatedEvidence{
+				ContainerID: strings.Repeat("a", 64), OwnershipLabelsSHA256: strings.Repeat("b", 64),
+			},
+		},
+		},
 		{
-			ScriptExecutionStartAuthorized,
-			ScriptCheckpointEvidence{
-				Kind:            ScriptCheckpointEvidenceStartAuthorized,
-				StartAuthorized: &ScriptStartAuthorizedEvidence{},
+			testscriptexecutions.ScriptExecutionOutcomeRecorded,
+			testscriptexecutions.ScriptCheckpointEvidence{
+				Kind:    testscriptexecutions.ScriptCheckpointEvidenceOutcome,
+				Outcome: outcome,
 			},
 		},
 		{
-			ScriptExecutionBodyPrepared,
-			ScriptCheckpointEvidence{
-				Kind: ScriptCheckpointEvidenceBodyPrepared,
-				BodyPrepared: &ScriptBodyPreparedEvidence{
-					BodySHA256: execution.BodySHA256, UID: 65534, GID: 65534, Device: 10, Inode: 20, Leaf: "body",
+			testscriptexecutions.ScriptExecutionCleanupProven,
+			testscriptexecutions.ScriptCheckpointEvidence{
+				Kind: testscriptexecutions.ScriptCheckpointEvidenceCleanup,
+				Cleanup: &testscriptexecutions.ScriptCleanupEvidence{
+					ContainerID: strings.Repeat("a", 64), BodyDevice: 10, BodyInode: 20, BodyLeaf: "body",
+					ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true,
 				},
 			},
-		},
-		{
-			ScriptExecutionContainerCreated,
-			ScriptCheckpointEvidence{
-				Kind: ScriptCheckpointEvidenceContainerCreated,
-				ContainerCreated: &ScriptContainerCreatedEvidence{
-					ContainerID: strings.Repeat("a", 64), OwnershipLabelsSHA256: strings.Repeat("b", 64),
-				},
-			},
-		},
-		{
-			ScriptExecutionOutcomeRecorded,
-			ScriptCheckpointEvidence{Kind: ScriptCheckpointEvidenceOutcome, Outcome: outcome},
-		},
-		{
-			ScriptExecutionCleanupProven,
-			ScriptCheckpointEvidence{Kind: ScriptCheckpointEvidenceCleanup, Cleanup: &ScriptCleanupEvidence{
-				ContainerID: strings.Repeat("a", 64), BodyDevice: 10, BodyInode: 20, BodyLeaf: "body",
-				ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true,
-			}},
 		},
 	}
-	previous := ScriptExecutionNotStarted
+	previous := testscriptexecutions.ScriptExecutionNotStarted
 	for index, checkpoint := range checkpoints {
 		input := scriptCheckpointTestInput(
 			execution,

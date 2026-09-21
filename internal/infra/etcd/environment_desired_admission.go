@@ -58,8 +58,10 @@ func validateEnvironmentDesiredPublication(
 			errs.KindValidationFailed, "Environment desired revision publication identity is invalid",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID ||
 		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {

@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 )
 
-// SVC-15: restoring a failed write uses the earlier acknowledged source and
+// SVC-15: etcd restoration of a failed write uses the earlier acknowledged source and
 // metadata, never the failed file's value or any unrelated acknowledged file.
 func TestRestorationSelectsExactPriorFilesAndInitialAbsence(t *testing.T) {
 	t.Parallel()

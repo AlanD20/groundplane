@@ -9,11 +9,18 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	migratedagentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	migratedscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -35,7 +42,7 @@ func (r retainedUnexpectedImageResolver) ResolveWorkloadImages(
 func proveRetainedBlueprintProducer(
 	t *testing.T,
 	fixture *etcd.ExecutedArtifactFixture,
-	resolver *controller.TaskPlanResolver,
+	resolver *testtaskplanning.TaskPlanResolver,
 	nativeProject *composetypes.Project,
 	serviceID string,
 	servingRace bool,
@@ -63,15 +70,15 @@ func proveRetainedBlueprintProducer(
 		fixture.Ledger,
 		&etcd.ScriptRepository{},
 		resolver,
-		&controller.ScriptArtifactService{},
-		&etcd.ScriptSourceReferenceAuthority{},
-		&etcd.LocalAgentRepository{},
+		&testtaskplanning.ScriptArtifactService{},
+		&migratedscriptsourcepublication.Authority{},
+		&migratedagentregistration.Repository{},
 		retainedUnexpectedImageResolver{t},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changes := []etcd.EnvironmentBlueprintServiceChange{
+	changes := []testblueprints.EnvironmentBlueprintServiceChange{
 		{Current: &planning[0].Service, Record: planning[0].Service.Record},
 	}
 	project := &composetypes.Project{Name: nativeProject.Name, Services: make(composetypes.Services)}
@@ -105,23 +112,25 @@ func proveRetainedBlueprintProducer(
 	task.RenderGeneration = int32(desired.Record.RenderGeneration + 1)
 	artifactID, managedID, componentID := ids.New(ids.KindConfig), ids.New(ids.KindService), ids.New(ids.KindComponent)
 	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(taskcontract.BlueprintComposeProcedureNone)
-	task.Params[controller.EnvironmentBlueprintArtifactParam] = artifactID
-	task.Params[etcd.EnvironmentDesiredRevisionParam] = task.ID
-	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{Project: project, ArtifactID: artifactID,
-		ProjectOwnerKind: controller.ComposeProjectOwnerTenant, TenantID: fixture.Project.Record.TenantID, ProjectID: fixture.Project.Record.ID,
-		EnvironmentID: fixture.Environment.Record.ID, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration), AuthorizedVolumeDir: fixture.Environment.Record.VolumeDir,
-		Identities: controller.ComposeIdentitySnapshot{
-			Services: []controller.ComposeResourceIdentity{
-				{ID: serviceID, Name: "api"},
-				{ID: managedID, Name: "managed-proof", ComponentID: componentID,
-					ComponentImage: &controller.SelectedComponentImage{
-						Repository:  catalog.Repository,
-						IndexDigest: catalog.IndexDigest,
-						Reference:   reference,
-						Platform:    platform,
-					}},
-			},
-		}})
+	task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
+	task.Params[testblueprints.EnvironmentDesiredRevisionParam] = task.ID
+	artifact, err := testcomposerender.RenderCompose(
+		testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
+			ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: fixture.Project.Record.TenantID, ProjectID: fixture.Project.Record.ID,
+			EnvironmentID: fixture.Environment.Record.ID, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration), AuthorizedVolumeDir: fixture.Environment.Record.VolumeDir,
+			Identities: testcomposeidentity.Snapshot{
+				Services: []testcomposeidentity.Resource{
+					{ID: serviceID, Name: "api"},
+					{ID: managedID, Name: "managed-proof", ComponentID: componentID,
+						ComponentImage: &testcomposeidentity.ComponentImage{
+							Repository:  catalog.Repository,
+							IndexDigest: catalog.IndexDigest,
+							Reference:   reference,
+							Platform:    platform,
+						}},
+				},
+			}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +146,7 @@ func proveRetainedBlueprintProducer(
 	projection.RevisionID, projection.RenderGeneration, projection.ComposeArtifact = task.ID, uint64(
 		task.RenderGeneration,
 	), value
-	caddy, err := etcd.NewComponentRecord(
+	caddy, err := testcomponents.NewRecord(
 		core.Component{
 			ID:      ids.New(ids.KindComponent),
 			Owner:   core.ComponentOwnerEnvironment,
@@ -148,7 +157,7 @@ func proveRetainedBlueprintProducer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	tunnel, err := etcd.NewComponentRecord(
+	tunnel, err := testcomponents.NewRecord(
 		core.Component{
 			ID:      componentID,
 			Owner:   core.ComponentOwnerEnvironment,
@@ -164,7 +173,7 @@ func proveRetainedBlueprintProducer(
 	if err != nil {
 		t.Fatal(err)
 	}
-	projection.Components = []etcd.ComponentRecord{caddy, tunnel}
+	projection.Components = []testcomponents.Record{caddy, tunnel}
 	// Generated Component Services are runtime output, not authored native input.
 	projection.NormalizedCompose, err = nativeProject.MarshalYAML()
 	if err != nil {
@@ -218,8 +227,7 @@ func proveRetainedBlueprintProducer(
 	if err != nil || !claimed || claim.Task.Record.ID != task.ID {
 		t.Fatalf("retained Task claim: %t %v", claimed, err)
 	}
-	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted,
-		etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, ExecutionEpoch: 1, Diagnostic: etcd.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
+	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	latest, found, err := fixture.Hierarchy.GetEnvironmentAppliedComposeProjection(ctx, fixture.Environment.Record.ID)

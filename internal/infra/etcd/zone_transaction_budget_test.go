@@ -1,11 +1,14 @@
 package etcd
 
-import "testing"
+import (
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"testing"
+)
 
 func TestZoneRemovalTransactionsRemainStrictlyBelowEtcdOperationLimit(t *testing.T) {
 	t.Parallel()
-	conditions := make([]Condition, 47)
-	mutations := make([]Mutation, 48)
+	conditions := make([]testkeyvalue.Condition, 47)
+	mutations := make([]testkeyvalue.Mutation, 48)
 	for _, phase := range []zoneRemovalTransactionPhase{
 		zoneRemovalTransactionBegin,
 		zoneRemovalTransactionRetry,
@@ -21,7 +24,7 @@ func TestZoneRemovalTransactionsRemainStrictlyBelowEtcdOperationLimit(t *testing
 			if err := validateZoneRemovalTransactionBudget(phase, conditions, mutations); err != nil {
 				t.Fatalf("validateZoneRemovalTransactionBudget(%s, 95) error = %v", phase, err)
 			}
-			atLimit := append(append([]Mutation(nil), mutations...), Mutation{})
+			atLimit := append(append([]testkeyvalue.Mutation(nil), mutations...), testkeyvalue.Mutation{})
 			if err := validateZoneRemovalTransactionBudget(phase, conditions, atLimit); err == nil {
 				t.Fatalf("validateZoneRemovalTransactionBudget(%s, 96) error = nil", phase)
 			}

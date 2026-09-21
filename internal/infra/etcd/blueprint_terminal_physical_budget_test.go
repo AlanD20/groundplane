@@ -5,6 +5,7 @@ import (
 	"math"
 	"testing"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,13 +16,15 @@ func TestBlueprintTerminalPhysicalBudgetAndNonExecutableProjection(t *testing.T)
 	key := "/v1/records/tasks/budget"
 	envelope := BlueprintTaskTerminalTransaction{
 		taskID: "budget", projectionOnly: true,
-		conditions: []Condition{{Key: key, ModRevision: math.MaxInt64}},
-		mutations:  []Mutation{{Type: MutationPut, Key: key, Value: make([]byte, maximumTransactionBytes)}},
+		conditions: []testkeyvalue.Condition{{Key: key, ModRevision: math.MaxInt64}},
+		mutations: []testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: key, Value: make([]byte, testkeyvalue.MaximumBytes)},
+		},
 	}
 	physicalKeys := []string{prefix + key}
 	size := transactionRequest(envelope.conditions, envelope.mutations, physicalKeys, physicalKeys).Size()
-	envelope.mutations[0].Value = envelope.mutations[0].Value[:maximumTransactionBytes-(size-maximumTransactionBytes)]
-	if got := transactionRequest(envelope.conditions, envelope.mutations, physicalKeys, physicalKeys).Size(); got != maximumTransactionBytes {
+	envelope.mutations[0].Value = envelope.mutations[0].Value[:testkeyvalue.MaximumBytes-(size-testkeyvalue.MaximumBytes)]
+	if got := transactionRequest(envelope.conditions, envelope.mutations, physicalKeys, physicalKeys).Size(); got != testkeyvalue.MaximumBytes {
 		t.Fatalf("physical boundary fixture size = %d", got)
 	}
 	s := &store{root: prefix} // Validation and projection rejection need no client.

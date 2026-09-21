@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,21 +19,26 @@ func TestTaskRecordCodecPreservesRestartSafeJournalState(t *testing.T) {
 	// sequence rather than reuse a sequence or lose task lifecycle metadata.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	first, err := prepareTaskEvent(task, taskEventInput(task.ID, 1, TaskEventStateRunning), nil, now.Add(time.Second))
+	first, err := prepareTaskEvent(
+		task,
+		taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning),
+		nil,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatalf("prepareTaskEvent(first) error = %v", err)
 	}
-	encoded, err := encodeTaskRecord(first.Task)
+	encoded, err := EncodeTaskRecord(first.Task)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord() error = %v", err)
 	}
-	restored, err := decodeTaskRecord(encoded)
+	restored, err := DecodeTaskRecord(encoded)
 	if err != nil {
 		t.Fatalf("decodeTaskRecord() error = %v", err)
 	}
 	second, err := prepareTaskEvent(
 		restored,
-		taskEventInput(task.ID, 2, TaskEventStateRunning),
+		taskEventInput(task.ID, 2, testtaskjournal.TaskEventStateRunning),
 		nil,
 		now.Add(2*time.Second),
 	)
@@ -42,10 +49,11 @@ func TestTaskRecordCodecPreservesRestartSafeJournalState(t *testing.T) {
 		second.Task.EventCount != 2 {
 		t.Fatalf("journal summaries = first %#v, second %#v", first, second)
 	}
-	if first.Task.Status != TaskStatusPending || second.Task.Status != TaskStatusPending {
+	if first.Task.Status != testtaskjournal.TaskStatusPending ||
+		second.Task.Status != testtaskjournal.TaskStatusPending {
 		t.Fatalf("step events changed task lifecycle: first=%s second=%s", first.Task.Status, second.Task.Status)
 	}
-	reencoded, err := encodeTaskRecord(restored)
+	reencoded, err := EncodeTaskRecord(restored)
 	if err != nil {
 		t.Fatalf("re-encode restored task: %v", err)
 	}
@@ -59,7 +67,7 @@ func TestTaskEventDeduplicationReturnsSequenceAndRejectsPayloadMismatch(t *testi
 	// identity must be replay-safe, while identity reuse cannot hide new output.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	prepared, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
 	if err != nil {
 		t.Fatalf("prepareTaskEvent() error = %v", err)
@@ -87,25 +95,19 @@ func TestTaskEventAcceptsTerminalReplayButRejectsNewTerminalIdentity(t *testing.
 	// new activity history after its lifecycle is closed.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	prepared, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
 	if err != nil {
 		t.Fatalf("prepareTaskEvent(first) error = %v", err)
 	}
-	running, err := transitionTaskStatus(
-		prepared.Task,
-		TaskStatusPending,
-		TaskStatusRunning,
-		now.Add(2*time.Second),
+	running, err := TransitionTaskStatus(
+		prepared.Task, testtaskjournal.TaskStatusPending, testtaskjournal.TaskStatusRunning, now.Add(2*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(running) error = %v", err)
 	}
-	terminal, err := transitionTaskStatus(
-		running,
-		TaskStatusRunning,
-		TaskStatusCompleted,
-		now.Add(3*time.Second),
+	terminal, err := TransitionTaskStatus(
+		running, testtaskjournal.TaskStatusRunning, testtaskjournal.TaskStatusCompleted, now.Add(3*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(terminal) error = %v", err)
@@ -117,7 +119,7 @@ func TestTaskEventAcceptsTerminalReplayButRejectsNewTerminalIdentity(t *testing.
 	if !replay.Duplicate || replay.Sequence != prepared.Sequence {
 		t.Fatalf("prepareTaskEvent(replay) = %#v", replay)
 	}
-	newIdentity := taskEventInput(task.ID, 2, TaskEventStateRunning)
+	newIdentity := taskEventInput(task.ID, 2, testtaskjournal.TaskEventStateRunning)
 	if _, err := prepareTaskEvent(
 		terminal,
 		newIdentity,
@@ -134,7 +136,7 @@ func TestTaskEventRequiresADeclaredTaskStep(t *testing.T) {
 	// the dispatched plan after a reconnect.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	input.Identity.StepID = ids.NewAt(ids.KindStep, now, 6)
 	_, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
 	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
@@ -147,20 +149,26 @@ func TestTaskStepEventDoesNotCompleteTheTaskLifecycle(t *testing.T) {
 	// Agent acknowledgement may complete the whole multi-step Task.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, now.Add(time.Second))
+	running, err := TransitionTaskStatus(
+		task,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(running) error = %v", err)
 	}
 	prepared, err := prepareTaskEvent(
 		running,
-		taskEventInput(task.ID, 1, TaskEventStateCompleted),
+		taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateCompleted),
 		nil,
 		now.Add(2*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("prepareTaskEvent(completed step) error = %v", err)
 	}
-	if prepared.Event.State != TaskEventStateCompleted || prepared.Task.Status != TaskStatusRunning {
+	if prepared.Event.State != testtaskjournal.TaskEventStateCompleted ||
+		prepared.Task.Status != testtaskjournal.TaskStatusRunning {
 		t.Fatalf("event/task states = %s/%s, want completed/running", prepared.Event.State, prepared.Task.Status)
 	}
 }
@@ -173,7 +181,7 @@ func TestTaskEventOrderingAndLimitsAreDeterministic(t *testing.T) {
 	for ordinal := uint64(1); ordinal <= 3; ordinal++ {
 		prepared, err := prepareTaskEvent(
 			task,
-			taskEventInput(task.ID, ordinal, TaskEventStateRunning),
+			taskEventInput(task.ID, ordinal, testtaskjournal.TaskEventStateRunning),
 			nil,
 			now.Add(time.Duration(ordinal)*time.Second),
 		)
@@ -185,11 +193,11 @@ func TestTaskEventOrderingAndLimitsAreDeterministic(t *testing.T) {
 		}
 		task = prepared.Task
 	}
-	task.EventCount = MaximumTaskEvents
-	task.NextEventSequence = MaximumTaskEvents + 1
+	task.EventCount = testtaskjournal.MaximumTaskEvents
+	task.NextEventSequence = testtaskjournal.MaximumTaskEvents + 1
 	window, err := prepareTaskEvent(
 		task,
-		taskEventInput(task.ID, MaximumTaskEvents+1, TaskEventStateRunning),
+		taskEventInput(task.ID, testtaskjournal.MaximumTaskEvents+1, testtaskjournal.TaskEventStateRunning),
 		nil,
 		now.Add(time.Hour),
 	)
@@ -204,8 +212,8 @@ func TestTaskEventDurableJSONLimitIncludesEnvelope(t *testing.T) {
 	// exceed etcd's accepted 32 KiB durable event ceiling.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
-	input.Payload = json.RawMessage(`{"message":"` + strings.Repeat("x", MaximumTaskEventBytes) + `"}`)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
+	input.Payload = json.RawMessage(`{"message":"` + strings.Repeat("x", testtaskjournal.MaximumTaskEventBytes) + `"}`)
 	_, err := prepareTaskEvent(task, input, nil, now.Add(time.Second))
 	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("prepareTaskEvent(oversized) error = %v, want validation.failed", err)
@@ -217,24 +225,44 @@ func TestTaskStatusTransitionRejectsStaleAndInvalidState(t *testing.T) {
 	// guard independently prevents stale workers and terminal-state regression.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, now.Add(time.Second))
+	running, err := TransitionTaskStatus(
+		task,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(running) error = %v", err)
 	}
-	_, err = transitionTaskStatus(running, TaskStatusPending, TaskStatusRunning, now.Add(2*time.Second))
+	_, err = TransitionTaskStatus(
+		running,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		now.Add(2*time.Second),
+	)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("transitionTaskStatus(stale) error = %v, want state.conflict", err)
 	}
-	completed, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusCompleted, now.Add(2*time.Second))
+	completed, err := TransitionTaskStatus(
+		running,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusCompleted,
+		now.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(completed) error = %v", err)
 	}
-	_, err = transitionTaskStatus(completed, TaskStatusCompleted, TaskStatusRunning, now.Add(3*time.Second))
+	_, err = TransitionTaskStatus(
+		completed,
+		testtaskjournal.TaskStatusCompleted,
+		testtaskjournal.TaskStatusRunning,
+		now.Add(3*time.Second),
+	)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("transitionTaskStatus(regression) error = %v, want state.conflict", err)
 	}
 	if completed.RetainUntil == nil || completed.FinishedAt == nil ||
-		!completed.RetainUntil.Equal(completed.FinishedAt.Add(TaskRetention)) ||
+		!completed.RetainUntil.Equal(completed.FinishedAt.Add(testtaskjournal.TaskRetention)) ||
 		!completed.UpdatedAt.Equal(*completed.FinishedAt) {
 		t.Fatalf("terminal retention metadata = %#v", completed)
 	}
@@ -245,16 +273,26 @@ func TestTaskRetryClonesOperationMetadataWithoutAliasing(t *testing.T) {
 	// mutable maps and step slices must not alias the terminal source record.
 	now := taskJournalTime()
 	source := validTaskRecord(now)
-	running, err := transitionTaskStatus(source, TaskStatusPending, TaskStatusRunning, now.Add(time.Second))
+	running, err := TransitionTaskStatus(
+		source,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(running) error = %v", err)
 	}
-	failed, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusFailed, now.Add(2*time.Second))
+	failed, err := TransitionTaskStatus(
+		running,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusFailed,
+		now.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(failed) error = %v", err)
 	}
 	retryID := ids.NewAt(ids.KindTask, now.Add(3*time.Second), 3)
-	retry, err := cloneRetryTask(failed, retryID, TaskActorOperator, now.Add(3*time.Second))
+	retry, err := CloneRetryTask(failed, retryID, testtaskjournal.TaskActorOperator, now.Add(3*time.Second))
 	if err != nil {
 		t.Fatalf("cloneRetryTask() error = %v", err)
 	}
@@ -262,11 +300,11 @@ func TestTaskRetryClonesOperationMetadataWithoutAliasing(t *testing.T) {
 		retry.IdempotencyKey != failed.IdempotencyKey || retry.PlanID != failed.PlanID ||
 		retry.PlanHash != failed.PlanHash || retry.RenderGeneration != failed.RenderGeneration ||
 		retry.Type != failed.Type || retry.Target != failed.Target || retry.TimeoutSeconds != failed.TimeoutSeconds ||
-		retry.Owner != failed.Owner || retry.Actor != TaskActorOperator ||
+		retry.Owner != failed.Owner || retry.Actor != testtaskjournal.TaskActorOperator ||
 		!reflect.DeepEqual(retry.Params, failed.Params) || !reflect.DeepEqual(retry.Steps, failed.Steps) {
 		t.Fatalf("retry did not preserve operation metadata: source=%#v retry=%#v", failed, retry)
 	}
-	if retry.Status != TaskStatusPending || retry.EventCount != 0 || retry.NextEventSequence != 1 ||
+	if retry.Status != testtaskjournal.TaskStatusPending || retry.EventCount != 0 || retry.NextEventSequence != 1 ||
 		retry.StartedAt != nil || retry.FinishedAt != nil || retry.RetainUntil != nil ||
 		!retry.UpdatedAt.Equal(retry.CreatedAt) {
 		t.Fatalf("retry lifecycle was not reset: %#v", retry)
@@ -285,20 +323,20 @@ func TestTaskAndEventCodecsRejectCorruptDurableRecords(t *testing.T) {
 	// envelope, stable ids, canonical timestamps, and event digest all agree.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	encodedTask, err := encodeTaskRecord(task)
+	encodedTask, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord() error = %v", err)
 	}
 	corruptTask := strings.Replace(string(encodedTask), `"next_event_sequence":1`, `"next_event_sequence":2`, 1)
-	if _, err := decodeTaskRecord([]byte(corruptTask)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := DecodeTaskRecord([]byte(corruptTask)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskRecord(corrupt) error = %v, want internal", err)
 	}
 	ownerless := strings.Replace(string(encodedTask), `"owner":{"workspace_type":"platform"},`, "", 1)
-	if _, err := decodeTaskRecord([]byte(ownerless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := DecodeTaskRecord([]byte(ownerless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskRecord(ownerless clean-start record) error = %v, want internal", err)
 	}
 	actorless := strings.Replace(string(encodedTask), `"actor":"operator",`, "", 1)
-	if _, err := decodeTaskRecord([]byte(actorless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := DecodeTaskRecord([]byte(actorless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskRecord(actorless clean-start record) error = %v, want internal", err)
 	}
 	updatedless := strings.Replace(
@@ -307,41 +345,54 @@ func TestTaskAndEventCodecsRejectCorruptDurableRecords(t *testing.T) {
 		`"updated_at":""`,
 		1,
 	)
-	if _, err := decodeTaskRecord([]byte(updatedless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := DecodeTaskRecord([]byte(updatedless)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskRecord(timestampless clean-start record) error = %v, want internal", err)
 	}
-	running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, now.Add(time.Second))
+	running, err := TransitionTaskStatus(
+		task,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(running) error = %v", err)
 	}
-	terminal, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusFailed, now.Add(2*time.Second))
+	terminal, err := TransitionTaskStatus(
+		running,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusFailed,
+		now.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(terminal) error = %v", err)
 	}
-	encodedTerminal, err := encodeTaskRecord(terminal)
+	encodedTerminal, err := EncodeTaskRecord(terminal)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord(terminal) error = %v", err)
 	}
 	oldTerminal := strings.Replace(string(encodedTerminal), `"finished_at":`, `"terminal_at":`, 1)
-	if _, err := decodeTaskRecord([]byte(oldTerminal)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := DecodeTaskRecord([]byte(oldTerminal)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("decodeTaskRecord(old terminal schema) error = %v, want internal", err)
 	}
 
 	prepared, err := prepareTaskEvent(
 		task,
-		taskEventInput(task.ID, 1, TaskEventStateRunning),
+		taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning),
 		nil,
 		now.Add(time.Second),
 	)
 	if err != nil {
 		t.Fatalf("prepareTaskEvent() error = %v", err)
 	}
-	encodedEvent, err := encodeTaskEventRecord(prepared.Event)
+	encodedEvent, err := testtaskjournal.EncodeTaskEventRecord(prepared.Event)
 	if err != nil {
 		t.Fatalf("encodeTaskEventRecord() error = %v", err)
 	}
 	corruptEvent := strings.Replace(string(encodedEvent), prepared.Event.PayloadSHA256, strings.Repeat("0", 64), 1)
-	if _, err := decodeTaskEventRecord([]byte(corruptEvent)); !errors.Is(err, errs.New(errs.KindInternal, "")) {
+	if _, err := testtaskjournal.DecodeTaskEventRecord([]byte(corruptEvent)); !errors.Is(
+		err,
+		errs.New(errs.KindInternal, ""),
+	) {
 		t.Fatalf("decodeTaskEventRecord(corrupt) error = %v, want internal", err)
 	}
 }
@@ -351,7 +402,12 @@ func TestTaskControllerTimestampsNormalizeEqualityAndRegression(t *testing.T) {
 	// valid Controller transitions fail or move updated_at backwards.
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, now)
+	running, err := TransitionTaskStatus(
+		task,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		now,
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(equal) error = %v", err)
 	}
@@ -360,7 +416,12 @@ func TestTaskControllerTimestampsNormalizeEqualityAndRegression(t *testing.T) {
 		!running.StartedAt.Equal(wantRunning) {
 		t.Fatalf("equal transition timestamps = %#v", running)
 	}
-	terminal, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusFailed, now.Add(-time.Hour))
+	terminal, err := TransitionTaskStatus(
+		running,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusFailed,
+		now.Add(-time.Hour),
+	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(regressed) error = %v", err)
 	}
@@ -373,7 +434,7 @@ func TestTaskControllerTimestampsNormalizeEqualityAndRegression(t *testing.T) {
 	eventTask := validTaskRecord(now)
 	prepared, err := prepareTaskEvent(
 		eventTask,
-		taskEventInput(eventTask.ID, 1, TaskEventStateRunning),
+		taskEventInput(eventTask.ID, 1, testtaskjournal.TaskEventStateRunning),
 		nil,
 		now.Add(-time.Hour),
 	)
@@ -391,12 +452,12 @@ func TestTaskJournalRequiresCanonicalUTCTimestamps(t *testing.T) {
 	now := taskJournalTime()
 	task := validTaskRecord(now)
 	task.CreatedAt = time.Date(2026, time.August, 20, 12, 0, 0, 0, time.FixedZone("zero-offset", 0))
-	if _, err := encodeTaskRecord(task); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := EncodeTaskRecord(task); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("encodeTaskRecord(noncanonical UTC) error = %v, want validation.failed", err)
 	}
 
 	task = validTaskRecord(now)
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	noncanonical := time.Date(2026, time.August, 20, 12, 0, 1, 0, time.FixedZone("zero-offset", 0))
 	if _, err := prepareTaskEvent(
 		task,
@@ -416,10 +477,14 @@ func validTaskRecord(now time.Time) TaskRecord {
 	// Script tests opt into TaskScript and publish those required companions.
 	task := newTaskRecord(
 		ids.NewAt(ids.KindTask, now, 1),
-		ids.NewAt(ids.KindOperation, now, 2),
-		PlatformTaskOwner(),
-		TaskActorOperator,
-		TaskUpdate,
+		ids.NewAt(
+			ids.KindOperation,
+			now,
+			2,
+		),
+		testtaskjournal.PlatformTaskOwner(),
+		testtaskjournal.TaskActorOperator,
+		testtaskjournal.TaskUpdate,
 		ids.NewAt(ids.KindService, now, 4),
 		120,
 		now,
@@ -429,7 +494,7 @@ func validTaskRecord(now time.Time) TaskRecord {
 	task.PlanHash = strings.Repeat("a", 64)
 	task.RenderGeneration = 1
 	task.Params = map[string]string{"name": "migrate"}
-	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: taskJournalStepID()}}
+	task.Steps = []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: taskJournalStepID()}}
 	return task
 }
 
@@ -438,20 +503,20 @@ func validTaskRecord(now time.Time) TaskRecord {
 func TestTaskBackupPruneIsInClosedDurableCatalog(t *testing.T) {
 	now := taskJournalTime()
 	task := validTaskRecord(now)
-	task.Type = TaskBackupPrune
+	task.Type = testtaskjournal.TaskBackupPrune
 	task.Target = ids.NewAt(ids.KindEnvironment, now, 901)
 	task.RenderGeneration = 0
 	task.Params = nil
 	task.Materializations = nil
 	task.TimeoutSeconds = backupTaskTimeoutSeconds
-	if err := validateTaskRecord(task); !errors.Is(
+	if err := ValidateTaskRecord(task); !errors.Is(
 		err,
 		errs.New(errs.KindValidationFailed, ""),
 	) {
 		t.Fatalf("validateTaskRecord(operator backup prune) error = %v, want validation.failed", err)
 	}
-	task.Actor = TaskActorSystem
-	if err := validateTaskRecord(task); err != nil {
+	task.Actor = testtaskjournal.TaskActorSystem
+	if err := ValidateTaskRecord(task); err != nil {
 		t.Fatalf("validateTaskRecord(backup prune) error = %v", err)
 	}
 }
@@ -461,18 +526,18 @@ func TestTaskBackupPruneIsInClosedDurableCatalog(t *testing.T) {
 // caller-selected deadlines cannot become a second machine contract.
 func TestBackupTaskDurableShapeIsClosed(t *testing.T) {
 	now := taskJournalTime()
-	for _, taskType := range []TaskType{TaskBackup, TaskBackupPrune} {
+	for _, taskType := range []testtaskjournal.TaskType{testtaskjournal.TaskBackup, testtaskjournal.TaskBackupPrune} {
 		base := validTaskRecord(now)
 		base.Type = taskType
-		if taskType == TaskBackupPrune {
-			base.Actor = TaskActorSystem
+		if taskType == testtaskjournal.TaskBackupPrune {
+			base.Actor = testtaskjournal.TaskActorSystem
 		}
 		base.Target = ids.NewAt(ids.KindEnvironment, now, 902)
 		base.RenderGeneration = 0
 		base.Params = nil
 		base.Materializations = nil
 		base.TimeoutSeconds = backupTaskTimeoutSeconds
-		if err := validateTaskRecord(base); err != nil {
+		if err := ValidateTaskRecord(base); err != nil {
 			t.Fatalf("validateTaskRecord(%s) error = %v", taskType, err)
 		}
 		checks := []struct {
@@ -483,7 +548,7 @@ func TestBackupTaskDurableShapeIsClosed(t *testing.T) {
 				task.Params = map[string]string{"object": "private"}
 			}},
 			{name: "materialization", mutate: func(task *TaskRecord) {
-				task.Materializations = []TaskMaterializationRecord{{}}
+				task.Materializations = []testtaskmaterialization.Record{{}}
 			}},
 			{name: "render generation", mutate: func(task *TaskRecord) { task.RenderGeneration = 1 }},
 			{name: "short timeout", mutate: func(task *TaskRecord) { task.TimeoutSeconds-- }},
@@ -492,7 +557,7 @@ func TestBackupTaskDurableShapeIsClosed(t *testing.T) {
 			t.Run(string(taskType)+"/"+check.name, func(t *testing.T) {
 				task := cloneTaskRecord(base)
 				check.mutate(&task)
-				if err := validateTaskRecord(task); !errors.Is(
+				if err := ValidateTaskRecord(task); !errors.Is(
 					err,
 					errs.New(errs.KindValidationFailed, ""),
 				) {
@@ -503,9 +568,13 @@ func TestBackupTaskDurableShapeIsClosed(t *testing.T) {
 	}
 }
 
-func taskEventInput(taskID string, ordinal uint64, state TaskEventState) TaskEventInput {
-	return TaskEventInput{
-		Identity: TaskEventIdentity{
+func taskEventInput(
+	taskID string,
+	ordinal uint64,
+	state testtaskjournal.TaskEventState,
+) testtaskjournal.TaskEventInput {
+	return testtaskjournal.TaskEventInput{
+		Identity: testtaskjournal.TaskEventIdentity{
 			AssignmentID: taskEventTestAssignmentID,
 			AgentID:      taskEventTestAgentID, AgentGeneration: 1,
 			TaskID: taskID, StepID: taskJournalStepID(), Attempt: 1, Ordinal: ordinal,

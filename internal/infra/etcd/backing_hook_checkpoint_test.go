@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -26,26 +28,32 @@ func TestBackingHookCheckpointReplaysResultWithoutReplacingCiphertext(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := BackingHookCheckpointInput{
+	input := testbackinghooks.CheckpointInput{
 		TaskID: task.ID, OperationID: task.OperationID,
 		AssignmentID: taskEventTestAssignmentID, AgentID: taskEventTestAgentID,
 		AgentGeneration: 1, ExecutionEpoch: 1, StepID: task.Steps[0].ID,
 		PlanHash: task.PlanHash, AttachID: ids.NewAt(ids.KindAttach, now, 20),
-		Event: "attach", State: BackingHookCheckpointStarted, At: now.Add(time.Second),
+		Event: "attach", State: testbackinghooks.CheckpointStarted, At: now.Add(time.Second),
 	}
 	started, existing, err := repository.CheckpointBackingHook(ctx, input)
-	if err != nil || existing || started.Record.State != BackingHookCheckpointStarted {
+	if err != nil || existing || started.Record.State != testbackinghooks.CheckpointStarted {
 		t.Fatalf("start: existing=%v, err=%v", existing, err)
 	}
 	duplicate, existing, err := repository.CheckpointBackingHook(ctx, input)
 	if err != nil || !existing || duplicate.Revision != started.Revision {
 		t.Fatalf("repeat start: existing=%v, err=%v", existing, err)
 	}
-	first, err := NewAttachEncryptedFacts(input.AttachID, 1, "age-x25519", "sha256", []byte("first-envelope"))
+	first, err := testattachments.NewAttachEncryptedFacts(
+		input.AttachID,
+		1,
+		"age-x25519",
+		"sha256",
+		[]byte("first-envelope"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input.State = BackingHookCheckpointResult
+	input.State = testbackinghooks.CheckpointResult
 	input.ResultSHA256 = strings.Repeat("b", 64)
 	input.Facts = &first
 	input.At = now.Add(2 * time.Second)
@@ -54,7 +62,13 @@ func TestBackingHookCheckpointReplaysResultWithoutReplacingCiphertext(t *testing
 		t.Fatal("injected lost acknowledgement was not returned")
 	}
 	committedRevision := store.currentRevision()
-	second, err := NewAttachEncryptedFacts(input.AttachID, 1, "age-x25519", "sha256", []byte("fresh-envelope"))
+	second, err := testattachments.NewAttachEncryptedFacts(
+		input.AttachID,
+		1,
+		"age-x25519",
+		"sha256",
+		[]byte("fresh-envelope"),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

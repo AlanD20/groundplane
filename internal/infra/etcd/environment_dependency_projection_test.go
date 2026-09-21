@@ -6,13 +6,15 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, time.August, 26, 12, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 3)
-	services := []EnvironmentServiceProjection{
+	services := []testservices.EnvironmentServiceProjection{
 		{EnvironmentID: environmentID, Desired: core.Service{
 			ID: ids.NewAt(ids.KindService, at, 1), Name: "api", Image: "example/api:1",
 			Strategy: core.StrategyRecreate, OnFailure: core.OnFailureSwitchBack,
@@ -36,7 +38,7 @@ func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.
 			Service: "api", Dependency: "database", Condition: core.ServiceDependencyCompletedSuccessfully,
 		}},
 	}
-	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:    environmentID,
 		RevisionID:       ids.NewAt(ids.KindTask, at, 4),
 		RenderGeneration: 1,
@@ -45,10 +47,10 @@ func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.
 			DeployDependencyPlan: deploy, RollbackDependencyPlan: rollback,
 		},
 	})
-	if err := validateEnvironmentComposeProjection(projection); err != nil {
+	if err := testenvironmentprojection.ValidateEnvironmentComposeProjection(projection); err != nil {
 		t.Fatalf("validateEnvironmentComposeProjection() error = %v", err)
 	}
-	clone := cloneEnvironmentComposeProjection(projection)
+	clone := testenvironmentprojection.CloneEnvironmentComposeProjection(projection)
 	clone.DeployDependencyPlan.OrderedServices[0] = "changed"
 	clone.RollbackDependencyPlan.Edges[0].Dependency = "changed"
 	if projection.DeployDependencyPlan.OrderedServices[0] != "database" ||
@@ -59,7 +61,7 @@ func TestEnvironmentComposeProjectionOwnsAndValidatesDependencyPlans(t *testing.
 	invalid.DeployDependencyPlan = core.CloneServiceDependencyPhasePlan(projection.DeployDependencyPlan)
 	invalid.DeployDependencyPlan.OrderedServices[0], invalid.DeployDependencyPlan.OrderedServices[1] =
 		invalid.DeployDependencyPlan.OrderedServices[1], invalid.DeployDependencyPlan.OrderedServices[0]
-	if err := validateEnvironmentComposeProjection(invalid); err == nil {
+	if err := testenvironmentprojection.ValidateEnvironmentComposeProjection(invalid); err == nil {
 		t.Fatal("validateEnvironmentComposeProjection(invalid order) error = nil")
 	}
 }

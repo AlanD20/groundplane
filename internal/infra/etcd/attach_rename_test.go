@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"testing"
 )
@@ -31,14 +32,17 @@ func TestRenameAttachIdempotentMovesTheScopedNameAtomically(t *testing.T) {
 		t.Fatalf("GetProject() error = %v", err)
 	}
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 		ScopeID:   current.Record.EnvironmentID,
 		Method:    http.MethodPost,
 		Route:     "/attaches/{id}/rename",
 		Key:       "attach-rename-key-0001",
 	}
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetAttach, ID: current.Record.ID}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetAttach,
+		ID:   current.Record.ID,
+	}
 	result, err := repository.RenameAttachIdempotent(
 		ctx, environment, project, current, "renamed-database", marker,
 	)

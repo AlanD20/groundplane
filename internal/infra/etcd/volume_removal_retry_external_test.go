@@ -8,6 +8,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -43,8 +46,8 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 		}
 	} else {
 		if _, err := tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, assignment.TaskID,
-			assignment.AssignmentID, etcd.TaskStatusFailed, etcd.TaskResultRecord{
-				Kind: etcd.TaskResultEnvironmentDirectory, Diagnostic: etcd.TaskResultDiagnosticNone,
+			assignment.AssignmentID, testtaskjournal.TaskStatusFailed, testtaskjournal.TaskResultRecord{
+				Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 			}, failedAt); err != nil {
 			t.Fatal(err)
 		}
@@ -52,21 +55,25 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 	retryAt := failedAt.Add(time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 93)
 	marker := volumeRemovalRetryMarker(fixture.Marker, retryID, retryAt)
-	rootKey, err := etcd.CapabilityIdempotencyMarkerKey(fixture.Marker.Locator)
+	rootKey, err := testidempotency.IdempotencyMarkerKey(fixture.Marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	retainedKeys := []string{rootKey, etcd.CapabilityTaskKey(assignment.TaskID),
-		removalrecord.ProgressKey(runtime.OperationID), removalrecord.OwnerKey(runtime.VolumeID),
-		removalrecord.EnvironmentLockKey(runtime.EnvironmentID)}
+	retainedKeys := []string{
+		rootKey,
+		testtaskjournal.TaskStorageKey(assignment.TaskID),
+		removalrecord.ProgressKey(runtime.OperationID),
+		removalrecord.OwnerKey(runtime.VolumeID),
+		removalrecord.EnvironmentLockKey(runtime.EnvironmentID),
+	}
 	if checkpoint == "pending" {
 		retainedKeys = append(retainedKeys, removalrecord.PendingPathKey(runtime.OperationID))
 	}
-	before, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: retainedKeys})
+	before, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: retainedKeys})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, etcd.TaskActorOperator, marker)
+	result, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, testtaskjournal.TaskActorOperator, marker)
 	if err != nil {
 		t.Fatalf("generic Volume Retry: %v", err)
 	}
@@ -75,14 +82,18 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 		t.Fatalf("generic Volume Retry outcome: %v/%v/%v", outcome, conflict, err)
 	}
 	fixture.AssertRemovalRetryBudget(t)
-	retryMarkerKey, err := etcd.CapabilityIdempotencyMarkerKey(marker.Locator)
+	retryMarkerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	atomic, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{
-		etcd.CapabilityTaskKey(retryID), removalrecord.RuntimeKey(runtime.OperationID),
-		removalrecord.AttemptKey(runtime.OperationID, 2), retryMarkerKey,
-	}})
+	atomic, err := fixture.Store.GetMany(
+		ctx,
+		testkeyvalue.GetManyRequest{
+			Keys: []string{testtaskjournal.TaskStorageKey(retryID), removalrecord.RuntimeKey(runtime.OperationID),
+				removalrecord.AttemptKey(runtime.OperationID, 2), retryMarkerKey,
+			},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +115,7 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 		state.Runtime.Record.DesiredRevisionID != runtime.DesiredRevisionID {
 		t.Fatal("generic Retry did not advance the same removal operation")
 	}
-	after, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: retainedKeys})
+	after, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: retainedKeys})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +126,7 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 		}
 	}
 	revision := fixture.Revision()
-	replay, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, etcd.TaskActorOperator, marker)
+	replay, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, testtaskjournal.TaskActorOperator, marker)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,9 +156,8 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 	}
 	if checkpoint == "pending" {
 		if mode == "repeated" {
-			if _, err := tasks.AcknowledgeTask(ctx, next.AgentID, 1, next.TaskID, next.AssignmentID,
-				etcd.TaskStatusFailed, etcd.TaskResultRecord{Kind: etcd.TaskResultEnvironmentDirectory,
-					Diagnostic: etcd.TaskResultDiagnosticNone}, retryAt.Add(2*time.Second)); err != nil {
+			if _, err := tasks.AcknowledgeTask(ctx, next.AgentID, 1, next.TaskID, next.AssignmentID, testtaskjournal.TaskStatusFailed, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultEnvironmentDirectory,
+				Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, retryAt.Add(2*time.Second)); err != nil {
 				t.Fatal(err)
 			}
 			fixture.AssertRemovalRecoveryBudget(t, "attempt")
@@ -155,7 +165,7 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 			retryID = ids.NewAt(ids.KindTask, retryAt, 94)
 			marker = volumeRemovalRetryMarker(fixture.Marker, retryID, retryAt)
 			marker.Locator.Key = "volume-removal-retry-0002"
-			result, err := tasks.RetryTask(ctx, next.TaskID, retryID, etcd.TaskActorOperator, marker)
+			result, err := tasks.RetryTask(ctx, next.TaskID, retryID, testtaskjournal.TaskActorOperator, marker)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -241,16 +251,22 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 			}
 			fixture.AssertRemovalRecoveryBudget(t, "next completion")
 		}
-		if _, err := tasks.AcknowledgeTask(ctx, next.AgentID, next.AgentGeneration, next.TaskID, next.AssignmentID,
-			etcd.TaskStatusCompleted, etcd.TaskResultRecord{Kind: etcd.TaskResultEnvironmentDirectory,
-				Diagnostic: etcd.TaskResultDiagnosticNone}, completion.CompletedAt.Add(time.Second)); err != nil {
+		if _, err := tasks.AcknowledgeTask(ctx, next.AgentID, next.AgentGeneration, next.TaskID, next.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultEnvironmentDirectory,
+			Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, completion.CompletedAt.Add(time.Second)); err != nil {
 			t.Fatalf("recovered operation terminalization: %v", err)
 		}
-		final, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{
-			etcd.CapabilityTaskKey(runtime.OriginTaskID), removalrecord.RuntimeKey(runtime.OperationID),
-			removalrecord.OwnerKey(runtime.VolumeID), removalrecord.EnvironmentLockKey(runtime.EnvironmentID),
-			removalrecord.PendingPathKey(runtime.OperationID),
-		}})
+		final, err := fixture.Store.GetMany(
+			ctx,
+			testkeyvalue.GetManyRequest{
+				Keys: []string{
+					testtaskjournal.TaskStorageKey(runtime.OriginTaskID),
+					removalrecord.RuntimeKey(runtime.OperationID),
+					removalrecord.OwnerKey(runtime.VolumeID),
+					removalrecord.EnvironmentLockKey(runtime.EnvironmentID),
+					removalrecord.PendingPathKey(runtime.OperationID),
+				},
+			},
+		)
 		if err != nil || final.Values[0] == nil || final.Values[0].ModRevision != before.Values[1].ModRevision ||
 			!bytes.Equal(final.Values[0].Value, before.Values[1].Value) {
 			t.Fatal("recovery changed the failed origin Task", err)
@@ -264,16 +280,17 @@ func proveVolumeRemovalRetry(t *testing.T, checkpoint, mode string) {
 }
 
 type volumePendingResponseLossStore struct {
-	etcd.Store
+	testkeyvalue.Store
+
 	lose bool
 }
 
-func (store *volumePendingResponseLossStore) Transact(ctx context.Context, conditions []etcd.Condition,
-	mutations []etcd.Mutation) (etcd.TransactionResult, error) {
+func (store *volumePendingResponseLossStore) Transact(ctx context.Context, conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation) (testkeyvalue.TransactionResult, error) {
 	result, err := store.Store.Transact(ctx, conditions, mutations)
 	if err == nil && result.Succeeded && store.lose {
 		store.lose = false
-		return etcd.TransactionResult{}, errs.New(errs.KindRequestFailed, "lost pending completion response")
+		return testkeyvalue.TransactionResult{}, errs.New(errs.KindRequestFailed, "lost pending completion response")
 	}
 	return result, err
 }
@@ -292,8 +309,8 @@ func TestVolumeRemovalGenericRetryRejectsChangedOwner(t *testing.T) {
 				fixture, tasks, assignment, runtime := prepareVolumeRemovalAttemptTerminal(t, "published")
 				at := runtime.CreatedAt.Add(10 * time.Second)
 				if _, err := tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, assignment.TaskID,
-					assignment.AssignmentID, etcd.TaskStatusFailed, etcd.TaskResultRecord{
-						Kind: etcd.TaskResultEnvironmentDirectory, Diagnostic: etcd.TaskResultDiagnosticNone,
+					assignment.AssignmentID, testtaskjournal.TaskStatusFailed, testtaskjournal.TaskResultRecord{
+						Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 					}, at); err != nil {
 					t.Fatal(err)
 				}
@@ -314,14 +331,14 @@ func TestVolumeRemovalGenericRetryRejectsChangedOwner(t *testing.T) {
 					t.Fatal(err)
 				}
 				if family == "root response" {
-					key, err = etcd.CapabilityIdempotencyMarkerKey(fixture.Marker.Locator)
+					key, err = testidempotency.IdempotencyMarkerKey(fixture.Marker.Locator)
 					if err != nil {
 						t.Fatal(err)
 					}
 					changed := fixture.Marker
 					changed.TaskID = ids.NewAt(ids.KindTask, at, 96)
 					changed.Response.Body = []byte(`{"task_id":"` + changed.TaskID + `"}`)
-					value, err = etcd.EncodeCapabilityIdempotencyMarker(changed)
+					value, err = testidempotency.EncodeIdempotencyMarker(changed)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -331,7 +348,7 @@ func TestVolumeRemovalGenericRetryRejectsChangedOwner(t *testing.T) {
 				}
 				inject := func() {
 					if mode == "missing" {
-						if _, err := fixture.Store.Transact(ctx, nil, []etcd.Mutation{{Type: etcd.MutationDelete, Key: key}}); err != nil {
+						if _, err := fixture.Store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}}); err != nil {
 							t.Fatal(err)
 						}
 						return
@@ -353,8 +370,13 @@ func TestVolumeRemovalGenericRetryRejectsChangedOwner(t *testing.T) {
 				retryAt := at.Add(time.Second)
 				retryID := ids.NewAt(ids.KindTask, retryAt, 95)
 				before := fixture.Revision()
-				result, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, etcd.TaskActorOperator,
-					volumeRemovalRetryMarker(fixture.Marker, retryID, retryAt))
+				result, err := tasks.RetryTask(
+					ctx,
+					assignment.TaskID,
+					retryID,
+					testtaskjournal.TaskActorOperator,
+					volumeRemovalRetryMarker(fixture.Marker, retryID, retryAt),
+				)
 				if err == nil {
 					_, _, conflict, classifyErr := result.Classify()
 					if classifyErr != nil {
@@ -374,7 +396,11 @@ func TestVolumeRemovalGenericRetryRejectsChangedOwner(t *testing.T) {
 	}
 }
 
-func volumeRemovalRetryMarker(marker etcd.IdempotencyMarker, taskID string, at time.Time) etcd.IdempotencyMarker {
+func volumeRemovalRetryMarker(
+	marker testidempotency.IdempotencyMarker,
+	taskID string,
+	at time.Time,
+) testidempotency.IdempotencyMarker {
 	marker.Locator.Method, marker.Locator.Route = "POST", "/tasks/{id}/retry"
 	marker.Locator.Key = "volume-removal-retry-0001"
 	marker.ReplayTarget = nil
@@ -403,15 +429,14 @@ func proveVolumeRemovalPendingEvidence(t *testing.T, phase, family, mode string)
 	ctx := context.Background()
 	fixture, tasks, assignment, runtime := prepareVolumeRemovalAttemptTerminal(t, "pending")
 	at := runtime.CreatedAt.Add(10 * time.Second)
-	if _, err := tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, assignment.TaskID, assignment.AssignmentID,
-		etcd.TaskStatusFailed, etcd.TaskResultRecord{Kind: etcd.TaskResultEnvironmentDirectory,
-			Diagnostic: etcd.TaskResultDiagnosticNone}, at); err != nil {
+	if _, err := tasks.AcknowledgeTask(ctx, assignment.AgentID, 1, assignment.TaskID, assignment.AssignmentID, testtaskjournal.TaskStatusFailed, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultEnvironmentDirectory,
+		Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, at); err != nil {
 		t.Fatal(err)
 	}
 	retryID := ids.NewAt(ids.KindTask, at.Add(time.Second), 98)
 	marker := volumeRemovalRetryMarker(fixture.Marker, retryID, at.Add(time.Second))
 	if phase == "completion" {
-		result, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, etcd.TaskActorOperator, marker)
+		result, err := tasks.RetryTask(ctx, assignment.TaskID, retryID, testtaskjournal.TaskActorOperator, marker)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -428,13 +453,13 @@ func proveVolumeRemovalPendingEvidence(t *testing.T, phase, family, mode string)
 	key := removalrecord.PendingPathKey(runtime.OperationID)
 	switch family {
 	case "origin":
-		key = etcd.CapabilityTaskKey(runtime.OriginTaskID)
+		key = testtaskjournal.TaskStorageKey(runtime.OriginTaskID)
 	case "volume owner":
 		key = removalrecord.OwnerKey(runtime.VolumeID)
 	case "environment owner":
 		key = removalrecord.EnvironmentLockKey(runtime.EnvironmentID)
 	}
-	read, err := fixture.Store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{key,
+	read, err := fixture.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{key,
 		removalrecord.PendingPathKey(runtime.OperationID)}})
 	if err != nil || read.Values[0] == nil || read.Values[1] == nil {
 		t.Fatal("missing recovery evidence", err)
@@ -453,10 +478,10 @@ func proveVolumeRemovalPendingEvidence(t *testing.T, phase, family, mode string)
 			value, err = removalrecord.EncodePendingPath(changed)
 		case "origin":
 			var origin etcd.TaskRecord
-			origin, err = etcd.DecodeCapabilityTaskRecord(value)
+			origin, err = etcd.DecodeTaskRecord(value)
 			if err == nil {
-				origin.Status = etcd.TaskStatusCompleted
-				value, err = etcd.EncodeCapabilityTaskRecord(origin)
+				origin.Status = testtaskjournal.TaskStatusCompleted
+				value, err = etcd.EncodeTaskRecord(origin)
 			}
 		default:
 			value, err = removalrecord.EncodeOwner(removalrecord.Owner{VolumeID: runtime.VolumeID,
@@ -484,7 +509,7 @@ func proveVolumeRemovalPendingEvidence(t *testing.T, phase, family, mode string)
 			t.Fatal(err)
 		}
 		var result etcd.IdempotencyTransactionResult
-		result, err = tasks.RetryTask(ctx, assignment.TaskID, retryID, etcd.TaskActorOperator, marker)
+		result, err = tasks.RetryTask(ctx, assignment.TaskID, retryID, testtaskjournal.TaskActorOperator, marker)
 		if err == nil {
 			_, _, conflict, classifyErr := result.Classify()
 			if classifyErr != nil {

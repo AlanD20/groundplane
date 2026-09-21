@@ -7,6 +7,12 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -22,16 +28,23 @@ func TestBlueprintTerminalAfterNewDesiredRetainsExecutionGuards(t *testing.T) {
 			ctx := context.Background()
 			published, tasks, claim, agentID := claimBlueprintTerminalDesiredFixture(t)
 			publishBlueprintTerminalSuccessor(t, published)
-			status := TaskStatusCompleted
-			result := TaskResultRecord{Kind: TaskResultCompose, ExecutionEpoch: 1, Diagnostic: TaskResultDiagnosticNone}
-			var mutations []Mutation
+			status := testtaskjournal.TaskStatusCompleted
+			result := testtaskjournal.TaskResultRecord{
+				Kind:           testtaskjournal.TaskResultCompose,
+				ExecutionEpoch: 1,
+				Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+			}
+			var mutations []testkeyvalue.Mutation
 			switch fault {
 			case "missing writer":
-				mutations = []Mutation{
-					{Type: MutationDelete, Key: taskMaterializationWriterKey(published.environmentID)},
+				mutations = []testkeyvalue.Mutation{
+					{
+						Type: testkeyvalue.MutationDelete,
+						Key:  testtaskjournal.TaskMaterializationWriterKey(published.environmentID),
+					},
 				}
 			case "foreign writer":
-				key := taskMaterializationWriterKey(published.environmentID)
+				key := testtaskjournal.TaskMaterializationWriterKey(published.environmentID)
 				writer, err := decodeTaskMaterializationWriter(
 					published.store.valueAt(key, published.store.revision).Value,
 				)
@@ -43,7 +56,7 @@ func TestBlueprintTerminalAfterNewDesiredRetainsExecutionGuards(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				mutations = []Mutation{{Type: MutationPut, Key: key, Value: value}}
+				mutations = []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}}
 			case "changed applied":
 				hierarchy, _ := newHierarchyRepository(published.store)
 				projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(
@@ -54,26 +67,32 @@ func TestBlueprintTerminalAfterNewDesiredRetainsExecutionGuards(t *testing.T) {
 				if err != nil || !found {
 					t.Fatalf("read original projection: %v", err)
 				}
-				value, err := encodeEnvironmentComposeProjection(projection.Record)
+				value, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection.Record)
 				if err != nil {
 					t.Fatal(err)
 				}
-				mutations = []Mutation{
-					{Type: MutationPut, Key: environmentComposeProjectionKey(published.environmentID), Value: value},
+				mutations = []testkeyvalue.Mutation{
+					{
+						Type: testkeyvalue.MutationPut,
+						Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(
+							published.environmentID,
+						),
+						Value: value,
+					},
 				}
 			case "changed manifest":
-				mutations = []Mutation{
+				mutations = []testkeyvalue.Mutation{
 					{
-						Type:  MutationPut,
-						Key:   releaseManifestStagingKey(published.releasePublicationID),
+						Type:  testkeyvalue.MutationPut,
+						Key:   testreleases.ReleaseManifestStagingKey(published.releasePublicationID),
 						Value: []byte("invalid"),
 					},
 				}
 			case "invalid epoch":
-				mutations = []Mutation{
+				mutations = []testkeyvalue.Mutation{
 					{
-						Type:  MutationPut,
-						Key:   environmentMutationEpochKey(published.environmentID),
+						Type:  testkeyvalue.MutationPut,
+						Key:   testhierarchy.EnvironmentMutationEpochKey(published.environmentID),
 						Value: []byte("invalid"),
 					},
 				}
@@ -86,10 +105,10 @@ func TestBlueprintTerminalAfterNewDesiredRetainsExecutionGuards(t *testing.T) {
 			case "foreign recovery digest":
 				result.ReleaseRecoveryRecordSHA256 = strings.Repeat("a", 64)
 			case "unproven recovery":
-				status, result.ReconciliationRequired = TaskStatusFailed, true
+				status, result.ReconciliationRequired = testtaskjournal.TaskStatusFailed, true
 				result.FailedStepID = published.task.Steps[0].ID
 			case "timeout after step":
-				status, result.Diagnostic = TaskStatusTimedOut, TaskResultDiagnosticTimeoutBeforeEffect
+				status, result.Diagnostic = testtaskjournal.TaskStatusTimedOut, testtaskjournal.TaskResultDiagnosticTimeoutBeforeEffect
 				result.FailedStepID = published.task.Steps[0].ID
 			}
 			if len(mutations) != 0 {
@@ -103,17 +122,17 @@ func TestBlueprintTerminalAfterNewDesiredRetainsExecutionGuards(t *testing.T) {
 				claim.Assignment.Record.AssignmentID, status, result, published.task.CreatedAt.Add(time.Minute))
 			if fault == "unproven recovery" {
 				current, readErr := tasks.GetTaskAssignment(ctx, claim.Task.Record.ID)
-				if err != nil || readErr != nil || acknowledged.Record.Status != TaskStatusRunning ||
-					acknowledged.Record.Result != nil || current.Assignment.Record.ExecutionMode != TaskExecutionModeRecoveryOnly ||
+				if err != nil || readErr != nil || acknowledged.Record.Status != testtaskjournal.TaskStatusRunning ||
+					acknowledged.Record.Result != nil || current.Assignment.Record.ExecutionMode != testtaskassignments.TaskExecutionModeRecoveryOnly ||
 					current.Assignment.Record.ExecutionEpoch != claim.Assignment.Record.ExecutionEpoch+1 {
 					t.Fatalf("unproven failure did not retain recovery ownership: terminal=%v read=%v", err, readErr)
 				}
 				if published.store.valueAt(
-					taskMaterializationWriterKey(published.environmentID),
+					testtaskjournal.TaskMaterializationWriterKey(published.environmentID),
 					published.store.revision,
 				) == nil ||
 					published.store.valueAt(
-						environmentComposeProjectionKey(published.environmentID),
+						testenvironmentprojection.EnvironmentComposeProjectionStorageKey(published.environmentID),
 						published.store.revision,
 					) != nil {
 					t.Fatal("unproven recovery released its writer or promoted applied state")
@@ -123,9 +142,12 @@ func TestBlueprintTerminalAfterNewDesiredRetainsExecutionGuards(t *testing.T) {
 			if err == nil || published.store.revision != before {
 				t.Fatalf("invalid terminal evidence mutated state: %v", err)
 			}
-			storedTask := published.store.valueAt(taskKey(claim.Task.Record.ID), published.store.revision)
+			storedTask := published.store.valueAt(
+				testtaskjournal.TaskStorageKey(claim.Task.Record.ID),
+				published.store.revision,
+			)
 			storedAssignment := published.store.valueAt(
-				taskAssignmentIndexKey(claim.Task.Record.ID),
+				testtaskjournal.TaskAssignmentIndexKey(claim.Task.Record.ID),
 				published.store.revision,
 			)
 			if storedTask == nil || storedAssignment == nil || storedTask.ModRevision != claim.Task.Revision ||
@@ -145,17 +167,19 @@ func TestBlueprintTerminalAfterNewDesiredKeepsAtomicCommitAndReplay(t *testing.T
 			published, tasks, claim, agentID := claimBlueprintTerminalDesiredFixture(t)
 			publishBlueprintTerminalSuccessor(t, published)
 			faults := &blueprintTerminalFaultStore{memoryHierarchyStore: published.store, t: t,
-				epochKey: environmentMutationEpochKey(published.environmentID), fault: fault}
+				epochKey: testhierarchy.EnvironmentMutationEpochKey(published.environmentID), fault: fault}
 			tasks.blueprintTerminalStore = faults
-			result := TaskResultRecord{Kind: TaskResultCompose, ExecutionEpoch: 1, Diagnostic: TaskResultDiagnosticNone}
+			result := testtaskjournal.TaskResultRecord{
+				Kind:           testtaskjournal.TaskResultCompose,
+				ExecutionEpoch: 1,
+				Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+			}
 			_, err := tasks.AcknowledgeTask(
 				ctx,
 				agentID,
 				1,
 				claim.Task.Record.ID,
-				claim.Assignment.Record.AssignmentID,
-				TaskStatusCompleted,
-				result,
+				claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result,
 				published.task.CreatedAt.Add(time.Minute),
 			)
 			if faults.calls != 1 {
@@ -182,9 +206,7 @@ func TestBlueprintTerminalAfterNewDesiredKeepsAtomicCommitAndReplay(t *testing.T
 				agentID,
 				1,
 				claim.Task.Record.ID,
-				claim.Assignment.Record.AssignmentID,
-				TaskStatusCompleted,
-				result,
+				claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result,
 				published.task.CreatedAt.Add(2*time.Minute),
 			)
 			if err != nil || replay.Revision != faults.committedRevision || published.store.revision != before {
@@ -204,20 +226,21 @@ func TestBlueprintRetryStillRejectsInterveningEpoch(t *testing.T) {
 		agentID,
 		1,
 		claim.Task.Record.ID,
-		claim.Assignment.Record.AssignmentID,
-		TaskStatusTimedOut,
-		TaskResultRecord{
-			Kind:           TaskResultCompose,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusTimedOut, testtaskjournal.TaskResultRecord{
+			Kind:           testtaskjournal.TaskResultCompose,
 			ExecutionEpoch: 1,
-			Diagnostic:     TaskResultDiagnosticTimeoutBeforeEffect,
-		},
-		published.task.CreatedAt.Add(time.Minute),
+			Diagnostic:     testtaskjournal.TaskResultDiagnosticTimeoutBeforeEffect,
+		}, published.task.CreatedAt.Add(time.Minute),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	retry, err := cloneRetryTask(terminal.Record, ids.NewAt(ids.KindTask, published.task.CreatedAt, 19887),
-		TaskActorOperator, published.task.CreatedAt.Add(2*time.Minute))
+	retry, err := CloneRetryTask(
+		terminal.Record,
+		ids.NewAt(ids.KindTask, published.task.CreatedAt, 19887),
+		testtaskjournal.TaskActorOperator,
+		published.task.CreatedAt.Add(2*time.Minute),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,9 +249,13 @@ func TestBlueprintRetryStillRejectsInterveningEpoch(t *testing.T) {
 	if err != nil || !change.applies {
 		t.Fatalf("unchanged retry authority rejected: %v", err)
 	}
-	key := environmentMutationEpochKey(published.environmentID)
+	key := testhierarchy.EnvironmentMutationEpochKey(published.environmentID)
 	epoch := published.store.valueAt(key, published.store.revision)
-	changed, err := published.store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: epoch.Value}})
+	changed, err := published.store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: epoch.Value}},
+	)
 	if err != nil || !changed.Succeeded {
 		t.Fatal(err)
 	}

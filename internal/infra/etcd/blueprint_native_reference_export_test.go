@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -21,8 +24,8 @@ type blueprintNativeReferenceReadFault struct {
 
 func (fault *blueprintNativeReferenceReadFault) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	read, err := fault.releasePlanningTestStore.GetMany(ctx, request)
 	if err != nil {
 		return read, err
@@ -42,17 +45,20 @@ func (fault *blueprintNativeReferenceReadFault) GetMany(
 func (fixture *ExecutedArtifactFixture) AssertBlueprintNativeReferenceRejection(t *testing.T, task TaskRecord) {
 	t.Helper()
 	ctx := context.Background()
-	key := releasePublicationKey(task.Params[TaskReleasePublicationParam])
+	key := testreleases.ReleasePublicationKey(task.Params[testreleaserender.TaskReleasePublicationParam])
 	stored, err := fixture.store.Get(ctx, key)
 	if err != nil || stored.Entry == nil {
 		t.Fatalf("native reference fixture marker: %v", err)
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](stored.Entry.Value, "release-publication")
+	marker, err := testreleases.DecodeReleaseRecord[testreleases.ReleasePublicationMarker](
+		stored.Entry.Value,
+		"release-publication",
+	)
 	if err != nil || len(marker.NativePredecessors) != 2 || marker.NativePredecessors[0].Serving == nil {
 		t.Fatalf("native reference fixture must own two running predecessors: %v", err)
 	}
 	marker.NativePredecessors[0].PriorRuntimeSHA256 = strings.Repeat("b", 64)
-	changedMarker, err := encodeReleaseRecord("release-publication", marker)
+	changedMarker, err := testreleases.EncodeReleaseRecord("release-publication", marker)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,14 +66,14 @@ func (fixture *ExecutedArtifactFixture) AssertBlueprintNativeReferenceRejection(
 	if err != nil {
 		t.Fatal(err)
 	}
-	renderKey := releaseRenderInputStagingKey(input.PublicationID, input.Members[0].Intent.ID)
+	renderKey := testreleases.ReleaseRenderInputStagingKey(input.PublicationID, input.Members[0].Intent.ID)
 	render := input.Members[0].Render
 	render.PriorRuntime.CurrentArtifact = slices.Clone(input.Members[1].Render.PriorRuntime.CurrentArtifact)
 	changedRaw, err := json.Marshal(render)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedRender, err := encodeReleaseRecord("release-render-input", json.RawMessage(changedRaw))
+	changedRender, err := testreleases.EncodeReleaseRecord("release-render-input", json.RawMessage(changedRaw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,25 +120,37 @@ func (fixture *ExecutedArtifactFixture) AssertBlueprintNativePublicationSourceFe
 ) {
 	t.Helper()
 	ctx := context.Background()
-	manifestRead, err := fixture.store.Get(ctx, releaseManifestStagingKey(task.Params[TaskReleasePublicationParam]))
+	manifestRead, err := fixture.store.Get(
+		ctx,
+		testreleases.ReleaseManifestStagingKey(task.Params[testreleaserender.TaskReleasePublicationParam]),
+	)
 	if err != nil || manifestRead.Entry == nil {
 		t.Fatalf("native staged manifest: %v", err)
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](manifestRead.Entry.Value, "release-staged-manifest")
+	manifest, err := testreleases.DecodeReleaseRecord[testreleases.ReleaseStagedManifest](
+		manifestRead.Entry.Value,
+		"release-staged-manifest",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, member := range manifest.Members {
-		key := releaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID)
+		key := testreleases.ReleaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID)
 		read, err := fixture.store.Get(ctx, key)
-		if err != nil || read.Entry == nil || !slices.Contains(publication.conditions,
-			Condition{Key: key, ModRevision: read.Entry.ModRevision}) {
+		if err != nil || read.Entry == nil ||
+			!slices.Contains(
+				publication.conditions,
+				testkeyvalue.Condition{Key: key, ModRevision: read.Entry.ModRevision},
+			) {
 			t.Fatalf("staged native bytes lack exact final-publication CAS: %v", err)
 		}
 		runtimeKey := serviceruntimerecord.Key(member.ServiceID)
 		runtimeRead, err := fixture.store.Get(ctx, runtimeKey)
-		if err != nil || runtimeRead.Entry == nil || !slices.Contains(publication.conditions,
-			Condition{Key: runtimeKey, ModRevision: runtimeRead.Entry.ModRevision}) {
+		if err != nil || runtimeRead.Entry == nil ||
+			!slices.Contains(
+				publication.conditions,
+				testkeyvalue.Condition{Key: runtimeKey, ModRevision: runtimeRead.Entry.ModRevision},
+			) {
 			t.Fatal("acknowledged native runtime lacks exact final-publication CAS")
 		}
 	}

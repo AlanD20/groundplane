@@ -18,8 +18,10 @@ func (repository *TaskRepository) CreateTask(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != record.ID || !marker.CreatedAt.Equal(record.CreatedAt) ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != record.ID ||
+		!marker.CreatedAt.Equal(record.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		record.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(

@@ -135,7 +135,11 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		return true, false, nil
 	}
 	var prune hierarchydeletion.HierarchyDeletionPruneIntent
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(pruneRead.Entry.Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &prune) != nil ||
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		pruneRead.Entry.Value,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		&prune,
+	) != nil ||
 		prune.ParentOperationID != operationID ||
 		!prune.RetainUntil.Equal(tombstone.Terminal.RetainUntil) {
 		clear(pruneRead.Entry.Value)

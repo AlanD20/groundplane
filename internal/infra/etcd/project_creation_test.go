@@ -6,6 +6,11 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,17 +22,17 @@ func TestHierarchyProjectIdempotentCreateCommitsIndexesMarkerAndOwnerFence(t *te
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 401), Slug: "acme", Name: "Acme"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 401), Slug: "acme", Name: "Acme"}
 	if _, err := repository.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	record := ProjectRecord{
+	record := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 402), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Description: "Operator interface", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Description: "Operator interface", Kind: testhierarchy.ProjectKindTenant,
 	}
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeTenant, ScopeID: tenant.ID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeTenant, ScopeID: tenant.ID,
 		Method: http.MethodPost, Route: "/projects", Key: "project-create-key-0001",
 	}
 	marker.Response.Status = http.StatusCreated
@@ -38,7 +43,13 @@ func TestHierarchyProjectIdempotentCreateCommitsIndexesMarkerAndOwnerFence(t *te
 	if err != nil || stored.Record != record {
 		t.Fatalf("GetProject() = %#v, %v", stored.Record, err)
 	}
-	assertHierarchyCoordinationRecord(t, store, HierarchyDeletionTargetProject, record.ID, stored.Revision)
+	assertHierarchyCoordinationRecord(
+		t,
+		store,
+		testhierarchydeletion.HierarchyDeletionTargetProject,
+		record.ID,
+		stored.Revision,
+	)
 	if _, err := repository.CreateProjectIdempotent(ctx, record, marker); err != nil {
 		t.Fatalf("CreateProjectIdempotent(replay) error = %v", err)
 	}
@@ -53,9 +64,9 @@ func TestHierarchyProjectIdempotentCreateCommitsIndexesMarkerAndOwnerFence(t *te
 		t.Fatalf("CreateProjectIdempotent(slug conflict) result/error = %#v, %v", conflictResult, err)
 	}
 
-	tombstoneKey := deletionTombstoneKey("tenant", tenant.ID)
-	result, err := store.Transact(ctx, []Condition{{Key: tombstoneKey}}, []Mutation{
-		{Type: MutationPut, Key: tombstoneKey, Value: []byte("deleting")},
+	tombstoneKey := testdeletions.TombstoneKey("tenant", tenant.ID)
+	result, err := store.Transact(ctx, []testkeyvalue.Condition{{Key: tombstoneKey}}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: tombstoneKey, Value: []byte("deleting")},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("create Tenant tombstone = %#v, %v", result, err)

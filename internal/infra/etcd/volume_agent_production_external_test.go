@@ -11,13 +11,18 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/agent"
+	migratedcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	migratedenvironmentdirectory "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/internal/infra/docker/environmentdirectoryhelper"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	api "github.com/AlanD20/groundplane/pkg/api"
@@ -57,7 +62,7 @@ func (volumeAgentObserver) ObserveRestoration(
 }
 
 type volumeAgentPathHelper struct {
-	store etcd.Store
+	store testkeyvalue.Store
 	calls int
 }
 
@@ -127,7 +132,11 @@ func TestVolumeRemovalProductionAgentReachesTerminal(t *testing.T) {
 		t.Fatalf("claim DELETE: %v", err)
 	}
 	task, assigned := claimed.Task.Record, claimed.Assignment.Record
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", fixture.Blueprint, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints(
+		"/var/lib/groundplane/vol",
+		fixture.Blueprint,
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +155,7 @@ func TestVolumeRemovalProductionAgentReachesTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	checkpoints, err := controller.NewVolumeRemovalCheckpointService(runtime)
+	checkpoints, err := testtaskcheckpoint.NewVolumeRemovalCheckpointService(runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,12 +167,12 @@ func TestVolumeRemovalProductionAgentReachesTerminal(t *testing.T) {
 		}
 		return runner.Result{}, errs.New(errs.KindInternal, "unexpected Docker effect")
 	}
-	compose, err := agent.NewComposeRuntime(volumeAgentComposeHelper{docker}, volumeAgentObserver{})
+	compose, err := migratedcomposeruntime.New(volumeAgentComposeHelper{docker}, volumeAgentObserver{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	path := &volumeAgentPathHelper{store: fixture.Store}
-	directories, err := agent.NewEnvironmentDirectoryRuntime(path)
+	directories, err := migratedenvironmentdirectory.New(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +188,7 @@ func TestVolumeRemovalProductionAgentReachesTerminal(t *testing.T) {
 	done := make(chan struct{})
 	go func() { pool.Run(ctx); close(done) }()
 	defer func() { cancel(); <-done }()
-	if err := pool.Submit(ctx, agent.Assignment{AssignmentID: assigned.AssignmentID, TaskID: task.ID, OperationID: task.OperationID,
+	if err := pool.Submit(ctx, testtaskassignment.Assignment{AssignmentID: assigned.AssignmentID, TaskID: task.ID, OperationID: task.OperationID,
 		Plan: plan, ExecutionEpoch: assigned.ExecutionEpoch, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 		ForwardDeadline: assigned.Deadline, RecoveryDeadline: assigned.RecoveryDeadline, Deadline: assigned.Deadline}); err != nil {
 		t.Fatal(err)
@@ -199,14 +208,14 @@ func TestVolumeRemovalProductionAgentReachesTerminal(t *testing.T) {
 				}
 			} else if output.Progress != nil {
 				progress := output.Progress
-				state, wireState := etcd.TaskEventStateRunning, agentpb.TaskState_TASK_STATE_RUNNING
+				state, wireState := testtaskjournal.TaskEventStateRunning, agentpb.TaskState_TASK_STATE_RUNNING
 				if progress.State == agent.TaskProgressCompleted {
-					state, wireState = etcd.TaskEventStateCompleted, agentpb.TaskState_TASK_STATE_COMPLETED
+					state, wireState = testtaskjournal.TaskEventStateCompleted, agentpb.TaskState_TASK_STATE_COMPLETED
 				}
 				if progress.State != agent.TaskProgressRunning && progress.State != agent.TaskProgressCompleted {
 					t.Fatalf("Agent step failed: %+v", progress)
 				}
-				_, err := fixture.Tasks.AppendTaskEvent(ctx, etcd.TaskEventInput{Identity: etcd.TaskEventIdentity{
+				_, err := fixture.Tasks.AppendTaskEvent(ctx, testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 					AssignmentID: assigned.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID, StepID: progress.StepID,
 					Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal}, State: state, Payload: json.RawMessage(`{}`)}, time.Now().UTC())
 				if err != nil {
@@ -221,8 +230,7 @@ func TestVolumeRemovalProductionAgentReachesTerminal(t *testing.T) {
 				if result.Terminal != agent.TaskTerminalCompleted || result.EnvironmentDirectory == nil || !result.EnvironmentDirectory.Complete || result.Compose != nil || path.calls != 2 {
 					t.Fatalf("Agent did not complete checkpointed removal: %+v calls=%d", result, path.calls)
 				}
-				_, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, assigned.AssignmentID, etcd.TaskStatusCompleted,
-					etcd.TaskResultRecord{Kind: etcd.TaskResultEnvironmentDirectory, Diagnostic: etcd.TaskResultDiagnosticNone}, time.Now().UTC())
+				_, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, assigned.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, time.Now().UTC())
 				if err != nil {
 					t.Fatal(err)
 				}

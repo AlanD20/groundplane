@@ -68,8 +68,10 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 			return false, releases.CorruptReleaseRecord()
 		}
 		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
-		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
-			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
+		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil ||
+			record.ID != step.executionID ||
+			record.CurrentTaskID != task.ID ||
+			record.OperationID != task.OperationID ||
 			record.StepID != step.stepID ||
 			record.PlanHash != task.PlanHash {
 			return false, releases.CorruptReleaseRecord()

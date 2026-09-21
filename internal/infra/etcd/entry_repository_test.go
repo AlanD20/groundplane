@@ -10,6 +10,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -29,14 +34,13 @@ func TestEntryRepositoryPersistsAndReplacesPlainGenerationAtomically(t *testing.
 		Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: "staging"},
 		Exposure: []string{"all"},
 	}
-	record, err := NewEntryRecord(environment.Record.ID, entry, firstID)
+	record, err := testentries.NewRecord(environment.Record.ID, entry, firstID)
 	if err != nil {
 		t.Fatalf("NewEntryRecord() error = %v", err)
 	}
 	first := testPlainGeneration(environment.Record.ID, entryID, firstID, "staging", now)
 	created, err := repository.CreateEntry(
-		context.Background(), environment, project, record,
-		EntryValueGeneration{Plain: &first},
+		context.Background(), environment, project, record, testentries.EntryValueGeneration{Plain: &first},
 	)
 	if err != nil {
 		t.Fatalf("CreateEntry() error = %v", err)
@@ -48,8 +52,13 @@ func TestEntryRepositoryPersistsAndReplacesPlainGenerationAtomically(t *testing.
 		environment.Record.ID, entryID, secondID, "production", now.Add(time.Second),
 	)
 	replaced, err := repository.ReplaceEntry(
-		context.Background(), environment, project, created, entry, secondID,
-		EntryValueGeneration{Plain: &second},
+		context.Background(),
+		environment,
+		project,
+		created,
+		entry,
+		secondID,
+		testentries.EntryValueGeneration{Plain: &second},
 	)
 	if err != nil {
 		t.Fatalf("ReplaceEntry() error = %v", err)
@@ -58,7 +67,7 @@ func TestEntryRepositoryPersistsAndReplacesPlainGenerationAtomically(t *testing.
 		replaced.Record.Entry.Source.Literal != "production" {
 		t.Fatalf("ReplaceEntry() = %#v", replaced.Record)
 	}
-	valueRepository, err := newEntryValueGenerationRepository(store)
+	valueRepository, err := testentryvalues.New(&releaseLogMemoryStore{store})
 	if err != nil {
 		t.Fatalf("newEntryValueGenerationRepository() error = %v", err)
 	}
@@ -68,7 +77,7 @@ func TestEntryRepositoryPersistsAndReplacesPlainGenerationAtomically(t *testing.
 	}
 	clear(old.Content)
 	page, err := repository.ListEntries(
-		context.Background(), environment.Record.ID, PageRequest{Limit: 10},
+		context.Background(), environment.Record.ID, testkeyvalue.PageRequest{Limit: 10},
 	)
 	if err != nil || len(page.Items) != 1 || page.Items[0].Record.Entry.ID != entryID {
 		t.Fatalf("ListEntries() = %#v, %v", page, err)
@@ -93,13 +102,13 @@ func TestEntryRepositoryReplacesGenerationIdempotently(t *testing.T) {
 		Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: "staging"},
 		Exposure: []string{"all"},
 	}
-	record, err := NewEntryRecord(environment.Record.ID, entry, firstID)
+	record, err := testentries.NewRecord(environment.Record.ID, entry, firstID)
 	if err != nil {
 		t.Fatalf("NewEntryRecord() error = %v", err)
 	}
 	first := testPlainGeneration(environment.Record.ID, entryID, firstID, "staging", now)
 	created, err := repository.CreateEntry(
-		context.Background(), environment, project, record, EntryValueGeneration{Plain: &first},
+		context.Background(), environment, project, record, testentries.EntryValueGeneration{Plain: &first},
 	)
 	if err != nil {
 		t.Fatalf("CreateEntry() error = %v", err)
@@ -111,24 +120,39 @@ func TestEntryRepositoryReplacesGenerationIdempotently(t *testing.T) {
 		environment.Record.ID, entryID, secondID, "production", now.Add(time.Second),
 	)
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
 		Method: http.MethodPatch, Route: "/entries/{id}", Key: "entry-edit-key-0001",
 	}
-	marker.Response = IdempotencyResponse{
+	marker.Response = testidempotency.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"id":"` + entryID + `"}`),
 	}
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetEntry, ID: entryID}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetEntry,
+		ID:   entryID,
+	}
 	result, err := repository.ReplaceEntryIdempotent(
-		context.Background(), environment, project, created, desired, secondID,
-		EntryValueGeneration{Plain: &second}, marker,
+		context.Background(),
+		environment,
+		project,
+		created,
+		desired,
+		secondID,
+		testentries.EntryValueGeneration{Plain: &second},
+		marker,
 	)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("ReplaceEntryIdempotent() = %#v, %v", result, err)
 	}
 	replayed, err := repository.ReplaceEntryIdempotent(
-		context.Background(), environment, project, created, desired, secondID,
-		EntryValueGeneration{Plain: &second}, marker,
+		context.Background(),
+		environment,
+		project,
+		created,
+		desired,
+		secondID,
+		testentries.EntryValueGeneration{Plain: &second},
+		marker,
 	)
 	if err != nil || replayed.kind != idempotencyTransactionExisting ||
 		string(replayed.marker.Response.Body) != string(marker.Response.Body) {
@@ -156,14 +180,13 @@ func TestEntryRepositoryDeleteRemovesEverySecretGenerationAtomically(t *testing.
 		ID: entryID, Kind: core.EntryKindEnv, Key: "API_TOKEN",
 		Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"api"}, Secret: true,
 	}
-	record, err := NewEntryRecord(environment.Record.ID, entry, firstID)
+	record, err := testentries.NewRecord(environment.Record.ID, entry, firstID)
 	if err != nil {
 		t.Fatalf("NewEntryRecord() error = %v", err)
 	}
 	first := testSecretGeneration(environment.Record.ID, entryID, firstID, "cipher-one", now)
 	created, err := repository.CreateEntry(
-		context.Background(), environment, project, record,
-		EntryValueGeneration{Secret: &first},
+		context.Background(), environment, project, record, testentries.EntryValueGeneration{Secret: &first},
 	)
 	if err != nil {
 		t.Fatalf("CreateEntry() error = %v", err)
@@ -173,8 +196,13 @@ func TestEntryRepositoryDeleteRemovesEverySecretGenerationAtomically(t *testing.
 		environment.Record.ID, entryID, secondID, "cipher-two", now.Add(time.Second),
 	)
 	current, err := repository.ReplaceEntry(
-		context.Background(), environment, project, created, entry, secondID,
-		EntryValueGeneration{Secret: &second},
+		context.Background(),
+		environment,
+		project,
+		created,
+		entry,
+		secondID,
+		testentries.EntryValueGeneration{Secret: &second},
 	)
 	if err != nil {
 		t.Fatalf("ReplaceEntry() error = %v", err)
@@ -186,7 +214,7 @@ func TestEntryRepositoryDeleteRemovesEverySecretGenerationAtomically(t *testing.
 	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindEntryNotFound {
 		t.Fatalf("GetEntry() after delete error = %v", err)
 	}
-	valueRepository, err := newEntryValueGenerationRepository(store)
+	valueRepository, err := testentryvalues.New(&releaseLogMemoryStore{store})
 	if err != nil {
 		t.Fatalf("newEntryValueGenerationRepository() error = %v", err)
 	}
@@ -208,7 +236,7 @@ func TestEntryRecordRejectsSecretPlaintextMetadata(t *testing.T) {
 		Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: "leaked"},
 		Exposure: []string{"all"}, Secret: true,
 	}
-	_, err := NewEntryRecord(
+	_, err := testentries.NewRecord(
 		ids.NewAt(ids.KindEnvironment, now, 31), entry, ids.NewAt(ids.KindConfig, now, 32),
 	)
 	if kind, ok := errs.KindOf(err); !ok || kind != errs.KindValidationFailed {
@@ -218,7 +246,7 @@ func TestEntryRecordRejectsSecretPlaintextMetadata(t *testing.T) {
 
 func testEntryRepositoryHierarchy(
 	t *testing.T,
-) (*memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {
+) (*memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], testkeyvalue.Versioned[testhierarchy.ProjectRecord]) {
 	t.Helper()
 	_, store, environment, project, _ := routeRepositoryTestHierarchy(t)
 	return store, environment, project
@@ -230,9 +258,9 @@ func testPlainGeneration(
 	generationID string,
 	content string,
 	createdAt time.Time,
-) PlainEntryValueGeneration {
+) testentryvalues.PlainGeneration {
 	digest := sha256.Sum256([]byte(content))
-	return PlainEntryValueGeneration{
+	return testentryvalues.PlainGeneration{
 		EnvironmentID: environmentID, EntryID: entryID, GenerationID: generationID,
 		Content: []byte(content), PlaintextSHA256: hex.EncodeToString(digest[:]), CreatedAt: createdAt,
 	}
@@ -244,9 +272,9 @@ func testSecretGeneration(
 	generationID string,
 	ciphertext string,
 	createdAt time.Time,
-) SecretEntryValueGeneration {
+) testentryvalues.SecretGeneration {
 	digest := sha256.Sum256([]byte(ciphertext))
-	return SecretEntryValueGeneration{
+	return testentryvalues.SecretGeneration{
 		EnvironmentID: environmentID, EntryID: entryID, GenerationID: generationID,
 		EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextSHA256: hex.EncodeToString(digest[:]), Ciphertext: []byte(ciphertext), CreatedAt: createdAt,

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -44,12 +45,15 @@ func stageVolumePolicyDesired(t *testing.T, fixture *etcd.VolumePolicyDesiredFix
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture.Request.Claim, err = staging.ClaimEnvironmentBlueprintStage(ctx, etcd.EnvironmentBlueprintStageClaimRequest{
-		EnvironmentID: fixture.Task.Owner.EnvironmentID, CandidateRevisionID: fixture.Task.ID, CandidateTaskID: fixture.Task.ID,
-		Locator: fixture.Marker.Locator, Intent: fixture.Marker.Intent, BaselineHeadRevision: fixture.HeadRevision,
-		SourceKind: etcd.EnvironmentBlueprintSourceMutation, RenderGeneration: 2,
-		ProjectionSchema: etcd.EnvironmentDesiredProjectionSchema, CreatedAt: fixture.Task.CreatedAt,
-	})
+	fixture.Request.Claim, err = staging.ClaimEnvironmentBlueprintStage(
+		ctx,
+		testblueprints.EnvironmentBlueprintStageClaimRequest{
+			EnvironmentID: fixture.Task.Owner.EnvironmentID, CandidateRevisionID: fixture.Task.ID, CandidateTaskID: fixture.Task.ID,
+			Locator: fixture.Marker.Locator, Intent: fixture.Marker.Intent, BaselineHeadRevision: fixture.HeadRevision,
+			SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: 2,
+			ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: fixture.Task.CreatedAt,
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +92,7 @@ func TestVolumePolicyDesiredPublicationRejectsRaces(t *testing.T) {
 func TestVolumePolicyDesiredPublicationRejectsDifferentStagedPolicy(t *testing.T) {
 	fixture := etcd.NewVolumePolicyDesiredFixture(t)
 	fixture.Request.Projection.Backup.Keep = 8
-	digest, err := etcd.EnvironmentBlueprintDependencyDigest(fixture.Request.Projection)
+	digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(fixture.Request.Projection)
 	if err != nil {
 		t.Fatal(err)
 	}

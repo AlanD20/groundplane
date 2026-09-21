@@ -154,8 +154,10 @@ func (repository *TaskRepository) entryRuntimeClaimConditions(
 func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 	ctx context.Context, terminal TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
-	if terminal.Type != taskjournal.TaskUpdate || terminal.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry ||
-		terminal.Status != taskjournal.TaskStatusCompleted || terminal.EntryRuntime == nil ||
+	if terminal.Type != taskjournal.TaskUpdate ||
+		terminal.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry ||
+		terminal.Status != taskjournal.TaskStatusCompleted ||
+		terminal.EntryRuntime == nil ||
 		len(terminal.EntryRuntime.Updates) == 0 {
 		return taskMaterializationProjectionChange{}, nil
 	}

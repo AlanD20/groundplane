@@ -6,6 +6,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/core"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -15,42 +17,42 @@ import (
 func TestScriptContextSourcesRejectRehashedSubstitution(t *testing.T) {
 	for _, test := range []struct {
 		name string
-		edit func(*ScriptExecutionSources, *agentpb.ResolvedRunnerSnapshot)
+		edit func(*testscriptsourcequeries.ScriptExecutionSources, *agentpb.ResolvedRunnerSnapshot)
 	}{
-		{"missing context", func(_ *ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
+		{"missing context", func(_ *testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
 			snapshot.ExplicitExecution = nil
 		}},
-		{"inherited source", func(sources *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+		{"inherited source", func(sources *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
 			sources.Script.Record.Desired.Execution = nil
 		}},
-		{"changed primary", func(sources *ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
+		{"changed primary", func(sources *testscriptsourcequeries.ScriptExecutionSources, _ *agentpb.ResolvedRunnerSnapshot) {
 			sources.Script.Revision++
 		}},
-		{"changed capture revision", func(_ *ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
+		{"changed capture revision", func(_ *testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
 			snapshot.ExplicitExecution.ScriptModRevision++
 		}},
-		{"another release image", func(_ *ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
+		{"another release image", func(_ *testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
 			snapshot.ExplicitExecution.ReleaseLocalImageId = "sha256:" + strings.Repeat("c", 64)
 		}},
-		{"another setup image", func(_ *ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
+		{"another setup image", func(_ *testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
 			snapshot.ExplicitExecution.Context.ImageReference = "example/setup@sha256:" + strings.Repeat("c", 64)
 		}},
-		{"another user", func(_ *ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
+		{"another user", func(_ *testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
 			snapshot.ExplicitExecution.Context.User = "1000:1000"
 		}},
-		{"another target", func(_ *ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
+		{"another target", func(_ *testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
 			snapshot.ExplicitExecution.Context.Volumes[0].Target = "/elsewhere"
 		}},
-		{"writable substitution", func(_ *ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
+		{"writable substitution", func(_ *testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
 			snapshot.ExplicitExecution.Context.Volumes[0].ReadOnly = false
 		}},
-		{"another entry", func(_ *ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
+		{"another entry", func(_ *testscriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) {
 			snapshot.ExplicitExecution.Context.EntryIds[0] = "ev_01ARZ3NDEKTSV4RRFFQ69G5FAT"
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			sources, snapshot := scriptContextSourcesForTest(t)
-			if err := validateScriptContextSources(sources, snapshot); err != nil {
+			if err := testscriptsourcequeries.ValidateScriptContextSources(sources, snapshot); err != nil {
 				t.Fatalf("valid captured context rejected: %v", err)
 			}
 			test.edit(&sources, snapshot)
@@ -61,7 +63,7 @@ func TestScriptContextSourcesRejectRehashedSubstitution(t *testing.T) {
 				}
 				snapshot.ExplicitExecution.ContextSha256 = digest
 			}
-			if err := validateScriptContextSources(sources, snapshot); err == nil {
+			if err := testscriptsourcequeries.ValidateScriptContextSources(sources, snapshot); err == nil {
 				t.Fatal("rehashed capture no longer matching the Script source was accepted")
 			}
 		})
@@ -72,7 +74,7 @@ func TestScriptContextSourcesRejectRehashedSubstitution(t *testing.T) {
 // actual explicit desired list order has no semantic effect on canonical capture.
 func TestScriptContextSourcesAcceptInheritedAndCanonicalCapture(t *testing.T) {
 	sources, snapshot := scriptContextSourcesForTest(t)
-	if err := validateScriptContextSources(sources, snapshot); err != nil {
+	if err := testscriptsourcequeries.ValidateScriptContextSources(sources, snapshot); err != nil {
 		t.Fatal(err)
 	}
 	if sources.Script.Record.Desired.Execution.Volumes[0].VolumeID != "vol_01ARZ3NDEKTSV4RRFFQ69G5FAW" ||
@@ -81,18 +83,20 @@ func TestScriptContextSourcesAcceptInheritedAndCanonicalCapture(t *testing.T) {
 	}
 	for _, choice := range []*core.ScriptExecution{nil, {Mode: core.ScriptExecutionInherited}} {
 		sources.Script.Record.Desired.Execution, snapshot.ExplicitExecution = choice, nil
-		if err := validateScriptContextSources(sources, snapshot); err != nil {
+		if err := testscriptsourcequeries.ValidateScriptContextSources(sources, snapshot); err != nil {
 			t.Fatalf("inherited choice rejected: %v", err)
 		}
 	}
 }
 
-func scriptContextSourcesForTest(t *testing.T) (ScriptExecutionSources, *agentpb.ResolvedRunnerSnapshot) {
+func scriptContextSourcesForTest(
+	t *testing.T,
+) (testscriptsourcequeries.ScriptExecutionSources, *agentpb.ResolvedRunnerSnapshot) {
 	t.Helper()
 	firstVolume, secondVolume := "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", "vol_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	firstEntry, secondEntry := "ev_01ARZ3NDEKTSV4RRFFQ69G5FAV", "ev_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 	image := "example/setup@sha256:" + strings.Repeat("b", 64)
-	sources := ScriptExecutionSources{Revision: 100}
+	sources := testscriptsourcequeries.ScriptExecutionSources{Revision: 100}
 	sources.Script.Revision, sources.Script.ReadRevision = 42, 100
 	sources.Script.Record.Desired.Execution = &core.ScriptExecution{
 		Mode: core.ScriptExecutionExplicit, Image: image, User: "0:0",
@@ -124,7 +128,10 @@ func scriptContextSourcesForTest(t *testing.T) (ScriptExecutionSources, *agentpb
 
 // Source-publication tests need a real wire snapshot, not the checkpoint-only
 // fixture's opaque byte sentinel. This does not pretend to build a runner plan.
-func withScriptContextSnapshot(t *testing.T, record ScriptExecutionRecord) ScriptExecutionRecord {
+func withScriptContextSnapshot(
+	t *testing.T,
+	record testscriptexecutions.ScriptExecutionRecord,
+) testscriptexecutions.ScriptExecutionRecord {
 	t.Helper()
 	value, err := proto.Marshal(&agentpb.ResolvedRunnerSnapshot{
 		SnapshotId: record.SnapshotID, ScriptExecutionId: record.ID,

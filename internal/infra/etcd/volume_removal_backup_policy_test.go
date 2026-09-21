@@ -9,6 +9,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testenvironmentcoordination "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 // Rationale: removal prepares a replacement without deleting historical source
@@ -26,17 +33,22 @@ func TestVolumeRemovalBackupPolicyPreparationPreservesHistory(t *testing.T) {
 			fixture := newBackupPolicyReplacementFixture(t, true)
 			ctx := context.Background()
 			volume := fixture.sources[0].Source.Record
-			selections := []BackupPolicySourceSelection{{Kind: core.BackupSourceVolume, TargetID: volume.TargetID}}
+			selections := []testbackuppolicy.BackupPolicySourceSelection{
+				{Kind: core.BackupSourceVolume, TargetID: volume.TargetID},
+			}
 			if remaining {
-				selections = append(selections, BackupPolicySourceSelection{
+				selections = append(selections, testbackuppolicy.BackupPolicySourceSelection{
 					Kind: core.BackupSourceConfig, TargetID: fixture.environment.Record.ID,
 				})
 			}
-			prepared, err := fixture.repository.PrepareBackupPolicyReplacement(ctx, BackupPolicyReplacementInput{
-				EnvironmentID: fixture.environment.Record.ID, Enabled: test.enabled,
-				Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "age",
-				ConnectorID: fixture.connector.Record.Connector.ID, Sources: selections,
-			})
+			prepared, err := fixture.repository.PrepareBackupPolicyReplacement(
+				ctx,
+				testbackuppolicy.BackupPolicyReplacementInput{
+					EnvironmentID: fixture.environment.Record.ID, Enabled: test.enabled,
+					Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "age",
+					ConnectorID: fixture.connector.Record.Connector.ID, Sources: selections,
+				},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -46,10 +58,13 @@ func TestVolumeRemovalBackupPolicyPreparationPreservesHistory(t *testing.T) {
 				if keyErr != nil {
 					t.Fatal(keyErr)
 				}
-				prepared, err = fixture.repository.SupplyBackupPolicyInitialKey(ctx, prepared,
-					BackupPolicyInitialKeyMaterial{
+				prepared, err = fixture.repository.SupplyBackupPolicyInitialKey(
+					ctx,
+					prepared,
+					testbackuppolicymutations.BackupPolicyInitialKeyMaterial{
 						Recipient: identity.Recipient().String(), Ciphertext: []byte("controller-sealed-test-identity"),
-					})
+					},
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -73,16 +88,19 @@ func TestVolumeRemovalBackupPolicyPreparationPreservesHistory(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer clearBackupRuntimeMutations(publication.mutations)
+			defer testkeyvalue.ClearMutationValues(publication.mutations)
 			projection := removal.Projection()
-			if !equalEnvironmentBlueprintBackupPolicy(projection, publication.projection) {
+			if !testblueprintplanning.EqualEnvironmentBlueprintBackupPolicy(projection, publication.projection) {
 				t.Fatal("staged decisions differ from publication decisions")
 			}
 			projection.Keep = 1
 			if len(projection.Sources) != 0 {
 				projection.Sources[0].ID = "changed"
 			}
-			if !equalEnvironmentBlueprintBackupPolicy(removal.Projection(), publication.projection) {
+			if !testblueprintplanning.EqualEnvironmentBlueprintBackupPolicy(
+				removal.Projection(),
+				publication.projection,
+			) {
 				t.Fatal("caller changed immutable removal preparation")
 			}
 			if fixture.store.revision != before || publication.projection.Enabled != remainsEnabled ||
@@ -97,13 +115,13 @@ func TestVolumeRemovalBackupPolicyPreparationPreservesHistory(t *testing.T) {
 			if len(publication.projection.Sources) != wantSources {
 				t.Fatal("replacement retained the removed Volume selection")
 			}
-			if err := validateEnvironmentBlueprintBackupPolicy(fixture.environment.Record.ID, publication.projection); err != nil {
+			if err := testenvironmentprojection.ValidateEnvironmentBlueprintBackupPolicy(fixture.environment.Record.ID, publication.projection); err != nil {
 				t.Fatalf("last-source replacement cannot be staged as desired state: %v", err)
 			}
 			if !remaining {
-				enabled := CloneEnvironmentBlueprintBackupPolicy(publication.projection)
+				enabled := testenvironmentprojection.CloneEnvironmentBlueprintBackupPolicy(publication.projection)
 				enabled.Enabled = true
-				if err := validateEnvironmentBlueprintBackupPolicy(fixture.environment.Record.ID, enabled); err == nil {
+				if err := testenvironmentprojection.ValidateEnvironmentBlueprintBackupPolicy(fixture.environment.Record.ID, enabled); err == nil {
 					t.Fatal("enabled empty-source desired policy accepted")
 				}
 			}
@@ -111,12 +129,13 @@ func TestVolumeRemovalBackupPolicyPreparationPreservesHistory(t *testing.T) {
 				t.Fatal("policy fragment no longer has one primary compare per source plus four fixed fences")
 			}
 			for _, mutation := range publication.mutations {
-				if mutation.Type == MutationDelete && mutation.Key != backupPolicyConnectorReferenceKey(
-					fixture.connector.Record.Connector.ID, fixture.environment.Record.ID) {
+				if mutation.Type == testkeyvalue.MutationDelete &&
+					mutation.Key != testbackuppolicy.BackupPolicyConnectorReferenceKey(
+						fixture.connector.Record.Connector.ID, fixture.environment.Record.ID) {
 					t.Fatal("replacement deletes historical authority")
 				}
-				if mutation.Key == environmentCoordinationKey(fixture.environment.Record.ID) {
-					coordination, err := decodeEnvironmentCoordinationRecord(mutation.Value)
+				if mutation.Key == testenvironmentcoordination.Key(fixture.environment.Record.ID) {
+					coordination, err := testenvironmentcoordination.Decode(mutation.Value)
 					if err != nil || !coordination.ScheduleClockFloor.Equal(fixture.now.Add(time.Hour)) ||
 						(coordination.CurrentBackupScheduleState != nil) != remainsEnabled {
 						t.Fatalf("replacement lost scheduling boundary: %v", err)
@@ -127,25 +146,24 @@ func TestVolumeRemovalBackupPolicyPreparationPreservesHistory(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer clearBackupRuntimeMutations(backward.mutations)
+			defer testkeyvalue.ClearMutationValues(backward.mutations)
 			for _, mutation := range backward.mutations {
-				if mutation.Key == environmentCoordinationKey(fixture.environment.Record.ID) {
-					coordination, err := decodeEnvironmentCoordinationRecord(mutation.Value)
+				if mutation.Key == testenvironmentcoordination.Key(fixture.environment.Record.ID) {
+					coordination, err := testenvironmentcoordination.Decode(mutation.Value)
 					if err != nil || !coordination.ScheduleClockFloor.Equal(fixture.now) {
 						t.Fatalf("removal moved the scheduling floor backward: %v", err)
 					}
 				}
 			}
 			keys := []string{
-				backupPolicyKey(fixture.environment.Record.ID),
-				environmentCoordinationKey(fixture.environment.Record.ID),
-				environmentMutationEpochKey(fixture.environment.Record.ID),
-				backupSourceKey(volume.ID),
+				testbackuppolicy.BackupPolicyKey(fixture.environment.Record.ID),
+				testenvironmentcoordination.Key(fixture.environment.Record.ID),
+				testhierarchy.EnvironmentMutationEpochKey(fixture.environment.Record.ID),
+				testbackuppolicy.BackupSourceKey(volume.ID),
 			}
 			if test.enabled {
 				keys = append(
-					keys,
-					backupPolicyConnectorReferenceKey(
+					keys, testbackuppolicy.BackupPolicyConnectorReferenceKey(
 						fixture.connector.Record.Connector.ID,
 						fixture.environment.Record.ID,
 					),
@@ -174,13 +192,17 @@ func assertVolumePolicyPreparationRejectsRace(
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clearBackupRuntimeMutations(publication.mutations)
+	defer testkeyvalue.ClearMutationValues(publication.mutations)
 	read, err := fixture.store.Get(ctx, key)
 	if err != nil || read.Entry == nil {
 		t.Fatalf("read race fence: %v", err)
 	}
 	defer clear(read.Entry.Value)
-	raced, err := fixture.store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: read.Entry.Value}})
+	raced, err := fixture.store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: read.Entry.Value}},
+	)
 	if err != nil || !raced.Succeeded {
 		t.Fatalf("inject race: %v", err)
 	}
@@ -198,18 +220,21 @@ func TestVolumeRemovalBackupPolicyMaximumFragmentBudget(t *testing.T) {
 	fixture := newBackupPolicyReplacementFixture(t, false)
 	ctx := context.Background()
 	taskID := ids.NewAt(ids.KindTask, fixture.now, 4001)
-	projection := EnvironmentComposeProjection{EnvironmentID: fixture.environment.Record.ID, RevisionID: taskID}
-	input := EnvironmentBlueprintBackupPolicyInput{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
+		EnvironmentID: fixture.environment.Record.ID,
+		RevisionID:    taskID,
+	}
+	input := testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 		EnvironmentID: fixture.environment.Record.ID, TaskID: taskID,
 		ReadRevision: fixture.store.revision, Enabled: true, Frequency: "*-*-* 03:00:00", Keep: 3,
 		Encryption: "none", ConnectorName: fixture.connector.Record.Connector.Name, CreatedAt: fixture.now,
 	}
-	for index := range MaximumBackupPolicySources {
+	for index := range testbackuppolicy.MaximumBackupPolicySources {
 		volumeID := ids.NewAt(ids.KindVolume, fixture.now, int64(4100+index))
-		projection.Volumes = append(projection.Volumes, EnvironmentVolumeIdentity{
+		projection.Volumes = append(projection.Volumes, testenvironmentprojection.EnvironmentVolumeIdentity{
 			ID: volumeID, Slug: "volume-" + string(rune('a'+index)), Key: "volume-" + string(rune('a'+index)),
 		})
-		input.Sources = append(input.Sources, EnvironmentBlueprintBackupPolicySourceInput{
+		input.Sources = append(input.Sources, testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
 			CandidateID: ids.NewAt(ids.KindBackupSource, fixture.now, int64(4200+index)),
 			Kind:        core.BackupSourceVolume, TargetID: volumeID,
 		})
@@ -221,21 +246,19 @@ func TestVolumeRemovalBackupPolicyMaximumFragmentBudget(t *testing.T) {
 	}
 	defer seed.Clear()
 	projection.Backup = seed.Projection()
-	seedPublication, err := prepareBlueprintBackupPolicyPublication(
-		TaskRecord{
+	seedPublication, err := testblueprintplanning.PrepareBlueprintBackupPolicyPublication(
+		testblueprintplanning.TaskIdentity{
 			ID:     taskID,
 			Target: fixture.environment.Record.ID,
 		},
-		projection,
-		BlueprintAttachTaskPreparation{},
-		seed,
+		projection, testblueprintplanning.BlueprintAttachTaskPreparation{}, seed,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clearPreparedBlueprintBackupPolicyPublication(seedPublication)
+	defer testblueprintplanning.ClearPreparedBlueprintBackupPolicyPublication(seedPublication)
 	// Seed only this owner's records in the MVCC fixture, not a product Apply.
-	seeded, err := fixture.store.Transact(ctx, seedPublication.conditions, seedPublication.mutations)
+	seeded, err := fixture.store.Transact(ctx, seedPublication.Conditions(), seedPublication.Mutations())
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed maximum policy records: %v", err)
 	}
@@ -248,9 +271,11 @@ func TestVolumeRemovalBackupPolicyMaximumFragmentBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clearBackupRuntimeMutations(publication.mutations)
+	defer testkeyvalue.ClearMutationValues(publication.mutations)
 	if len(publication.conditions) != 16 || len(publication.mutations) != 2 ||
-		len(publication.projection.Sources) != MaximumBackupPolicySources-1 || !publication.projection.Enabled {
+		len(
+			publication.projection.Sources,
+		) != testbackuppolicy.MaximumBackupPolicySources-1 || !publication.projection.Enabled {
 		t.Fatal("maximum policy removal fragment changed its bounded shape")
 	}
 	sizer := &store{root: "/groundplane"}

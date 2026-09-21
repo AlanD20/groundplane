@@ -10,13 +10,15 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func TestBlueprintScriptGenerationAccepts64UnchangedScripts(t *testing.T) {
 	store := newMemoryHierarchyStore()
 	repository, current := scriptBlueprintSeedActiveSet(t, store, 64)
-	desired := make([]ScriptRecord, len(current))
+	desired := make([]testscripts.Record, len(current))
 	for index := range current {
 		desired[index] = current[index].Record
 	}
@@ -34,7 +36,7 @@ func TestBlueprintScriptGenerationAccepts64Creates(t *testing.T) {
 	store := newMemoryHierarchyStore()
 	repository, environmentID, revision := scriptBlueprintEmptyActiveSet(t, store)
 	desired := scriptBlueprintRecords(t, environmentID, 64, "created")
-	generations := make([]ScriptBodyGenerationRecord, len(desired))
+	generations := make([]testscripts.BodyGenerationRecord, len(desired))
 	for index := range desired {
 		generations[index] = scriptBlueprintGeneration(desired[index])
 	}
@@ -90,7 +92,7 @@ func TestBlueprintScriptFinalFlipMakesCompleteSetVisible(t *testing.T) {
 	if err != nil || !result.Succeeded {
 		t.Fatalf("final Script-set flip = %#v, %v", result, err)
 	}
-	page, err := repository.ListScripts(context.Background(), environmentID, PageRequest{Limit: 64})
+	page, err := repository.ListScripts(context.Background(), environmentID, testkeyvalue.PageRequest{Limit: 64})
 	if err != nil || len(page.Items) != len(desired) {
 		t.Fatalf("ListScripts(after flip) = %#v, %v", page, err)
 	}
@@ -103,39 +105,43 @@ func TestBlueprintScriptFinalFlipConflictsWithConcurrentDirectEditCAS(t *testing
 	desired.Desired.Slug = "blueprint-edit"
 	publication, err := repository.PrepareBlueprintScriptPublication(
 		context.Background(), desired.EnvironmentID, current[0].ReadRevision,
-		scriptBlueprintGenerationID(904), current, []ScriptRecord{desired}, nil,
+		scriptBlueprintGenerationID(904), current, []testscripts.Record{desired}, nil,
 	)
 	if err != nil {
 		t.Fatalf("PrepareBlueprintScriptPublication() error = %v", err)
 	}
 	defer publication.Clear()
-	active, err := readActiveScriptSet(context.Background(), store, desired.EnvironmentID, 0)
+	active, err := testscripts.ReadActiveScriptSet(context.Background(), store, desired.EnvironmentID, 0)
 	if err != nil {
 		t.Fatalf("readActiveScriptSet() error = %v", err)
 	}
 	direct := current[0].Record
 	direct.Desired.Slug = "direct-edit"
-	primary, err := encodeScriptRecord(direct)
+	primary, err := testscripts.EncodeRecord(direct)
 	if err != nil {
 		t.Fatalf("encodeScriptRecord(direct) error = %v", err)
 	}
-	activeValue, err := encodeScriptSetGeneration(active.Record)
+	activeValue, err := testscripts.EncodeScriptSetGeneration(active.Record)
 	if err != nil {
 		t.Fatalf("encodeScriptSetGeneration() error = %v", err)
 	}
-	directResult, err := store.Transact(context.Background(), []Condition{
-		{Key: scriptSetActiveKey(direct.EnvironmentID), ModRevision: active.Revision},
+	directResult, err := store.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testscripts.ScriptSetActiveKey(direct.EnvironmentID), ModRevision: active.Revision},
 		{
-			Key:         scriptSetScriptKey(direct.EnvironmentID, direct.ScriptSetGeneration, direct.Desired.ID),
+			Key: testscripts.ScriptSetScriptKey(
+				direct.EnvironmentID,
+				direct.ScriptSetGeneration,
+				direct.Desired.ID,
+			),
 			ModRevision: current[0].Revision,
 		},
-	}, []Mutation{
+	}, []testkeyvalue.Mutation{
 		{
-			Type:  MutationPut,
-			Key:   scriptSetScriptKey(direct.EnvironmentID, direct.ScriptSetGeneration, direct.Desired.ID),
+			Type:  testkeyvalue.MutationPut,
+			Key:   testscripts.ScriptSetScriptKey(direct.EnvironmentID, direct.ScriptSetGeneration, direct.Desired.ID),
 			Value: primary,
 		},
-		{Type: MutationPut, Key: scriptSetActiveKey(direct.EnvironmentID), Value: activeValue},
+		{Type: testkeyvalue.MutationPut, Key: testscripts.ScriptSetActiveKey(direct.EnvironmentID), Value: activeValue},
 	})
 	clear(primary)
 	clear(activeValue)
@@ -176,20 +182,20 @@ func TestBlueprintScriptStageReplayRetainsNewLocatorMutations(t *testing.T) {
 	_, environmentID, _ := scriptBlueprintEmptyActiveSet(t, base)
 	desired := scriptBlueprintRecords(t, environmentID, 1, "locator-replay")
 	record := desired[0]
-	locator, err := encodeScriptLocator(scriptLocatorRecord{
+	locator, err := testscripts.EncodeScriptLocator(testscripts.LocatorRecord{
 		ScriptID: record.Desired.ID, EnvironmentID: environmentID,
 	})
 	if err != nil {
 		t.Fatalf("encodeScriptLocator() error = %v", err)
 	}
-	seed, err := base.Transact(context.Background(), []Condition{
-		{Key: scriptLocatorKey(record.Desired.ID)},
-		{Key: scriptEnvironmentLocatorKey(environmentID, record.Desired.ID)},
-	}, []Mutation{
-		{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator},
+	seed, err := base.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testscripts.ScriptLocatorKey(record.Desired.ID)},
+		{Key: testscripts.ScriptEnvironmentLocatorKey(environmentID, record.Desired.ID)},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testscripts.ScriptLocatorKey(record.Desired.ID), Value: locator},
 		{
-			Type:  MutationPut,
-			Key:   scriptEnvironmentLocatorKey(environmentID, record.Desired.ID),
+			Type:  testkeyvalue.MutationPut,
+			Key:   testscripts.ScriptEnvironmentLocatorKey(environmentID, record.Desired.ID),
 			Value: []byte(record.Desired.ID),
 		},
 	})
@@ -211,11 +217,11 @@ func TestBlueprintScriptStageReplayRetainsNewLocatorMutations(t *testing.T) {
 	}
 	publication.Clear()
 	want := map[string]bool{
-		scriptLocatorKey(record.Desired.ID):                           false,
-		scriptEnvironmentLocatorKey(environmentID, record.Desired.ID): false,
+		testscripts.ScriptLocatorKey(record.Desired.ID):                           false,
+		testscripts.ScriptEnvironmentLocatorKey(environmentID, record.Desired.ID): false,
 	}
 	for _, mutation := range store.batches[0] {
-		if _, expected := want[mutation.Key]; expected && mutation.Type == MutationPut {
+		if _, expected := want[mutation.Key]; expected && mutation.Type == testkeyvalue.MutationPut {
 			want[mutation.Key] = true
 		}
 	}
@@ -232,7 +238,7 @@ func TestBlueprintScriptFlipRejectsActiveExecutionReferences(t *testing.T) {
 	current[0].Record.ActiveReferences = 1
 	_, err := repository.PrepareBlueprintScriptPublication(
 		context.Background(), current[0].Record.EnvironmentID, current[0].ReadRevision,
-		scriptBlueprintGenerationID(907), current, []ScriptRecord{current[0].Record}, nil,
+		scriptBlueprintGenerationID(907), current, []testscripts.Record{current[0].Record}, nil,
 	)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("PrepareBlueprintScriptPublication(active reference) error = %v, want state.conflict", err)
@@ -260,12 +266,11 @@ func TestBlueprintScriptStageBatchesContainAtMost16Records(t *testing.T) {
 		t.Fatalf("stage transaction count = %d, want 10", len(store.batches))
 	}
 	for index, batch := range store.batches {
-		if store.operationCounts[index] > maximumTransactionOperations {
+		if store.operationCounts[index] > testkeyvalue.MaximumOperations {
 			t.Fatalf(
 				"batch %d transaction operations = %d, want <=%d",
 				index,
-				store.operationCounts[index],
-				maximumTransactionOperations,
+				store.operationCounts[index], testkeyvalue.MaximumOperations,
 			)
 		}
 		records := 0
@@ -305,12 +310,11 @@ func TestBlueprintScriptStageShrinksForEncodedByteCeiling(t *testing.T) {
 		t.Fatalf("stage transaction count = %d, want 4", len(store.batches))
 	}
 	for index, encodedBytes := range store.encodedBytes {
-		if encodedBytes > maximumTransactionBytes {
+		if encodedBytes > testkeyvalue.MaximumBytes {
 			t.Fatalf(
 				"batch %d encoded bytes = %d, want <=%d",
 				index,
-				encodedBytes,
-				maximumTransactionBytes,
+				encodedBytes, testkeyvalue.MaximumBytes,
 			)
 		}
 	}
@@ -320,22 +324,22 @@ type scriptBlueprintStageStore struct {
 	*memoryHierarchyStore
 	transacts       int
 	failAt          int
-	batches         [][]Mutation
+	batches         [][]testkeyvalue.Mutation
 	operationCounts []int
 	encodedBytes    []int
 }
 
 func (store *scriptBlueprintStageStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	store.transacts++
-	store.batches = append(store.batches, cloneMutations(mutations))
+	store.batches = append(store.batches, testkeyvalue.CloneMutations(mutations))
 	store.operationCounts = append(store.operationCounts, len(conditions)+len(mutations))
 	store.encodedBytes = append(store.encodedBytes, scriptStageEncodedBytes(conditions, mutations))
 	if store.failAt != 0 && store.transacts == store.failAt {
-		return TransactionResult{}, errs.New(errs.KindInternal, "injected Script staging failure")
+		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "injected Script staging failure")
 	}
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 }
@@ -344,16 +348,16 @@ func scriptBlueprintEmptyActiveSet(t *testing.T, store *memoryHierarchyStore) (*
 	t.Helper()
 	at := time.Date(2026, 8, 30, 16, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
-	active := ScriptSetGenerationRecord{EnvironmentID: environmentID, GenerationID: environmentID}
-	value, err := encodeScriptSetGeneration(active)
+	active := testscripts.SetGenerationRecord{EnvironmentID: environmentID, GenerationID: environmentID}
+	value, err := testscripts.EncodeScriptSetGeneration(active)
 	if err != nil {
 		t.Fatalf("encodeScriptSetGeneration() error = %v", err)
 	}
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: scriptSetActiveKey(environmentID)}},
-		[]Mutation{{
-			Type: MutationPut, Key: scriptSetActiveKey(environmentID), Value: value,
+		[]testkeyvalue.Condition{{Key: testscripts.ScriptSetActiveKey(environmentID)}},
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testscripts.ScriptSetActiveKey(environmentID), Value: value,
 		}},
 	)
 	clear(value)
@@ -371,83 +375,81 @@ func scriptBlueprintSeedActiveSet(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	count int,
-) (*ScriptRepository, []Versioned[ScriptRecord]) {
+) (*ScriptRepository, []testkeyvalue.Versioned[testscripts.Record]) {
 	t.Helper()
 	repository, environmentID, _ := scriptBlueprintEmptyActiveSet(t, store)
 	records := scriptBlueprintRecords(t, environmentID, count, "existing")
 	for start := 0; start < len(records); start += 8 {
 		end := min(start+8, len(records))
-		mutations := make([]Mutation, 0, (end-start)*6)
+		mutations := make([]testkeyvalue.Mutation, 0, (end-start)*6)
 		for index := start; index < end; index++ {
 			record := records[index]
 			record.ScriptSetGeneration = environmentID
 			records[index] = record
-			primary, err := encodeScriptRecord(record)
+			primary, err := testscripts.EncodeRecord(record)
 			if err != nil {
 				t.Fatalf("encodeScriptRecord() error = %v", err)
 			}
-			body, err := encodeScriptBodyGeneration(scriptBlueprintGeneration(record))
+			body, err := testscripts.EncodeScriptBodyGeneration(scriptBlueprintGeneration(record))
 			if err != nil {
 				t.Fatalf("encodeScriptBodyGeneration() error = %v", err)
 			}
-			locator, err := encodeScriptLocator(
-				scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: environmentID},
+			locator, err := testscripts.EncodeScriptLocator(
+				testscripts.LocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: environmentID},
 			)
 			if err != nil {
 				t.Fatalf("encodeScriptLocator() error = %v", err)
 			}
 			mutations = append(
-				mutations,
-				Mutation{
-					Type:  MutationPut,
-					Key:   scriptSetScriptKey(environmentID, environmentID, record.Desired.ID),
+				mutations, testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testscripts.ScriptSetScriptKey(environmentID, environmentID, record.Desired.ID),
 					Value: primary,
-				},
-				Mutation{
-					Type:  MutationPut,
-					Key:   scriptSetBodyGenerationKey(environmentID, environmentID, record.Desired.ID, 1),
+				}, testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testscripts.ScriptSetBodyGenerationKey(environmentID, environmentID, record.Desired.ID, 1),
 					Value: body,
-				},
-				Mutation{
-					Type:  MutationPut,
-					Key:   scriptSetOwnerKey(environmentID, environmentID, record.Desired.ID),
+				}, testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testscripts.ScriptSetOwnerKey(environmentID, environmentID, record.Desired.ID),
 					Value: []byte(record.Desired.ID),
-				},
-				Mutation{
-					Type:  MutationPut,
-					Key:   scriptSetSlugKey(environmentID, environmentID, record.Desired.Slug),
+				}, testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testscripts.ScriptSetSlugKey(environmentID, environmentID, record.Desired.Slug),
 					Value: []byte(record.Desired.ID),
-				},
-				Mutation{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator},
-				Mutation{
-					Type:  MutationPut,
-					Key:   scriptEnvironmentLocatorKey(environmentID, record.Desired.ID),
+				}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testscripts.ScriptLocatorKey(record.Desired.ID), Value: locator}, testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testscripts.ScriptEnvironmentLocatorKey(environmentID, record.Desired.ID),
 					Value: []byte(record.Desired.ID),
 				},
 			)
 		}
 		result, err := store.Transact(context.Background(), nil, mutations)
-		clearMutationValues(mutations)
+		testkeyvalue.ClearMutationValues(mutations)
 		if err != nil || !result.Succeeded {
 			t.Fatalf("seed active Scripts = %#v, %v", result, err)
 		}
 	}
-	page, err := repository.ListScripts(context.Background(), environmentID, PageRequest{Limit: 64})
+	page, err := repository.ListScripts(context.Background(), environmentID, testkeyvalue.PageRequest{Limit: 64})
 	if err != nil || len(page.Items) != count {
 		t.Fatalf("ListScripts(seed) = %#v, %v", page, err)
 	}
 	return repository, page.Items
 }
 
-func scriptBlueprintRecords(t *testing.T, environmentID string, count int, bodyPrefix string) []ScriptRecord {
+func scriptBlueprintRecords(t *testing.T, environmentID string, count int, bodyPrefix string) []testscripts.Record {
 	t.Helper()
 	at := time.Date(2026, 8, 30, 16, 0, 0, 0, time.UTC)
-	records := make([]ScriptRecord, count)
+	records := make([]testscripts.Record, count)
 	for index := range records {
-		record, err := NewScriptRecord(environmentID, ids.NewAt(ids.KindService, at, int64(index+100)), core.Script{
-			ID: ids.NewAt(ids.KindScript, at, int64(index+200)), Slug: fmt.Sprintf("script-%02d", index),
-			ServiceName: "api", Body: fmt.Sprintf("%s-%02d", bodyPrefix, index), When: core.ScriptManual,
-		})
+		record, err := testscripts.NewRecord(
+			environmentID,
+			ids.NewAt(ids.KindService, at, int64(index+100)),
+			core.Script{
+				ID: ids.NewAt(ids.KindScript, at, int64(index+200)), Slug: fmt.Sprintf("script-%02d", index),
+				ServiceName: "api", Body: fmt.Sprintf("%s-%02d", bodyPrefix, index), When: core.ScriptManual,
+			},
+		)
 		if err != nil {
 			t.Fatalf("NewScriptRecord(%d) error = %v", index, err)
 		}
@@ -458,16 +460,16 @@ func scriptBlueprintRecords(t *testing.T, environmentID string, count int, bodyP
 	return records
 }
 
-func scriptBlueprintGenerations(records []ScriptRecord) []ScriptBodyGenerationRecord {
-	result := make([]ScriptBodyGenerationRecord, len(records))
+func scriptBlueprintGenerations(records []testscripts.Record) []testscripts.BodyGenerationRecord {
+	result := make([]testscripts.BodyGenerationRecord, len(records))
 	for index := range records {
 		result[index] = scriptBlueprintGeneration(records[index])
 	}
 	return result
 }
 
-func scriptBlueprintGeneration(record ScriptRecord) ScriptBodyGenerationRecord {
-	generation, err := newScriptBodyGeneration(record)
+func scriptBlueprintGeneration(record testscripts.Record) testscripts.BodyGenerationRecord {
+	generation, err := testscripts.NewScriptBodyGeneration(record)
 	if err != nil {
 		panic(err)
 	}
@@ -476,24 +478,4 @@ func scriptBlueprintGeneration(record ScriptRecord) ScriptBodyGenerationRecord {
 
 func scriptBlueprintGenerationID(seed int64) string {
 	return ids.NewAt(ids.KindTask, time.Date(2026, 8, 30, 16, 0, 0, 0, time.UTC), seed)
-}
-
-// Flat-key helpers remain test fixtures only so pre-migration corruption and
-// rejection tests can construct superseded records without production dual-read support.
-func scriptKey(id string) string                  { return "/v1/records/scripts/" + id }
-func scriptBodyGenerationPrefix(id string) string { return scriptKey(id) + "/generations/" }
-func scriptBodyGenerationKey(id string, generation uint64) string {
-	return scriptBodyGenerationPrefix(id) + fmt.Sprint(generation)
-}
-func scriptOwnerPrefix(environmentID string) string {
-	return "/v1/indexes/scripts/by-owner/environment/" + environmentID + "/"
-}
-func scriptOwnerKey(environmentID, scriptID string) string {
-	return scriptOwnerPrefix(environmentID) + scriptID
-}
-func scriptSlugKey(environmentID, slug string) string {
-	return "/v1/indexes/scripts/by-slug/environment/" + environmentID + "/" + encodeDynamicSegment(slug)
-}
-func scriptBodyForwardReferenceKey(scriptID string, generation uint64, executionID string) string {
-	return scriptBodyGenerationKey(scriptID, generation) + scriptBodyForwardRefSegment + executionID
 }

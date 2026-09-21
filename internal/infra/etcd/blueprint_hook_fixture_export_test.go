@@ -9,19 +9,26 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func (fixture *ExecutedArtifactFixture) HookDependencies(
 	t *testing.T,
-) (*ScriptRepository, *ScriptSourceReferenceAuthority) {
+) (*ScriptRepository, *testscriptsourcepublication.Authority) {
 	t.Helper()
 	scripts, err := newScriptRepository(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sources, err := newScriptSourceReferenceAuthority(fixture.store)
+	sources, err := testscriptsourcepublication.NewAuthority(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,18 +40,18 @@ func (fixture *ExecutedArtifactFixture) HookDependencies(
 func (fixture *ExecutedArtifactFixture) StageHookScripts(
 	t *testing.T,
 	task TaskRecord,
-	service ServiceRecord,
+	service testservices.ServiceRecord,
 	count int,
-) []ScriptRecord {
+) []testscripts.Record {
 	t.Helper()
 	if count == 0 {
 		return nil
 	}
 	scripts, _ := fixture.HookDependencies(t)
-	records := make([]ScriptRecord, count)
-	generations := make([]ScriptBodyGenerationRecord, count)
+	records := make([]testscripts.Record, count)
+	generations := make([]testscripts.BodyGenerationRecord, count)
 	for index := range records {
-		record, err := NewScriptRecord(task.Target, service.Desired.ID, core.Script{
+		record, err := testscripts.NewRecord(task.Target, service.Desired.ID, core.Script{
 			ID: ids.New(ids.KindScript), Slug: fmt.Sprintf("hook-%02d", index), ServiceName: service.Desired.Name,
 			When: core.ScriptPreDeploy, Body: "exit 0",
 		})
@@ -83,65 +90,55 @@ func (fixture *ExecutedArtifactFixture) CompleteHookCheckpoints(
 		record := versioned.Record
 		zero := int32(0)
 		checkpoints := []struct {
-			state ScriptExecutionState
-			proof ScriptCheckpointEvidence
+			state testscriptexecutions.ScriptExecutionState
+			proof testscriptexecutions.ScriptCheckpointEvidence
 		}{
-			{
-				ScriptExecutionStartAuthorized,
-				ScriptCheckpointEvidence{
-					Kind:            ScriptCheckpointEvidenceStartAuthorized,
-					StartAuthorized: &ScriptStartAuthorizedEvidence{},
+			{testscriptexecutions.ScriptExecutionStartAuthorized, testscriptexecutions.ScriptCheckpointEvidence{
+				Kind:            testscriptexecutions.ScriptCheckpointEvidenceStartAuthorized,
+				StartAuthorized: &testscriptexecutions.ScriptStartAuthorizedEvidence{},
+			},
+			},
+			{testscriptexecutions.ScriptExecutionBodyPrepared, testscriptexecutions.ScriptCheckpointEvidence{
+				Kind: testscriptexecutions.ScriptCheckpointEvidenceBodyPrepared,
+				BodyPrepared: &testscriptexecutions.ScriptBodyPreparedEvidence{
+					BodySHA256: record.BodySHA256,
+					UID:        65534,
+					GID:        65534,
+					Device:     10,
+					Inode:      20,
+					Leaf:       "body",
 				},
 			},
-			{
-				ScriptExecutionBodyPrepared,
-				ScriptCheckpointEvidence{
-					Kind: ScriptCheckpointEvidenceBodyPrepared,
-					BodyPrepared: &ScriptBodyPreparedEvidence{
-						BodySHA256: record.BodySHA256,
-						UID:        65534,
-						GID:        65534,
-						Device:     10,
-						Inode:      20,
-						Leaf:       "body",
-					},
+			},
+			{testscriptexecutions.ScriptExecutionContainerCreated, testscriptexecutions.ScriptCheckpointEvidence{
+				Kind: testscriptexecutions.ScriptCheckpointEvidenceContainerCreated,
+				ContainerCreated: &testscriptexecutions.ScriptContainerCreatedEvidence{
+					ContainerID:           strings.Repeat("a", 64),
+					OwnershipLabelsSHA256: strings.Repeat("b", 64),
 				},
 			},
-			{
-				ScriptExecutionContainerCreated,
-				ScriptCheckpointEvidence{
-					Kind: ScriptCheckpointEvidenceContainerCreated,
-					ContainerCreated: &ScriptContainerCreatedEvidence{
-						ContainerID:           strings.Repeat("a", 64),
-						OwnershipLabelsSHA256: strings.Repeat("b", 64),
-					},
+			},
+			{testscriptexecutions.ScriptExecutionOutcomeRecorded, testscriptexecutions.ScriptCheckpointEvidence{
+				Kind: testscriptexecutions.ScriptCheckpointEvidenceOutcome,
+				Outcome: &testscriptexecutions.ScriptOutcomeEvidence{
+					Reason:     testscriptexecutions.ScriptOutcomeNormalExit,
+					ExitCode:   &zero,
+					ObservedAt: task.CreatedAt.Add(5 * time.Second),
 				},
 			},
-			{
-				ScriptExecutionOutcomeRecorded,
-				ScriptCheckpointEvidence{
-					Kind: ScriptCheckpointEvidenceOutcome,
-					Outcome: &ScriptOutcomeEvidence{
-						Reason:     ScriptOutcomeNormalExit,
-						ExitCode:   &zero,
-						ObservedAt: task.CreatedAt.Add(5 * time.Second),
-					},
+			},
+			{testscriptexecutions.ScriptExecutionCleanupProven, testscriptexecutions.ScriptCheckpointEvidence{
+				Kind: testscriptexecutions.ScriptCheckpointEvidenceCleanup,
+				Cleanup: &testscriptexecutions.ScriptCleanupEvidence{
+					ContainerID:              strings.Repeat("a", 64),
+					BodyDevice:               10,
+					BodyInode:                20,
+					BodyLeaf:                 "body",
+					ContainerAbsent:          true,
+					BodyAbsent:               true,
+					ExecutionDirectoryAbsent: true,
 				},
 			},
-			{
-				ScriptExecutionCleanupProven,
-				ScriptCheckpointEvidence{
-					Kind: ScriptCheckpointEvidenceCleanup,
-					Cleanup: &ScriptCleanupEvidence{
-						ContainerID:              strings.Repeat("a", 64),
-						BodyDevice:               10,
-						BodyInode:                20,
-						BodyLeaf:                 "body",
-						ContainerAbsent:          true,
-						BodyAbsent:               true,
-						ExecutionDirectoryAbsent: true,
-					},
-				},
 			},
 		}
 		for index, checkpoint := range checkpoints {
@@ -167,17 +164,29 @@ func (fixture *ExecutedArtifactFixture) RejectOversizedHookTerminal(
 ) {
 	t.Helper()
 	task := claim.Task.Record
-	result := TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+	result := testtaskjournal.TaskResultRecord{
+		Kind:           testtaskjournal.TaskResultCompose,
+		Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
 		ExecutionEpoch: claim.Assignment.Record.ExecutionEpoch,
-		Projects: []TaskObservedProjectSummary{{ProjectName: strings.Repeat("x", maximumTransactionBytes),
-			ObservedAt: task.CreatedAt.Add(time.Minute)}},
+		Projects: []testtaskjournal.TaskObservedProjectSummary{
+			{ProjectName: strings.Repeat("x", testkeyvalue.MaximumBytes),
+				ObservedAt: task.CreatedAt.Add(time.Minute)},
+		},
 	}
-	if err := validateTaskResult(result, task.Steps, TaskStatusCompleted); err != nil {
+	if err := testtaskjournal.ValidateTaskResult(result, task.Steps, testtaskjournal.TaskStatusCompleted); err != nil {
 		t.Fatalf("oversized report is not otherwise valid: %v", err)
 	}
 	before := fixture.store.revision
-	_, err := fixture.Tasks.AcknowledgeTask(context.Background(), agentID, 1, task.ID,
-		claim.Assignment.Record.AssignmentID, TaskStatusCompleted, result, task.CreatedAt.Add(time.Minute))
+	_, err := fixture.Tasks.AcknowledgeTask(
+		context.Background(),
+		agentID,
+		1,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		result,
+		task.CreatedAt.Add(time.Minute),
+	)
 	if !isKind(err, errs.KindValidationFailed) || fixture.store.revision != before {
 		t.Fatalf("oversized terminal report changed source authority before rejection: revision %d -> %d, error %v",
 			before, fixture.store.revision, err)
@@ -190,8 +199,16 @@ func (fixture *ExecutedArtifactFixture) RejectOversizedHookTerminal(
 	}
 	physical.blueprintTerminalStore = &store{root: strings.Repeat("/namespace", 4096)}
 	result.Projects = nil
-	_, err = physical.AcknowledgeTask(context.Background(), agentID, 1, task.ID,
-		claim.Assignment.Record.AssignmentID, TaskStatusCompleted, result, task.CreatedAt.Add(time.Minute))
+	_, err = physical.AcknowledgeTask(
+		context.Background(),
+		agentID,
+		1,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		result,
+		task.CreatedAt.Add(time.Minute),
+	)
 	if !isKind(err, errs.KindValidationFailed) || fixture.store.revision != before {
 		t.Fatalf("physical request rejection changed source authority: revision %d -> %d, error %v",
 			before, fixture.store.revision, err)
@@ -214,10 +231,10 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 		memoryHierarchyStore: fixture.store.memoryHierarchyStore,
 		failAt:               2,
 	}
-	event := TaskEventInput{Identity: TaskEventIdentity{
+	event := testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
 		AssignmentID: claim.Assignment.Record.AssignmentID, AgentID: agentID, AgentGeneration: 1,
 		TaskID: task.ID, StepID: task.Steps[0].ID, Attempt: claim.Assignment.Record.ExecutionEpoch, Ordinal: 1,
-	}, State: TaskEventStateRunning, Payload: []byte(`{"message":"progress before closure"}`)}
+	}, State: testtaskjournal.TaskEventStateRunning, Payload: []byte(`{"message":"progress before closure"}`)}
 	if _, err := fixture.Tasks.AppendTaskEvent(ctx, event, task.CreatedAt.Add(10*time.Second)); err != nil {
 		t.Fatal(err)
 	}
@@ -226,17 +243,19 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 		t.Fatal(err)
 	}
 	interrupted.blueprintTerminalStore = failedStore
-	result := TaskResultRecord{
-		Kind:           TaskResultCompose,
+	result := testtaskjournal.TaskResultRecord{
+		Kind:           testtaskjournal.TaskResultCompose,
 		ExecutionEpoch: claim.Assignment.Record.ExecutionEpoch,
-		Diagnostic:     TaskResultDiagnosticNone,
+		Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
 	}
 	before, err := fixture.Tasks.GetTaskAssignment(ctx, task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := interrupted.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID,
-		TaskStatusCompleted, result, task.CreatedAt.Add(time.Minute)); !isKind(err, errs.KindInternal) {
+	if _, err := interrupted.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result, task.CreatedAt.Add(time.Minute)); !isKind(
+		err,
+		errs.KindInternal,
+	) {
 		t.Fatalf("actual interrupted hook completion: %v", err)
 	}
 	after, err := fixture.Tasks.GetTaskAssignment(ctx, task.ID)
@@ -244,17 +263,20 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 		after.Assignment.Revision != before.Assignment.Revision {
 		t.Fatalf("interrupted source release changed Task/assignment authority: %v", err)
 	}
-	rootRead, err := fixture.store.Get(ctx, scriptSourceRootKey(task.OperationID))
+	rootRead, err := fixture.store.Get(ctx, testscriptsourceevidence.ScriptSourceRootKey(task.OperationID))
 	if err != nil || rootRead == nil || rootRead.Entry == nil {
 		t.Fatalf("interrupted source root: %v", err)
 	}
-	root, err := decodeScriptOperationSourceRoot(rootRead.Entry.Value)
-	if err != nil || root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal {
+	root, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(rootRead.Entry.Value)
+	if err != nil || root.Phase != testscriptsourceevidence.ScriptOperationSourceReleasing ||
+		root.ReleasePath != testscriptsourceevidence.ScriptSourceReleaseNormal {
 		t.Fatalf("interruption did not reach normal source release: %v", err)
 	}
 	report, reportValue, err := fixture.Tasks.readScriptClosingReport(ctx, after)
 	if err != nil || reportValue == nil || reportValue.ModRevision != rootRead.Entry.ModRevision ||
-		!report.ObservedAt.Equal(task.CreatedAt.Add(time.Minute)) || !taskResultsEqual(report.Result, result) {
+		!report.ObservedAt.Equal(
+			task.CreatedAt.Add(time.Minute),
+		) || !testtaskjournal.TaskResultsEqual(report.Result, result) {
 		t.Fatalf("original report was not captured atomically with source closure: %v", err)
 	}
 	beforeMismatch := fixture.store.revision
@@ -263,36 +285,48 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 		t.Fatalf("closing Task rejected or rewrote an identical event retransmission: %v", err)
 	}
 	changed := result
-	changed.Projects = []TaskObservedProjectSummary{{ProjectName: "different", ObservedAt: report.ObservedAt}}
-	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID,
-		TaskStatusCompleted, changed, task.CreatedAt.Add(2*time.Minute)); !isKind(err, errs.KindStateConflict) ||
+	changed.Projects = []testtaskjournal.TaskObservedProjectSummary{
+		{ProjectName: "different", ObservedAt: report.ObservedAt},
+	}
+	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, changed, task.CreatedAt.Add(2*time.Minute)); !isKind(
+		err,
+		errs.KindStateConflict,
+	) ||
 		fixture.store.revision != beforeMismatch {
 		t.Fatalf("changed closing report did not reject without writes: %v", err)
 	}
 	failure := result
 	failure.ReconciliationRequired = true
-	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID,
-		TaskStatusFailed, failure, task.CreatedAt.Add(2*time.Minute)); !isKind(err, errs.KindStateConflict) ||
+	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failure, task.CreatedAt.Add(2*time.Minute)); !isKind(
+		err,
+		errs.KindStateConflict,
+	) ||
 		fixture.store.revision != beforeMismatch {
 		t.Fatalf("competing failure changed closing execution authority: %v", err)
 	}
-	failure.ReconciliationRequired, failure.Diagnostic = false, TaskResultDiagnosticTimeoutBeforeEffect
-	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID,
-		TaskStatusFailed, failure, task.CreatedAt.Add(2*time.Minute)); !isKind(err, errs.KindStateConflict) ||
+	failure.ReconciliationRequired, failure.Diagnostic = false, testtaskjournal.TaskResultDiagnosticTimeoutBeforeEffect
+	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failure, task.CreatedAt.Add(2*time.Minute)); !isKind(
+		err,
+		errs.KindStateConflict,
+	) ||
 		fixture.store.revision != beforeMismatch {
 		t.Fatalf("timeout reclassified closing execution authority: %v", err)
 	}
-	_, lateErr := fixture.Tasks.AppendTaskEvent(ctx, TaskEventInput{Identity: TaskEventIdentity{
-		AssignmentID: claim.Assignment.Record.AssignmentID, AgentID: agentID, AgentGeneration: 1,
-		TaskID: task.ID, StepID: task.Steps[0].ID, Attempt: claim.Assignment.Record.ExecutionEpoch, Ordinal: 2,
-	}, State: TaskEventStateRunning, Payload: []byte(`{"message":"late event after closure"}`)},
-		task.CreatedAt.Add(2*time.Minute))
+	_, lateErr := fixture.Tasks.AppendTaskEvent(
+		ctx,
+		testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
+			AssignmentID: claim.Assignment.Record.AssignmentID, AgentID: agentID, AgentGeneration: 1,
+			TaskID: task.ID, StepID: task.Steps[0].ID, Attempt: claim.Assignment.Record.ExecutionEpoch, Ordinal: 2,
+		}, State: testtaskjournal.TaskEventStateRunning, Payload: []byte(`{"message":"late event after closure"}`)},
+		task.CreatedAt.Add(2*time.Minute),
+	)
 	if !isKind(lateErr, errs.KindStateConflict) || fixture.store.revision != beforeMismatch {
 		t.Fatalf("late event changed closing Task authority: %v", lateErr)
 	}
 	for _, metadata := range plan.ScriptBodyArtifacts {
 		execution, err := scripts.GetScriptExecution(ctx, metadata.ScriptExecutionId)
-		if err != nil || execution.Record.ActiveReference || execution.Record.State != ScriptExecutionCleanupProven {
+		if err != nil || execution.Record.ActiveReference ||
+			execution.Record.State != testscriptexecutions.ScriptExecutionCleanupProven {
 			t.Fatalf("interrupted hook was not cleanup-proven and closed: %v", err)
 		}
 	}
@@ -306,7 +340,7 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 		return
 	}
 	resumed, err := restarted.ReconnectAgentAssignment(ctx, claim)
-	if err != nil || resumed.Task.Record.Status != TaskStatusCompleted {
+	if err != nil || resumed.Task.Record.Status != testtaskjournal.TaskStatusCompleted {
 		_, artifactErr := scripts.ResolveScriptAssignmentArtifacts(ctx, resumed.Task.Record, plan)
 		t.Fatalf(
 			"actual closing hook reconnect: status=%s mode=%s epoch=%d error=%v artifacts=%v",
@@ -321,14 +355,22 @@ func (fixture *ExecutedArtifactFixture) ProveHookTerminalReconnect(
 		resumed.Task.Record.FinishedAt == nil || !resumed.Task.Record.FinishedAt.Equal(report.ObservedAt) {
 		t.Fatal("Controller completion changed assignment authority or original terminal timestamp")
 	}
-	for _, key := range []string{scriptSourceRootKey(task.OperationID), blueprintClosingReportKey(task.ID)} {
+	for _, key := range []string{testscriptsourceevidence.ScriptSourceRootKey(task.OperationID), blueprintClosingReportKey(task.ID)} {
 		read, err := fixture.store.Get(ctx, key)
 		if err != nil || read.Entry != nil {
 			t.Fatalf("terminal continuation authority was not removed: %s %v", key, err)
 		}
 	}
-	replayed, err := restarted.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID,
-		TaskStatusCompleted, result, task.CreatedAt.Add(3*time.Minute))
+	replayed, err := restarted.AcknowledgeTask(
+		ctx,
+		agentID,
+		1,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		result,
+		task.CreatedAt.Add(3*time.Minute),
+	)
 	if err != nil || replayed.Revision != resumed.Task.Revision {
 		t.Fatalf("restarted terminal replay changed Task authority: %v", err)
 	}

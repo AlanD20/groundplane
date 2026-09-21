@@ -8,6 +8,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func seedBlueprintTerminalCandidateLedger(t *testing.T, published environmentBlueprintAtomicPublication) {
@@ -15,25 +22,37 @@ func seedBlueprintTerminalCandidateLedger(t *testing.T, published environmentBlu
 	ctx := context.Background()
 	task := published.task
 	publicationID := published.releasePublicationID
-	read, err := published.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
-		environmentMutationEpochKey(published.environmentID),
-	}})
+	read, err := published.store.GetMany(
+		ctx,
+		testkeyvalue.GetManyRequest{
+			Keys: []string{
+				testreleases.ReleasePublicationKey(publicationID),
+				testreleases.ReleaseManifestStagingKey(publicationID),
+				testhierarchy.EnvironmentMutationEpochKey(published.environmentID),
+			},
+		},
+	)
 	if err != nil || read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
 		t.Fatalf("read Blueprint Release authority = %#v, %v", read, err)
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	marker, err := testreleases.DecodeReleaseRecord[testreleases.ReleasePublicationMarker](
+		read.Values[0].Value,
+		"release-publication",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	manifest, err := testreleases.DecodeReleaseRecord[testreleases.ReleaseStagedManifest](
+		read.Values[1].Value,
+		"release-staged-manifest",
+	)
 	if err != nil || len(manifest.Members) != 1 {
 		t.Fatalf("decode staged manifest = %#v, %v", manifest, err)
 	}
 	member := manifest.Members[0]
-	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: published.environmentID, RevisionID: task.ID, RenderGeneration: uint64(task.RenderGeneration),
-		DesiredServices: []EnvironmentServiceProjection{{
+		DesiredServices: []testservices.EnvironmentServiceProjection{{
 			EnvironmentID: published.environmentID,
 			Desired: core.Service{
 				ID:       member.ServiceID,
@@ -44,8 +63,8 @@ func seedBlueprintTerminalCandidateLedger(t *testing.T, published environmentBlu
 		}},
 		ServiceDependencyPlans: core.ServiceDependencyPlans{},
 	})
-	render := ReleaseRenderInput{
-		ReleaseID: member.ReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[TaskComposeArtifactParam],
+	render := testreleaserender.ReleaseRenderInput{
+		ReleaseID: member.ReleaseID, PlanID: task.PlanID, ArtifactID: task.Params[testtaskjournal.TaskComposeArtifactParam],
 		ServiceID: member.ServiceID, ServiceName: "api", CandidateWorkload: releaseTestWorkloadSeal("example/api:1"),
 		Strategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton,
 		PriorArtifactID: ids.NewAt(
@@ -59,7 +78,7 @@ func seedBlueprintTerminalCandidateLedger(t *testing.T, published environmentBlu
 		AuthorizedVolumeDir: "/var/lib/groundplane/volumes", Projection: projection,
 		ServiceDependencyPlans: core.ServiceDependencyPlans{},
 	}
-	rawRender, err := EncodeReleaseRenderInput(render)
+	rawRender, err := testreleaserender.EncodeReleaseRenderInput(render)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,24 +120,18 @@ func seedBlueprintTerminalCandidateLedger(t *testing.T, published environmentBlu
 	for key, record := range map[string]struct {
 		typeName string
 		value    any
-	}{
-		releasePublicationKey(publicationID):                          {"release-publication", marker},
-		releaseManifestStagingKey(publicationID):                      {"release-staged-manifest", manifest},
-		releaseIntentStagingKey(publicationID, member.ReleaseID):      {"release-intent", intent},
-		releaseRenderInputStagingKey(publicationID, member.ReleaseID): {"release-render-input", json.RawMessage(rawRender)},
-		releaseCheckpointStagingKey(publicationID, member.ReleaseID):  {"release-checkpoint", checkpoint},
-	} {
-		values[key], err = encodeReleaseRecord(record.typeName, record.value)
+	}{testreleases.ReleasePublicationKey(publicationID): {"release-publication", marker}, testreleases.ReleaseManifestStagingKey(publicationID): {"release-staged-manifest", manifest}, testreleases.ReleaseIntentStagingKey(publicationID, member.ReleaseID): {"release-intent", intent}, testreleases.ReleaseRenderInputStagingKey(publicationID, member.ReleaseID): {"release-render-input", json.RawMessage(rawRender)}, testreleases.ReleaseCheckpointStagingKey(publicationID, member.ReleaseID): {"release-checkpoint", checkpoint}} {
+		values[key], err = testreleases.EncodeReleaseRecord(record.typeName, record.value)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	mutations := make([]Mutation, 0, len(values))
+	mutations := make([]testkeyvalue.Mutation, 0, len(values))
 	for key, value := range values {
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: value})
+		mutations = append(mutations, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: value})
 	}
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: environmentMutationEpochKey(published.environmentID), Value: read.Values[2].Value,
+	mutations = append(mutations, testkeyvalue.Mutation{
+		Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentMutationEpochKey(published.environmentID), Value: read.Values[2].Value,
 	})
 	updated, err := published.store.Transact(ctx, nil, mutations)
 	if err != nil || !updated.Succeeded {

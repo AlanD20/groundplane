@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testnetworkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,7 +18,7 @@ func TestEnvironmentPoolRegistryEnforcesGlobalDisjointReservations(t *testing.T)
 	root := netip.MustParsePrefix("10.0.0.0/8")
 	firstID := ids.NewAt(ids.KindEnvironment, time.Unix(1, 0).UTC(), 1)
 	secondID := ids.NewAt(ids.KindEnvironment, time.Unix(2, 0).UTC(), 2)
-	registry, canonical, err := (EnvironmentPoolRegistry{Reservations: map[string]string{}}).Reserve(
+	registry, canonical, err := (testnetworkreservations.EnvironmentPoolRegistry{Reservations: map[string]string{}}).Reserve(
 		root,
 		firstID,
 		"10.200.0.0/16",
@@ -59,7 +60,7 @@ func TestEnvironmentPoolRegistryReplaceExcludesOnlyCurrentOwner(t *testing.T) {
 	root := netip.MustParsePrefix("10.0.0.0/8")
 	firstID := ids.NewAt(ids.KindEnvironment, time.Unix(3, 0).UTC(), 3)
 	secondID := ids.NewAt(ids.KindEnvironment, time.Unix(4, 0).UTC(), 4)
-	registry := EnvironmentPoolRegistry{Reservations: map[string]string{
+	registry := testnetworkreservations.EnvironmentPoolRegistry{Reservations: map[string]string{
 		firstID:  "10.200.0.0/16",
 		secondID: "10.22.0.0/16",
 	}}

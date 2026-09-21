@@ -34,9 +34,12 @@ func validateBackupPolicyReplacementMarker(
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != candidate.Replacement.EnvironmentID ||
-		marker.Locator.Method != http.MethodPut || marker.Locator.Route != backupPolicyReplacementRoute ||
-		marker.ReplayTarget != nil || marker.Response.Status != http.StatusOK ||
-		marker.Response.ContentKind != "application/json" || !json.Valid(marker.Response.Body) ||
+		marker.Locator.Method != http.MethodPut ||
+		marker.Locator.Route != backupPolicyReplacementRoute ||
+		marker.ReplayTarget != nil ||
+		marker.Response.Status != http.StatusOK ||
+		marker.Response.ContentKind != "application/json" ||
+		!json.Valid(marker.Response.Body) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		!marker.TerminalAt.Equal(marker.CreatedAt) ||
 		!marker.RetainUntil.Equal(marker.TerminalAt.Add(idempotencyrecord.MarkerRetention)) {

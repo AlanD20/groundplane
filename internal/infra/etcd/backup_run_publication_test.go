@@ -6,17 +6,25 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: publication callers must not mutate the durable candidate after fixed-revision derivation.
 func TestPreparedBackupRunPublicationRecordIsDefensive(t *testing.T) {
 	publication := &PreparedBackupRunPublication{
-		state: &preparedBackupRunState{plan: backupRunPublicationPlan{record: BackupRunRecord{
-			Sources: []BackupRunSourceAttemptRecord{
+		state: &preparedBackupRunState{plan: backupRunPublicationPlan{record: testbackupruntime.BackupRunRecord{
+			Sources: []testbackupruntime.BackupRunSourceAttemptRecord{
 				{
 					SourceID: "spt_source",
-					Snapshot: BackupRunSourceSnapshot{
-						Config: &BackupConfigSourceSnapshot{ConfigSnapshotID: "cfg_snapshot"},
+					Snapshot: testbackupruntime.BackupRunSourceSnapshot{
+						Config: &testbackupruntime.BackupConfigSourceSnapshot{ConfigSnapshotID: "cfg_snapshot"},
 					},
 				},
 			},
@@ -36,7 +44,7 @@ func TestBackupRunPublicationRejectsNilRepository(t *testing.T) {
 	var nilOperationContext context.Context
 	if _, err := (*BackupRuntimeRepository)(
 		nil,
-	).PrepareManualBackupRun(nilOperationContext, ManualBackupRunInput{}, nil); err == nil {
+	).PrepareManualBackupRun(nilOperationContext, testbackupplanning.ManualBackupRunInput{}, nil); err == nil {
 		t.Fatal("nil repository preparation unexpectedly succeeded")
 	}
 }
@@ -47,8 +55,7 @@ func TestPrepareManualBackupRunDerivesFixedRevisionCandidate(t *testing.T) {
 	repository, store, seeded := newBackupRuntimeBareFixture(t)
 	now := seeded.CreatedAt
 	prepared, err := repository.PrepareManualBackupRun(
-		context.Background(),
-		ManualBackupRunInput{
+		context.Background(), testbackupplanning.ManualBackupRunInput{
 			EnvironmentID: seeded.EnvironmentID,
 			TaskID: ids.NewAt(
 				ids.KindTask,
@@ -63,14 +70,13 @@ func TestPrepareManualBackupRunDerivesFixedRevisionCandidate(t *testing.T) {
 				seeded.EnvironmentID,
 			),
 			CreatedAt: now,
-		},
-		func(
+		}, func(
 			_ context.Context,
-			_ Versioned[AttachRecord],
-			_ AttachEncryptedFacts,
-			consume func(BackupPostgresIdentity) error,
+			_ testkeyvalue.Versioned[testattachments.Record],
+			_ testattachments.EncryptedFacts,
+			consume func(testbackupplanning.BackupPostgresIdentity) error,
 		) error {
-			return consume(BackupPostgresIdentity{
+			return consume(testbackupplanning.BackupPostgresIdentity{
 				Database: seeded.Sources[0].Snapshot.Postgres.Database,
 				Role:     seeded.Sources[0].Snapshot.Postgres.Role,
 			})
@@ -91,7 +97,7 @@ func TestPrepareManualBackupRunDerivesFixedRevisionCandidate(t *testing.T) {
 func TestPreparedBackupRunPublicationRejectsSecondPublish(t *testing.T) {
 	publication := &PreparedBackupRunPublication{state: &preparedBackupRunState{consumed: true}}
 	if _, err := publication.Publish(
-		context.Background(), TaskRecord{}, nil, IdempotencyMarker{},
+		context.Background(), TaskRecord{}, nil, testidempotency.IdempotencyMarker{},
 	); err == nil {
 		t.Fatal("second Publish unexpectedly succeeded")
 	}
@@ -102,38 +108,38 @@ func TestPreparedBackupRunPublicationRejectsSecondPublish(t *testing.T) {
 func TestBackupRunPublicationReplayRejectsSubordinateOmissionAndRewrite(t *testing.T) {
 	tests := []struct {
 		name   string
-		key    func(BackupRunRecord, TaskRecord) string
+		key    func(testbackupruntime.BackupRunRecord, TaskRecord) string
 		remove bool
 	}{
 		{
 			name:   "missing run membership",
 			remove: true,
-			key: func(run BackupRunRecord, _ TaskRecord) string {
-				key, _ := backupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
+			key: func(run testbackupruntime.BackupRunRecord, _ TaskRecord) string {
+				key, _ := testbackupruntime.BackupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
 				return key
 			},
 		},
-		{name: "rewritten operation index", key: func(_ BackupRunRecord, task TaskRecord) string {
-			return taskOperationIndexKey(task.OperationID, task.ID)
+		{name: "rewritten operation index", key: func(_ testbackupruntime.BackupRunRecord, task TaskRecord) string {
+			return testtaskjournal.TaskOperationIndexKey(task.OperationID, task.ID)
 		}},
 		{
 			name:   "missing source exclusion",
 			remove: true,
-			key: func(run BackupRunRecord, _ TaskRecord) string {
+			key: func(run testbackupruntime.BackupRunRecord, _ TaskRecord) string {
 				exclusions, _ := backupRunExclusionRecords(run, run.CreatedAt)
-				key, _ := backupSourceTargetExclusionKey(
+				key, _ := testbackupruntime.BackupSourceTargetExclusionKey(
 					exclusions[0].TargetKind,
 					exclusions[0].TargetID,
 				)
 				return key
 			},
 		},
-		{name: "rewritten owner index", key: func(_ BackupRunRecord, task TaskRecord) string {
+		{name: "rewritten owner index", key: func(_ testbackupruntime.BackupRunRecord, task TaskRecord) string {
 			keys, _ := taskOwnerIndexKeys(task.Owner, task.ID)
 			return keys[0]
 		}},
-		{name: "rewritten mutation epoch", key: func(run BackupRunRecord, _ TaskRecord) string {
-			return environmentMutationEpochKey(run.EnvironmentID)
+		{name: "rewritten mutation epoch", key: func(run testbackupruntime.BackupRunRecord, _ TaskRecord) string {
+			return testhierarchy.EnvironmentMutationEpochKey(run.EnvironmentID)
 		}},
 	}
 	for _, test := range tests {
@@ -146,14 +152,14 @@ func TestBackupRunPublicationReplayRejectsSubordinateOmissionAndRewrite(t *testi
 			}
 			key := test.key(run, task)
 			entry := mustOptionalKey(t, store, key)
-			mutation := Mutation{Type: MutationPut, Key: key, Value: []byte("rewritten")}
+			mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: []byte("rewritten")}
 			if test.remove {
-				mutation = Mutation{Type: MutationDelete, Key: key}
+				mutation = testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: key}
 			}
 			changed, err := store.Transact(
 				context.Background(),
-				[]Condition{{Key: key, ModRevision: entry.ModRevision}},
-				[]Mutation{mutation},
+				[]testkeyvalue.Condition{{Key: key, ModRevision: entry.ModRevision}},
+				[]testkeyvalue.Mutation{mutation},
 			)
 			if err != nil || !changed.Succeeded {
 				t.Fatalf("tamper subordinate = %#v, %v", changed, err)
@@ -191,7 +197,7 @@ func TestBackupRunPublicationReplayAcceptsClaimedWinner(t *testing.T) {
 	}
 	outcome, existing, conflict, err := result.Classify()
 	if err != nil || conflict != nil || outcome != IdempotencyKnownExisting ||
-		existing.State != IdempotencyMarkerPending || existing.TaskID != run.TaskID {
+		existing.State != testidempotency.IdempotencyMarkerPending || existing.TaskID != run.TaskID {
 		t.Fatalf("claimed winner classification = %v/%#v/%v/%v", outcome, existing, conflict, err)
 	}
 }
@@ -219,12 +225,10 @@ func TestBackupRunPublicationReplayAcceptsTerminalWinner(t *testing.T) {
 		agentID,
 		1,
 		run.TaskID,
-		claim.Assignment.Record.AssignmentID,
-		TaskStatusFailed,
-		resultRecord,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, resultRecord,
 		run.CreatedAt.Add(2*time.Second),
 	)
-	if err != nil || terminal.Record.Status != TaskStatusFailed {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeTask() = %#v/%v", terminal, err)
 	}
 	result, err := applyCompetingBackupRunPublication(
@@ -235,7 +239,7 @@ func TestBackupRunPublicationReplayAcceptsTerminalWinner(t *testing.T) {
 	}
 	outcome, existing, conflict, err := result.Classify()
 	if err != nil || conflict != nil || outcome != IdempotencyKnownExisting ||
-		existing.State != IdempotencyMarkerFailed || existing.TaskID != run.TaskID {
+		existing.State != testidempotency.IdempotencyMarkerFailed || existing.TaskID != run.TaskID {
 		t.Fatalf("terminal winner classification = %v/%#v/%v/%v", outcome, existing, conflict, err)
 	}
 }
@@ -262,7 +266,9 @@ func TestBackupRunPublicationReplayRejectsTornSuccessors(t *testing.T) {
 		torn, err := store.Transact(
 			context.Background(),
 			nil,
-			[]Mutation{{Type: MutationDelete, Key: taskAssignmentIndexKey(run.TaskID)}},
+			[]testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationDelete, Key: testtaskjournal.TaskAssignmentIndexKey(run.TaskID)},
+			},
 		)
 		if err != nil || !torn.Succeeded {
 			t.Fatalf("delete assignment index = %#v/%v", torn, err)
@@ -291,7 +297,7 @@ func TestBackupRunPublicationReplayRejectsTornSuccessors(t *testing.T) {
 		resultRecord.ExitCode = 1
 		if _, err := tasks.AcknowledgeTask(
 			context.Background(), agentID, 1, run.TaskID,
-			claim.Assignment.Record.AssignmentID, TaskStatusFailed, resultRecord,
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, resultRecord,
 			run.CreatedAt.Add(2*time.Second),
 		); err != nil {
 			t.Fatal(err)
@@ -300,7 +306,9 @@ func TestBackupRunPublicationReplayRejectsTornSuccessors(t *testing.T) {
 		torn, err := store.Transact(
 			context.Background(),
 			nil,
-			[]Mutation{{Type: MutationDelete, Key: backupTerminalReceiptKey(run.TaskID)}},
+			[]testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationDelete, Key: testbackupruntime.BackupTerminalReceiptKey(run.TaskID)},
+			},
 		)
 		if err != nil || !torn.Succeeded {
 			t.Fatalf("delete terminal receipt = %#v/%v", torn, err)
@@ -317,23 +325,21 @@ func applyCompetingBackupRunPublication(
 	t *testing.T,
 	repository *BackupRuntimeRepository,
 	store *memoryHierarchyStore,
-	winner IdempotencyMarker,
+	winner testidempotency.IdempotencyMarker,
 	losingTaskID string,
 ) (IdempotencyTransactionResult, error) {
 	t.Helper()
-	candidate := cloneIdempotencyMarker(winner)
+	candidate := testidempotency.CloneIdempotencyMarker(winner)
 	defer clear(candidate.Intent.Ciphertext)
 	defer clear(candidate.Response.Body)
 	candidate.TaskID = losingTaskID
 	candidate.Response.Body = []byte(`{"task_id":"` + losingTaskID + `"}`)
-	plan, err := newIdempotencyMutationPlanForMarker(
-		IdempotencyMarkerTask,
-		nil,
-		[]Mutation{{
-			Type: MutationPut, Key: "/tests/backup-run-publication/" + losingTaskID,
+	plan, err := newIdempotencyMutationPlanForMarker(testidempotency.IdempotencyMarkerTask, nil,
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: "/tests/backup-run-publication/" + losingTaskID,
 			Value: []byte("losing-candidate"),
 		}},
-		func(int64, []*KeyValue) error { return nil },
+		func(int64, []*testkeyvalue.KeyValue) error { return nil },
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -341,7 +347,7 @@ func applyCompetingBackupRunPublication(
 	if err := plan.enforceExistingReplay(repository.validateExistingBackupRunPublication); err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,10 +357,10 @@ func applyCompetingBackupRunPublication(
 func storedBackupRunMarker(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	locator IdempotencyLocator,
-) (IdempotencyMarker, int64) {
+	locator testidempotency.IdempotencyLocator,
+) (testidempotency.IdempotencyMarker, int64) {
 	t.Helper()
-	key, err := idempotencyMarkerKey(locator)
+	key, err := testidempotency.IdempotencyMarkerKey(locator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +368,7 @@ func storedBackupRunMarker(
 	if err != nil || read == nil || read.Entry == nil {
 		t.Fatalf("Get(marker) = %#v/%v", read, err)
 	}
-	marker, err := decodeIdempotencyMarker(read.Entry.Value, locator)
+	marker, err := testidempotency.DecodeIdempotencyMarker(read.Entry.Value, locator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,8 +379,8 @@ func storedBackupRunMarker(
 // final Task, owner indexes, marker, and replay target are all counted.
 func TestBackupRunPublicationTwelveSourceFinalEnvelopeFitsBounds(t *testing.T) {
 	repository, store, run := newBackupRuntimeBareFixture(t)
-	for ordinal := uint32(1); ordinal < MaximumBackupPolicySources; ordinal++ {
-		source := testBackupLaterSource(run.CreatedAt, ordinal, BackupSourceAttemptPending)
+	for ordinal := uint32(1); ordinal < testbackuppolicy.MaximumBackupPolicySources; ordinal++ {
+		source := testBackupLaterSource(run.CreatedAt, ordinal, testbackupruntime.BackupSourceAttemptPending)
 		source.Snapshot.Postgres.ConsumerEnvironmentID = run.EnvironmentID
 		source.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + source.SourceID + "/" +
 			source.RecoveryPointID + "/artifact.bin"
@@ -394,44 +400,46 @@ func TestBackupRunPublicationTwelveSourceFinalEnvelopeFitsBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conditions := append([]Condition(nil), publication.conditions...)
-	mutations := append([]Mutation(nil), publication.mutations...)
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	conditions := append([]testkeyvalue.Condition(nil), publication.conditions...)
+	mutations := append([]testkeyvalue.Mutation(nil), publication.mutations...)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerValue, err := encodeIdempotencyMarker(marker)
+	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(markerValue)
-	conditions = append(conditions, Condition{Key: markerKey})
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: markerKey, Value: markerValue})
+	conditions = append(conditions, testkeyvalue.Condition{Key: markerKey})
+	mutations = append(
+		mutations,
+		testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: markerKey, Value: markerValue},
+	)
 	if marker.ReplayTarget != nil {
-		targetKey, keyErr := idempotencyReplayTargetKey(
+		targetKey, keyErr := testidempotency.IdempotencyReplayTargetKey(
 			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
 		)
 		if keyErr != nil {
 			t.Fatal(keyErr)
 		}
-		targetValue, encodeErr := encodeReplayTargetReference(markerKey)
+		targetValue, encodeErr := testidempotency.EncodeReplayTargetReference(markerKey)
 		if encodeErr != nil {
 			t.Fatal(encodeErr)
 		}
 		defer clear(targetValue)
-		conditions = append(conditions, Condition{Key: targetKey})
+		conditions = append(conditions, testkeyvalue.Condition{Key: targetKey})
 		mutations = append(
-			mutations,
-			Mutation{Type: MutationPut, Key: targetKey, Value: targetValue},
+			mutations, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: targetKey, Value: targetValue},
 		)
 	}
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(mutations) > testkeyvalue.MaximumOperations {
 		t.Fatalf("final envelope operations = %d", len(conditions)+len(mutations))
 	}
-	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+	if err := testbackupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
 		t.Fatalf("final envelope bounds = %v", err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +450,7 @@ func TestBackupRunPublicationTwelveSourceFinalEnvelopeFitsBounds(t *testing.T) {
 
 func publishBackupRunReplayFixture(
 	t *testing.T,
-) (*BackupRuntimeRepository, *memoryHierarchyStore, BackupRunRecord, TaskRecord, IdempotencyMarker, int64) {
+) (*BackupRuntimeRepository, *memoryHierarchyStore, testbackupruntime.BackupRunRecord, TaskRecord, testidempotency.IdempotencyMarker, int64) {
 	t.Helper()
 	repository, store, run := newBackupRuntimeBareFixture(t)
 	plan, err := repository.prepareBackupRunPublication(
@@ -458,7 +466,7 @@ func publishBackupRunReplayFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +478,7 @@ func publishBackupRunReplayFixture(
 	if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("publication result = %v/%v/%v", outcome, conflict, err)
 	}
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}

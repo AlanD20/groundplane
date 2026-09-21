@@ -12,6 +12,17 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -23,8 +34,8 @@ type ExecutedArtifactFixture struct {
 	Hierarchy           *HierarchyRepository
 	Ledger              *ReleaseLedger
 	Tasks               *TaskRepository
-	Project             Versioned[ProjectRecord]
-	Environment         Versioned[EnvironmentRecord]
+	Project             testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	Environment         testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
 	store               *releasePlanningTestStore
 	head                int64
 	hookScripts         BlueprintScriptPublication
@@ -37,9 +48,9 @@ type ExecutedArtifactFixture struct {
 func buildBlueprintAbsenceAuthorityForTest(
 	task TaskRecord,
 	predecessor taskMaterializationAppliedPredecessor,
-	manifest ReleaseStagedManifest,
+	manifest testreleases.ReleaseStagedManifest,
 	applied []byte,
-) (ReleaseRestorationAuthority, string, error) {
+) (testtaskassignments.ReleaseRestorationAuthority, string, error) {
 	native := make([]BlueprintNativePredecessor, len(manifest.Members))
 	procedure := &agentpb.CandidateReleaseProcedure{
 		Members: make([]*agentpb.CandidateReleaseMember, len(manifest.Members)),
@@ -48,7 +59,7 @@ func buildBlueprintAbsenceAuthorityForTest(
 		native[index] = BlueprintNativePredecessor{ServiceID: member.ServiceID, FixedReadRevision: 21}
 		procedure.Members[index] = &agentpb.CandidateReleaseMember{
 			ServiceId: member.ServiceID, CandidateReleaseId: member.ReleaseID,
-			CandidateArtifactId: task.Params[TaskComposeArtifactParam],
+			CandidateArtifactId: task.Params[testtaskjournal.TaskComposeArtifactParam],
 		}
 	}
 	return buildBlueprintNativeRestorationAuthority(task, predecessor, native, manifest, procedure, applied)
@@ -60,11 +71,11 @@ func (fixture *ExecutedArtifactFixture) ReadRevision() int64 { return fixture.st
 // desired replica count without changing the applied Blueprint witness.
 func (fixture *ExecutedArtifactFixture) SeedNativeCandidateDesired(
 	t *testing.T,
-	render ReleaseRenderInput,
+	render testreleaserender.ReleaseRenderInput,
 	replicas int,
 ) {
 	t.Helper()
-	projection := cloneEnvironmentComposeProjection(render.Projection)
+	projection := testenvironmentprojection.CloneEnvironmentComposeProjection(render.Projection)
 	projection.RevisionID = ids.New(ids.KindTask)
 	projection.RenderGeneration = 2
 	for index := range projection.DesiredServices {
@@ -73,7 +84,10 @@ func (fixture *ExecutedArtifactFixture) SeedNativeCandidateDesired(
 		}
 	}
 	seedServiceRepositoryTestDesiredProjection(t, fixture.store.memoryHierarchyStore, projection)
-	loaded, err := fixture.store.Get(context.Background(), environmentBlueprintHeadKey(render.EnvironmentID))
+	loaded, err := fixture.store.Get(
+		context.Background(),
+		testblueprints.EnvironmentBlueprintHeadKey(render.EnvironmentID),
+	)
 	if err != nil || loaded.Entry == nil {
 		t.Fatalf("desired fixture head: %v", err)
 	}
@@ -83,21 +97,21 @@ func (fixture *ExecutedArtifactFixture) SeedNativeCandidateDesired(
 func (fixture *ExecutedArtifactFixture) AssertNativeCandidateSourceRace(
 	t *testing.T,
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 	publication BlueprintReleasePublication,
-	source ReleaseRenderInput,
+	source testreleaserender.ReleaseRenderInput,
 	fault string,
 ) {
 	t.Helper()
 	ctx := context.Background()
-	key := map[string]string{"intent": releaseIntentStagingKey("", source.ReleaseID), "render": releaseRenderInputStagingKey("", source.ReleaseID),
-		"projection": releaseProjectionKey(source.ServiceID), "applied": environmentComposeProjectionKey(source.EnvironmentID)}[strings.Split(fault, "-")[0]]
+	key := map[string]string{"intent": testreleases.ReleaseIntentStagingKey("", source.ReleaseID), "render": testreleases.ReleaseRenderInputStagingKey("", source.ReleaseID),
+		"projection": testreleases.ReleaseProjectionKey(source.ServiceID), "applied": testenvironmentprojection.EnvironmentComposeProjectionStorageKey(source.EnvironmentID)}[strings.Split(fault, "-")[0]]
 	if strings.HasPrefix(fault, "inactive-") {
 		serving, err := fixture.Ledger.ResolveServing(ctx, source.EnvironmentID, source.ServiceID, 0)
 		if err != nil || serving.Intent.PriorServingReleaseID == "" {
 			t.Fatalf("inactive race source: %v", err)
 		}
-		key = releaseRenderInputStagingKey("", serving.Intent.PriorServingReleaseID)
+		key = testreleases.ReleaseRenderInputStagingKey("", serving.Intent.PriorServingReleaseID)
 	}
 	before, err := fixture.store.Get(ctx, key)
 	if err != nil || before.Entry == nil {
@@ -107,15 +121,15 @@ func (fixture *ExecutedArtifactFixture) AssertNativeCandidateSourceRace(
 	if err != nil || !ready.Succeeded {
 		t.Fatalf("native publication was not ready before race: %v", err)
 	}
-	head, err := fixture.store.Get(ctx, environmentBlueprintHeadKey(task.Target))
+	head, err := fixture.store.Get(ctx, testblueprints.EnvironmentBlueprintHeadKey(task.Target))
 	if err != nil || head.Entry == nil {
 		t.Fatalf("desired head before race: %v", err)
 	}
-	mutation := Mutation{Type: MutationPut, Key: key, Value: before.Entry.Value}
+	mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: before.Entry.Value}
 	if strings.HasSuffix(fault, "-prune") {
-		mutation.Type, mutation.Value = MutationDelete, nil
+		mutation.Type, mutation.Value = testkeyvalue.MutationDelete, nil
 	}
-	if _, err := fixture.store.Transact(ctx, nil, []Mutation{mutation}); err != nil {
+	if _, err := fixture.store.Transact(ctx, nil, []testkeyvalue.Mutation{mutation}); err != nil {
 		t.Fatal(err)
 	}
 	result, err := fixture.tryPublish(t, task, projection, publication)
@@ -127,12 +141,11 @@ func (fixture *ExecutedArtifactFixture) AssertNativeCandidateSourceRace(
 		t.Fatalf("native source race published: %v %v %v", outcome, conflict, err)
 	}
 	loaded, err := fixture.store.GetMany(
-		ctx,
-		GetManyRequest{
+		ctx, testkeyvalue.GetManyRequest{
 			Keys: []string{
-				taskKey(task.ID),
-				releasePublicationKey(task.Params[TaskReleasePublicationParam]),
-				environmentBlueprintHeadKey(task.Target),
+				testtaskjournal.TaskStorageKey(task.ID),
+				testreleases.ReleasePublicationKey(task.Params[testreleaserender.TaskReleasePublicationParam]),
+				testblueprints.EnvironmentBlueprintHeadKey(task.Target),
 			},
 		},
 	)
@@ -146,9 +159,9 @@ func (fixture *ExecutedArtifactFixture) AssertNativeCandidateSourceRace(
 
 func (fixture *ExecutedArtifactFixture) SeedNativeBlueGreenPredecessor(
 	t *testing.T,
-	current ReleaseRenderInput,
+	current testreleaserender.ReleaseRenderInput,
 	intent domain.Intent,
-) ReleaseRenderInput {
+) testreleaserender.ReleaseRenderInput {
 	t.Helper()
 	scope, err := fixture.Ledger.LoadPlanningScope(t.Context(), current.EnvironmentID)
 	if err != nil {
@@ -158,13 +171,17 @@ func (fixture *ExecutedArtifactFixture) SeedNativeBlueGreenPredecessor(
 	if err != nil {
 		t.Fatal(err)
 	}
-	current, prior.Record = cloneReleaseRenderInput(current), cloneReleaseRenderInput(prior.Record)
+	current, prior.Record = testreleaserender.CloneReleaseRenderInput(
+		current,
+	), testreleaserender.CloneReleaseRenderInput(
+		prior.Record,
+	)
 	prior.Record.Strategy, prior.Record.Slot, prior.Record.CandidateTarget = domain.StrategyBlueGreen, domain.SlotBlue, domain.WorkloadBlue
 	current.Strategy, current.Slot, current.CandidateTarget = domain.StrategyBlueGreen, domain.SlotGreen, domain.WorkloadGreen
 	current.PriorStrategy, current.PriorSlot, current.PriorTarget = domain.StrategyBlueGreen, domain.SlotBlue, domain.WorkloadBlue
 	current.PriorArtifactID, current.PriorWorkload = "", nil
 	current.PriorProxyGeneration, current.PriorProxyDigest = 0, ""
-	for _, render := range []*ReleaseRenderInput{&prior.Record, &current} {
+	for _, render := range []*testreleaserender.ReleaseRenderInput{&prior.Record, &current} {
 		render.CandidateWorkload.ReplicaCount = 1
 		render.Projection.DesiredServices[0].Desired.Replicas = 1
 		for _, old := range []string{"replicas: 2", "replicas: 3", "scale: 2", "scale: 3"} {
@@ -185,15 +202,15 @@ func (fixture *ExecutedArtifactFixture) SeedNativeBlueGreenPredecessor(
 			t.Fatal(err)
 		}
 		render.ProxyConfigDigest = hex.EncodeToString(config.SHA256[:])
-		raw, err := EncodeReleaseRenderInput(*render)
+		raw, err := testreleaserender.EncodeReleaseRenderInput(*render)
 		if err != nil {
 			t.Fatal(err)
 		}
-		value, err := encodeReleaseRecord("release-render-input", json.RawMessage(raw))
+		value, err := testreleases.EncodeReleaseRecord("release-render-input", json.RawMessage(raw))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fixture.store.Put(t.Context(), releaseRenderInputStagingKey("", render.ReleaseID), value); err != nil {
+		if _, err := fixture.store.Put(t.Context(), testreleases.ReleaseRenderInputStagingKey("", render.ReleaseID), value); err != nil {
 			t.Fatal(err)
 		}
 		if render.ReleaseID == current.ReleaseID {
@@ -204,11 +221,11 @@ func (fixture *ExecutedArtifactFixture) SeedNativeBlueGreenPredecessor(
 			}
 		}
 	}
-	value, err := encodeReleaseRecord("release-intent", intent)
+	value, err := testreleases.EncodeReleaseRecord("release-intent", intent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.store.Put(t.Context(), releaseIntentStagingKey("", intent.ID), value); err != nil {
+	if _, err := fixture.store.Put(t.Context(), testreleases.ReleaseIntentStagingKey("", intent.ID), value); err != nil {
 		t.Fatal(err)
 	}
 	return current
@@ -231,38 +248,48 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 		t.Fatal("native recovery lacks one sealed member")
 	}
 	member := plan.GetCandidateReleaseProcedure().GetMembers()[0]
-	keys := []string{environmentComposeProjectionKey(task.Target), releaseProjectionKey(member.ServiceId)}
-	before, err := fixture.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	keys := []string{
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(task.Target),
+		testreleases.ReleaseProjectionKey(member.ServiceId),
+	}
+	before, err := fixture.store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index, state := range []TaskEventState{TaskEventStateRunning, TaskEventStateCompleted} {
+	for index, state := range []testtaskjournal.TaskEventState{testtaskjournal.TaskEventStateRunning, testtaskjournal.TaskEventStateCompleted} {
 		_, err := fixture.Tasks.AppendTaskEvent(
 			ctx,
-			TaskEventInput{Identity: TaskEventIdentity{AssignmentID: assignment.AssignmentID, AgentID: agentID,
-				AgentGeneration: 1, TaskID: task.ID, StepID: member.GetForwardStepIds()[0], Attempt: 1, Ordinal: uint64(index + 1)}, State: state,
+			testtaskjournal.TaskEventInput{
+				Identity: testtaskjournal.TaskEventIdentity{AssignmentID: assignment.AssignmentID, AgentID: agentID,
+					AgentGeneration: 1, TaskID: task.ID, StepID: member.GetForwardStepIds()[0], Attempt: 1, Ordinal: uint64(index + 1)},
+				State: state,
 				Payload: json.RawMessage(
 					`{"message":"native forward"}`,
-				)},
+				),
+			},
 			task.CreatedAt.Add(time.Duration(1100+index*100)*time.Millisecond),
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	primary := TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticComposeFailed, ExitCode: 17,
-		FailedStepID: member.GetForwardStepIds()[1], ReconciliationRequired: true, ExecutionEpoch: 1}
+	primary := testtaskjournal.TaskResultRecord{
+		Kind:                   testtaskjournal.TaskResultCompose,
+		Diagnostic:             testtaskjournal.TaskResultDiagnosticComposeFailed,
+		ExitCode:               17,
+		FailedStepID:           member.GetForwardStepIds()[1],
+		ReconciliationRequired: true,
+		ExecutionEpoch:         1,
+	}
 	transitioned, err := fixture.Tasks.AcknowledgeTask(
 		ctx,
 		agentID,
 		1,
 		task.ID,
-		assignment.AssignmentID,
-		TaskStatusFailed,
-		primary,
+		assignment.AssignmentID, testtaskjournal.TaskStatusFailed, primary,
 		task.CreatedAt.Add(3*time.Second),
 	)
-	if err != nil || transitioned.Record.Status != TaskStatusRunning {
+	if err != nil || transitioned.Record.Status != testtaskjournal.TaskStatusRunning {
 		t.Fatalf("native recovery transition: %v", err)
 	}
 	reopened, err := NewTaskRepository(fixture.store)
@@ -284,7 +311,10 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 		) {
 		t.Fatal("reconnect replaced immutable native C")
 	}
-	witness, err := openRestorationWitness(task.Target, authority.NativePredecessors[0].CurrentArtifact)
+	witness, err := testtaskassignments.OpenRestorationWitness(
+		task.Target,
+		authority.NativePredecessors[0].CurrentArtifact,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,11 +329,10 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 	final.CandidateAbsenceEvidence = nil
 	ordinal := uint64(1)
 	for _, stepID := range recovery.ReleaseRecovery.StepIDs {
-		for _, state := range []TaskEventState{TaskEventStateRunning, TaskEventStateCompleted} {
+		for _, state := range []testtaskjournal.TaskEventState{testtaskjournal.TaskEventStateRunning, testtaskjournal.TaskEventStateCompleted} {
 			_, err := reopened.AppendTaskEvent(
-				ctx,
-				TaskEventInput{
-					Identity: TaskEventIdentity{
+				ctx, testtaskjournal.TaskEventInput{
+					Identity: testtaskjournal.TaskEventIdentity{
 						AssignmentID:    assignment.AssignmentID,
 						AgentID:         agentID,
 						AgentGeneration: 1,
@@ -314,8 +343,7 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 					},
 					State:   state,
 					Payload: json.RawMessage(`{"message":"native recovery"}`),
-				},
-				task.CreatedAt.Add(time.Duration(4+ordinal)*time.Second),
+				}, task.CreatedAt.Add(time.Duration(4+ordinal)*time.Second),
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -323,16 +351,18 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 			ordinal++
 		}
 	}
-	for _, mutate := range []func(*TaskResultRecord){
-		func(result *TaskResultRecord) { result.ProxyEvidence, result.RecreateEvidence = nil, nil },
-		func(result *TaskResultRecord) {
+	for _, mutate := range []func(*testtaskjournal.TaskResultRecord){
+		func(result *testtaskjournal.TaskResultRecord) {
+			result.ProxyEvidence, result.RecreateEvidence = nil, nil
+		},
+		func(result *testtaskjournal.TaskResultRecord) {
 			if len(result.ProxyEvidence) != 0 {
 				result.ProxyEvidence[0].ReleaseID = member.CandidateReleaseId
 			} else {
 				result.RecreateEvidence[0].ReleaseID = member.CandidateReleaseId
 			}
 		},
-		func(result *TaskResultRecord) {
+		func(result *testtaskjournal.TaskResultRecord) {
 			if len(result.ProxyEvidence) != 0 {
 				result.ProxyEvidence[0].Compensated = false
 			} else {
@@ -340,10 +370,10 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 			}
 		},
 	} {
-		changed := cloneTaskResult(&final)
+		changed := testtaskjournal.CloneTaskResult(&final)
 		mutate(changed)
 		revision := fixture.ReadRevision()
-		if _, err := reopened.AcknowledgeTask(ctx, agentID, 1, task.ID, assignment.AssignmentID, TaskStatusCompleted, *changed, task.CreatedAt.Add(30*time.Second)); !isKind(
+		if _, err := reopened.AcknowledgeTask(ctx, agentID, 1, task.ID, assignment.AssignmentID, testtaskjournal.TaskStatusCompleted, *changed, task.CreatedAt.Add(30*time.Second)); !isKind(
 			err,
 			errs.KindStateConflict,
 		) &&
@@ -359,17 +389,15 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 		agentID,
 		1,
 		task.ID,
-		assignment.AssignmentID,
-		TaskStatusCompleted,
-		final,
+		assignment.AssignmentID, testtaskjournal.TaskStatusCompleted, final,
 		task.CreatedAt.Add(31*time.Second),
 	)
-	if err != nil || terminal.Record.Status != TaskStatusFailed || terminal.Record.Result == nil ||
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusFailed || terminal.Record.Result == nil ||
 		terminal.Record.Result.ExitCode != 17 ||
 		terminal.Record.Result.ReconciliationRequired {
 		t.Fatalf("native recovery lost original failure: %v", err)
 	}
-	after, err := fixture.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	after, err := fixture.store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,26 +412,20 @@ func (fixture *ExecutedArtifactFixture) ProveNativeCandidateRecovery(
 		agentID,
 		1,
 		task.ID,
-		assignment.AssignmentID,
-		TaskStatusCompleted,
-		final,
+		assignment.AssignmentID, testtaskjournal.TaskStatusCompleted, final,
 		task.CreatedAt.Add(32*time.Second),
 	)
-	if err != nil || replay.Revision != terminal.Revision || replay.Record.Status != TaskStatusFailed {
+	if err != nil || replay.Revision != terminal.Revision || replay.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("native terminal replay changed authority: %v", err)
 	}
 }
 
-func (fixture *ExecutedArtifactFixture) ImageLookupAgent(t *testing.T) *LocalAgentRepository {
-	t.Helper()
-	repository, err := newLocalAgentRepository(newMemoryTaskStore())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repository.CreateSingleton(context.Background(), localAgentTestRecord(localAgentTestToken(7), taskJournalTime())); err != nil {
-		t.Fatal(err)
-	}
-	return repository
+func (fixture *ExecutedArtifactFixture) ImageLookupStore() testkeyvalue.Store {
+	return &releaseLogMemoryStore{newMemoryHierarchyStore()}
+}
+
+func (fixture *ExecutedArtifactFixture) ImageLookupAgentRecord() testlocalagents.LocalAgentRecord {
+	return localAgentTestRecord(localAgentTestToken(7), taskJournalTime())
 }
 
 // Rationale: a real candidate plus retained-source fragment must keep both
@@ -411,7 +433,7 @@ func (fixture *ExecutedArtifactFixture) ImageLookupAgent(t *testing.T) *LocalAge
 func (fixture *ExecutedArtifactFixture) AssertMixedRuntimeTamperingRejected(
 	t *testing.T,
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 	publication BlueprintReleasePublication,
 ) {
 	t.Helper()
@@ -451,26 +473,29 @@ func (fixture *ExecutedArtifactFixture) AssertMixedRuntimeTamperingRejected(
 func (fixture *ExecutedArtifactFixture) RejectChangedServingPublication(
 	t *testing.T,
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 	publication BlueprintReleasePublication,
 	serviceID string,
 ) {
 	t.Helper()
 	ctx := context.Background()
-	before, err := fixture.store.Get(ctx, environmentComposeProjectionKey(task.Target))
+	before, err := fixture.store.Get(ctx, testenvironmentprojection.EnvironmentComposeProjectionStorageKey(task.Target))
 	if err != nil || before.Entry == nil {
 		t.Fatalf("applied before: %v", err)
 	}
-	record, err := fixture.store.Get(ctx, releaseProjectionKey(serviceID))
+	record, err := fixture.store.Get(ctx, testreleases.ReleaseProjectionKey(serviceID))
 	if err != nil || record.Entry == nil {
 		t.Fatalf("serving before: %v", err)
 	}
-	current, err := decodeReleaseRecord[domain.ServiceProjection](record.Entry.Value, "service-release-projection")
+	current, err := testreleases.DecodeReleaseRecord[domain.ServiceProjection](
+		record.Entry.Value,
+		"service-release-projection",
+	)
 	if err != nil || current.ServingReleaseID == "" {
 		t.Fatalf("serving decode: %v", err)
 	}
 	current.ServingReleaseID = ids.New(ids.KindDeployment)
-	value, err := encodeReleaseRecord("service-release-projection", current)
+	value, err := testreleases.EncodeReleaseRecord("service-release-projection", current)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +510,7 @@ func (fixture *ExecutedArtifactFixture) RejectChangedServingPublication(
 	if err != nil || !isKind(conflict, errs.KindStateConflict) || outcome == IdempotencyKnownApplied {
 		t.Fatalf("stale serving accepted: %v %v %v", outcome, conflict, err)
 	}
-	after, err := fixture.store.Get(ctx, environmentComposeProjectionKey(task.Target))
+	after, err := fixture.store.Get(ctx, testenvironmentprojection.EnvironmentComposeProjectionStorageKey(task.Target))
 	if err != nil || after.Entry == nil || after.Entry.ModRevision != before.Entry.ModRevision ||
 		string(after.Entry.Value) != string(before.Entry.Value) {
 		t.Fatal("serving-race fixture changed applied Blueprint authority")
@@ -525,7 +550,7 @@ func (fixture *ExecutedArtifactFixture) Task(t *testing.T, seed int64) TaskRecor
 func (fixture *ExecutedArtifactFixture) Publish(
 	t *testing.T,
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 	release BlueprintReleasePublication,
 ) {
 	t.Helper()
@@ -543,7 +568,7 @@ func (fixture *ExecutedArtifactFixture) Publish(
 func (fixture *ExecutedArtifactFixture) tryPublish(
 	t *testing.T,
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 	release BlueprintReleasePublication,
 ) (IdempotencyTransactionResult, error) {
 	t.Helper()
@@ -602,15 +627,18 @@ func (fixture *ExecutedArtifactFixture) tryPublish(
 		fixture.Environment,
 		fixture.head,
 		claim,
-		EnvironmentDesiredRevisionIdentity{EnvironmentID: revision.EnvironmentID, RevisionID: revision.RevisionID},
+		testblueprints.EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: revision.EnvironmentID,
+			RevisionID:    revision.RevisionID,
+		},
 		projection,
 		nil,
 		environmentBlueprintTestServiceChanges(t, fixture.Hierarchy, projection),
 		nil,
 		groups,
-		ComponentTaskPreparation{},
-		BlueprintAttachTaskPreparation{},
-		BlueprintBackupPolicyPreparation{},
+		testcomponentplanning.ComponentTaskPreparation{},
+		testblueprintplanning.BlueprintAttachTaskPreparation{},
+		testblueprintplanning.BlueprintBackupPolicyPreparation{},
 		scripts,
 		release,
 		BlueprintRequirementGate{},

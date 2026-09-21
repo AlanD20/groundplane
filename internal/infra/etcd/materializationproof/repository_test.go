@@ -12,9 +12,15 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/core"
 	coreproof "github.com/AlanD20/groundplane/internal/core/materializationproof"
 	base "github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -70,7 +76,12 @@ func TestMaterializationRepositoryPublishesAgainstCanonicalSemanticAuthority(t *
 	backend := newMemoryStore()
 	repository, _ := newRepository(backend)
 	proof := repositoryTestProof(t, 7, 1)
-	seedSemanticAuthority(t, backend, proof, func(_ *base.EnvironmentComposeProjection, _ *base.TaskRecord) {})
+	seedSemanticAuthority(
+		t,
+		backend,
+		proof,
+		func(_ *testenvironmentprojection.EnvironmentComposeProjection, _ *base.TaskRecord) {},
+	)
 	published, err := repository.Publish(context.Background(), proof)
 	if err != nil {
 		t.Fatalf("Publish: %v", err)
@@ -86,17 +97,23 @@ func TestMaterializationRepositoryRejectsWrongGenerationTaskAndMembership(t *tes
 	t.Parallel()
 	tests := []struct {
 		name   string
-		mutate func(*base.EnvironmentComposeProjection, *base.TaskRecord)
+		mutate func(*testenvironmentprojection.EnvironmentComposeProjection, *base.TaskRecord)
 	}{
-		{name: "applied generation", mutate: func(projection *base.EnvironmentComposeProjection, _ *base.TaskRecord) {
-			projection.RenderGeneration++
-		}},
-		{name: "owning Task revision", mutate: func(_ *base.EnvironmentComposeProjection, task *base.TaskRecord) {
-			task.Params[base.EnvironmentDesiredRevisionParam] = testID(ids.KindTask, 90)
-		}},
+		{
+			name: "applied generation",
+			mutate: func(projection *testenvironmentprojection.EnvironmentComposeProjection, _ *base.TaskRecord) {
+				projection.RenderGeneration++
+			},
+		},
+		{
+			name: "owning Task revision",
+			mutate: func(_ *testenvironmentprojection.EnvironmentComposeProjection, task *base.TaskRecord) {
+				task.Params[testblueprints.EnvironmentDesiredRevisionParam] = testID(ids.KindTask, 90)
+			},
+		},
 		{
 			name: "missing desired Service",
-			mutate: func(projection *base.EnvironmentComposeProjection, _ *base.TaskRecord) {
+			mutate: func(projection *testenvironmentprojection.EnvironmentComposeProjection, _ *base.TaskRecord) {
 				projection.DesiredServices = nil
 				artifact := new(agentpb.ComposeArtifact)
 				if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
@@ -112,7 +129,7 @@ func TestMaterializationRepositoryRejectsWrongGenerationTaskAndMembership(t *tes
 		},
 		{
 			name: "Task membership destination",
-			mutate: func(_ *base.EnvironmentComposeProjection, task *base.TaskRecord) {
+			mutate: func(_ *testenvironmentprojection.EnvironmentComposeProjection, task *base.TaskRecord) {
 				task.Materializations[0].Destination = "secrets/.env." + task.Target + ".other"
 				task.Materializations[0].ServiceName = "other"
 			},
@@ -139,28 +156,28 @@ func TestTaskSourcesRejectsConflictingLogicalSourceIdentity(t *testing.T) {
 	secretID := testID(ids.KindSecret, 92)
 	tests := []struct {
 		name   string
-		values []base.TaskGeneratedEnvironmentEntryReference
+		values []testtaskmaterialization.GeneratedEnvironmentEntryReference
 	}{
 		{
 			name: "Entry generation",
-			values: []base.TaskGeneratedEnvironmentEntryReference{
-				{Name: "A", Value: base.TaskEntryValueReference{
+			values: []testtaskmaterialization.GeneratedEnvironmentEntryReference{
+				{Name: "A", Value: testtaskmaterialization.EntryValueReference{
 					EntryID: entryID, ValueGenerationID: testID(ids.KindConfig, 93),
-					Storage: base.TaskEntryValueStorageSecret,
+					Storage: testtaskmaterialization.EntryValueStorageSecret,
 				}},
-				{Name: "B", Value: base.TaskEntryValueReference{
+				{Name: "B", Value: testtaskmaterialization.EntryValueReference{
 					EntryID: entryID, ValueGenerationID: testID(ids.KindConfig, 94),
-					Storage: base.TaskEntryValueStorageSecret,
+					Storage: testtaskmaterialization.EntryValueStorageSecret,
 				}},
 			},
 		},
 		{
 			name: "Secret metadata",
-			values: []base.TaskGeneratedEnvironmentEntryReference{
-				{Name: "A", Secret: &base.TaskSecretValueReference{
+			values: []testtaskmaterialization.GeneratedEnvironmentEntryReference{
+				{Name: "A", Secret: &testtaskmaterialization.SecretValueReference{
 					SecretID: secretID, Revision: 1, CiphertextSHA256: testDigest("first"),
 				}},
-				{Name: "B", Secret: &base.TaskSecretValueReference{
+				{Name: "B", Secret: &testtaskmaterialization.SecretValueReference{
 					SecretID: secretID, Revision: 2, CiphertextSHA256: testDigest("second"),
 				}},
 			},
@@ -168,9 +185,9 @@ func TestTaskSourcesRejectsConflictingLogicalSourceIdentity(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, _, valid := taskSources(base.TaskMaterializationSource{
-				Kind: base.TaskMaterializationSourceGeneratedEnvironment,
-				GeneratedEnvironment: &base.TaskGeneratedEnvironmentValueReference{
+			_, _, valid := taskSources(testtaskmaterialization.Source{
+				Kind: testtaskmaterialization.SourceGeneratedEnvironment,
+				GeneratedEnvironment: &testtaskmaterialization.GeneratedEnvironmentValueReference{
 					FormatVersion: 1,
 					Values:        test.values,
 				},
@@ -189,13 +206,21 @@ func TestRepositoryReplaysBeforeMutableAuthorityValidation(t *testing.T) {
 	backend := newMemoryStore()
 	repository, _ := newRepository(backend)
 	proof := repositoryTestProof(t, 9, 3)
-	seedSemanticAuthority(t, backend, proof, func(_ *base.EnvironmentComposeProjection, _ *base.TaskRecord) {})
+	seedSemanticAuthority(
+		t,
+		backend,
+		proof,
+		func(_ *testenvironmentprojection.EnvironmentComposeProjection, _ *base.TaskRecord) {},
+	)
 	first, err := repository.Publish(context.Background(), proof)
 	if err != nil {
 		t.Fatalf("Publish(first): %v", err)
 	}
-	backend.forcePut(base.EnvironmentComposeProjectionStorageKey(proof.EnvironmentID()), []byte("advanced"))
-	backend.forcePut(base.TaskStorageKey(proof.ProducingTaskID()), []byte("advanced"))
+	backend.forcePut(
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(proof.EnvironmentID()),
+		[]byte("advanced"),
+	)
+	backend.forcePut(testtaskjournal.TaskStorageKey(proof.ProducingTaskID()), []byte("advanced"))
 	replay, err := repository.Publish(context.Background(), proof)
 	if err != nil || replay.ModRevision != first.ModRevision || replay.ReadRevision <= first.ReadRevision {
 		t.Fatalf("Publish(replay) = %#v, %v; first=%#v", replay, err, first)
@@ -209,14 +234,19 @@ func TestRepositoryConcurrentExactPublicationReplaysWinner(t *testing.T) {
 	backend := newMemoryStore()
 	repository, _ := newRepository(backend)
 	proof := repositoryTestProof(t, 10, 4)
-	seedSemanticAuthority(t, backend, proof, func(_ *base.EnvironmentComposeProjection, _ *base.TaskRecord) {})
+	seedSemanticAuthority(
+		t,
+		backend,
+		proof,
+		func(_ *testenvironmentprojection.EnvironmentComposeProjection, _ *base.TaskRecord) {},
+	)
 	encoded, err := encodeProof(proof)
 	if err != nil {
 		t.Fatalf("encodeProof: %v", err)
 	}
 	backend.beforeTransact = func() {
 		backend.forcePut(proofKey(proof.EnvironmentID(), proof.RenderGeneration()), encoded)
-		backend.forcePut(base.TaskStorageKey(proof.ProducingTaskID()), []byte("advanced"))
+		backend.forcePut(testtaskjournal.TaskStorageKey(proof.ProducingTaskID()), []byte("advanced"))
 	}
 	replay, err := repository.Publish(context.Background(), proof)
 	if err != nil || replay.ModRevision <= 0 {
@@ -231,7 +261,12 @@ func TestRepositoryReplayRetainsDeletionFenceRules(t *testing.T) {
 	backend := newMemoryStore()
 	repository, _ := newRepository(backend)
 	proof := repositoryTestProof(t, 11, 5)
-	seedSemanticAuthority(t, backend, proof, func(_ *base.EnvironmentComposeProjection, _ *base.TaskRecord) {})
+	seedSemanticAuthority(
+		t,
+		backend,
+		proof,
+		func(_ *testenvironmentprojection.EnvironmentComposeProjection, _ *base.TaskRecord) {},
+	)
 	if _, err := repository.Publish(context.Background(), proof); err != nil {
 		t.Fatalf("Publish(first): %v", err)
 	}
@@ -250,7 +285,12 @@ func TestRepositoryLoadsOnlyTheExactFixedRevision(t *testing.T) {
 	backend := newMemoryStore()
 	repository, _ := newRepository(backend)
 	proof := repositoryTestProof(t, 12, 6)
-	seedSemanticAuthority(t, backend, proof, func(_ *base.EnvironmentComposeProjection, _ *base.TaskRecord) {})
+	seedSemanticAuthority(
+		t,
+		backend,
+		proof,
+		func(_ *testenvironmentprojection.EnvironmentComposeProjection, _ *base.TaskRecord) {},
+	)
 	published, err := repository.Publish(context.Background(), proof)
 	if err != nil {
 		t.Fatalf("Publish: %v", err)
@@ -273,7 +313,7 @@ func seedSemanticAuthority(
 	t *testing.T,
 	store *memoryStore,
 	proof coreproof.Proof,
-	mutate func(*base.EnvironmentComposeProjection, *base.TaskRecord),
+	mutate func(*testenvironmentprojection.EnvironmentComposeProjection, *base.TaskRecord),
 ) {
 	t.Helper()
 	record := proof.Record()
@@ -281,23 +321,26 @@ func seedSemanticAuthority(
 	projection := testProjection(t, record, member)
 	task := testTask(record, member)
 	mutate(&projection, &task)
-	projectionValue, err := base.EncodeEnvironmentComposeProjectionStorage(projection)
+	projectionValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		t.Fatalf("EncodeEnvironmentComposeProjectionStorage: %v", err)
 	}
-	taskValue, err := base.EncodeTaskStorageRecord(task)
+	taskValue, err := base.EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatalf("EncodeTaskStorageRecord: %v", err)
 	}
-	store.forcePut(base.EnvironmentComposeProjectionStorageKey(record.EnvironmentID), projectionValue)
-	store.forcePut(base.TaskStorageKey(record.ProducingTaskID), taskValue)
+	store.forcePut(
+		testenvironmentprojection.EnvironmentComposeProjectionStorageKey(record.EnvironmentID),
+		projectionValue,
+	)
+	store.forcePut(testtaskjournal.TaskStorageKey(record.ProducingTaskID), taskValue)
 }
 
 func testProjection(
 	t *testing.T,
 	record coreproof.Record,
 	member coreproof.MemberRecord,
-) base.EnvironmentComposeProjection {
+) testenvironmentprojection.EnvironmentComposeProjection {
 	t.Helper()
 	canonicalYAML := []byte("services: {}\n")
 	digest := sha256.Sum256(canonicalYAML)
@@ -314,11 +357,11 @@ func testProjection(
 	if err != nil {
 		t.Fatalf("Marshal ComposeArtifact: %v", err)
 	}
-	return base.EnvironmentComposeProjection{
+	return testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: record.EnvironmentID, RevisionID: record.AppliedRevisionID,
 		RenderGeneration: record.RenderGeneration, ComposeArtifact: artifact,
 		NormalizedCompose: canonicalYAML,
-		DesiredServices: []base.EnvironmentServiceProjection{{
+		DesiredServices: []testservices.EnvironmentServiceProjection{{
 			EnvironmentID: record.EnvironmentID,
 			Desired: core.Service{
 				ID: member.ServiceID, Name: member.ServiceName, Image: "example/service:1",
@@ -334,32 +377,34 @@ func testTask(record coreproof.Record, member coreproof.MemberRecord) base.TaskR
 	secret := member.ReusableSecrets[0]
 	return base.TaskRecord{
 		ID: record.ProducingTaskID, OperationID: testID(ids.KindOperation, 72),
-		Owner: base.TaskOwner{
-			WorkspaceType: base.TaskWorkspaceTenant, TenantID: testID(ids.KindTenant, 73),
+		Owner: testtaskjournal.TaskOwner{
+			WorkspaceType: testtaskjournal.TaskWorkspaceTenant, TenantID: testID(ids.KindTenant, 73),
 			ProjectID: testID(ids.KindProject, 74), EnvironmentID: record.EnvironmentID,
 		},
-		Actor: base.TaskActorOperator, Executor: base.TaskExecutorAgent,
+		Actor: testtaskjournal.TaskActorOperator, Executor: testtaskjournal.TaskExecutorAgent,
 		PlanID: testID(ids.KindPlan, 75), PlanHash: strings.Repeat("a", 64),
-		RenderGeneration: int32(record.RenderGeneration), Type: base.TaskUpdate, Target: record.EnvironmentID,
+		RenderGeneration: int32(
+			record.RenderGeneration,
+		), Type: testtaskjournal.TaskUpdate, Target: record.EnvironmentID,
 		Params: map[string]string{
-			base.TaskMaterializationEnvironmentParam: record.EnvironmentID,
-			base.EnvironmentDesiredRevisionParam:     record.AppliedRevisionID,
+			testtaskjournal.TaskMaterializationEnvironmentParam: record.EnvironmentID,
+			testblueprints.EnvironmentDesiredRevisionParam:      record.AppliedRevisionID,
 		},
-		Steps: []base.TaskStepRecord{{Kind: base.TaskStepOperation, ID: stepID}},
-		Materializations: []base.TaskMaterializationRecord{{
+		Steps: []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}},
+		Materializations: []testtaskmaterialization.Record{{
 			StepID: stepID, MaterializationID: member.MaterializationID,
 			EnvironmentID: record.EnvironmentID, Destination: member.Destination,
 			ServiceID: member.ServiceID, ServiceName: member.ServiceName,
-			OutputKind: base.TaskMaterializationOutputGeneratedEnvironment,
+			OutputKind: testtaskmaterialization.OutputGeneratedEnvironment,
 			UID:        member.UID, GID: member.GID, Mode: member.Mode,
 			Length: member.Length, SHA256: member.ContentSHA256,
-			Source: base.TaskMaterializationSource{
-				Kind: base.TaskMaterializationSourceGeneratedEnvironment,
-				GeneratedEnvironment: &base.TaskGeneratedEnvironmentValueReference{
+			Source: testtaskmaterialization.Source{
+				Kind: testtaskmaterialization.SourceGeneratedEnvironment,
+				GeneratedEnvironment: &testtaskmaterialization.GeneratedEnvironmentValueReference{
 					FormatVersion: 1,
-					Values: []base.TaskGeneratedEnvironmentEntryReference{{
+					Values: []testtaskmaterialization.GeneratedEnvironmentEntryReference{{
 						Name: "TOKEN",
-						Secret: &base.TaskSecretValueReference{
+						Secret: &testtaskmaterialization.SecretValueReference{
 							SecretID: secret.SecretID, Revision: secret.MetadataRevision,
 							CiphertextSHA256: secret.CiphertextSHA256,
 						},
@@ -367,7 +412,7 @@ func testTask(record coreproof.Record, member coreproof.MemberRecord) base.TaskR
 				},
 			},
 		}},
-		TimeoutSeconds: 120, Status: base.TaskStatusPending, NextEventSequence: 1,
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: now, UpdatedAt: now,
 	}
 }
@@ -440,18 +485,21 @@ func newMemoryStore() *memoryStore { return &memoryStore{history: make(map[strin
 
 func (store *memoryStore) GetMany(
 	_ context.Context,
-	request base.GetManyRequest,
-) (*base.GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	revision := request.Revision
 	if revision == 0 {
 		revision = store.revision
 	}
-	result := &base.GetManyResult{
-		Values: make([]*base.KeyValue, len(request.Keys)), ReadRevision: revision, ResponseRevision: store.revision,
+	result := &testkeyvalue.GetManyResult{
+		Values: make(
+			[]*testkeyvalue.KeyValue,
+			len(request.Keys),
+		), ReadRevision: revision, ResponseRevision: store.revision,
 	}
 	for index, key := range request.Keys {
 		if value, found := store.at(key, revision); found {
-			result.Values[index] = &base.KeyValue{
+			result.Values[index] = &testkeyvalue.KeyValue{
 				Key: key, Value: append([]byte(nil), value.value...), Version: 1, ModRevision: value.revision,
 			}
 		}
@@ -461,23 +509,23 @@ func (store *memoryStore) GetMany(
 
 func (store *memoryStore) Transact(
 	_ context.Context,
-	conditions []base.Condition,
-	mutations []base.Mutation,
-) (base.TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	store.transactions++
 	if store.beforeTransact != nil {
 		hook := store.beforeTransact
 		store.beforeTransact = nil
 		hook()
 	}
-	failureReads := make([]*base.KeyValue, len(conditions))
+	failureReads := make([]*testkeyvalue.KeyValue, len(conditions))
 	matched := true
 	for index, condition := range conditions {
 		value, found := store.at(condition.Key, store.revision)
 		actual := int64(0)
 		if found {
 			actual = value.revision
-			failureReads[index] = &base.KeyValue{
+			failureReads[index] = &testkeyvalue.KeyValue{
 				Key: condition.Key, Value: append([]byte(nil), value.value...), Version: 1, ModRevision: value.revision,
 			}
 		}
@@ -486,17 +534,17 @@ func (store *memoryStore) Transact(
 		}
 	}
 	if !matched {
-		return base.TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
+		return testkeyvalue.TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
 	}
 	store.revision++
 	for _, mutation := range mutations {
-		value := memoryValue{revision: store.revision, deleted: mutation.Type == base.MutationDelete}
-		if mutation.Type == base.MutationPut {
+		value := memoryValue{revision: store.revision, deleted: mutation.Type == testkeyvalue.MutationDelete}
+		if mutation.Type == testkeyvalue.MutationPut {
 			value.value = append([]byte(nil), mutation.Value...)
 		}
 		store.history[mutation.Key] = append(store.history[mutation.Key], value)
 	}
-	return base.TransactionResult{Succeeded: true, Revision: store.revision}, nil
+	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
 func (store *memoryStore) forcePut(key string, value []byte) int64 {

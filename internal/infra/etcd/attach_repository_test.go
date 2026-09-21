@@ -1,21 +1,29 @@
 package etcd
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"io"
-	"net/http"
-	"strings"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
+	context "context"
+	sha256 "crypto/sha256"
+	hex "encoding/hex"
+	errors "errors"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	core "github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	proto "google.golang.org/protobuf/proto"
+	io "io"
+	http "net/http"
+	strings "strings"
+	testing "testing"
+	time "time"
 )
 
 // Rationale: Attach creation must publish metadata, every ownership index, and encrypted facts in one revision.
@@ -34,7 +42,7 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	if created.Revision == 0 || created.Record.ID != record.ID {
 		t.Fatalf("CreateAttach() = %#v", created)
 	}
-	epoch, err := store.Get(ctx, environmentMutationEpochKey(record.EnvironmentID))
+	epoch, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(record.EnvironmentID))
 	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != created.Revision {
 		t.Fatalf("Attach creation mutation epoch = %#v, %v", epoch, err)
 	}
@@ -48,7 +56,7 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	if resolved.Record.BackingNetworkID != record.BackingNetworkID {
 		t.Fatalf("ResolveAttach() lost backing network binding: %#v", resolved.Record)
 	}
-	page, err := repository.ListAttaches(ctx, record.EnvironmentID, PageRequest{Limit: 10})
+	page, err := repository.ListAttaches(ctx, record.EnvironmentID, testkeyvalue.PageRequest{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListAttaches() error = %v", err)
 	}
@@ -63,13 +71,7 @@ func TestAttachRepositoryCreatesAndReadsAtomicAttach(t *testing.T) {
 	if !ok || string(storedFacts.Ciphertext) != "encrypted-facts" {
 		t.Fatalf("GetAttachFacts() = %#v, %t", storedFacts, ok)
 	}
-	for _, key := range []string{
-		attachOwnerKey(record.EnvironmentID, record.ID),
-		attachNameKey(record.EnvironmentID, record.Name),
-		attachServiceKey(record.ServiceID, record.ID),
-		attachBackingServiceKey(record.BackingServiceID, record.ID),
-		attachBackingProjectKey(record.BackingProjectID, record.ID),
-	} {
+	for _, key := range []string{testattachments.AttachOwnerKey(record.EnvironmentID, record.ID), testattachments.AttachNameKey(record.EnvironmentID, record.Name), testattachments.AttachServiceKey(record.ServiceID, record.ID), testattachments.AttachBackingServiceKey(record.BackingServiceID, record.ID), testattachments.AttachBackingProjectKey(record.BackingProjectID, record.ID)} {
 		result, getErr := store.Get(ctx, key)
 		if getErr != nil || result.Entry == nil || string(result.Entry.Value) != record.ID ||
 			result.Entry.ModRevision != created.Revision {
@@ -109,11 +111,11 @@ func TestAttachRepositoryPublishesNoAuthenticationMode(t *testing.T) {
 	record, facts := testPendingAttach(t, scope, 304, "api-cache", nil)
 
 	created := createTestAttach(t, ctx, repository, scope, record, &facts)
-	storedTask, err := store.Get(ctx, taskKey(created.Record.TaskID))
+	storedTask, err := store.Get(ctx, testtaskjournal.TaskStorageKey(created.Record.TaskID))
 	if err != nil || storedTask == nil || storedTask.Entry == nil {
 		t.Fatalf("Get(published Task) = %#v, %v", storedTask, err)
 	}
-	task, err := decodeTaskRecord(storedTask.Entry.Value)
+	task, err := DecodeTaskRecord(storedTask.Entry.Value)
 	if err != nil {
 		t.Fatalf("decodeTaskRecord() error = %v", err)
 	}
@@ -141,7 +143,7 @@ func TestAttachLifecycleRetryPreservesIdentity(t *testing.T) {
 	}
 	record, facts := testPendingAttach(t, scope, 41, "worker-db", nil)
 	current := createTestAttach(t, ctx, repository, scope, record, &facts)
-	provisioning, err := MarkAttachProvisioning(current.Record, current.Record.TaskID)
+	provisioning, err := testattachments.MarkAttachProvisioning(current.Record, current.Record.TaskID)
 	if err != nil {
 		t.Fatalf("MarkAttachProvisioning() error = %v", err)
 	}
@@ -149,7 +151,7 @@ func TestAttachLifecycleRetryPreservesIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReplaceLifecycle(provisioning) error = %v", err)
 	}
-	failed, err := CompleteAttachProvisioning(current.Record, current.Record.TaskID, false)
+	failed, err := testattachments.CompleteAttachProvisioning(current.Record, current.Record.TaskID, false)
 	if err != nil {
 		t.Fatalf("CompleteAttachProvisioning() error = %v", err)
 	}
@@ -158,7 +160,7 @@ func TestAttachLifecycleRetryPreservesIdentity(t *testing.T) {
 		t.Fatalf("ReplaceLifecycle(failed) error = %v", err)
 	}
 	retryTaskID := ids.NewAt(ids.KindTask, testAttachTime.Add(time.Minute), 42)
-	retried, err := RetryAttachOperation(current.Record, retryTaskID)
+	retried, err := testattachments.RetryAttachOperation(current.Record, retryTaskID)
 	if err != nil {
 		t.Fatalf("RetryAttachOperation() error = %v", err)
 	}
@@ -181,7 +183,7 @@ func TestServiceResolutionDefaultsMissingRuntimeToRunning(t *testing.T) {
 	store := newAttachTestStore()
 	scope := seedAttachScope(t, ctx, store)
 	serviceID := scope.Services[0].Record.Desired.ID
-	if _, err := store.Delete(ctx, serviceRuntimeKey(serviceID)); err != nil {
+	if _, err := store.Delete(ctx, testservices.ServiceRuntimeKey(serviceID)); err != nil {
 		t.Fatalf("Delete(Service runtime sidecar) error = %v", err)
 	}
 	services, err := NewServiceRepository(store)
@@ -216,15 +218,21 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 	}
 
 	grantScope := scope
-	grantScope.Grants = []Versioned[AttachRecord]{target}
-	sourceRecord, sourceFacts := testPendingAttach(t, grantScope, 52, "source-db", []Versioned[AttachRecord]{target})
+	grantScope.Grants = []testkeyvalue.Versioned[testattachments.Record]{target}
+	sourceRecord, sourceFacts := testPendingAttach(
+		t,
+		grantScope,
+		52,
+		"source-db",
+		[]testkeyvalue.Versioned[testattachments.Record]{target},
+	)
 	createTestAttach(t, ctx, repository, grantScope, sourceRecord, &sourceFacts)
 	target, err = repository.GetAttach(ctx, target.Record.ID)
 	if err != nil {
 		t.Fatalf("GetAttach(target) error = %v", err)
 	}
 	detachTaskID := ids.NewAt(ids.KindTask, testAttachTime.Add(2*time.Minute), 53)
-	detaching, err := BeginAttachDetaching(target.Record, detachTaskID)
+	detaching, err := testattachments.BeginAttachDetaching(target.Record, detachTaskID)
 	if err != nil {
 		t.Fatalf("BeginAttachDetaching() error = %v", err)
 	}
@@ -232,7 +240,7 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReplaceLifecycle(detaching) error = %v", err)
 	}
-	detached, err := CompleteAttachDetaching(target.Record, detachTaskID, true)
+	detached, err := testattachments.CompleteAttachDetaching(target.Record, detachTaskID, true)
 	if err != nil {
 		t.Fatalf("CompleteAttachDetaching() error = %v", err)
 	}
@@ -250,17 +258,16 @@ func TestAttachRepositoryProtectsGrantedAttach(t *testing.T) {
 // Rationale: the locked one-consumer/eight-grant maximum must remain within the atomic transaction ceiling.
 func TestAttachRepositoryMaximumCombinationFitsTransactionBudget(t *testing.T) {
 	t.Parallel()
-	record := AttachRecord{
+	record := testattachments.Record{
 		ID:                 ids.NewAt(ids.KindAttach, testAttachTime, 902),
 		ServiceID:          ids.NewAt(ids.KindService, testAttachTime, 901),
 		CredentialAttachID: ids.NewAt(ids.KindAttach, testAttachTime, 902),
 		GrantAttachIDs:     make([]string, 8),
 	}
-	if got := attachCreateWithTaskOperationCount(record, true); got > maximumTransactionOperations {
+	if got := attachCreateWithTaskOperationCount(record, true); got > testkeyvalue.MaximumOperations {
 		t.Fatalf(
 			"attachCreateWithTaskOperationCount() = %d, want at most %d",
-			got,
-			maximumTransactionOperations,
+			got, testkeyvalue.MaximumOperations,
 		)
 	}
 	if got := attachDetachWithTaskOperationCount(record); got != 63 {
@@ -303,7 +310,7 @@ func TestAttachRepositoryPublishesDetachTaskAtomically(t *testing.T) {
 	if err != nil || renderInput.Revision != detaching.Revision {
 		t.Fatalf("detach render input = %#v, %v", renderInput, err)
 	}
-	epoch, err := store.Get(ctx, environmentMutationEpochKey(record.EnvironmentID))
+	epoch, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(record.EnvironmentID))
 	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != detaching.Revision {
 		t.Fatalf("Attach mutation epoch = %#v, %v", epoch, err)
 	}
@@ -335,234 +342,12 @@ func TestAttachDetachOperationBudgetMatchesComposedTransaction(t *testing.T) {
 	}
 	publishTestDetach(t, ctx, capturedRepository, scope, ready, record.CreatedAt.Add(5*time.Minute))
 	want := attachDetachWithTaskOperationCount(record)
-	if capture.operations <= 0 || capture.operations > want || capture.operations > maximumTransactionOperations {
+	if capture.operations <= 0 || capture.operations > want || capture.operations > testkeyvalue.MaximumOperations {
 		t.Fatalf(
 			"composed Attach detach operations = %d, want at most %d and at most %d",
 			capture.operations,
-			want,
-			maximumTransactionOperations,
+			want, testkeyvalue.MaximumOperations,
 		)
-	}
-}
-
-// Rationale: an Attach selected by an active Backup run must remain stable
-// across detach initiation and final durable deprovisioning.
-func TestAttachRepositoryRejectsDestructiveBackupSourceMutations(t *testing.T) {
-	t.Run("detach lifecycle replacement", func(t *testing.T) {
-		ctx := context.Background()
-		store := newAttachTestStore()
-		scope := seedAttachScope(t, ctx, store)
-		repository, err := NewAttachRepository(store)
-		if err != nil {
-			t.Fatalf("NewAttachRepository() error = %v", err)
-		}
-		record, facts := testPendingAttach(t, scope, 62, "backup-source-detach", nil)
-		ready := createTestAttach(t, ctx, repository, scope, record, &facts)
-		ready, err = advanceAttachReady(ctx, repository, ready)
-		if err != nil {
-			t.Fatalf("advanceAttachReady() error = %v", err)
-		}
-		exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
-		if err != nil {
-			t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
-		}
-		exclusionValue := testAttachBackupExclusionValue(
-			t, scope.Environment.Record.ID, record.ID, 621,
-		)
-		if _, err := store.Put(ctx, exclusionKey, exclusionValue); err != nil {
-			t.Fatalf("Put(Backup source exclusion) error = %v", err)
-		}
-		ready, err = repository.GetAttach(ctx, record.ID)
-		if err != nil {
-			t.Fatalf("GetAttach() error = %v", err)
-		}
-		detaching, err := BeginAttachDetaching(
-			ready.Record,
-			ids.NewAt(ids.KindTask, testAttachTime.Add(2*time.Minute), 620),
-		)
-		if err != nil {
-			t.Fatalf("BeginAttachDetaching() error = %v", err)
-		}
-		_, err = repository.ReplaceLifecycle(ctx, ready, detaching)
-		if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
-			t.Fatalf("ReplaceLifecycle(detaching) error = %v, want resource in use", err)
-		}
-	})
-
-	t.Run("detached record removal", func(t *testing.T) {
-		ctx := context.Background()
-		store := newAttachTestStore()
-		scope := seedAttachScope(t, ctx, store)
-		repository, err := NewAttachRepository(store)
-		if err != nil {
-			t.Fatalf("NewAttachRepository() error = %v", err)
-		}
-		record, facts := testPendingAttach(t, scope, 63, "backup-source-removal", nil)
-		current := createTestAttach(t, ctx, repository, scope, record, &facts)
-		current, err = advanceAttachReady(ctx, repository, current)
-		if err != nil {
-			t.Fatalf("advanceAttachReady() error = %v", err)
-		}
-		taskID := ids.NewAt(ids.KindTask, testAttachTime.Add(3*time.Minute), 630)
-		detaching, err := BeginAttachDetaching(current.Record, taskID)
-		if err != nil {
-			t.Fatalf("BeginAttachDetaching() error = %v", err)
-		}
-		current, err = repository.ReplaceLifecycle(ctx, current, detaching)
-		if err != nil {
-			t.Fatalf("ReplaceLifecycle(detaching) error = %v", err)
-		}
-		detached, err := CompleteAttachDetaching(current.Record, taskID, true)
-		if err != nil {
-			t.Fatalf("CompleteAttachDetaching() error = %v", err)
-		}
-		current, err = repository.ReplaceLifecycle(ctx, current, detached)
-		if err != nil {
-			t.Fatalf("ReplaceLifecycle(detached) error = %v", err)
-		}
-		exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
-		if err != nil {
-			t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
-		}
-		exclusionValue := testAttachBackupExclusionValue(
-			t, scope.Environment.Record.ID, record.ID, 631,
-		)
-		if _, err := store.Put(ctx, exclusionKey, exclusionValue); err != nil {
-			t.Fatalf("Put(Backup source exclusion) error = %v", err)
-		}
-		current, err = repository.GetAttach(ctx, record.ID)
-		if err != nil {
-			t.Fatalf("GetAttach() error = %v", err)
-		}
-		_, err = repository.DeleteDetachedAttach(ctx, current)
-		if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
-			t.Fatalf("DeleteDetachedAttach() error = %v, want resource in use", err)
-		}
-	})
-}
-
-// Rationale: an Attach detach failure preserves truthful non-destructive state
-// even when a Backup source exclusion becomes active after detach initiation.
-func TestAttachRepositoryAllowsDetachFailureWithActiveBackupSourceExclusion(t *testing.T) {
-	ctx := context.Background()
-	store := newAttachTestStore()
-	scope := seedAttachScope(t, ctx, store)
-	repository, err := NewAttachRepository(store)
-	if err != nil {
-		t.Fatalf("NewAttachRepository() error = %v", err)
-	}
-	record, facts := testPendingAttach(t, scope, 68, "backup-source-detach-failure", nil)
-	current := createTestAttach(t, ctx, repository, scope, record, &facts)
-	current, err = advanceAttachReady(ctx, repository, current)
-	if err != nil {
-		t.Fatalf("advanceAttachReady() error = %v", err)
-	}
-	taskID := ids.NewAt(ids.KindTask, testAttachTime.Add(8*time.Minute), 680)
-	detaching, err := BeginAttachDetaching(current.Record, taskID)
-	if err != nil {
-		t.Fatalf("BeginAttachDetaching() error = %v", err)
-	}
-	current, err = repository.ReplaceLifecycle(ctx, current, detaching)
-	if err != nil {
-		t.Fatalf("ReplaceLifecycle(detaching) error = %v", err)
-	}
-	exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
-	if err != nil {
-		t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
-	}
-	exclusionValue := testAttachBackupExclusionValue(
-		t, scope.Environment.Record.ID, record.ID, 681,
-	)
-	if _, err := store.Put(ctx, exclusionKey, exclusionValue); err != nil {
-		t.Fatalf("Put(Backup source exclusion) error = %v", err)
-	}
-	current, err = repository.GetAttach(ctx, record.ID)
-	if err != nil {
-		t.Fatalf("GetAttach(detaching) error = %v", err)
-	}
-	failed, err := CompleteAttachDetaching(current.Record, taskID, false)
-	if err != nil {
-		t.Fatalf("CompleteAttachDetaching(failed) error = %v", err)
-	}
-	current, err = repository.ReplaceLifecycle(ctx, current, failed)
-	if err != nil {
-		t.Fatalf("ReplaceLifecycle(failed) error = %v", err)
-	}
-	if current.Record.Status != core.AttachFailed || current.Record.Operation != AttachOperationDetach {
-		t.Fatalf("failed Attach = %#v", current.Record)
-	}
-}
-
-// Rationale: malformed or misbucketed Backup exclusion bytes are corrupt
-// authority, not a valid resource-in-use fence that may be trusted blindly.
-func TestAttachRepositoryRejectsInvalidBackupSourceExclusionEvidence(t *testing.T) {
-	t.Parallel()
-	for _, test := range []struct {
-		name  string
-		value func(*testing.T, AttachCreateScope, AttachRecord) []byte
-	}{
-		{
-			name: "malformed",
-			value: func(*testing.T, AttachCreateScope, AttachRecord) []byte {
-				return []byte("not-an-exclusion-record")
-			},
-		},
-		{
-			name: "target mismatch",
-			value: func(t *testing.T, scope AttachCreateScope, _ AttachRecord) []byte {
-				return testAttachBackupExclusionValue(
-					t,
-					scope.Environment.Record.ID,
-					ids.NewAt(ids.KindAttach, testAttachTime.Add(7*time.Minute), 671),
-					672,
-				)
-			},
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			ctx := context.Background()
-			store := newAttachTestStore()
-			scope := seedAttachScope(t, ctx, store)
-			repository, err := NewAttachRepository(store)
-			if err != nil {
-				t.Fatalf("NewAttachRepository() error = %v", err)
-			}
-			record, facts := testPendingAttach(t, scope, 67, "invalid-exclusion", nil)
-			current := createTestAttach(t, ctx, repository, scope, record, &facts)
-			current, err = advanceAttachReady(ctx, repository, current)
-			if err != nil {
-				t.Fatalf("advanceAttachReady() error = %v", err)
-			}
-			exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
-			if err != nil {
-				t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
-			}
-			if _, err := store.Put(ctx, exclusionKey, test.value(t, scope, record)); err != nil {
-				t.Fatalf("Put(invalid Backup exclusion) error = %v", err)
-			}
-			current, err = repository.GetAttach(ctx, record.ID)
-			if err != nil {
-				t.Fatalf("GetAttach() error = %v", err)
-			}
-			detaching, err := BeginAttachDetaching(
-				current.Record,
-				ids.NewAt(ids.KindTask, testAttachTime.Add(7*time.Minute), 673),
-			)
-			if err != nil {
-				t.Fatalf("BeginAttachDetaching() error = %v", err)
-			}
-			if _, err := repository.ReplaceLifecycle(ctx, current, detaching); !errors.Is(
-				err,
-				errs.New(errs.KindInternal, ""),
-			) {
-				t.Fatalf("ReplaceLifecycle(invalid exclusion) error = %v, want internal", err)
-			}
-			stored, err := repository.GetAttach(ctx, record.ID)
-			if err != nil || stored.Record.Status != core.AttachReady {
-				t.Fatalf("GetAttach(after invalid exclusion) = %#v/%v", stored, err)
-			}
-		})
 	}
 }
 
@@ -584,7 +369,7 @@ func TestDeleteDetachedAttachRacesIncomingGrant(t *testing.T) {
 		t.Fatalf("advanceAttachReady() error = %v", err)
 	}
 	taskID := ids.NewAt(ids.KindTask, testAttachTime.Add(6*time.Minute), 660)
-	detaching, err := BeginAttachDetaching(current.Record, taskID)
+	detaching, err := testattachments.BeginAttachDetaching(current.Record, taskID)
 	if err != nil {
 		t.Fatalf("BeginAttachDetaching() error = %v", err)
 	}
@@ -592,7 +377,7 @@ func TestDeleteDetachedAttachRacesIncomingGrant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReplaceLifecycle(detaching) error = %v", err)
 	}
-	detached, err := CompleteAttachDetaching(current.Record, taskID, true)
+	detached, err := testattachments.CompleteAttachDetaching(current.Record, taskID, true)
 	if err != nil {
 		t.Fatalf("CompleteAttachDetaching() error = %v", err)
 	}
@@ -602,10 +387,10 @@ func TestDeleteDetachedAttachRacesIncomingGrant(t *testing.T) {
 	}
 
 	dependentID := ids.NewAt(ids.KindAttach, testAttachTime.Add(6*time.Minute), 661)
-	reverseKey := attachGrantedByKey(record.ID, dependentID)
+	reverseKey := testattachments.AttachGrantedByKey(record.ID, dependentID)
 	racingStore := &attachIncomingGrantRaceStore{
 		attachTestStore: store,
-		prefix:          attachGrantedByPrefix(record.ID),
+		prefix:          testattachments.AttachGrantedByPrefix(record.ID),
 		key:             reverseKey,
 		value:           []byte(dependentID),
 	}
@@ -645,7 +430,10 @@ func TestAttachLifecycleReplacementRacesBackupSourceExclusion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("advanceAttachReady() error = %v", err)
 	}
-	exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
+	exclusionKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+		testbackupruntime.BackupSourceTargetAttach,
+		record.ID,
+	)
 	if err != nil {
 		t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
 	}
@@ -685,7 +473,7 @@ func TestAttachLifecycleReplacementRacesBackupSourceExclusion(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewAttachRepository(race) error = %v", err)
 			}
-			detaching, err := BeginAttachDetaching(
+			detaching, err := testattachments.BeginAttachDetaching(
 				ready.Record,
 				ids.NewAt(ids.KindTask, testAttachTime.Add(4*time.Minute), int64(640+index)),
 			)
@@ -714,29 +502,18 @@ func TestAttachDesiredHeadConditionsCoalesceOneEnvironmentRevision(t *testing.T)
 	consumerEnvironmentID := ids.NewAt(ids.KindEnvironment, testAttachTime, 700)
 	backingEnvironmentID := ids.NewAt(ids.KindEnvironment, testAttachTime, 701)
 	consumerRevision := int64(41)
-	consumerService := Versioned[ServiceRecord]{
-		Record: ServiceRecord{
-			EnvironmentID:   consumerEnvironmentID,
-			Desired:         core.Service{ID: ids.NewAt(ids.KindService, testAttachTime, 703)},
-			desiredFenceKey: environmentBlueprintHeadKey(consumerEnvironmentID),
-		},
-		Revision: consumerRevision,
-	}
+	consumerService := selectedServiceFixture(t, consumerEnvironmentID,
+		ids.NewAt(ids.KindService, testAttachTime, 703), "", consumerRevision)
 	secondConsumerService := consumerService
 	secondConsumerService.Record.Desired.ID = ids.NewAt(ids.KindService, testAttachTime, 704)
-	backingService := Versioned[ServiceRecord]{
-		Record: ServiceRecord{
-			EnvironmentID:   backingEnvironmentID,
-			desiredFenceKey: environmentBlueprintHeadKey(backingEnvironmentID),
-		},
-		Revision: 52,
-	}
+	backingService := selectedServiceFixture(t, backingEnvironmentID,
+		ids.NewAt(ids.KindService, testAttachTime, 705), "", 52)
 
 	conditions, err := attachDesiredHeadConditions(
 		consumerEnvironmentID,
 		consumerRevision,
 		backingService,
-		[]Versioned[ServiceRecord]{consumerService, secondConsumerService},
+		[]testkeyvalue.Versioned[testservices.ServiceRecord]{consumerService, secondConsumerService},
 	)
 	if err != nil {
 		t.Fatalf("attachDesiredHeadConditions() error = %v", err)
@@ -744,11 +521,11 @@ func TestAttachDesiredHeadConditionsCoalesceOneEnvironmentRevision(t *testing.T)
 	if len(conditions) != 2 {
 		t.Fatalf("attachDesiredHeadConditions() count = %d, want 2", len(conditions))
 	}
-	if conditions[0].Key != environmentBlueprintHeadKey(consumerEnvironmentID) ||
+	if conditions[0].Key != testblueprints.EnvironmentBlueprintHeadKey(consumerEnvironmentID) ||
 		conditions[0].ModRevision != consumerRevision {
 		t.Fatalf("consumer desired-head condition = %#v", conditions[0])
 	}
-	if conditions[1].Key != environmentBlueprintHeadKey(backingEnvironmentID) ||
+	if conditions[1].Key != testblueprints.EnvironmentBlueprintHeadKey(backingEnvironmentID) ||
 		conditions[1].ModRevision != backingService.Revision {
 		t.Fatalf("backing desired-head condition = %#v", conditions[1])
 	}
@@ -758,19 +535,14 @@ func TestAttachDesiredHeadConditionsCoalesceOneEnvironmentRevision(t *testing.T)
 // at a different revision of the same Environment.
 func TestAttachDesiredHeadConditionsRejectConflictingEnvironmentRevision(t *testing.T) {
 	environmentID := ids.NewAt(ids.KindEnvironment, testAttachTime, 702)
-	service := Versioned[ServiceRecord]{
-		Record: ServiceRecord{
-			EnvironmentID:   environmentID,
-			desiredFenceKey: environmentBlueprintHeadKey(environmentID),
-		},
-		Revision: 61,
-	}
+	service := selectedServiceFixture(t, environmentID,
+		ids.NewAt(ids.KindService, testAttachTime, 706), "", 61)
 
 	_, err := attachDesiredHeadConditions(
 		environmentID,
 		service.Revision+1,
 		service,
-		[]Versioned[ServiceRecord]{service},
+		[]testkeyvalue.Versioned[testservices.ServiceRecord]{service},
 	)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("attachDesiredHeadConditions() error = %v, want state conflict", err)
@@ -804,11 +576,11 @@ type attachDetachOperationCaptureStore struct {
 
 func (store *attachDetachOperationCaptureStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	for _, mutation := range mutations {
-		if mutation.Type == MutationPut && mutation.Key == attachKey(store.attachID) {
+		if mutation.Type == testkeyvalue.MutationPut && mutation.Key == testattachments.AttachKey(store.attachID) {
 			store.operations = len(conditions) + len(mutations)
 			break
 		}
@@ -818,22 +590,22 @@ func (store *attachDetachOperationCaptureStore) Transact(
 
 func (store *attachIncomingGrantRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if !store.injected {
 		for _, condition := range conditions {
 			if !condition.Prefix || condition.Key != store.prefix {
 				continue
 			}
 			store.injected = true
-			raced, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
-				Type: MutationPut, Key: store.key, Value: store.value,
+			raced, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+				Type: testkeyvalue.MutationPut, Key: store.key, Value: store.value,
 			}})
 			if err != nil {
-				return TransactionResult{}, err
+				return testkeyvalue.TransactionResult{}, err
 			}
-			return TransactionResult{Revision: raced.Revision}, nil
+			return testkeyvalue.TransactionResult{Revision: raced.Revision}, nil
 		}
 	}
 	return store.attachTestStore.Transact(ctx, conditions, mutations)
@@ -841,19 +613,19 @@ func (store *attachIncomingGrantRaceStore) Transact(
 
 func (store *attachBackupExclusionRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if !store.injected {
 		for _, condition := range conditions {
 			if condition.Key != store.exclusionKey || condition.Prefix {
 				continue
 			}
 			store.injected = true
-			if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
-				Type: MutationPut, Key: store.exclusionKey, Value: store.exclusionValue,
+			if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+				Type: testkeyvalue.MutationPut, Key: store.exclusionKey, Value: store.exclusionValue,
 			}}); err != nil {
-				return TransactionResult{}, err
+				return testkeyvalue.TransactionResult{}, err
 			}
 			break
 		}
@@ -869,16 +641,18 @@ func testAttachBackupExclusionValue(
 ) []byte {
 	t.Helper()
 	at := testAttachTime.Add(time.Duration(seed) * time.Second)
-	value, err := encodeBackupSourceTargetExclusionRecord(BackupSourceTargetExclusionRecord{
-		EnvironmentID: environmentID,
-		OperationID:   ids.NewAt(ids.KindOperation, at, seed),
-		TaskID:        ids.NewAt(ids.KindTask, at, seed+1),
-		OperationKind: BackupOperationBackup,
-		TargetKind:    BackupSourceTargetAttach,
-		TargetID:      attachID,
-		CreatedAt:     at,
-		UpdatedAt:     at,
-	})
+	value, err := testbackupruntime.EncodeBackupSourceTargetExclusionRecord(
+		testbackupruntime.BackupSourceTargetExclusionRecord{
+			EnvironmentID: environmentID,
+			OperationID:   ids.NewAt(ids.KindOperation, at, seed),
+			TaskID:        ids.NewAt(ids.KindTask, at, seed+1),
+			OperationKind: testbackupruntime.BackupOperationBackup,
+			TargetKind:    testbackupruntime.BackupSourceTargetAttach,
+			TargetID:      attachID,
+			CreatedAt:     at,
+			UpdatedAt:     at,
+		},
+	)
 	if err != nil {
 		t.Fatalf("encodeBackupSourceTargetExclusionRecord() error = %v", err)
 	}
@@ -895,16 +669,20 @@ func (store *attachTestStore) Health(context.Context) error {
 }
 
 func (store *attachTestStore) Put(ctx context.Context, key string, value []byte) (int64, error) {
-	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: value}})
+	result, err := store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}},
+	)
 	return result.Revision, err
 }
 
 func (store *attachTestStore) Delete(ctx context.Context, key string) (int64, error) {
-	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: key}})
+	result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}})
 	return result.Revision, err
 }
 
-func (store *attachTestStore) Watch(context.Context, string, int64) (*WatchStream, error) {
+func (store *attachTestStore) Watch(context.Context, string, int64) (*testkeyvalue.WatchStream, error) {
 	return nil, errs.New(errs.KindInternal, "Attach test store does not implement Watch")
 }
 
@@ -917,10 +695,10 @@ func (store *attachTestStore) Close() error {
 }
 
 type desiredServiceFixture struct {
-	Service    Versioned[ServiceRecord]
-	Projection Versioned[EnvironmentComposeProjection]
-	Blueprint  Versioned[EnvironmentBlueprintRevision]
-	Claim      EnvironmentBlueprintStageClaim
+	Service    testkeyvalue.Versioned[testservices.ServiceRecord]
+	Projection testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
+	Blueprint  testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintRevision]
+	Claim      testblueprints.EnvironmentBlueprintStageClaim
 }
 
 func seedDesiredServiceFixture(
@@ -935,14 +713,14 @@ func seedDesiredServiceFixture(
 	publishHead bool,
 ) desiredServiceFixture {
 	t.Helper()
-	record, err := NewServiceRecord(environmentID, desired, backingNetworkID)
+	record, err := testservices.NewServiceRecord(environmentID, desired, backingNetworkID)
 	if err != nil {
 		t.Fatalf("NewServiceRecord() error = %v", err)
 	}
 	revisionID := ids.NewAt(ids.KindTask, testAttachTime, seed)
-	projection := EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
-		DesiredServices: []EnvironmentServiceProjection{{
+		DesiredServices: []testservices.EnvironmentServiceProjection{{
 			EnvironmentID: environmentID, BackingNetworkID: backingNetworkID, Desired: desired,
 		}},
 	}
@@ -962,32 +740,34 @@ func seedDesiredServiceFixture(
 	if err != nil {
 		t.Fatalf("marshal Environment Compose artifact: %v", err)
 	}
-	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection)
+	dependencyDigest, err := testblueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		t.Fatalf("EnvironmentBlueprintDependencyDigest() error = %v", err)
 	}
 	intentCiphertext := []byte("desired-service-fixture-intent-" + desired.ID)
 	intentDigest := sha256.Sum256(intentCiphertext)
-	claim := EnvironmentBlueprintStageClaim{
+	claim := testblueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID:  strings.TrimPrefix(revisionID, "task_"),
 		EnvironmentID: environmentID, RevisionID: revisionID, TaskID: revisionID,
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment, ScopeID: environmentID,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
 			Method: http.MethodPost, Route: "/blueprints", Key: "desired-service-fixture-" + desired.ID,
 		},
-		Intent: ProtectedIntentRecord{
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: intentCiphertext,
 		},
-		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1,
 		ProjectionSchema: 1, CreatedAt: testAttachTime,
 	}
-	blueprint := EnvironmentBlueprintRevision{
+	blueprint := testblueprints.EnvironmentBlueprintRevision{
 		EnvironmentID: environmentID, RevisionID: revisionID,
 		RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
-		Files: []EnvironmentBlueprintFile{{Path: "blueprint.yaml", Content: canonicalYAML}}, CreatedAt: testAttachTime,
+		Files: []testblueprints.EnvironmentBlueprintFile{
+			{Path: "blueprint.yaml", Content: canonicalYAML},
+		}, CreatedAt: testAttachTime,
 	}
-	streams, err := buildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
+	streams, err := testblueprints.BuildEnvironmentBlueprintStreams(testblueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim, Blueprint: &blueprint, Projection: projection, DependencyDigest: dependencyDigest,
 	})
 	if err != nil {
@@ -995,78 +775,79 @@ func seedDesiredServiceFixture(
 	}
 	defer clear(streams.Audit)
 	defer clear(streams.Projection)
-	rootValue, err := encodeEnvironmentBlueprintSeal(environmentBlueprintSealFromDescriptor(streams.Descriptor))
+	rootValue, err := testblueprints.EncodeEnvironmentBlueprintSeal(
+		testblueprints.EnvironmentBlueprintSealFromDescriptor(streams.Descriptor),
+	)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentBlueprintSeal() error = %v", err)
 	}
 	defer clear(rootValue)
-	mutations := []Mutation{{
-		Type: MutationPut, Key: environmentBlueprintRootKey(environmentID, revisionID), Value: rootValue,
+	mutations := []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintRootKey(environmentID, revisionID), Value: rootValue,
 	}}
 	if publishHead {
-		headValue, encodeErr := encodeTaskReference(revisionID)
+		headValue, encodeErr := testidempotency.EncodeTaskReference(revisionID)
 		if encodeErr != nil {
 			t.Fatalf("encodeTaskReference() error = %v", encodeErr)
 		}
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: environmentBlueprintHeadKey(environmentID), Value: headValue,
+		mutations = append(mutations, testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headValue,
 		})
 	} else {
 		descriptor := streams.Descriptor
-		descriptor.State = EnvironmentBlueprintStageSealed
+		descriptor.State = testblueprints.EnvironmentBlueprintStageSealed
 		descriptor.NextAuditChunk = descriptor.AuditChunks
 		descriptor.NextProjectionChunk = descriptor.ProjectionChunks
-		descriptorValue, encodeErr := encodeEnvironmentBlueprintStageDescriptor(descriptor)
+		descriptorValue, encodeErr := testblueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)
 		if encodeErr != nil {
 			t.Fatalf("encodeEnvironmentBlueprintStageDescriptor() error = %v", encodeErr)
 		}
-		intentDigest, encodeErr := protectedBlueprintIntentDigest(claim.Intent)
+		intentDigest, encodeErr := testblueprints.ProtectedBlueprintIntentDigest(claim.Intent)
 		if encodeErr != nil {
 			clear(descriptorValue)
 			t.Fatalf("protectedBlueprintIntentDigest() error = %v", encodeErr)
 		}
-		locatorValue, encodeErr := encodeEnvironmentBlueprintStageLocator(claim.DescriptorID, intentDigest)
+		locatorValue, encodeErr := testblueprints.EncodeEnvironmentBlueprintStageLocator(claim.DescriptorID, intentDigest)
 		if encodeErr != nil {
 			clear(descriptorValue)
 			t.Fatalf("encodeEnvironmentBlueprintStageLocator() error = %v", encodeErr)
 		}
-		locatorKey, _, encodeErr := environmentBlueprintLocatorKey(claim.Locator)
+		locatorKey, _, encodeErr := testblueprints.EnvironmentBlueprintLocatorKey(claim.Locator)
 		if encodeErr != nil {
 			clear(descriptorValue)
 			clear(locatorValue)
 			t.Fatalf("environmentBlueprintLocatorKey() error = %v", encodeErr)
 		}
-		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue},
-			Mutation{Type: MutationPut, Key: locatorKey, Value: locatorValue},
-		)
+		mutations = append(mutations, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: locatorKey, Value: locatorValue})
 	}
 	for _, family := range []struct {
 		id    uint8
 		value []byte
 	}{
-		{id: EnvironmentBlueprintChunkAudit, value: streams.Audit},
-		{id: EnvironmentBlueprintChunkProjection, value: streams.Projection},
+		{id: testblueprints.EnvironmentBlueprintChunkAudit, value: streams.Audit},
+		{id: testblueprints.EnvironmentBlueprintChunkProjection, value: streams.Projection},
 	} {
-		for index := uint32(0); index < chunkCount32(len(family.value)); index++ {
-			from := int(index) * EnvironmentBlueprintChunkBytes
-			to := min(from+EnvironmentBlueprintChunkBytes, len(family.value))
+		for index := uint32(0); index < testblueprints.ChunkCount32(len(family.value)); index++ {
+			from := int(index) * testblueprints.EnvironmentBlueprintChunkBytes
+			to := min(from+testblueprints.EnvironmentBlueprintChunkBytes, len(family.value))
 			data := family.value[from:to]
-			chunkValue, encodeErr := encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
-				Family: family.id, Sequence: index, LogicalOffset: uint64(from),
-				LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data,
-			})
+			chunkValue, encodeErr := testblueprints.EncodeEnvironmentBlueprintChunk(
+				testblueprints.EnvironmentBlueprintChunk{
+					Family: family.id, Sequence: index, LogicalOffset: uint64(from),
+					LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data,
+				},
+			)
 			if encodeErr != nil {
 				t.Fatalf("encodeEnvironmentBlueprintChunk() error = %v", encodeErr)
 			}
-			mutations = append(mutations, Mutation{
-				Type:  MutationPut,
-				Key:   environmentBlueprintChunkKeyFor(environmentID, revisionID, family.id, index),
+			mutations = append(mutations, testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testblueprints.EnvironmentBlueprintChunkKeyFor(environmentID, revisionID, family.id, index),
 				Value: chunkValue,
 			})
 		}
 	}
-	defer clearMutationValues(mutations)
+	defer testkeyvalue.ClearMutationValues(mutations)
 	result, err := store.Transact(ctx, nil, mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed sealed desired projection = %#v, %v", result, err)
@@ -1074,12 +855,12 @@ func seedDesiredServiceFixture(
 	rootRevision := result.Revision
 	runtimeRevision := int64(0)
 	if includeRuntime {
-		runtimeValue, encodeErr := encodeServiceRuntimeRecord(newServiceRuntimeRecord(record))
+		runtimeValue, encodeErr := testservices.EncodeServiceRuntimeRecord(testservices.NewServiceRuntimeRecord(record))
 		if encodeErr != nil {
 			t.Fatalf("encodeServiceRuntimeRecord() error = %v", encodeErr)
 		}
-		runtimeResult, transactErr := store.Transact(ctx, nil, []Mutation{{
-			Type: MutationPut, Key: serviceRuntimeKey(desired.ID), Value: runtimeValue,
+		runtimeResult, transactErr := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testservices.ServiceRuntimeKey(desired.ID), Value: runtimeValue,
 		}})
 		clear(runtimeValue)
 		if transactErr != nil || !runtimeResult.Succeeded {
@@ -1087,16 +868,18 @@ func seedDesiredServiceFixture(
 		}
 		runtimeRevision = runtimeResult.Revision
 	}
-	record.desiredFenceKey = environmentBlueprintHeadKey(environmentID)
-	record.runtimeRevision = runtimeRevision
+	joined, err := testservices.ReadJoined(ctx, store, testservices.DesiredSelection{
+		Services: projection.DesiredServices, Revision: rootRevision, ReadRevision: max(rootRevision, runtimeRevision),
+	}, desired.ID, testblueprints.EnvironmentBlueprintHeadKey(environmentID))
+	if err != nil {
+		t.Fatalf("read seeded Service: %v", err)
+	}
 	return desiredServiceFixture{
-		Service: Versioned[ServiceRecord]{
-			Record: record, Revision: rootRevision, ReadRevision: max(rootRevision, runtimeRevision),
-		},
-		Projection: Versioned[EnvironmentComposeProjection]{
+		Service: joined,
+		Projection: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
 			Record: projection, Revision: rootRevision, ReadRevision: rootRevision,
 		},
-		Blueprint: Versioned[EnvironmentBlueprintRevision]{
+		Blueprint: testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintRevision]{
 			Record: blueprint, Revision: rootRevision, ReadRevision: rootRevision,
 		},
 		Claim: claim,
@@ -1109,28 +892,28 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	if err != nil {
 		t.Fatalf("NewHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{
+	tenant := testhierarchy.TenantRecord{
 		ID: ids.NewAt(ids.KindTenant, testAttachTime, 1), Slug: "acme", Name: "Acme",
 	}
 	tenantVersion, err := hierarchy.CreateTenant(ctx, tenant)
 	if err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	project, err := hierarchy.CreateProject(ctx, ProjectRecord{
+	project, err := hierarchy.CreateProject(ctx, testhierarchy.ProjectRecord{
 		ID: ids.NewAt(ids.KindProject, testAttachTime, 2), TenantID: tenant.ID, Slug: "app", Name: "App",
-		Kind: ProjectKindTenant,
+		Kind: testhierarchy.ProjectKindTenant,
 	})
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	backingProject, err := hierarchy.CreateProject(ctx, ProjectRecord{
+	backingProject, err := hierarchy.CreateProject(ctx, testhierarchy.ProjectRecord{
 		ID: ids.NewAt(ids.KindProject, testAttachTime, 3), Slug: "postgres", Name: "Postgres",
-		Kind: ProjectKindBacking,
+		Kind: testhierarchy.ProjectKindBacking,
 	})
 	if err != nil {
 		t.Fatalf("CreateProject(backing) error = %v", err)
 	}
-	environmentRecord, err := NewProvisioningEnvironment(
+	environmentRecord, err := testhierarchy.NewProvisioningEnvironment(
 		"/srv/groundplane",
 		project.Record,
 		ids.NewAt(ids.KindEnvironment, testAttachTime, 4),
@@ -1146,7 +929,7 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	if err != nil {
 		t.Fatalf("CreateEnvironment() error = %v", err)
 	}
-	backingEnvironmentRecord, err := NewProvisioningEnvironment(
+	backingEnvironmentRecord, err := testhierarchy.NewProvisioningEnvironment(
 		"/srv/groundplane",
 		backingProject.Record,
 		ids.NewAt(ids.KindEnvironment, testAttachTime, 6),
@@ -1158,18 +941,18 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	if err != nil {
 		t.Fatalf("NewProvisioningEnvironment(backing) error = %v", err)
 	}
-	backingEnvironmentValue, err := encodeEnvironment(backingEnvironmentRecord)
+	backingEnvironmentValue, err := testhierarchy.EncodeEnvironment(backingEnvironmentRecord)
 	if err != nil {
 		t.Fatalf("encodeEnvironment(backing Environment) error = %v", err)
 	}
 	defer clear(backingEnvironmentValue)
-	backingEnvironmentResult, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: environmentKey(backingEnvironmentRecord.ID), Value: backingEnvironmentValue,
+	backingEnvironmentResult, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentKey(backingEnvironmentRecord.ID), Value: backingEnvironmentValue,
 	}})
 	if err != nil || !backingEnvironmentResult.Succeeded {
 		t.Fatalf("seed backing Environment = %#v, %v", backingEnvironmentResult, err)
 	}
-	backingEnvironment := Versioned[EnvironmentRecord]{
+	backingEnvironment := testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
 		Record: backingEnvironmentRecord, Revision: backingEnvironmentResult.Revision,
 		ReadRevision: backingEnvironmentResult.Revision,
 	}
@@ -1189,19 +972,19 @@ func seedAttachScope(t *testing.T, ctx context.Context, store *attachTestStore) 
 	}
 	return AttachCreateScope{
 		Tenant: tenantVersion, Project: project, Environment: environment,
-		DesiredHead: Versioned[EnvironmentBlueprintHead]{
-			Record: EnvironmentBlueprintHead{
+		DesiredHead: testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintHead]{
+			Record: testblueprints.EnvironmentBlueprintHead{
 				EnvironmentID: environment.Record.ID,
 				RevisionID:    serviceFixture.Projection.Record.RevisionID,
 			},
 			Revision:     serviceFixture.Projection.Revision,
 			ReadRevision: serviceFixture.Projection.ReadRevision,
 		},
-		ComposeProjection: Versioned[EnvironmentComposeProjection]{
+		ComposeProjection: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
 			Record: serviceFixture.Projection.Record, Revision: serviceFixture.Projection.Revision,
 			ReadRevision: serviceFixture.Projection.ReadRevision,
 		},
-		Services:       []Versioned[ServiceRecord]{service},
+		Services:       []testkeyvalue.Versioned[testservices.ServiceRecord]{service},
 		BackingProject: backingProject, BackingEnvironment: backingEnvironment, BackingService: backingService,
 	}
 }
@@ -1211,20 +994,20 @@ func testPendingAttach(
 	scope AttachCreateScope,
 	seed int64,
 	name string,
-	grants []Versioned[AttachRecord],
-) (AttachRecord, AttachEncryptedFacts) {
+	grants []testkeyvalue.Versioned[testattachments.Record],
+) (testattachments.Record, testattachments.EncryptedFacts) {
 	t.Helper()
 	grantIDs := make([]string, 0, len(grants))
-	factSets := []AttachFactSetMetadata{{Facts: []AttachFactDefinition{
+	factSets := []testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{
 		{Key: "pg16_DATABASE"},
 		{Key: "pg16_PASSWORD", Secret: true},
 		{Key: "pg16_URL", Secret: true},
 	}}}
 	for _, grant := range grants {
 		grantIDs = append(grantIDs, grant.Record.ID)
-		factSets = append(factSets, AttachFactSetMetadata{
+		factSets = append(factSets, testattachments.FactSetMetadata{
 			GrantAttachID: grant.Record.ID,
-			Facts: []AttachFactDefinition{
+			Facts: []testattachments.FactDefinition{
 				{Key: "pg16_DATABASE"},
 				{Key: "pg16_PASSWORD", Secret: true},
 				{Key: "pg16_URL", Secret: true},
@@ -1232,7 +1015,7 @@ func testPendingAttach(
 		})
 	}
 	id := ids.NewAt(ids.KindAttach, testAttachTime, seed)
-	record, err := NewPendingAttachRecord(
+	record, err := testattachments.NewPendingAttachRecord(
 		id,
 		scope.Environment.Record.ID,
 		name,
@@ -1250,7 +1033,13 @@ func testPendingAttach(
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord() error = %v", err)
 	}
-	facts, err := NewAttachEncryptedFacts(record.ID, 1, "age-x25519", "sha256", []byte("encrypted-facts"))
+	facts, err := testattachments.NewAttachEncryptedFacts(
+		record.ID,
+		1,
+		"age-x25519",
+		"sha256",
+		[]byte("encrypted-facts"),
+	)
 	if err != nil {
 		t.Fatalf("NewAttachEncryptedFacts() error = %v", err)
 	}
@@ -1260,19 +1049,19 @@ func testPendingAttach(
 func advanceAttachReady(
 	ctx context.Context,
 	repository *AttachRepository,
-	current Versioned[AttachRecord],
-) (Versioned[AttachRecord], error) {
-	provisioning, err := MarkAttachProvisioning(current.Record, current.Record.TaskID)
+	current testkeyvalue.Versioned[testattachments.Record],
+) (testkeyvalue.Versioned[testattachments.Record], error) {
+	provisioning, err := testattachments.MarkAttachProvisioning(current.Record, current.Record.TaskID)
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return testkeyvalue.Versioned[testattachments.Record]{}, err
 	}
 	current, err = repository.ReplaceLifecycle(ctx, current, provisioning)
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return testkeyvalue.Versioned[testattachments.Record]{}, err
 	}
-	ready, err := CompleteAttachProvisioning(current.Record, current.Record.TaskID, true)
+	ready, err := testattachments.CompleteAttachProvisioning(current.Record, current.Record.TaskID, true)
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return testkeyvalue.Versioned[testattachments.Record]{}, err
 	}
 	return repository.ReplaceLifecycle(ctx, current, ready)
 }
@@ -1284,7 +1073,7 @@ func attachTestEpochRevision(
 	environmentID string,
 ) int64 {
 	t.Helper()
-	result, err := store.Get(ctx, environmentMutationEpochKey(environmentID))
+	result, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(environmentID))
 	if err != nil || result == nil || result.Entry == nil {
 		t.Fatalf("read Attach Environment epoch = %#v, %v", result, err)
 	}

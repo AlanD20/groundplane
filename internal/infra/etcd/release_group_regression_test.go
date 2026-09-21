@@ -12,6 +12,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -24,9 +32,9 @@ type releaseGroupCountingStore struct {
 
 func (store *releaseGroupCountingStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	operations := len(conditions) + len(mutations)
 	if operations > store.maxOperations {
 		store.maxOperations = operations
@@ -37,8 +45,8 @@ func (store *releaseGroupCountingStore) Transact(
 type releaseGroupPublisherFixture struct {
 	store       *releaseGroupCountingStore
 	tasks       *TaskRepository
-	project     Versioned[ProjectRecord]
-	environment Versioned[EnvironmentRecord]
+	project     testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
 	group       domain.Group
 	revision    int64
 	serviceIDs  []string
@@ -58,9 +66,9 @@ func TestReleaseGroupMaximumRemovalFitsRealTaskPublicationEnvelope(t *testing.T)
 		t.Fatalf("PrepareReleaseGroupRemove() error = %v", err)
 	}
 	unrelatedServiceID := ids.NewAt(ids.KindService, fixture.now, 9900)
-	mustReleaseGroupTransaction(t, fixture.store, []Mutation{{
-		Type:  MutationPut,
-		Key:   deletionTombstoneKey("service", unrelatedServiceID),
+	mustReleaseGroupTransaction(t, fixture.store, []testkeyvalue.Mutation{{
+		Type:  testkeyvalue.MutationPut,
+		Key:   testdeletions.TombstoneKey("service", unrelatedServiceID),
 		Value: []byte(`{"phase":"requested"}`),
 	}})
 	fixture.store.maxOperations = 0
@@ -94,11 +102,10 @@ func TestReleaseGroupMaximumRemovalFitsRealTaskPublicationEnvelope(t *testing.T)
 			expectedOperations,
 		)
 	}
-	if fixture.store.maxOperations > maximumTransactionOperations {
+	if fixture.store.maxOperations > testkeyvalue.MaximumOperations {
 		t.Fatalf(
 			"real maximum-member removal envelope = %d operations, want <= %d",
-			fixture.store.maxOperations,
-			maximumTransactionOperations,
+			fixture.store.maxOperations, testkeyvalue.MaximumOperations,
 		)
 	}
 }
@@ -114,9 +121,9 @@ func TestReleaseGroupRemovalFencesExactSelectedServiceDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareReleaseGroupRemove() error = %v", err)
 	}
-	mustReleaseGroupTransaction(t, fixture.store, []Mutation{{
-		Type:  MutationPut,
-		Key:   deletionTombstoneKey("service", fixture.serviceIDs[len(fixture.serviceIDs)-1]),
+	mustReleaseGroupTransaction(t, fixture.store, []testkeyvalue.Mutation{{
+		Type:  testkeyvalue.MutationPut,
+		Key:   testdeletions.TombstoneKey("service", fixture.serviceIDs[len(fixture.serviceIDs)-1]),
 		Value: []byte(`{"phase":"requested"}`),
 	}})
 	task, marker := releaseGroupRemovalTaskAndMarker(
@@ -142,7 +149,7 @@ func TestReleaseGroupRemovalFencesExactSelectedServiceDeletion(t *testing.T) {
 		!isKind(conflict, errs.KindStateConflict) {
 		t.Fatalf("selected deletion race = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	if value := fixture.store.valueAt(taskKey(task.ID), fixture.store.revision); value != nil {
+	if value := fixture.store.valueAt(testtaskjournal.TaskStorageKey(task.ID), fixture.store.revision); value != nil {
 		t.Fatalf("failed selected-member publication wrote Task %#v", value)
 	}
 }
@@ -159,7 +166,7 @@ func TestReleaseGroupBlueprintCollectionCASRejectsConcurrentInsertion(t *testing
 		context.Background(),
 		fixture.environment.Record.ID,
 		readRevision,
-		[]ReleaseGroupSnapshotEntry{{
+		[]testreleasegroups.ReleaseGroupSnapshotEntry{{
 			Group:        fixture.group,
 			Revision:     fixture.revision,
 			ReadRevision: readRevision,
@@ -178,35 +185,40 @@ func TestReleaseGroupBlueprintCollectionCASRejectsConcurrentInsertion(t *testing
 	if err != nil {
 		t.Fatalf("domain.New(concurrent) error = %v", err)
 	}
-	concurrentValue, err := encodeReleaseGroup(concurrent)
+	concurrentValue, err := encodeReleaseGroupFixture(concurrent)
 	if err != nil {
-		t.Fatalf("encodeReleaseGroup(concurrent) error = %v", err)
+		t.Fatalf("encodeReleaseGroupFixture(concurrent) error = %v", err)
 	}
-	collectionValue, err := encodeReleaseGroupCollectionEpoch(
+	collectionValue, err := encodeReleaseGroupEpochFixture(
 		fixture.environment.Record.ID,
 	)
 	if err != nil {
-		t.Fatalf("encodeReleaseGroupCollectionEpoch() error = %v", err)
+		t.Fatalf("encodeReleaseGroupEpochFixture() error = %v", err)
 	}
-	mustReleaseGroupTransaction(t, fixture.store, []Mutation{
-		{Type: MutationPut, Key: releaseGroupRecordKey(concurrent.ID), Value: concurrentValue},
+	mustReleaseGroupTransaction(t, fixture.store, []testkeyvalue.Mutation{
 		{
-			Type:  MutationPut,
-			Key:   releaseGroupOwnerKey(concurrent.EnvironmentID, concurrent.ID),
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleasegroups.ReleaseGroupRecordKey(concurrent.ID),
+			Value: concurrentValue,
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleasegroups.ReleaseGroupOwnerKey(concurrent.EnvironmentID, concurrent.ID),
 			Value: []byte(concurrent.ID),
 		},
 		{
-			Type:  MutationPut,
-			Key:   releaseGroupNameKey(concurrent.EnvironmentID, concurrent.Name),
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleasegroups.ReleaseGroupNameKey(concurrent.EnvironmentID, concurrent.Name),
 			Value: []byte(concurrent.ID),
 		},
-		{Type: MutationPut, Key: releaseGroupCollectionEpochKey(concurrent.EnvironmentID), Value: collectionValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleasegroups.ReleaseGroupCollectionEpochKey(concurrent.EnvironmentID),
+			Value: collectionValue,
+		},
 	})
-	result, err := fixture.store.Transact(
-		context.Background(),
-		prepared.conditions,
-		prepared.mutations,
-	)
+	conditions, mutations := prepared.AppendTo(nil, nil)
+	result, err := fixture.store.Transact(context.Background(), conditions, mutations)
 	if err != nil {
 		t.Fatalf("Blueprint collection transaction error = %v", err)
 	}
@@ -214,10 +226,7 @@ func TestReleaseGroupBlueprintCollectionCASRejectsConcurrentInsertion(t *testing
 		t.Fatal("Blueprint omission retained a concurrent insertion by committing")
 	}
 	for _, groupID := range []string{fixture.group.ID, concurrent.ID} {
-		if value := fixture.store.valueAt(
-			releaseGroupRecordKey(groupID),
-			fixture.store.revision,
-		); value == nil {
+		if value := fixture.store.valueAt(testreleasegroups.ReleaseGroupRecordKey(groupID), fixture.store.revision); value == nil {
 			t.Fatalf("collection race removed live group %s", groupID)
 		}
 	}
@@ -231,21 +240,18 @@ func TestReleaseGroupBlueprintOmissionDeletesOnlyLiveProjection(t *testing.T) {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	historicalKey := "/v1/records/releases/" + ids.NewAt(ids.KindDeployment, fixture.now, 9700)
-	mustReleaseGroupTransaction(t, fixture.store, []Mutation{{
-		Type:  MutationPut,
+	mustReleaseGroupTransaction(t, fixture.store, []testkeyvalue.Mutation{{
+		Type:  testkeyvalue.MutationPut,
 		Key:   historicalKey,
 		Value: []byte("historical-release"),
 	}})
 	readRevision := fixture.store.revision
-	groupValue := fixture.store.valueAt(
-		releaseGroupRecordKey(fixture.group.ID),
-		readRevision,
-	)
+	groupValue := fixture.store.valueAt(testreleasegroups.ReleaseGroupRecordKey(fixture.group.ID), readRevision)
 	prepared, err := repository.PrepareReleaseGroupBlueprintMutation(
 		context.Background(),
 		fixture.environment.Record.ID,
 		readRevision,
-		[]ReleaseGroupSnapshotEntry{{
+		[]testreleasegroups.ReleaseGroupSnapshotEntry{{
 			Group:        fixture.group,
 			Revision:     groupValue.ModRevision,
 			ReadRevision: readRevision,
@@ -255,18 +261,12 @@ func TestReleaseGroupBlueprintOmissionDeletesOnlyLiveProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareReleaseGroupBlueprintMutation() error = %v", err)
 	}
-	result, err := fixture.store.Transact(
-		context.Background(),
-		prepared.conditions,
-		prepared.mutations,
-	)
+	conditions, mutations := prepared.AppendTo(nil, nil)
+	result, err := fixture.store.Transact(context.Background(), conditions, mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("Blueprint omission transaction = %#v, %v", result, err)
 	}
-	if value := fixture.store.valueAt(
-		releaseGroupRecordKey(fixture.group.ID),
-		fixture.store.revision,
-	); value != nil {
+	if value := fixture.store.valueAt(testreleasegroups.ReleaseGroupRecordKey(fixture.group.ID), fixture.store.revision); value != nil {
 		t.Fatalf("omitted live group remains %#v", value)
 	}
 	if value := fixture.store.valueAt(historicalKey, fixture.store.revision); value == nil {
@@ -288,8 +288,8 @@ func newReleaseGroupPublisherFixture(
 	now := time.Date(2026, 8, 27, 15, 0, 0, 0, time.UTC)
 	serviceIDs := make([]string, memberCount)
 	artifactServices := make([]*agentpb.ComposeService, memberCount)
-	mutations := make([]Mutation, 0, memberCount+5)
-	desiredServices := make([]EnvironmentServiceProjection, memberCount)
+	mutations := make([]testkeyvalue.Mutation, 0, memberCount+5)
+	desiredServices := make([]testservices.EnvironmentServiceProjection, memberCount)
 	for index := range serviceIDs {
 		serviceID := ids.NewAt(ids.KindService, now, int64(100+index))
 		serviceIDs[index] = serviceID
@@ -298,7 +298,7 @@ func newReleaseGroupPublisherFixture(
 			ServiceId:   serviceID,
 			ComposeName: name,
 		}
-		desiredServices[index] = EnvironmentServiceProjection{
+		desiredServices[index] = testservices.EnvironmentServiceProjection{
 			EnvironmentID: environment.Record.ID,
 			Desired:       core.Service{ID: serviceID, Name: name, Image: "example.invalid/" + name + ":1"},
 		}
@@ -319,7 +319,7 @@ func newReleaseGroupPublisherFixture(
 	if err != nil {
 		t.Fatalf("marshal artifact error = %v", err)
 	}
-	projection := EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:     environment.Record.ID,
 		RevisionID:        ids.NewAt(ids.KindTask, now, 701),
 		RenderGeneration:  1,
@@ -327,7 +327,7 @@ func newReleaseGroupPublisherFixture(
 		ComposeArtifact:   artifactValue,
 		NormalizedCompose: []byte("services: {}\n"),
 	}
-	projectionValue, err := encodeEnvironmentComposeProjection(projection)
+	projectionValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
 	}
@@ -340,31 +340,30 @@ func newReleaseGroupPublisherFixture(
 	if err != nil {
 		t.Fatalf("domain.New() error = %v", err)
 	}
-	groupValue, err := encodeReleaseGroup(group)
+	groupValue, err := encodeReleaseGroupFixture(group)
 	if err != nil {
-		t.Fatalf("encodeReleaseGroup() error = %v", err)
+		t.Fatalf("encodeReleaseGroupFixture() error = %v", err)
 	}
-	collectionValue, err := encodeReleaseGroupCollectionEpoch(environment.Record.ID)
+	collectionValue, err := encodeReleaseGroupEpochFixture(environment.Record.ID)
 	if err != nil {
-		t.Fatalf("encodeReleaseGroupCollectionEpoch() error = %v", err)
+		t.Fatalf("encodeReleaseGroupEpochFixture() error = %v", err)
 	}
 	mutations = append(
-		mutations,
-		Mutation{
-			Type:  MutationPut,
-			Key:   environmentComposeProjectionKey(environment.Record.ID),
+		mutations, testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 			Value: projectionValue,
-		},
-		Mutation{Type: MutationPut, Key: releaseGroupRecordKey(group.ID), Value: groupValue},
-		Mutation{Type: MutationPut, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
-		Mutation{Type: MutationPut, Key: releaseGroupNameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)},
-		Mutation{Type: MutationPut, Key: releaseGroupCollectionEpochKey(group.EnvironmentID), Value: collectionValue},
+		}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testreleasegroups.ReleaseGroupRecordKey(group.ID), Value: groupValue}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testreleasegroups.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testreleasegroups.ReleaseGroupNameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testreleasegroups.ReleaseGroupCollectionEpochKey(group.EnvironmentID), Value: collectionValue},
 	)
 	mustReleaseGroupTransaction(t, store, mutations)
-	groupRecord := store.valueAt(releaseGroupRecordKey(group.ID), store.revision)
+	groupRecord := store.valueAt(testreleasegroups.ReleaseGroupRecordKey(group.ID), store.revision)
+	tasks, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return releaseGroupPublisherFixture{
 		store:       store,
-		tasks:       &TaskRepository{store: store},
+		tasks:       tasks,
 		project:     project,
 		environment: environment,
 		group:       group,
@@ -376,61 +375,65 @@ func newReleaseGroupPublisherFixture(
 
 func releaseGroupRemovalTaskAndMarker(
 	t *testing.T,
-	project ProjectRecord,
-	environment EnvironmentRecord,
+	project testhierarchy.ProjectRecord,
+	environment testhierarchy.EnvironmentRecord,
 	groupID string,
 	now time.Time,
-) (TaskRecord, IdempotencyMarker) {
+) (TaskRecord, testidempotency.IdempotencyMarker) {
 	t.Helper()
-	owner, err := EnvironmentTaskOwner(project, environment)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
 	}
 	task := TaskRecord{
-		ID:                ids.NewAt(ids.KindTask, now, 900),
-		OperationID:       ids.NewAt(ids.KindOperation, now, 901),
-		IdempotencyKey:    ids.NewAt(ids.KindOperation, now, 902)[3:],
-		Owner:             owner,
-		Actor:             TaskActorOperator,
-		Executor:          TaskExecutorController,
-		PlanID:            ids.NewAt(ids.KindPlan, now, 903),
-		PlanHash:          strings.Repeat("a", 64),
-		RenderGeneration:  1,
-		Type:              TaskRemove,
-		Target:            groupID,
-		Params:            map[string]string{TaskResourceKindParam: TaskResourceReleaseGroup},
-		Steps:             []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 904)}},
+		ID:               ids.NewAt(ids.KindTask, now, 900),
+		OperationID:      ids.NewAt(ids.KindOperation, now, 901),
+		IdempotencyKey:   ids.NewAt(ids.KindOperation, now, 902)[3:],
+		Owner:            owner,
+		Actor:            testtaskjournal.TaskActorOperator,
+		Executor:         testtaskjournal.TaskExecutorController,
+		PlanID:           ids.NewAt(ids.KindPlan, now, 903),
+		PlanHash:         strings.Repeat("a", 64),
+		RenderGeneration: 1,
+		Type:             testtaskjournal.TaskRemove,
+		Target:           groupID,
+		Params: map[string]string{
+			testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceReleaseGroup,
+		},
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 904)},
+		},
 		TimeoutSeconds:    30,
-		Status:            TaskStatusPending,
+		Status:            testtaskjournal.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
 	ciphertext := []byte("protected-release-group-removal")
 	digest := sha256.Sum256(ciphertext)
-	target := IdempotencyReplayTarget{
-		Kind: IdempotencyReplayTargetReleaseGroup,
+	target := testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetReleaseGroup,
 		ID:   groupID,
 	}
-	marker := IdempotencyMarker{
-		Kind:  IdempotencyMarkerTask,
-		State: IdempotencyMarkerPending,
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment,
+	marker := testidempotency.IdempotencyMarker{
+		Kind:  testidempotency.IdempotencyMarkerTask,
+		State: testidempotency.IdempotencyMarkerPending,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 			ScopeID:   environment.ID,
 			Method:    http.MethodDelete,
 			Route:     "/release-groups/{id}",
 			Key:       task.IdempotencyKey,
 		},
 		ReplayTarget: &target,
-		Intent: ProtectedIntentRecord{
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion:  1,
 			Cipher:           "age-x25519",
 			DigestAlgorithm:  "sha256",
 			CiphertextDigest: hex.EncodeToString(digest[:]),
 			Ciphertext:       ciphertext,
 		},
-		Response: IdempotencyResponse{
+		Response: testidempotency.IdempotencyResponse{
 			Status:      http.StatusAccepted,
 			ContentKind: "application/json",
 			Body:        []byte(`{"task_id":"` + task.ID + `"}`),
@@ -445,7 +448,7 @@ func releaseGroupRemovalTaskAndMarker(
 func mustReleaseGroupTransaction(
 	t *testing.T,
 	store *releaseGroupCountingStore,
-	mutations []Mutation,
+	mutations []testkeyvalue.Mutation,
 ) {
 	t.Helper()
 	result, err := store.Transact(context.Background(), nil, mutations)

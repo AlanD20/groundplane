@@ -9,6 +9,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -25,7 +27,7 @@ func TestReleaseFileRunningEvidenceSurvivesRepositoryRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	appended, err := repository.AppendTaskEvent(ctx, taskEventInput(task.ID, 1, TaskEventStateRunning),
+	appended, err := repository.AppendTaskEvent(ctx, taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning),
 		at.Add(time.Second))
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +45,7 @@ func TestReleaseFileRunningEvidenceSurvivesRepositoryRestart(t *testing.T) {
 			{ForwardStepId: secondForward, ProbeStepId: secondProbe, CompensateStepId: secondCompensate},
 		},
 	}}
-	assignment := TaskAssignmentRecord{
+	assignment := testtaskassignments.TaskAssignmentRecord{
 		AssignmentID: taskEventTestAssignmentID, AgentID: taskEventTestAgentID,
 		AgentGeneration: 1, ExecutionEpoch: 1,
 	}
@@ -54,40 +56,40 @@ func TestReleaseFileRunningEvidenceSurvivesRepositoryRestart(t *testing.T) {
 		procedure,
 		appended.Revision,
 	)
-	if err != nil || !effect || !slices.Equal(evidence, []releaseRecoveryMutationEvidence{{
+	if err != nil || !effect || !slices.Equal(evidence, []testtaskassignments.ReleaseRecoveryMutationEvidence{{
 		StepID: taskJournalStepID(), Running: true,
 	}}) {
 		t.Fatalf("durable file evidence = %#v, %t, %v", evidence, effect, err)
 	}
 
-	primary := TaskResultRecord{
-		Kind: TaskResultCompose, ExitCode: 1, Diagnostic: TaskResultDiagnosticComposeFailed,
+	primary := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultCompose, ExitCode: 1, Diagnostic: testtaskjournal.TaskResultDiagnosticComposeFailed,
 		ReconciliationRequired: true,
 	}
-	primaryDigest, err := canonicalPrimaryReportSHA256(TaskStatusFailed, primary)
+	primaryDigest, err := testtaskassignments.CanonicalPrimaryReportSHA256(testtaskjournal.TaskStatusFailed, primary)
 	if err != nil {
 		t.Fatal(err)
 	}
 	steps := executionplan.RecoveryStepIDs(procedure)
 	deadline := at.Add(time.Hour)
-	record := releaseRecoveryRecord{
+	record := testtaskassignments.ReleaseRecoveryRecord{
 		Schema: 1, TaskID: task.ID, AssignmentID: assignment.AssignmentID, OperationID: task.OperationID,
 		PlanHash: task.PlanHash, RestorationAuthoritySHA256: strings.Repeat("b", 64),
-		PrimaryReportSHA256: primaryDigest, PrimaryStatus: TaskStatusFailed, PrimaryResult: primary,
+		PrimaryReportSHA256: primaryDigest, PrimaryStatus: testtaskjournal.TaskStatusFailed, PrimaryResult: primary,
 		RecoveryDeadline: deadline, MutationEvidence: evidence, RecoveryStepIDs: steps,
-		Phase: ReleaseRecoveryPhaseProbe, EvidenceRevision: appended.Revision,
+		Phase: testtaskassignments.ReleaseRecoveryPhaseProbe, EvidenceRevision: appended.Revision,
 	}
-	recoveryValue, err := encodeReleaseRecoveryRecord(record)
+	recoveryValue, err := testtaskassignments.EncodeReleaseRecoveryRecord(record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedTaskRepositoryValue(t, store, releaseRecoveryKey(task.ID), recoveryValue)
-	recoveryDigest, err := releaseRecoveryRecordSHA256(record)
+	seedTaskRepositoryValue(t, store, testtaskassignments.ReleaseRecoveryKey(task.ID), recoveryValue)
+	recoveryDigest, err := testtaskassignments.ReleaseRecoveryRecordSHA256(record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignment.ExecutionMode = TaskExecutionModeRecoveryOnly
-	assignment.RestorationAuthority = &ReleaseRestorationAuthority{}
+	assignment.ExecutionMode = testtaskassignments.TaskExecutionModeRecoveryOnly
+	assignment.RestorationAuthority = &testtaskassignments.ReleaseRestorationAuthority{}
 	assignment.RestorationAuthoritySHA256 = record.RestorationAuthoritySHA256
 	assignment.RecoveryDeadline = deadline
 	assignment.ReleaseRecoveryRecordSHA256 = recoveryDigest
@@ -111,17 +113,17 @@ func TestReleaseFileRunningEvidenceSurvivesRepositoryRestart(t *testing.T) {
 	}
 	progress := record
 	for index, stepID := range steps {
-		progress, _, err = advanceReleaseRecoveryRecord(progress, TaskEventInput{
-			Identity: TaskEventIdentity{StepID: stepID}, State: TaskEventStateCompleted,
+		progress, _, err = testtaskassignments.AdvanceReleaseRecoveryRecord(progress, testtaskjournal.TaskEventInput{
+			Identity: testtaskjournal.TaskEventIdentity{StepID: stepID}, State: testtaskjournal.TaskEventStateCompleted,
 		}, store.currentRevision()+int64(index)+1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if index+1 == len(steps)/2 && progress.Phase != ReleaseRecoveryPhaseCompensate {
+		if index+1 == len(steps)/2 && progress.Phase != testtaskassignments.ReleaseRecoveryPhaseCompensate {
 			t.Fatalf("file recovery phase at compensation boundary = %s", progress.Phase)
 		}
 	}
-	if progress.Phase != ReleaseRecoveryPhaseProven || int(progress.Cursor) != len(steps) {
+	if progress.Phase != testtaskassignments.ReleaseRecoveryPhaseProven || int(progress.Cursor) != len(steps) {
 		t.Fatalf("terminal file recovery progress = %#v", progress)
 	}
 }
@@ -139,13 +141,13 @@ func TestReleaseFileCompensationRejectsUnsealedEvidence(t *testing.T) {
 	}}
 	for _, test := range []struct {
 		name     string
-		evidence []releaseRecoveryMutationEvidence
+		evidence []testtaskassignments.ReleaseRecoveryMutationEvidence
 	}{
-		{"foreign", []releaseRecoveryMutationEvidence{{StepID: ids.NewAt(ids.KindStep, at, 24), Running: true}}},
-		{"reordered", []releaseRecoveryMutationEvidence{
+		{"foreign", []testtaskassignments.ReleaseRecoveryMutationEvidence{{StepID: ids.NewAt(ids.KindStep, at, 24), Running: true}}},
+		{"reordered", []testtaskassignments.ReleaseRecoveryMutationEvidence{
 			{StepID: forwardB, Running: true}, {StepID: forwardA, Running: true},
 		}},
-		{"not running", []releaseRecoveryMutationEvidence{{StepID: forwardA, Completed: true}}},
+		{"not running", []testtaskassignments.ReleaseRecoveryMutationEvidence{{StepID: forwardA, Completed: true}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := releaseApplicableCompensationStepIDs(procedure, nil, test.evidence); err == nil {

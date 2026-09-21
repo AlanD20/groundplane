@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	api "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -17,9 +19,9 @@ import (
 // Release fragment. Exercise the actual publisher after that exact sequence.
 func TestVolumeMutationProductionAfterRetainedBlueprint(t *testing.T) {
 	testBlueprintExecutedArtifact(t, true, false, func(fixture *etcd.ExecutedArtifactFixture,
-		resolver *controller.TaskPlanResolver, prior etcd.ReleaseRenderInput, _ domain.Intent, _ *agentpb.ComposeArtifact) {
+		resolver *testtaskplanning.TaskPlanResolver, prior testreleaserender.ReleaseRenderInput, _ domain.Intent, _ *agentpb.ComposeArtifact) {
 		ctx := t.Context()
-		project, err := controller.LoadNormalizedEnvironmentProject(ctx, prior.Projection)
+		project, err := testcomposerender.LoadNormalizedEnvironmentProject(ctx, prior.Projection)
 		if err != nil {
 			t.Fatal(err)
 		}

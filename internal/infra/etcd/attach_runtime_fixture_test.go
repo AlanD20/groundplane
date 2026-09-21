@@ -8,6 +8,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -85,7 +89,7 @@ func nativeAttachFixturePlan(t *testing.T, record serviceruntimerecord.Record, t
 	replace := strings.NewReplacer("old-backing", network, "new-backing", network)
 	setAttachFixtureYAML(artifact, replace.Replace(string(artifact.CanonicalYaml)))
 	operation := agentpb.PlanOperation_PLAN_OPERATION_ATTACH
-	if task.Type == TaskDetach {
+	if task.Type == testtaskjournal.TaskDetach {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_DETACH
 	}
 	var selected []string
@@ -103,13 +107,13 @@ func nativeAttachFixturePlan(t *testing.T, record serviceruntimerecord.Record, t
 	return plan
 }
 
-func putNativeAttachRuntime(t *testing.T, store Store, record serviceruntimerecord.Record) int64 {
+func putNativeAttachRuntime(t *testing.T, store testkeyvalue.Store, record serviceruntimerecord.Record) int64 {
 	t.Helper()
-	value, err := encodeReleaseRecord("service-acknowledged-runtime", record)
+	value, err := testreleases.EncodeReleaseRecord("service-acknowledged-runtime", record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.Transact(t.Context(), nil, []Mutation{{Type: MutationPut,
+	result, err := store.Transact(t.Context(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut,
 		Key: serviceruntimerecord.Key(record.Runtime.ServiceID), Value: value}})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed runtime: %v", err)
@@ -117,8 +121,14 @@ func putNativeAttachRuntime(t *testing.T, store Store, record serviceruntimereco
 	return result.Revision
 }
 
-func prepareNativeAttachEnvelope(t *testing.T, repository *AttachRepository, record serviceruntimerecord.Record,
-	input AttachTaskRenderInput, task TaskRecord, network string) (AttachTaskRenderInput, TaskRecord) {
+func prepareNativeAttachEnvelope(
+	t *testing.T,
+	repository *AttachRepository,
+	record serviceruntimerecord.Record,
+	input testattachrender.AttachTaskRenderInput,
+	task TaskRecord,
+	network string,
+) (testattachrender.AttachTaskRenderInput, TaskRecord) {
 	t.Helper()
 	plan := nativeAttachFixturePlan(t, record, task, input.ArtifactID, network, true)
 	prepared, err := repository.PrepareAttachRuntime(t.Context(), plan)

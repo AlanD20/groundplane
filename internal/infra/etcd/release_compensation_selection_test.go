@@ -3,6 +3,7 @@ package etcd
 import (
 	"testing"
 
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -14,7 +15,7 @@ func TestApplicableCompensationRejectsMissingMemberAuthority(t *testing.T) {
 		ForwardStepIds:   []string{"step_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 		CandidateAbsence: &agentpb.CandidateAbsenceRestoration{CompensateStepId: "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"},
 	}}}
-	evidence := []releaseRecoveryMutationEvidence{
+	evidence := []testtaskassignments.ReleaseRecoveryMutationEvidence{
 		{StepID: procedure.Members[0].ForwardStepIds[0], Running: true, Completed: true},
 	}
 	if _, err := releaseApplicableCompensationStepIDs(procedure, nil, evidence); err == nil {

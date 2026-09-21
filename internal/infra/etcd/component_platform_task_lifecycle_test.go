@@ -8,6 +8,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -39,9 +44,7 @@ func TestPlatformComponentAcknowledgementIgnoresNilControllerResult(t *testing.T
 	repository := &TaskRepository{}
 	change, err := repository.preparePlatformComponentTaskAcknowledgement(
 		context.Background(),
-		TaskRecord{Executor: TaskExecutorController},
-		TaskStatusCompleted,
-		nil,
+		TaskRecord{Executor: testtaskjournal.TaskExecutorController}, testtaskjournal.TaskStatusCompleted, nil,
 		1,
 	)
 	if err != nil || change.applies {
@@ -54,7 +57,7 @@ func TestPlatformComponentAcknowledgementIgnoresNilControllerResult(t *testing.T
 func TestPlatformComponentObservationBindsPromotionToExactAgentProof(t *testing.T) {
 	t.Parallel()
 	now := time.Unix(1_700_000_000, 0).UTC()
-	input := PlatformComponentTaskRenderInput{
+	input := testplatformcomponents.PlatformComponentTaskRenderInput{
 		ComponentID:        ids.NewAt(ids.KindComponent, now, 1),
 		GeneratedServiceID: ids.NewAt(ids.KindService, now, 2),
 		ArtifactID:         ids.NewAt(ids.KindConfig, now, 3), ArtifactSHA256: strings.Repeat("1", 64),
@@ -96,13 +99,13 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	records, err := DefaultPlatformComponents(false)
+	records, err := testplatformcomponents.DefaultPlatformComponents(false)
 	if err != nil {
 		t.Fatalf("DefaultPlatformComponents() error = %v", err)
 	}
 	now := time.Date(2026, time.August, 30, 3, 0, 0, 0, time.UTC)
 	serviceID := ids.NewAt(ids.KindService, now, 1)
-	records[0], err = SetComponentRuntime(records[0], []string{serviceID}, "", true)
+	records[0], err = testcomponents.SetRuntime(records[0], []string{serviceID}, "", true)
 	if err != nil {
 		t.Fatalf("SetComponentRuntime() error = %v", err)
 	}
@@ -117,7 +120,7 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 	planID := ids.NewAt(ids.KindPlan, now, 2)
 	taskID := ids.NewAt(ids.KindTask, now, 3)
 	stepID := ids.NewAt(ids.KindStep, now, 4)
-	input := PlatformComponentTaskRenderInput{
+	input := testplatformcomponents.PlatformComponentTaskRenderInput{
 		PlanID: planID, TaskID: taskID, ComponentID: current.Record.Desired.ID,
 		DesiredSHA256: desiredSHA256, BaselineGeneration: 1, BaselineSHA256: strings.Repeat("1", 64),
 		HostResolutionInputRevision: 1, HostResolutionSHA256: strings.Repeat("2", 64),
@@ -138,17 +141,17 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 	for name, digest := range map[string]string{"missing": "", "zero": strings.Repeat("0", 64)} {
 		invalid := input
 		invalid.ImageConfigDigest = digest
-		if _, err := encodePlatformComponentTaskRenderInput(invalid); err == nil {
+		if _, err := testplatformcomponents.EncodePlatformComponentTaskRenderInput(invalid); err == nil {
 			t.Fatalf("encodePlatformComponentTaskRenderInput() accepted %s image config identity", name)
 		}
 	}
-	renderValue, err := encodePlatformComponentTaskRenderInput(input)
+	renderValue, err := testplatformcomponents.EncodePlatformComponentTaskRenderInput(input)
 	if err != nil {
 		t.Fatalf("encodePlatformComponentTaskRenderInput() error = %v", err)
 	}
-	if result, transactErr := store.Transact(ctx, nil, []Mutation{
-		{Type: MutationPut, Key: platformComponentTaskRenderInputKey(planID), Value: renderValue},
-		{Type: MutationPut, Key: platformComponentTaskActiveKey(input.ComponentID), Value: []byte(taskID)},
+	if result, transactErr := store.Transact(ctx, nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testplatformcomponents.PlatformComponentTaskRenderInputKey(planID), Value: renderValue},
+		{Type: testkeyvalue.MutationPut, Key: platformComponentTaskActiveKey(input.ComponentID), Value: []byte(taskID)},
 	}); transactErr != nil || !result.Succeeded {
 		t.Fatalf("seed render input transaction = %#v, %v", result, transactErr)
 	}
@@ -158,35 +161,36 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 	}
 	finishedAt := now.Add(time.Minute)
 	task := TaskRecord{
-		ID: taskID, Actor: TaskActorOperator, Executor: TaskExecutorAgent, PlanID: planID,
-		PlanHash: input.ExecutionPlanSHA256, RenderGeneration: 1, Type: TaskUpdate, Target: input.ComponentID,
+		ID: taskID, Actor: testtaskjournal.TaskActorOperator, Executor: testtaskjournal.TaskExecutorAgent, PlanID: planID,
+		PlanHash: input.ExecutionPlanSHA256, RenderGeneration: 1, Type: testtaskjournal.TaskUpdate, Target: input.ComponentID,
 		Params: map[string]string{
-			TaskResourceKindParam:                   TaskResourceComponent,
+			testtaskjournal.TaskResourceKindParam:   testtaskjournal.TaskResourceComponent,
 			TaskPlatformComponentDesiredSHA256Param: desiredSHA256,
 		},
-		Steps: []TaskStepRecord{
-			{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)},
-			{Kind: TaskStepOperation, ID: stepID},
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)},
+			{Kind: testtaskjournal.TaskStepOperation, ID: stepID},
 		},
 		FinishedAt: &finishedAt,
-		TerminalAssignment: &TaskTerminalAssignmentRecord{
+		TerminalAssignment: &testtaskjournal.TaskTerminalAssignmentRecord{
 			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8),
 			AgentID:      ids.NewAt(ids.KindAgent, now, 9), AgentGeneration: 2,
 		},
 	}
 	result := platformDNSProof(input, 1, finishedAt)
 	change, err := tasks.preparePlatformComponentTaskAcknowledgement(
-		ctx, task, TaskStatusCompleted, &result, current.ReadRevision,
+		ctx, task, testtaskjournal.TaskStatusCompleted, &result, current.ReadRevision,
 	)
 	if err != nil {
 		t.Fatalf("preparePlatformComponentTaskAcknowledgement() error = %v", err)
 	}
-	if len(change.mutations) < 2 || change.mutations[0].Key != componentObservationKey(input.ComponentID) {
+	if len(change.mutations) < 2 ||
+		change.mutations[0].Key != testplatformcomponents.ComponentObservationKey(input.ComponentID) {
 		t.Fatalf("platform Component acknowledgement mutations = %#v", change.mutations)
 	}
-	acknowledgementMutations := append([]Mutation(nil), change.mutations...)
-	acknowledgementMutations = append(acknowledgementMutations, Mutation{
-		Type: MutationDelete, Key: platformComponentTaskActiveKey(input.ComponentID),
+	acknowledgementMutations := append([]testkeyvalue.Mutation(nil), change.mutations...)
+	acknowledgementMutations = append(acknowledgementMutations, testkeyvalue.Mutation{
+		Type: testkeyvalue.MutationDelete, Key: platformComponentTaskActiveKey(input.ComponentID),
 	})
 	if transaction, transactErr := store.Transact(
 		ctx,
@@ -208,20 +212,20 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 		observed.Record.PredecessorTaskID != "" {
 		t.Fatalf("Component observation lineage = %#v", observed.Record)
 	}
-	task.Status = TaskStatusCompleted
-	task.Result = cloneTaskResult(&result)
+	task.Status = testtaskjournal.TaskStatusCompleted
+	task.Result = testtaskjournal.CloneTaskResult(&result)
 	if err := tasks.validatePlatformComponentTaskAcknowledgementReplay(ctx, task, observed.ReadRevision); err != nil {
 		t.Fatalf("validatePlatformComponentTaskAcknowledgementReplay() error = %v", err)
 	}
 	corrupt := observed.Record
 	corrupt.TaskID = ids.NewAt(ids.KindTask, now, 10)
-	corruptValue, err := encodeComponentObservation(corrupt)
+	corruptValue, err := testplatformcomponents.EncodeComponentObservation(corrupt)
 	if err != nil {
 		t.Fatalf("encode corrupt Component observation: %v", err)
 	}
-	corruption, err := store.Transact(ctx, []Condition{{
-		Key: componentObservationKey(input.ComponentID), ModRevision: observed.Revision,
-	}}, []Mutation{{Type: MutationPut, Key: componentObservationKey(input.ComponentID), Value: corruptValue}})
+	corruption, err := store.Transact(ctx, []testkeyvalue.Condition{{
+		Key: testplatformcomponents.ComponentObservationKey(input.ComponentID), ModRevision: observed.Revision,
+	}}, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: testplatformcomponents.ComponentObservationKey(input.ComponentID), Value: corruptValue}})
 	if err != nil || !corruption.Succeeded {
 		t.Fatalf("corrupt observation transaction = %#v, %v", corruption, err)
 	}
@@ -237,7 +241,7 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	records, err := DefaultPlatformComponents(false)
+	records, err := testplatformcomponents.DefaultPlatformComponents(false)
 	if err != nil {
 		t.Fatalf("DefaultPlatformComponents() error = %v", err)
 	}
@@ -248,7 +252,7 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 	serviceID := ids.NewAt(ids.KindService, now, 4)
 	componentID := records[0].Desired.ID
 	agentID := ids.NewAt(ids.KindAgent, now, 5)
-	input := PlatformComponentTaskRenderInput{
+	input := testplatformcomponents.PlatformComponentTaskRenderInput{
 		PlanID: planID, TaskID: taskID, ComponentID: componentID,
 		DesiredSHA256: strings.Repeat("1", 64), BaselineGeneration: 1,
 		BaselineSHA256: strings.Repeat("2", 64), HostResolutionInputRevision: 1,
@@ -264,39 +268,47 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 		ImageChildDigest:  strings.Repeat("9", 64), ImageReference: "coredns/coredns@sha256:" + strings.Repeat("9", 64),
 		ImageOS: "linux", ImageArchitecture: "amd64",
 	}
-	renderValue, err := encodePlatformComponentTaskRenderInput(input)
+	renderValue, err := testplatformcomponents.EncodePlatformComponentTaskRenderInput(input)
 	if err != nil {
 		t.Fatalf("encodePlatformComponentTaskRenderInput() error = %v", err)
 	}
 	task := TaskRecord{
-		ID: taskID, Actor: TaskActorOperator, Executor: TaskExecutorAgent,
-		Status: TaskStatusCompleted, PlanID: planID, PlanHash: input.ExecutionPlanSHA256,
-		RenderGeneration: 1, Type: TaskUpdate, Target: componentID,
+		ID: taskID, Actor: testtaskjournal.TaskActorOperator, Executor: testtaskjournal.TaskExecutorAgent,
+		Status: testtaskjournal.TaskStatusCompleted, PlanID: planID, PlanHash: input.ExecutionPlanSHA256,
+		RenderGeneration: 1, Type: testtaskjournal.TaskUpdate, Target: componentID,
 		Params: map[string]string{
-			TaskResourceKindParam:                   TaskResourceComponent,
+			testtaskjournal.TaskResourceKindParam:   testtaskjournal.TaskResourceComponent,
 			TaskPlatformComponentDesiredSHA256Param: input.DesiredSHA256,
 		},
-		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}},
-		TerminalAssignment: &TaskTerminalAssignmentRecord{
+		Steps: []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}},
+		TerminalAssignment: &testtaskjournal.TaskTerminalAssignmentRecord{
 			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8),
 			AgentID:      agentID, AgentGeneration: 1,
 		},
 	}
-	task.Result = &TaskResultRecord{Kind: TaskResultCompose}
-	observation := ComponentObservationRecord{
+	task.Result = &testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose}
+	observation := testplatformcomponents.ComponentObservationRecord{
 		ComponentID: componentID, ServiceID: serviceID, PlanID: planID,
 		ComposeArtifactID: input.ComposeArtifactID, Enabled: false, Healthy: false,
 		DesiredGeneration: 1, RenderGeneration: 1, AgentID: agentID, AgentGeneration: 1,
 		BaselineGeneration: 1, OwnershipGeneration: 1, ObservedAt: now,
 		TaskID: taskID, StepID: stepID, Revision: 1,
 	}
-	observationValue, err := encodeComponentObservation(observation)
+	observationValue, err := testplatformcomponents.EncodeComponentObservation(observation)
 	if err != nil {
 		t.Fatalf("encodeComponentObservation() error = %v", err)
 	}
-	seed, err := store.Transact(ctx, nil, []Mutation{
-		{Type: MutationPut, Key: platformComponentTaskRenderInputKey(planID), Value: renderValue},
-		{Type: MutationPut, Key: componentObservationKey(componentID), Value: observationValue},
+	seed, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testplatformcomponents.PlatformComponentTaskRenderInputKey(planID),
+			Value: renderValue,
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testplatformcomponents.ComponentObservationKey(componentID),
+			Value: observationValue,
+		},
 	})
 	if err != nil || !seed.Succeeded {
 		t.Fatalf("seed disabled replay state = %#v, %v", seed, err)
@@ -307,12 +319,12 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 
 	corrupt := observation
 	corrupt.InputSHA256 = strings.Repeat("8", 64)
-	corruptValue, err := encodeEnvelope("component_observation", corrupt)
+	corruptValue, err := testrecordcodec.Encode("component_observation", corrupt)
 	if err != nil {
 		t.Fatalf("encode corrupt disabled observation: %v", err)
 	}
-	corruption, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: componentObservationKey(componentID), Value: corruptValue,
+	corruption, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testplatformcomponents.ComponentObservationKey(componentID), Value: corruptValue,
 	}})
 	if err != nil || !corruption.Succeeded {
 		t.Fatalf("corrupt disabled observation transaction = %#v, %v", corruption, err)
@@ -323,12 +335,12 @@ func TestPlatformComponentDisableAcknowledgementReplayAcceptsEmptyDigests(t *tes
 }
 
 func platformDNSProof(
-	input PlatformComponentTaskRenderInput,
+	input testplatformcomponents.PlatformComponentTaskRenderInput,
 	renderGeneration uint64,
 	observedAt time.Time,
-) TaskResultRecord {
-	return TaskResultRecord{
-		Kind: TaskResultCompose,
+) testtaskjournal.TaskResultRecord {
+	return testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultCompose,
 		DNSResolverCandidateObservation: testDurableDNSProof(
 			input.ComponentID, input.GeneratedServiceID, input.ArtifactID,
 			input.ArtifactSHA256, renderGeneration, observedAt, 1,

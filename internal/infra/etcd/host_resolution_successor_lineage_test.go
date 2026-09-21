@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: automatic resolver replay must bind physical CAS to the exact
@@ -22,18 +24,18 @@ func TestPlatformResolverFinalLiveLineageReplaysExactTerminalEvidence(t *testing
 	priorTaskID := ids.NewAt(ids.KindTask, now, 5)
 	candidateSHA256 := strings.Repeat("a", 64)
 	priorSHA256 := strings.Repeat("b", 64)
-	input := PlatformComponentTaskRenderInput{
+	input := testplatformcomponents.PlatformComponentTaskRenderInput{
 		ComponentID: componentID, GeneratedServiceID: serviceID, ArtifactID: artifactID,
 		ArtifactSHA256: candidateSHA256, PriorObservationModRevision: 41,
 		PriorObservationRevision: 7, PredecessorTaskID: priorTaskID,
 		ExpectedPreviousArtifactSHA256: priorSHA256,
 		ExpectedPreviousArtifactID:     priorArtifactID, ExpectedPreviousGeneration: 2,
 	}
-	candidate := &TaskDNSResolverObservationEvidence{
+	candidate := &testtaskjournal.TaskDNSResolverObservationEvidence{
 		ComponentID: componentID, ServiceID: serviceID, ArtifactID: artifactID,
 		ArtifactSHA256: candidateSHA256, RenderGeneration: 3,
 	}
-	rollback := &TaskDNSResolverObservationEvidence{
+	rollback := &testtaskjournal.TaskDNSResolverObservationEvidence{
 		ComponentID: componentID, ServiceID: serviceID, ArtifactID: priorArtifactID,
 		ArtifactSHA256: priorSHA256, RenderGeneration: 2,
 	}
@@ -41,14 +43,17 @@ func TestPlatformResolverFinalLiveLineageReplaysExactTerminalEvidence(t *testing
 	tests := []struct {
 		name        string
 		predecessor TaskRecord
-		input       PlatformComponentTaskRenderInput
+		input       testplatformcomponents.PlatformComponentTaskRenderInput
 		want        platformResolverLiveLineage
 		wantProven  bool
 	}{
 		{
 			name: "successful candidate",
-			predecessor: TaskRecord{ID: predecessorID, Status: TaskStatusCompleted, RenderGeneration: 3,
-				Result: &TaskResultRecord{Kind: TaskResultCompose, DNSResolverCandidateObservation: candidate}},
+			predecessor: TaskRecord{ID: predecessorID, Status: testtaskjournal.TaskStatusCompleted, RenderGeneration: 3,
+				Result: &testtaskjournal.TaskResultRecord{
+					Kind:                            testtaskjournal.TaskResultCompose,
+					DNSResolverCandidateObservation: candidate,
+				}},
 			input: input,
 			want: platformResolverLiveLineage{priorObservationRevision: 8, predecessorTaskID: predecessorID,
 				expectedPreviousArtifactSHA256: candidateSHA256,
@@ -57,8 +62,11 @@ func TestPlatformResolverFinalLiveLineageReplaysExactTerminalEvidence(t *testing
 		},
 		{
 			name: "compensated rollback to prior bytes",
-			predecessor: TaskRecord{ID: predecessorID, Status: TaskStatusFailed, RenderGeneration: 3,
-				Result: &TaskResultRecord{Kind: TaskResultCompose, DNSResolverRollbackObservation: rollback}},
+			predecessor: TaskRecord{ID: predecessorID, Status: testtaskjournal.TaskStatusFailed, RenderGeneration: 3,
+				Result: &testtaskjournal.TaskResultRecord{
+					Kind:                           testtaskjournal.TaskResultCompose,
+					DNSResolverRollbackObservation: rollback,
+				}},
 			input: input,
 			want: platformResolverLiveLineage{priorObservationModRevision: 41, priorObservationRevision: 7,
 				predecessorTaskID: priorTaskID, expectedPreviousArtifactSHA256: priorSHA256,
@@ -67,17 +75,24 @@ func TestPlatformResolverFinalLiveLineageReplaysExactTerminalEvidence(t *testing
 		},
 		{
 			name: "compensated rollback to prior absence",
-			predecessor: TaskRecord{ID: predecessorID, Status: TaskStatusAborted, RenderGeneration: 3,
-				Result: &TaskResultRecord{Kind: TaskResultCompose}},
-			input: PlatformComponentTaskRenderInput{ComponentID: componentID, GeneratedServiceID: serviceID,
-				ArtifactID: artifactID, ArtifactSHA256: candidateSHA256},
+			predecessor: TaskRecord{ID: predecessorID, Status: testtaskjournal.TaskStatusAborted, RenderGeneration: 3,
+				Result: &testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose}},
+			input: testplatformcomponents.PlatformComponentTaskRenderInput{
+				ComponentID:        componentID,
+				GeneratedServiceID: serviceID,
+				ArtifactID:         artifactID,
+				ArtifactSHA256:     candidateSHA256,
+			},
 			want:       platformResolverLiveLineage{},
 			wantProven: true,
 		},
 		{
 			name: "unproved failed compensation",
-			predecessor: TaskRecord{ID: predecessorID, Status: TaskStatusTimedOut, RenderGeneration: 3,
-				Result: &TaskResultRecord{Kind: TaskResultCompose, ReconciliationRequired: true}},
+			predecessor: TaskRecord{ID: predecessorID, Status: testtaskjournal.TaskStatusTimedOut, RenderGeneration: 3,
+				Result: &testtaskjournal.TaskResultRecord{
+					Kind:                   testtaskjournal.TaskResultCompose,
+					ReconciliationRequired: true,
+				}},
 			input:      input,
 			wantProven: false,
 		},
@@ -106,12 +121,14 @@ func TestPlatformResolverTaskInputBelongsToTaskAcceptsPinnedRetryOrigin(t *testi
 	retryID := ids.NewAt(ids.KindTask, now, 2)
 	retry := TaskRecord{ID: retryID, RetryOf: originID}
 
-	if !platformResolverTaskInputBelongsToTask(retry, PlatformComponentTaskRenderInput{TaskID: originID}) {
+	if !platformResolverTaskInputBelongsToTask(
+		retry,
+		testplatformcomponents.PlatformComponentTaskRenderInput{TaskID: originID},
+	) {
 		t.Fatal("retry predecessor rejected its originating render input")
 	}
 	if platformResolverTaskInputBelongsToTask(
-		TaskRecord{ID: retryID},
-		PlatformComponentTaskRenderInput{TaskID: originID},
+		TaskRecord{ID: retryID}, testplatformcomponents.PlatformComponentTaskRenderInput{TaskID: originID},
 	) {
 		t.Fatal("non-retry predecessor accepted another Task's render input")
 	}

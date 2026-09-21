@@ -7,6 +7,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,13 +21,13 @@ type blueprintRequirementGateFixture struct {
 	store      *memoryTaskStore
 	repository *TaskRepository
 	task       TaskRecord
-	attach     AttachRecord
+	attach     testattachments.Record
 	gate       BlueprintRequirementGate
-	projection EnvironmentComposeProjection
+	projection testenvironmentprojection.EnvironmentComposeProjection
 }
 
 type blueprintRequirementGateTestStore interface {
-	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+	Transact(context.Context, []testkeyvalue.Condition, []testkeyvalue.Mutation) (testkeyvalue.TransactionResult, error)
 }
 
 // Rationale: only the exact acknowledged prerequisite may carry a pending Blueprint gate across an
@@ -63,14 +70,16 @@ func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledg
 				t, store, tasks, scope, provisioning, core.RequirementReady,
 			)
 			if test.unrelatedEpoch {
-				epochValue, encodeErr := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
-					EnvironmentID: scope.Environment.Record.ID,
-				})
+				epochValue, encodeErr := testbackupruntime.EncodeEnvironmentMutationEpochRecord(
+					testbackupruntime.EnvironmentMutationEpochRecord{
+						EnvironmentID: scope.Environment.Record.ID,
+					},
+				)
 				if encodeErr != nil {
 					t.Fatal(encodeErr)
 				}
-				advanced, advanceErr := store.Transact(ctx, nil, []Mutation{{
-					Type: MutationPut, Key: environmentMutationEpochKey(scope.Environment.Record.ID), Value: epochValue,
+				advanced, advanceErr := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+					Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentMutationEpochKey(scope.Environment.Record.ID), Value: epochValue,
 				}})
 				if advanceErr != nil || !advanced.Succeeded {
 					t.Fatalf("advance unrelated epoch = %#v, %v", advanced, advanceErr)
@@ -83,16 +92,17 @@ func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledg
 				1,
 				attach.TaskID,
 				claimedAttach.Assignment.Record.AssignmentID,
-				TaskStatusCompleted,
+				testtaskjournal.TaskStatusCompleted,
 				completedComposeTaskResult(),
 				attach.CreatedAt.Add(2*time.Second),
 			)
-			if err != nil || terminal.Record.Status != TaskStatusCompleted {
+			if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 				t.Fatalf("acknowledge Attach = %#v, %v", terminal, err)
 			}
-			gateAndEpoch, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
-				blueprintRequirementGateKey(blueprintTask.ID),
-				environmentMutationEpochKey(scope.Environment.Record.ID),
+			gateAndEpoch, err := store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{
+				blueprintRequirementGateKey(
+					blueprintTask.ID,
+				), testhierarchy.EnvironmentMutationEpochKey(scope.Environment.Record.ID),
 			}})
 			if err != nil || gateAndEpoch.Values[0] == nil || gateAndEpoch.Values[1] == nil ||
 				gateAndEpoch.Values[1].ModRevision != terminal.Revision {
@@ -114,7 +124,7 @@ func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledg
 					)
 				}
 				pending, getErr := tasks.GetTask(ctx, blueprintTask.ID)
-				if getErr != nil || pending.Record.Status != TaskStatusPending {
+				if getErr != nil || pending.Record.Status != testtaskjournal.TaskStatusPending {
 					t.Fatalf("Blueprint after rejected claim = %#v, %v", pending, getErr)
 				}
 				return
@@ -129,10 +139,15 @@ func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledg
 					terminal.Revision,
 				)
 			}
-			writerAndEpoch, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
-				taskMaterializationWriterKey(scope.Environment.Record.ID),
-				environmentMutationEpochKey(scope.Environment.Record.ID),
-			}})
+			writerAndEpoch, err := store.GetMany(
+				ctx,
+				testkeyvalue.GetManyRequest{
+					Keys: []string{
+						testtaskjournal.TaskMaterializationWriterKey(scope.Environment.Record.ID),
+						testhierarchy.EnvironmentMutationEpochKey(scope.Environment.Record.ID),
+					},
+				},
+			)
 			if err != nil || writerAndEpoch.Values[0] == nil || writerAndEpoch.Values[1] == nil ||
 				writerAndEpoch.Values[0].ModRevision != claimedBlueprint.Assignment.Revision ||
 				writerAndEpoch.Values[1].ModRevision != claimedBlueprint.Assignment.Revision {
@@ -145,7 +160,7 @@ func TestBlueprintRequirementGateClaimEpochAllowsOnlyExactPrerequisiteAcknowledg
 // Rationale: a failed or aborted prerequisite Attach still exists, but it must not carry gate authority
 // across its terminal epoch advance and make an exists-gated Blueprint claimable.
 func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *testing.T) {
-	for _, terminalStatus := range []TaskStatus{TaskStatusFailed, TaskStatusAborted} {
+	for _, terminalStatus := range []testtaskjournal.TaskStatus{testtaskjournal.TaskStatusFailed, testtaskjournal.TaskStatusAborted} {
 		t.Run(string(terminalStatus), func(t *testing.T) {
 			ctx := context.Background()
 			store := newAttachTestStore()
@@ -163,7 +178,7 @@ func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *te
 			agentID := ids.NewAt(ids.KindAgent, attach.CreatedAt, 941)
 			var assignmentID string
 			prerequisite := created
-			if terminalStatus == TaskStatusFailed {
+			if terminalStatus == testtaskjournal.TaskStatusFailed {
 				claim, found, claimErr := tasks.ClaimNextTask(
 					ctx, agentID, 1, attach.CreatedAt.Add(time.Second),
 				)
@@ -180,8 +195,8 @@ func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *te
 				t, store, tasks, scope, prerequisite, core.RequirementExists,
 			)
 
-			var terminal Versioned[TaskRecord]
-			if terminalStatus == TaskStatusAborted {
+			var terminal testkeyvalue.Versioned[TaskRecord]
+			if terminalStatus == testtaskjournal.TaskStatusAborted {
 				terminal, err = tasks.AbortPendingTask(
 					ctx, attach.TaskID, attach.CreatedAt.Add(2*time.Second),
 				)
@@ -191,22 +206,20 @@ func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *te
 					agentID,
 					1,
 					attach.TaskID,
-					assignmentID,
-					TaskStatusFailed,
-					TaskResultRecord{
-						Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+					assignmentID, testtaskjournal.TaskStatusFailed, testtaskjournal.TaskResultRecord{
+						Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 						FailedStepID:           attachTaskStepIDForTest(t, tasks, attach.TaskID),
 						ReconciliationRequired: true,
-					},
-					attach.CreatedAt.Add(2*time.Second),
+					}, attach.CreatedAt.Add(2*time.Second),
 				)
 			}
 			if err != nil || terminal.Record.Status != terminalStatus {
 				t.Fatalf("terminalize Attach = %#v, %v", terminal, err)
 			}
-			gateAndEpoch, err := store.GetMany(ctx, GetManyRequest{Keys: []string{
-				blueprintRequirementGateKey(blueprintTask.ID),
-				environmentMutationEpochKey(scope.Environment.Record.ID),
+			gateAndEpoch, err := store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{
+				blueprintRequirementGateKey(
+					blueprintTask.ID,
+				), testhierarchy.EnvironmentMutationEpochKey(scope.Environment.Record.ID),
 			}})
 			if err != nil || gateAndEpoch.Values[0] == nil || gateAndEpoch.Values[1] == nil ||
 				gateAndEpoch.Values[0].ModRevision != publicationRevision ||
@@ -220,7 +233,7 @@ func TestBlueprintRequirementGateNonSuccessPrerequisiteNeverRefreshesEpoch(t *te
 				t.Fatalf("claim Blueprint after non-success = %#v, %t, %v", claimed, found, claimErr)
 			}
 			pending, err := tasks.GetTask(ctx, blueprintTask.ID)
-			if err != nil || pending.Record.Status != TaskStatusPending {
+			if err != nil || pending.Record.Status != testtaskjournal.TaskStatusPending {
 				t.Fatalf("Blueprint after non-success = %#v, %v", pending, err)
 			}
 		})
@@ -244,14 +257,14 @@ func newBlueprintRequirementGateFixture(
 	t.Helper()
 	now := time.Date(2026, 9, 2, 16, 0, 0, 0, time.UTC)
 	tenantID := ids.NewAt(ids.KindTenant, now, 1)
-	project := ProjectRecord{
-		ID: ids.NewAt(ids.KindProject, now, 2), TenantID: tenantID, Kind: ProjectKindTenant,
+	project := testhierarchy.ProjectRecord{
+		ID: ids.NewAt(ids.KindProject, now, 2), TenantID: tenantID, Kind: testhierarchy.ProjectKindTenant,
 	}
-	environment := EnvironmentRecord{ID: ids.NewAt(ids.KindEnvironment, now, 3), ProjectID: project.ID}
+	environment := testhierarchy.EnvironmentRecord{ID: ids.NewAt(ids.KindEnvironment, now, 3), ProjectID: project.ID}
 	task := environmentBlueprintTestTask(t, project, environment, 10)
 	producerTaskID := ids.NewAt(ids.KindTask, now, 20)
 	attachID := ids.NewAt(ids.KindAttach, now, 21)
-	attach, err := NewPendingAttachRecord(
+	attach, err := testattachments.NewPendingAttachRecord(
 		attachID,
 		environment.ID,
 		"api-db",
@@ -270,12 +283,12 @@ func newBlueprintRequirementGateFixture(
 		t.Fatalf("NewPendingAttachRecord() error = %v", err)
 	}
 	attach.Status = status
-	attachValue, err := encodeAttachRecord(attach)
+	attachValue, err := testattachments.EncodeAttachRecord(attach)
 	if err != nil {
 		t.Fatalf("encodeAttachRecord() error = %v", err)
 	}
 	store := newMemoryTaskStore()
-	seedTaskRepositoryValue(t, store, attachKey(attach.ID), attachValue)
+	seedTaskRepositoryValue(t, store, testattachments.AttachKey(attach.ID), attachValue)
 	requirements := core.BlueprintRequirements{
 		Authored: []core.Requirement{{
 			Target:    core.RequirementTarget{Kind: core.RequirementTargetBackingAttach, Name: attach.Name},
@@ -320,7 +333,7 @@ func newBlueprintRequirementGateFixture(
 	}
 	return blueprintRequirementGateFixture{
 		store: store, repository: repository, task: task, attach: attach, gate: gate,
-		projection: EnvironmentComposeProjection{
+		projection: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID: environment.ID, RevisionID: task.ID, BlueprintRequirements: requirements,
 		},
 	}
@@ -330,19 +343,19 @@ func seedBlueprintRequirementTask(t *testing.T, store blueprintRequirementGateTe
 	t.Helper()
 	marker := pendingTaskMarker(task)
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerValue, err := encodeIdempotencyMarker(marker)
+	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,15 +363,26 @@ func seedBlueprintRequirementTask(t *testing.T, store blueprintRequirementGateTe
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: markerKey, Value: markerValue},
+	mutations := []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskActiveOperationKey(task.OperationID),
+			Value: reference,
+		},
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: testkeyvalue.MutationPut, Key: markerKey, Value: markerValue},
 	}
 	for _, key := range ownerKeys {
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: []byte(task.ID)})
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: []byte(task.ID)},
+		)
 	}
 	result, err := store.Transact(context.Background(), nil, mutations)
 	if err != nil || !result.Succeeded {
@@ -415,17 +439,17 @@ type blueprintRequirementGateClaimRaceStore struct {
 
 func (store *blueprintRequirementGateClaimRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.armed {
 		for _, condition := range conditions {
 			if condition.Key == store.targetKey {
 				store.armed = false
-				if _, err := store.memoryTaskStore.Transact(ctx, nil, []Mutation{{
-					Type: MutationPut, Key: store.targetKey, Value: store.replacement,
+				if _, err := store.memoryTaskStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+					Type: testkeyvalue.MutationPut, Key: store.targetKey, Value: store.replacement,
 				}}); err != nil {
-					return TransactionResult{}, err
+					return testkeyvalue.TransactionResult{}, err
 				}
 				break
 			}
@@ -438,13 +462,13 @@ func TestBlueprintRequirementGateClaimRetriesAgainstTargetRace(t *testing.T) {
 	fixture := newBlueprintRequirementGateFixture(t, core.AttachReady, true)
 	pending := fixture.attach
 	pending.Status = core.AttachPending
-	pendingValue, err := encodeAttachRecord(pending)
+	pendingValue, err := testattachments.EncodeAttachRecord(pending)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tracing := &blueprintRequirementGateClaimRaceStore{
 		memoryTaskStore: fixture.store,
-		targetKey:       attachKey(fixture.attach.ID),
+		targetKey:       testattachments.AttachKey(fixture.attach.ID),
 		replacement:     pendingValue,
 		armed:           true,
 	}
@@ -462,7 +486,7 @@ func TestBlueprintRequirementGateClaimRetriesAgainstTargetRace(t *testing.T) {
 		t.Fatalf("ClaimNextTask(race) found/error/armed = %t/%v/%t", found, err, tracing.armed)
 	}
 	current, err := repository.GetTask(context.Background(), fixture.task.ID)
-	if err != nil || current.Record.Status != TaskStatusPending {
+	if err != nil || current.Record.Status != testtaskjournal.TaskStatusPending {
 		t.Fatalf("Task after target race = %#v, %v", current, err)
 	}
 }
@@ -478,12 +502,12 @@ func TestBlueprintRequirementGatePublicationRejectsResolvedTargetRace(t *testing
 	defer prepared.clear()
 	changed := fixture.attach
 	changed.Status = core.AttachPending
-	changedValue, err := encodeAttachRecord(changed)
+	changedValue, err := testattachments.EncodeAttachRecord(changed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: attachKey(changed.ID), Value: changedValue,
+	if _, err := fixture.store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testattachments.AttachKey(changed.ID), Value: changedValue,
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -501,25 +525,23 @@ func TestEnvironmentBlueprintComponentClassifierPreservesRequirementConflict(t *
 	// classifier; it must not reset the chain and hide a raced requirement.
 	t.Parallel()
 	requirementClassified := false
-	requirementClassifier := func(_ int64, values []*KeyValue) error {
+	requirementClassifier := func(_ int64, values []*testkeyvalue.KeyValue) error {
 		requirementClassified = true
 		if len(values) != 1 {
 			return errs.New(errs.KindInternal, "requirement compare evidence is incomplete")
 		}
 		return errs.New(errs.KindStateConflict, "Blueprint requirement target raced")
 	}
-	componentPublication := preparedComponentTaskPublication{
-		conditions: []Condition{{Key: "/test/component-publication"}},
-	}
+	componentPublication := zeroComponentPublication(t)
 	_, classified, err := composeEnvironmentBlueprintComponentPublication(
-		[]Condition{{Key: "/test/requirement"}},
+		[]testkeyvalue.Condition{{Key: "/test/requirement"}},
 		requirementClassifier,
 		componentPublication,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = classified(0, []*KeyValue{nil, nil})
+	err = classified(0, []*testkeyvalue.KeyValue{nil, nil})
 	if !requirementClassified || !isKind(err, errs.KindStateConflict) {
 		t.Fatalf(
 			"Component publication classification called/error = %t/%v, want true/state conflict",
@@ -536,7 +558,7 @@ func TestBlueprintRequirementGateRetryAndReplayPreserveOriginalRoot(t *testing.T
 	retryID := ids.NewAt(ids.KindTask, retryAt, 90)
 	marker := pendingRetryMarker(failed, retryID, retryAt, "requirement-gate-retry-one")
 	result, err := fixture.repository.RetryTask(
-		context.Background(), failed.ID, retryID, TaskActorOperator, marker,
+		context.Background(), failed.ID, retryID, testtaskjournal.TaskActorOperator, marker,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -548,7 +570,7 @@ func TestBlueprintRequirementGateRetryAndReplayPreserveOriginalRoot(t *testing.T
 		t.Fatalf("first retry gate = %#v", firstGate)
 	}
 	replay, err := fixture.repository.RetryTask(
-		context.Background(), failed.ID, retryID, TaskActorOperator, marker,
+		context.Background(), failed.ID, retryID, testtaskjournal.TaskActorOperator, marker,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -568,7 +590,7 @@ func TestBlueprintRequirementGateRetryAndReplayPreserveOriginalRoot(t *testing.T
 	secondID := ids.NewAt(ids.KindTask, secondAt, 91)
 	secondMarker := pendingRetryMarker(firstFailed, secondID, secondAt, "requirement-gate-retry-two")
 	second, err := fixture.repository.RetryTask(
-		context.Background(), firstFailed.ID, secondID, TaskActorOperator, secondMarker,
+		context.Background(), firstFailed.ID, secondID, testtaskjournal.TaskActorOperator, secondMarker,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -592,28 +614,34 @@ func terminalBlueprintRequirementTask(
 	if err != nil {
 		t.Fatal(err)
 	}
-	running, err := transitionTaskStatus(
-		current.Record, TaskStatusPending, TaskStatusRunning, current.Record.UpdatedAt.Add(time.Second),
+	running, err := TransitionTaskStatus(
+		current.Record,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		current.Record.UpdatedAt.Add(time.Second),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	failed, err := transitionTaskStatus(
-		running, TaskStatusRunning, TaskStatusFailed, running.UpdatedAt.Add(time.Second),
+	failed, err := TransitionTaskStatus(
+		running,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusFailed,
+		running.UpdatedAt.Add(time.Second),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	value, err := encodeTaskRecord(failed)
+	value, err := EncodeTaskRecord(failed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.Transact(context.Background(), []Condition{{
-		Key: taskKey(task.ID), ModRevision: current.Revision,
-	}}, []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: value},
-		{Type: MutationDelete, Key: taskActiveOperationKey(task.OperationID)},
-		{Type: MutationDelete, Key: taskQueueKey(task.Executor, task.ID)},
+	result, err := store.Transact(context.Background(), []testkeyvalue.Condition{{
+		Key: testtaskjournal.TaskStorageKey(task.ID), ModRevision: current.Revision,
+	}}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: value},
+		{Type: testkeyvalue.MutationDelete, Key: testtaskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Type: testkeyvalue.MutationDelete, Key: testtaskjournal.TaskQueueKey(task.Executor, task.ID)},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("terminal Task transaction = %#v, %v", result, err)

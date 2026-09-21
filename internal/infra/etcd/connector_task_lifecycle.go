@@ -263,7 +263,8 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		)
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(stored.Values[1].Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetConnector || tombstone.TargetID != task.Target ||
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetConnector ||
+		tombstone.TargetID != task.Target ||
 		tombstone.TargetRevision != stored.Values[0].ModRevision ||
 		tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {

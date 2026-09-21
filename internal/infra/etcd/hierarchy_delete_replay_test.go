@@ -10,6 +10,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 func TestHierarchyDeletionProjectReplayUsesCanonicalTenantScope(t *testing.T) {
@@ -18,29 +22,36 @@ func TestHierarchyDeletionProjectReplayUsesCanonicalTenantScope(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
 	tenantID := hierarchyTestID(ids.KindTenant, 701)
-	projects := []ProjectRecord{
+	projects := []testhierarchy.ProjectRecord{
 		{
 			ID:       hierarchyTestID(ids.KindProject, 702),
 			TenantID: tenantID,
 			Slug:     "one",
 			Name:     "One",
-			Kind:     ProjectKindTenant,
+			Kind:     testhierarchy.ProjectKindTenant,
 		},
 		{
 			ID:       hierarchyTestID(ids.KindProject, 703),
 			TenantID: tenantID,
 			Slug:     "two",
 			Name:     "Two",
-			Kind:     ProjectKindTenant,
+			Kind:     testhierarchy.ProjectKindTenant,
 		},
 	}
-	mutations := make([]Mutation, 0, len(projects))
+	mutations := make([]testkeyvalue.Mutation, 0, len(projects))
 	for _, project := range projects {
-		value, err := encodeProject(project)
+		value, err := testhierarchy.EncodeProject(project)
 		if err != nil {
 			t.Fatalf("encodeProject() error = %v", err)
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: projectKey(project.ID), Value: value})
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testhierarchy.ProjectKey(project.ID),
+				Value: value,
+			},
+		)
 	}
 	if result, err := store.Transact(ctx, nil, mutations); err != nil || !result.Succeeded {
 		t.Fatalf("seed Projects = %#v/%v", result, err)
@@ -50,11 +61,16 @@ func TestHierarchyDeletionProjectReplayUsesCanonicalTenantScope(t *testing.T) {
 		t.Fatalf("newHierarchyDeletionRepository() error = %v", err)
 	}
 	for _, project := range projects {
-		resolved, err := repository.ResolveDeletionTarget(ctx, HierarchyDeletionTargetProject, project.ID)
+		resolved, err := repository.ResolveDeletionTarget(
+			ctx,
+			testhierarchydeletion.HierarchyDeletionTargetProject,
+			project.ID,
+		)
 		if err != nil {
 			t.Fatalf("ResolveDeletionTarget(%s) error = %v", project.ID, err)
 		}
-		if resolved.TargetKind != HierarchyDeletionTargetProject || resolved.ScopeKind != IdempotencyScopeTenant ||
+		if resolved.TargetKind != testhierarchydeletion.HierarchyDeletionTargetProject ||
+			resolved.ScopeKind != testidempotency.IdempotencyScopeTenant ||
 			resolved.ScopeID != tenantID {
 			t.Fatalf("ResolveDeletionTarget(%s) = %#v", project.ID, resolved)
 		}
@@ -66,7 +82,7 @@ func TestIdempotencyHierarchyReplayIndexPreservesOwnerIsolationAndOriginalTask(t
 	// the original accepted Task after the target has changed or been removed.
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
-	repository, err := newIdempotencyRepository(store)
+	repository, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("NewIdempotencyRepository() error = %v", err)
 	}
@@ -78,15 +94,15 @@ func TestIdempotencyHierarchyReplayIndexPreservesOwnerIsolationAndOriginalTask(t
 	key := "hierarchy-project-delete-key-0001"
 	originalTask := ids.NewAt(ids.KindTask, now, 708)
 	marker := hierarchyReplayTaskMarker(now, tenantOne, projectOne, key, originalTask)
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", err)
 	}
-	markerValue, err := encodeIdempotencyMarker(marker)
+	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
 	}
-	targetKey, err := idempotencyReplayTargetKey(
+	targetKey, err := testidempotency.IdempotencyReplayTargetKey(
 		*marker.ReplayTarget,
 		marker.Locator.Method,
 		marker.Locator.Route,
@@ -95,13 +111,13 @@ func TestIdempotencyHierarchyReplayIndexPreservesOwnerIsolationAndOriginalTask(t
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey() error = %v", err)
 	}
-	targetValue, err := encodeReplayTargetReference(markerKey)
+	targetValue, err := testidempotency.EncodeReplayTargetReference(markerKey)
 	if err != nil {
 		t.Fatalf("encodeReplayTargetReference() error = %v", err)
 	}
-	if result, err := store.Transact(ctx, nil, []Mutation{
-		{Type: MutationPut, Key: markerKey, Value: markerValue},
-		{Type: MutationPut, Key: targetKey, Value: targetValue},
+	if result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: markerKey, Value: markerValue},
+		{Type: testkeyvalue.MutationPut, Key: targetKey, Value: targetValue},
 	}); err != nil || !result.Succeeded {
 		t.Fatalf("seed replay marker = %#v/%v", result, err)
 	}
@@ -110,12 +126,15 @@ func TestIdempotencyHierarchyReplayIndexPreservesOwnerIsolationAndOriginalTask(t
 	// marker. It cannot claim the key, while another Tenant can.
 	other := marker
 	other.Locator.ScopeID = tenantOne
-	other.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetProject, ID: projectTwo}
-	otherValue, err := encodeIdempotencyMarker(other)
+	other.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetProject,
+		ID:   projectTwo,
+	}
+	otherValue, err := testidempotency.EncodeIdempotencyMarker(other)
 	if err != nil {
 		t.Fatalf("encode second marker = %v", err)
 	}
-	otherTargetKey, err := idempotencyReplayTargetKey(
+	otherTargetKey, err := testidempotency.IdempotencyReplayTargetKey(
 		*other.ReplayTarget,
 		other.Locator.Method,
 		other.Locator.Route,
@@ -124,34 +143,37 @@ func TestIdempotencyHierarchyReplayIndexPreservesOwnerIsolationAndOriginalTask(t
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey(second) error = %v", err)
 	}
-	otherTargetValue, err := encodeReplayTargetReference(markerKey)
+	otherTargetValue, err := testidempotency.EncodeReplayTargetReference(markerKey)
 	if err != nil {
 		t.Fatalf("encode second target reference = %v", err)
 	}
 	if result, err := store.Transact(ctx,
-		[]Condition{{Key: markerKey}, {Key: otherTargetKey}},
-		[]Mutation{{Type: MutationPut, Key: markerKey, Value: otherValue}, {Type: MutationPut, Key: otherTargetKey, Value: otherTargetValue}},
+		[]testkeyvalue.Condition{{Key: markerKey}, {Key: otherTargetKey}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: markerKey, Value: otherValue}, {Type: testkeyvalue.MutationPut, Key: otherTargetKey, Value: otherTargetValue}},
 	); err != nil || result.Succeeded {
 		t.Fatalf("same-owner key claim = %#v/%v, want conflict", result, err)
 	}
 
 	other.Locator.ScopeID = tenantTwo
-	other.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetProject, ID: projectTwo}
-	otherMarkerKey, err := idempotencyMarkerKey(other.Locator)
+	other.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetProject,
+		ID:   projectTwo,
+	}
+	otherMarkerKey, err := testidempotency.IdempotencyMarkerKey(other.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey(second owner) error = %v", err)
 	}
-	otherValue, err = encodeIdempotencyMarker(other)
+	otherValue, err = testidempotency.EncodeIdempotencyMarker(other)
 	if err != nil {
 		t.Fatalf("encode second-owner marker = %v", err)
 	}
-	otherTargetValue, err = encodeReplayTargetReference(otherMarkerKey)
+	otherTargetValue, err = testidempotency.EncodeReplayTargetReference(otherMarkerKey)
 	if err != nil {
 		t.Fatalf("encode second-owner target reference = %v", err)
 	}
-	if result, err := store.Transact(ctx, nil, []Mutation{
-		{Type: MutationPut, Key: otherMarkerKey, Value: otherValue},
-		{Type: MutationPut, Key: otherTargetKey, Value: otherTargetValue},
+	if result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: otherMarkerKey, Value: otherValue},
+		{Type: testkeyvalue.MutationPut, Key: otherTargetKey, Value: otherTargetValue},
 	}); err != nil || !result.Succeeded {
 		t.Fatalf("different-owner key claim = %#v/%v", result, err)
 	}
@@ -178,30 +200,40 @@ func TestIdempotencyHierarchyReplayIndexPreservesOwnerIsolationAndOriginalTask(t
 	}
 }
 
-func hierarchyReplayTaskMarker(now time.Time, tenantID, projectID, key, taskID string) IdempotencyMarker {
+func hierarchyReplayTaskMarker(
+	now time.Time,
+	tenantID, projectID, key, taskID string,
+) testidempotency.IdempotencyMarker {
 	ciphertext := []byte("hierarchy-protected-intent")
 	digest := sha256.Sum256(ciphertext)
 	body, _ := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: taskID})
-	return IdempotencyMarker{
-		Kind: IdempotencyMarkerTask, State: IdempotencyMarkerCompleted,
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeTenant,
+	return testidempotency.IdempotencyMarker{
+		Kind: testidempotency.IdempotencyMarkerTask, State: testidempotency.IdempotencyMarkerCompleted,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeTenant,
 			ScopeID:   tenantID,
 			Method:    http.MethodDelete,
 			Route:     "/projects/{id}",
 			Key:       key,
 		},
-		ReplayTarget: &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetProject, ID: projectID},
-		Intent: ProtectedIntentRecord{
+		ReplayTarget: &testidempotency.IdempotencyReplayTarget{
+			Kind: testidempotency.IdempotencyReplayTargetProject,
+			ID:   projectID,
+		},
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion:  1,
 			Cipher:           "age-x25519",
 			DigestAlgorithm:  "sha256",
 			CiphertextDigest: hex.EncodeToString(digest[:]),
 			Ciphertext:       ciphertext,
 		},
-		Response: IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		TaskID:   taskID, CreatedAt: now, UpdatedAt: now, TerminalAt: now, RetainUntil: now.Add(markerRetention),
+		Response: testidempotency.IdempotencyResponse{
+			Status:      http.StatusAccepted,
+			ContentKind: "application/json",
+			Body:        body,
+		},
+		TaskID: taskID, CreatedAt: now, UpdatedAt: now, TerminalAt: now, RetainUntil: now.Add(testidempotency.MarkerRetention),
 	}
 }

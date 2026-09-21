@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -36,25 +39,22 @@ func TestTaskPruningDrainsBackupCheckpointsInBoundedBatches(t *testing.T) {
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks() = %d, %v", count, err)
 	}
-	if store.maximumOperations != maximumTransactionOperations {
+	if store.maximumOperations != testkeyvalue.MaximumOperations {
 		t.Fatalf(
 			"maximum checkpoint prune operations = %d, want %d",
-			store.maximumOperations,
-			maximumTransactionOperations,
+			store.maximumOperations, testkeyvalue.MaximumOperations,
 		)
 	}
 	assertTaskPruneCheckpointPrefixEmpty(
 		t,
-		store.memoryTaskStore,
-		backupCheckpointCursorTaskPrefix(task.ID),
+		store.memoryTaskStore, testbackupruntime.BackupCheckpointCursorTaskPrefix(task.ID),
 	)
 	assertTaskPruneCheckpointPrefixEmpty(
 		t,
-		store.memoryTaskStore,
-		backupCheckpointDedupTaskPrefix(task.ID),
+		store.memoryTaskStore, testbackupruntime.BackupCheckpointDedupTaskPrefix(task.ID),
 	)
-	assertTaskLifecycleValue(t, store.memoryTaskStore, taskKey(task.ID), false)
-	assertTaskLifecycleValue(t, store.memoryTaskStore, taskPruneIntentKey(task.ID), false)
+	assertTaskLifecycleValue(t, store.memoryTaskStore, testtaskjournal.TaskStorageKey(task.ID), false)
+	assertTaskLifecycleValue(t, store.memoryTaskStore, testtaskjournal.TaskPruneIntentKey(task.ID), false)
 }
 
 func TestTaskPruningReplaysCommittedBackupCheckpointBatch(t *testing.T) {
@@ -87,18 +87,17 @@ func TestTaskPruningReplaysCommittedBackupCheckpointBatch(t *testing.T) {
 		!errors.Is(err, unknown) {
 		t.Fatalf("PruneExpiredTasks(unknown) = %d, %v", count, err)
 	}
-	assertTaskLifecycleValue(t, store.memoryTaskStore, taskKey(task.ID), true)
+	assertTaskLifecycleValue(t, store.memoryTaskStore, testtaskjournal.TaskStorageKey(task.ID), true)
 	intentValue := mustTaskPruneCheckpointValue(
 		t,
-		store.memoryTaskStore,
-		taskPruneIntentKey(task.ID),
+		store.memoryTaskStore, testtaskjournal.TaskPruneIntentKey(task.ID),
 	)
-	intent, err := decodeTaskPruneIntent(intentValue.Value)
+	intent, err := testtaskjournal.DecodePruneIntent(intentValue.Value)
 	if err != nil || intent.TaskPrimaryDeleted || intent.BackupCheckpointCursorsComplete {
 		t.Fatalf("checkpointed Task prune intent = %#v, %v", intent, err)
 	}
-	remaining, err := store.Range(ctx, RangeRequest{
-		Prefix: backupCheckpointCursorTaskPrefix(task.ID),
+	remaining, err := store.Range(ctx, testkeyvalue.RangeRequest{
+		Prefix: testbackupruntime.BackupCheckpointCursorTaskPrefix(task.ID),
 		Limit:  maximumTaskPruneBatchRecords + 1,
 	})
 	if err != nil || remaining == nil || len(remaining.Values) != 3 {
@@ -110,15 +109,13 @@ func TestTaskPruningReplaysCommittedBackupCheckpointBatch(t *testing.T) {
 	}
 	assertTaskPruneCheckpointPrefixEmpty(
 		t,
-		store.memoryTaskStore,
-		backupCheckpointCursorTaskPrefix(task.ID),
+		store.memoryTaskStore, testbackupruntime.BackupCheckpointCursorTaskPrefix(task.ID),
 	)
 	assertTaskPruneCheckpointPrefixEmpty(
 		t,
-		store.memoryTaskStore,
-		backupCheckpointDedupTaskPrefix(task.ID),
+		store.memoryTaskStore, testbackupruntime.BackupCheckpointDedupTaskPrefix(task.ID),
 	)
-	assertTaskLifecycleValue(t, store.memoryTaskStore, taskKey(task.ID), false)
+	assertTaskLifecycleValue(t, store.memoryTaskStore, testtaskjournal.TaskStorageKey(task.ID), false)
 }
 
 func TestTaskPruningDoesNotDeleteAnotherTasksBackupCheckpoints(t *testing.T) {
@@ -146,19 +143,15 @@ func TestTaskPruningDoesNotDeleteAnotherTasksBackupCheckpoints(t *testing.T) {
 	if count, err := repository.PruneExpiredTasks(ctx, pruneAt); err != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks() = %d, %v", count, err)
 	}
-	assertTaskPruneCheckpointPrefixEmpty(t, store, backupCheckpointCursorTaskPrefix(task.ID))
-	assertTaskPruneCheckpointPrefixEmpty(t, store, backupCheckpointDedupTaskPrefix(task.ID))
+	assertTaskPruneCheckpointPrefixEmpty(t, store, testbackupruntime.BackupCheckpointCursorTaskPrefix(task.ID))
+	assertTaskPruneCheckpointPrefixEmpty(t, store, testbackupruntime.BackupCheckpointDedupTaskPrefix(task.ID))
 	assertTaskPruneCheckpointPrefixCount(
 		t,
-		store,
-		backupCheckpointCursorTaskPrefix(otherTaskID),
-		2,
+		store, testbackupruntime.BackupCheckpointCursorTaskPrefix(otherTaskID), 2,
 	)
 	assertTaskPruneCheckpointPrefixCount(
 		t,
-		store,
-		backupCheckpointDedupTaskPrefix(otherTaskID),
-		2,
+		store, testbackupruntime.BackupCheckpointDedupTaskPrefix(otherTaskID), 2,
 	)
 }
 
@@ -172,9 +165,9 @@ type taskPruneCheckpointStore struct {
 
 func (store *taskPruneCheckpointStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	operations := len(conditions) + len(mutations)
 	if operations > store.maximumOperations {
 		store.maximumOperations = operations
@@ -183,12 +176,12 @@ func (store *taskPruneCheckpointStore) Transact(
 	if err != nil || !result.Succeeded || store.failure == nil || store.failed {
 		return result, err
 	}
-	prefix := backupCheckpointCursorTaskPrefix(store.failureTaskID)
+	prefix := testbackupruntime.BackupCheckpointCursorTaskPrefix(store.failureTaskID)
 	for _, mutation := range mutations {
-		if mutation.Type == MutationDelete && len(mutation.Key) > len(prefix) &&
+		if mutation.Type == testkeyvalue.MutationDelete && len(mutation.Key) > len(prefix) &&
 			mutation.Key[:len(prefix)] == prefix {
 			store.failed = true
-			return TransactionResult{}, store.failure
+			return testkeyvalue.TransactionResult{}, store.failure
 		}
 	}
 	return result, nil
@@ -204,44 +197,54 @@ func seedTaskPruneBackupCheckpoints(
 ) {
 	t.Helper()
 	for index := 0; index < cursors; index++ {
-		record := backupCheckpointCursorRecord{
+		record := testbackupruntime.BackupCheckpointCursorRecord{
 			TaskID:       taskID,
 			AssignmentID: ids.NewAt(ids.KindAssignment, now, int64(9200+index)),
 			StepID:       ids.NewAt(ids.KindStep, now, int64(9300+index)),
 			NextSequence: 2,
 		}
-		value, err := encodeBackupCheckpointCursorRecord(record)
+		value, err := testbackupruntime.EncodeBackupCheckpointCursorRecord(record)
 		if err != nil {
 			t.Fatalf("encodeBackupCheckpointCursorRecord() error = %v", err)
 		}
-		seedTaskRepositoryValue(t, store, backupCheckpointCursorKey(BackupCheckpointInput{
-			TaskID: record.TaskID, AssignmentID: record.AssignmentID, StepID: record.StepID,
-		}), value)
+		seedTaskRepositoryValue(
+			t,
+			store,
+			testbackupruntime.BackupCheckpointCursorKey(testbackupruntime.BackupCheckpointInput{
+				TaskID: record.TaskID, AssignmentID: record.AssignmentID, StepID: record.StepID,
+			}),
+			value,
+		)
 		clear(value)
 	}
 	assignmentID := ids.NewAt(ids.KindAssignment, now, 9400)
 	stepID := ids.NewAt(ids.KindStep, now, 9401)
 	for index := 0; index < deduplications; index++ {
-		record := backupCheckpointDedupRecord{
+		record := testbackupruntime.BackupCheckpointDedupRecord{
 			TaskID: taskID, AssignmentID: assignmentID, StepID: stepID,
-			Sequence: uint64(index + 1), Kind: BackupCheckpointUploadCompleted,
+			Sequence: uint64(index + 1), Kind: testbackupruntime.BackupCheckpointUploadCompleted,
 			PayloadSHA256: taskPruneCheckpointDigest,
 		}
-		value, err := encodeBackupCheckpointDedupRecord(record)
+		value, err := testbackupruntime.EncodeBackupCheckpointDedupRecord(record)
 		if err != nil {
 			t.Fatalf("encodeBackupCheckpointDedupRecord() error = %v", err)
 		}
-		seedTaskRepositoryValue(t, store, backupCheckpointDedupKey(BackupCheckpointInput{
-			TaskID: record.TaskID, AssignmentID: record.AssignmentID,
-			StepID: record.StepID, Sequence: record.Sequence,
-		}), value)
+		seedTaskRepositoryValue(
+			t,
+			store,
+			testbackupruntime.BackupCheckpointDedupKey(testbackupruntime.BackupCheckpointInput{
+				TaskID: record.TaskID, AssignmentID: record.AssignmentID,
+				StepID: record.StepID, Sequence: record.Sequence,
+			}),
+			value,
+		)
 		clear(value)
 	}
 }
 
 func pruneTaskCheckpointMarker(t *testing.T, store *memoryTaskStore, pruneAt time.Time) {
 	t.Helper()
-	repository, err := newIdempotencyRepository(store)
+	repository, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatalf("newIdempotencyRepository() error = %v", err)
 	}
@@ -271,8 +274,7 @@ func assertTaskPruneCheckpointPrefixCount(
 ) {
 	t.Helper()
 	page, err := store.Range(
-		context.Background(),
-		RangeRequest{Prefix: prefix, Limit: int64(want + 1)},
+		context.Background(), testkeyvalue.RangeRequest{Prefix: prefix, Limit: int64(want + 1)},
 	)
 	if err != nil || page == nil {
 		t.Fatalf("Range(%s) = %#v, %v", prefix, page, err)
@@ -293,7 +295,7 @@ func mustTaskPruneCheckpointValue(
 	t *testing.T,
 	store *memoryTaskStore,
 	key string,
-) *KeyValue {
+) *testkeyvalue.KeyValue {
 	t.Helper()
 	result, err := store.Get(context.Background(), key)
 	if err != nil || result.Entry == nil {

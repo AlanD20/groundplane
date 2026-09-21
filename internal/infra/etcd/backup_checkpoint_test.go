@@ -10,6 +10,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -27,14 +31,14 @@ func TestBackupCheckpointPlanFencesAssignmentSequenceAndDigest(t *testing.T) {
 	}
 	marker := "/v1/test/backup-checkpoint-domain/" + input.TaskID
 	conditions, mutations, err := plan.composeTransaction(
-		[]Condition{{Key: marker}},
-		[]Mutation{{Type: MutationPut, Key: marker, Value: []byte(plan.digest)}},
+		[]testkeyvalue.Condition{{Key: marker}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: marker, Value: []byte(plan.digest)}},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := repository.transact(context.Background(), conditions, mutations)
-	clearBackupRuntimeMutations(mutations)
+	result, err := repository.TransactRuntime(context.Background(), conditions, mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	plan.clear()
 	if err != nil || !result.Succeeded {
 		t.Fatalf("commit checkpoint = %#v, %v", result, err)
@@ -54,7 +58,7 @@ func TestBackupCheckpointPlanFencesAssignmentSequenceAndDigest(t *testing.T) {
 	}
 	next := input
 	next.Sequence++
-	next.Payload.Kind = BackupCheckpointSourceCleanupCompleted
+	next.Payload.Kind = testbackupruntime.BackupCheckpointSourceCleanupCompleted
 	next.Payload.StoredSizeBytes = 0
 	next.Payload.StoredSHA256 = ""
 	nextPlan, err := repository.loadBackupCheckpointPlan(
@@ -64,14 +68,14 @@ func TestBackupCheckpointPlanFencesAssignmentSequenceAndDigest(t *testing.T) {
 		t.Fatalf("loadBackupCheckpointPlan(next sequence) error = %v", err)
 	}
 	nextConditions, nextMutations, err := nextPlan.composeTransaction(
-		[]Condition{{Key: marker, ModRevision: result.Revision}},
-		[]Mutation{{Type: MutationPut, Key: marker, Value: []byte(nextPlan.digest)}},
+		[]testkeyvalue.Condition{{Key: marker, ModRevision: result.Revision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: marker, Value: []byte(nextPlan.digest)}},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	nextResult, err := repository.transact(context.Background(), nextConditions, nextMutations)
-	clearBackupRuntimeMutations(nextMutations)
+	nextResult, err := repository.TransactRuntime(context.Background(), nextConditions, nextMutations)
+	testkeyvalue.ClearMutationValues(nextMutations)
 	nextPlan.clear()
 	if err != nil || !nextResult.Succeeded {
 		t.Fatalf("commit next checkpoint = %#v, %v", nextResult, err)
@@ -81,12 +85,12 @@ func TestBackupCheckpointPlanFencesAssignmentSequenceAndDigest(t *testing.T) {
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("loadBackupCheckpointPlan(old sequence) error = %v", err)
 	}
-	dedupKey := backupCheckpointDedupKey(next)
+	dedupKey := testbackupruntime.BackupCheckpointDedupKey(next)
 	dedup := mustOptionalKey(t, store, dedupKey)
 	rewritten, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: dedupKey, ModRevision: dedup.ModRevision}},
-		[]Mutation{{Type: MutationPut, Key: dedupKey, Value: dedup.Value}},
+		[]testkeyvalue.Condition{{Key: dedupKey, ModRevision: dedup.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: dedupKey, Value: dedup.Value}},
 	)
 	if err != nil || !rewritten.Succeeded {
 		t.Fatalf("rewrite checkpoint dedupe = %#v, %v", rewritten, err)
@@ -105,12 +109,12 @@ func TestBackupCheckpointPlanRejectsStaleAssignment(t *testing.T) {
 	repository, store, run := newBackupRuntimeBareFixture(t)
 	input, revision := seedBackupCheckpointAssignment(t, store, run)
 	binding := backupRunCheckpointBinding(run, 0)
-	claimKey := taskAssignmentKey(input.AgentID, input.TaskID)
+	claimKey := testtaskjournal.TaskAssignmentKey(input.AgentID, input.TaskID)
 	claim := mustOptionalKey(t, store, claimKey)
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: claimKey, ModRevision: claim.ModRevision}},
-		[]Mutation{{Type: MutationDelete, Key: claimKey}},
+		[]testkeyvalue.Condition{{Key: claimKey, ModRevision: claim.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: claimKey}},
 	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("remove assignment = %#v, %v", result, err)
@@ -136,7 +140,10 @@ func TestBackupCheckpointPlanRejectsCrossStepSubstitution(t *testing.T) {
 
 	t.Run("backup source", func(t *testing.T) {
 		repository, store, run := newBackupRuntimeBareFixture(t)
-		run.Sources = append(run.Sources, testBackupLaterSource(run.CreatedAt, 1, BackupSourceAttemptPending))
+		run.Sources = append(
+			run.Sources,
+			testBackupLaterSource(run.CreatedAt, 1, testbackupruntime.BackupSourceAttemptPending),
+		)
 		input, revision := seedBackupCheckpointAssignment(t, store, run)
 		input.Payload.PointID = run.Sources[1].RecoveryPointID
 		if _, err := repository.loadBackupCheckpointPlan(
@@ -153,12 +160,12 @@ func TestBackupCheckpointPlanRejectsCrossStepSubstitution(t *testing.T) {
 			ids.NewAt(ids.KindRecoveryPoint, run.CreatedAt.Add(time.Millisecond), 804),
 		}
 		input, revision := seedBackupPruneCheckpointAssignment(t, store, run, pointIDs)
-		input.Payload = BackupCheckpointPayload{
-			Kind: BackupCheckpointRemoteObjectAbsent, PointID: pointIDs[1],
+		input.Payload = testbackupruntime.BackupCheckpointPayload{
+			Kind: testbackupruntime.BackupCheckpointRemoteObjectAbsent, PointID: pointIDs[1],
 		}
 		if _, err := repository.loadBackupCheckpointPlan(
 			context.Background(), input, revision,
-			backupCheckpointBinding{taskType: TaskBackupPrune, ordinal: 1, pointID: pointIDs[1]},
+			backupCheckpointBinding{taskType: testtaskjournal.TaskBackupPrune, ordinal: 1, pointID: pointIDs[1]},
 		); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 			t.Fatalf("loadBackupCheckpointPlan(cross-prune step) error = %v", err)
 		}
@@ -179,13 +186,17 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 	manifestDigest := bytes.Repeat([]byte{0x55}, 32)
 	tests := []struct {
 		name    string
-		payload BackupCheckpointPayload
+		payload testbackupruntime.BackupCheckpointPayload
 		request *agentpb.BackupCheckpointRequest
 	}{
 		{
 			name: "artifact prepared",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointArtifactPrepared, PointID: pointID,
-				StoredSizeBytes: 101, StoredSHA256: hex.EncodeToString(storedDigest)},
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:            testbackupruntime.BackupCheckpointArtifactPrepared,
+				PointID:         pointID,
+				StoredSizeBytes: 101,
+				StoredSHA256:    hex.EncodeToString(storedDigest),
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_ARTIFACT_PREPARED,
 				Payload: &agentpb.BackupCheckpointRequest_ArtifactPrepared{
@@ -197,8 +208,12 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 		},
 		{
 			name: "upload verified",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointUploadVerified, PointID: pointID,
-				StoredSizeBytes: 102, StoredSHA256: hex.EncodeToString(storedDigest)},
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:            testbackupruntime.BackupCheckpointUploadVerified,
+				PointID:         pointID,
+				StoredSizeBytes: 102,
+				StoredSHA256:    hex.EncodeToString(storedDigest),
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_VERIFIED,
 				Payload: &agentpb.BackupCheckpointRequest_UploadVerified{
@@ -209,8 +224,11 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 			},
 		},
 		{
-			name:    "source cleanup completed",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointSourceCleanupCompleted, PointID: pointID},
+			name: "source cleanup completed",
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:    testbackupruntime.BackupCheckpointSourceCleanupCompleted,
+				PointID: pointID,
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_SOURCE_CLEANUP_COMPLETED,
 				Payload: &agentpb.BackupCheckpointRequest_SourceCleanupCompleted{
@@ -220,8 +238,12 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 		},
 		{
 			name: "restore artifact validated",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointRestoreArtifactValidated, PointID: pointID,
-				StoredSHA256: hex.EncodeToString(storedDigest), DecodedSHA256: hex.EncodeToString(decodedDigest)},
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:          testbackupruntime.BackupCheckpointRestoreArtifactValidated,
+				PointID:       pointID,
+				StoredSHA256:  hex.EncodeToString(storedDigest),
+				DecodedSHA256: hex.EncodeToString(decodedDigest),
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_RESTORE_ARTIFACT_VALIDATED,
 				Payload: &agentpb.BackupCheckpointRequest_RestoreArtifactValidated{
@@ -233,8 +255,11 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 		},
 		{
 			name: "volume tree staged",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointVolumeTreeStaged, PointID: pointID,
-				StagedTreeManifestSHA256: hex.EncodeToString(stagedDigest)},
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:                     testbackupruntime.BackupCheckpointVolumeTreeStaged,
+				PointID:                  pointID,
+				StagedTreeManifestSHA256: hex.EncodeToString(stagedDigest),
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_VOLUME_TREE_STAGED,
 				Payload: &agentpb.BackupCheckpointRequest_VolumeTreeStaged{
@@ -246,8 +271,11 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 		},
 		{
 			name: "volume tree exchanged",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointVolumeTreeExchanged, PointID: pointID,
-				LiveTreeManifestSHA256: hex.EncodeToString(liveDigest)},
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:                   testbackupruntime.BackupCheckpointVolumeTreeExchanged,
+				PointID:                pointID,
+				LiveTreeManifestSHA256: hex.EncodeToString(liveDigest),
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_VOLUME_TREE_EXCHANGED,
 				Payload: &agentpb.BackupCheckpointRequest_VolumeTreeExchanged{
@@ -258,8 +286,11 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 			},
 		},
 		{
-			name:    "volume replaced tree cleaned",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointVolumeReplacedTreeCleaned, PointID: pointID},
+			name: "volume replaced tree cleaned",
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:    testbackupruntime.BackupCheckpointVolumeReplacedTreeCleaned,
+				PointID: pointID,
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_VOLUME_REPLACED_TREE_CLEANED,
 				Payload: &agentpb.BackupCheckpointRequest_VolumeReplacedTreeCleaned{
@@ -269,9 +300,12 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 		},
 		{
 			name: "config generation staged",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointConfigGenerationStaged, PointID: pointID,
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:                          testbackupruntime.BackupCheckpointConfigGenerationStaged,
+				PointID:                       pointID,
 				RestoreGenerationID:           restoreGenerationID,
-				EntryGenerationManifestSHA256: hex.EncodeToString(manifestDigest)},
+				EntryGenerationManifestSHA256: hex.EncodeToString(manifestDigest),
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_STAGED,
 				Payload: &agentpb.BackupCheckpointRequest_ConfigGenerationStaged{
@@ -284,8 +318,12 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 		},
 		{
 			name: "config generation activated",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointConfigGenerationActivated, PointID: pointID,
-				RestoreGenerationID: restoreGenerationID, RenderGeneration: 106},
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:                testbackupruntime.BackupCheckpointConfigGenerationActivated,
+				PointID:             pointID,
+				RestoreGenerationID: restoreGenerationID,
+				RenderGeneration:    106,
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_CONFIG_GENERATION_ACTIVATED,
 				Payload: &agentpb.BackupCheckpointRequest_ConfigGenerationActivated{
@@ -296,8 +334,11 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 			},
 		},
 		{
-			name:    "postgres restore verified",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointPostgresRestoreVerified, PointID: pointID},
+			name: "postgres restore verified",
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:    testbackupruntime.BackupCheckpointPostgresRestoreVerified,
+				PointID: pointID,
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_POSTGRES_RESTORE_VERIFIED,
 				Payload: &agentpb.BackupCheckpointRequest_PostgresRestoreVerified{
@@ -306,8 +347,11 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 			},
 		},
 		{
-			name:    "remote object absent",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointRemoteObjectAbsent, PointID: pointID},
+			name: "remote object absent",
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:    testbackupruntime.BackupCheckpointRemoteObjectAbsent,
+				PointID: pointID,
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_REMOTE_OBJECT_ABSENT,
 				Payload: &agentpb.BackupCheckpointRequest_RemoteObjectAbsent{
@@ -317,8 +361,12 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 		},
 		{
 			name: "upload completed",
-			payload: BackupCheckpointPayload{Kind: BackupCheckpointUploadCompleted, PointID: pointID,
-				StoredSizeBytes: 107, StoredSHA256: hex.EncodeToString(storedDigest)},
+			payload: testbackupruntime.BackupCheckpointPayload{
+				Kind:            testbackupruntime.BackupCheckpointUploadCompleted,
+				PointID:         pointID,
+				StoredSizeBytes: 107,
+				StoredSHA256:    hex.EncodeToString(storedDigest),
+			},
 			request: &agentpb.BackupCheckpointRequest{
 				Kind: agentpb.BackupCheckpointKind_BACKUP_CHECKPOINT_KIND_UPLOAD_COMPLETED,
 				Payload: &agentpb.BackupCheckpointRequest_UploadCompleted{
@@ -329,12 +377,12 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 			},
 		},
 	}
-	if got, want := len(tests), int(BackupCheckpointUploadCompleted); got != want {
+	if got, want := len(tests), int(testbackupruntime.BackupCheckpointUploadCompleted); got != want {
 		t.Fatalf("checkpoint parity vectors = %d, want %d current kinds", got, want)
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := backupCheckpointDigest(test.payload)
+			got, err := testbackupruntime.BackupCheckpointDigest(test.payload)
 			if err != nil {
 				t.Fatalf("backupCheckpointDigest() error = %v", err)
 			}
@@ -352,102 +400,115 @@ func TestBackupCheckpointDigestMatchesExecutionPlanGrammarForEveryKind(t *testin
 func seedBackupCheckpointAssignment(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	run BackupRunRecord,
-) (BackupCheckpointInput, int64) {
+	run testbackupruntime.BackupRunRecord,
+) (testbackupruntime.BackupCheckpointInput, int64) {
 	pointIDs := make([]string, len(run.Sources))
 	for index := range run.Sources {
 		pointIDs[index] = run.Sources[index].RecoveryPointID
 	}
-	return seedBackupCheckpointAssignmentForTask(t, store, run, TaskBackup, pointIDs)
+	return seedBackupCheckpointAssignmentForTask(t, store, run, testtaskjournal.TaskBackup, pointIDs)
 }
 
 func seedBackupPruneCheckpointAssignment(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	run BackupRunRecord,
+	run testbackupruntime.BackupRunRecord,
 	pointIDs []string,
-) (BackupCheckpointInput, int64) {
-	return seedBackupCheckpointAssignmentForTask(t, store, run, TaskBackupPrune, pointIDs)
+) (testbackupruntime.BackupCheckpointInput, int64) {
+	return seedBackupCheckpointAssignmentForTask(t, store, run, testtaskjournal.TaskBackupPrune, pointIDs)
 }
 
 func seedBackupCheckpointAssignmentForTask(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	run BackupRunRecord,
-	taskType TaskType,
+	run testbackupruntime.BackupRunRecord,
+	taskType testtaskjournal.TaskType,
 	pointIDs []string,
-) (BackupCheckpointInput, int64) {
+) (testbackupruntime.BackupCheckpointInput, int64) {
 	t.Helper()
 	now := run.CreatedAt
 	task := validTaskRecord(now)
 	task.ID = run.TaskID
 	task.OperationID = run.OperationID
 	task.Type = taskType
-	if taskType == TaskBackupPrune {
-		task.Actor = TaskActorSystem
+	if taskType == testtaskjournal.TaskBackupPrune {
+		task.Actor = testtaskjournal.TaskActorSystem
 	}
 	task.Target = run.EnvironmentID
 	task.RenderGeneration = 0
 	task.Params = nil
 	task.Materializations = nil
 	task.TimeoutSeconds = backupTaskTimeoutSeconds
-	task.Steps = make([]TaskStepRecord, len(pointIDs))
+	task.Steps = make([]testtaskjournal.TaskStepRecord, len(pointIDs))
 	for index := range pointIDs {
-		task.Steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, int64(801+index))}
+		task.Steps[index] = testtaskjournal.TaskStepRecord{
+			Kind: testtaskjournal.TaskStepOperation,
+			ID:   ids.NewAt(ids.KindStep, now, int64(801+index)),
+		}
 	}
-	task.Status = TaskStatusPending
+	task.Status = testtaskjournal.TaskStatusPending
 	task.StartedAt = nil
 	task.UpdatedAt = task.CreatedAt
-	value, err := encodeTaskRecord(task)
+	value, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(value)
 	created, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: taskKey(task.ID)}},
-		[]Mutation{{Type: MutationPut, Key: taskKey(task.ID), Value: value}},
+		[]testkeyvalue.Condition{{Key: testtaskjournal.TaskStorageKey(task.ID)}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: value},
+		},
 	)
 	if err != nil || !created.Succeeded {
 		t.Fatalf("seed checkpoint Task = %#v, %v", created, err)
 	}
 	agentID := ids.NewAt(ids.KindAgent, now, 802)
-	assignment := TaskAssignmentRecord{
+	assignment := testtaskassignments.TaskAssignmentRecord{
 		AssignmentID: ids.NewAt(ids.KindAssignment, now, 803), TaskID: task.ID,
-		Executor: TaskExecutorAgent, AgentID: agentID, AgentGeneration: 7,
+		Executor: testtaskjournal.TaskExecutorAgent, AgentID: agentID, AgentGeneration: 7,
 		ClaimedTaskRevision: created.Revision, AssignedAt: now.Add(time.Second),
 		Deadline: now.Add(6*time.Hour + time.Second), RecoveryDeadline: now.Add(12*time.Hour + time.Second),
-		ExecutionMode: TaskExecutionModeForward, ExecutionEpoch: 1,
+		ExecutionMode: testtaskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
 	running := task
-	running.Status = TaskStatusRunning
+	running.Status = testtaskjournal.TaskStatusRunning
 	running.StartedAt = &assignment.AssignedAt
 	running.UpdatedAt = assignment.AssignedAt
-	runningValue, err := encodeTaskRecord(running)
+	runningValue, err := EncodeTaskRecord(running)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(runningValue)
-	assignmentValue, err := encodeTaskAssignment(assignment)
+	assignmentValue, err := testtaskassignments.EncodeTaskAssignment(assignment)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(assignmentValue)
 	claimed, err := store.Transact(
 		context.Background(),
-		[]Condition{
-			{Key: taskKey(task.ID), ModRevision: created.Revision},
-			{Key: taskAssignmentKey(agentID, task.ID)},
-			{Key: taskAssignmentIndexKey(task.ID)},
-			{Key: taskTimeoutIndexKey(task.ID, assignment.Deadline)},
+		[]testkeyvalue.Condition{
+			{Key: testtaskjournal.TaskStorageKey(task.ID), ModRevision: created.Revision},
+			{Key: testtaskjournal.TaskAssignmentKey(agentID, task.ID)},
+			{Key: testtaskjournal.TaskAssignmentIndexKey(task.ID)},
+			{Key: testtaskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline)},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: taskKey(task.ID), Value: runningValue},
-			{Type: MutationPut, Key: taskAssignmentKey(agentID, task.ID), Value: assignmentValue},
-			{Type: MutationPut, Key: taskAssignmentIndexKey(task.ID), Value: assignmentValue},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: runningValue},
 			{
-				Type:  MutationPut,
-				Key:   taskTimeoutIndexKey(task.ID, assignment.Deadline),
+				Type:  testkeyvalue.MutationPut,
+				Key:   testtaskjournal.TaskAssignmentKey(agentID, task.ID),
+				Value: assignmentValue,
+			},
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testtaskjournal.TaskAssignmentIndexKey(task.ID),
+				Value: assignmentValue,
+			},
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testtaskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline),
 				Value: assignmentValue,
 			},
 		},
@@ -455,11 +516,11 @@ func seedBackupCheckpointAssignmentForTask(
 	if err != nil || !claimed.Succeeded {
 		t.Fatalf("seed checkpoint assignment = %#v, %v", claimed, err)
 	}
-	return BackupCheckpointInput{
+	return testbackupruntime.BackupCheckpointInput{
 		TaskID: task.ID, AssignmentID: assignment.AssignmentID, AgentID: agentID,
 		AgentGeneration: assignment.AgentGeneration, StepID: task.Steps[0].ID, Sequence: 1,
-		Payload: BackupCheckpointPayload{
-			Kind: BackupCheckpointArtifactPrepared, PointID: pointIDs[0],
+		Payload: testbackupruntime.BackupCheckpointPayload{
+			Kind: testbackupruntime.BackupCheckpointArtifactPrepared, PointID: pointIDs[0],
 			StoredSizeBytes: 123, StoredSHA256: testBackupDigest,
 		},
 	}, claimed.Revision

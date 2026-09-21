@@ -11,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -177,7 +181,7 @@ func TestEnvironmentVolumeRemovalRootReplayPreservesOriginalResponse(t *testing.
 
 func environmentVolumeRemovalRuntimeFixture(
 	t *testing.T,
-) (*memoryHierarchyStore, *EnvironmentVolumeRemovalRuntimeRepository, removalrecord.Runtime, etcd.TaskRecord, etcd.IdempotencyMarker) {
+) (*memoryHierarchyStore, *EnvironmentVolumeRemovalRuntimeRepository, removalrecord.Runtime, etcd.TaskRecord, testidempotency.IdempotencyMarker) {
 	t.Helper()
 	store := newMemoryHierarchyStore()
 	repository, err := newEnvironmentVolumeRemovalRuntimeRepository(store)
@@ -195,18 +199,18 @@ func environmentVolumeRemovalRuntimeFixture(
 	task := validVolumeRemovalTask(now)
 	task.ID = taskID
 	task.OperationID = operationID
-	task.Owner = etcd.TaskOwner{
-		WorkspaceType: etcd.TaskWorkspaceTenant, TenantID: tenantID,
+	task.Owner = testtaskjournal.TaskOwner{
+		WorkspaceType: testtaskjournal.TaskWorkspaceTenant, TenantID: tenantID,
 		ProjectID: projectID, EnvironmentID: environmentID,
 	}
-	task.Type = etcd.TaskRemove
+	task.Type = testtaskjournal.TaskRemove
 	task.Target = volumeID
 	task.TimeoutSeconds = removalrecord.TimeoutSeconds
-	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}
+	task.Steps = []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}}
 	task.IdempotencyKey = "volume-remove-idempotency-key-0001"
 	marker := pendingVolumeRemovalMarker(task)
-	marker.Locator = etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: http.MethodDelete, Route: "/volumes/{id}", Key: task.IdempotencyKey,
 	}
 	marker.TaskID = task.ID
@@ -243,18 +247,18 @@ func persistEnvironmentVolumeRemovalTaskAndMarker(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker testidempotency.IdempotencyMarker,
 ) {
 	t.Helper()
-	taskValue, err := etcd.EncodeCapabilityTaskRecord(task)
+	taskValue, err := etcd.EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerValue, err := etcd.EncodeCapabilityIdempotencyMarker(marker)
+	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatal(err)
 	}
-	markerKey, err := etcd.CapabilityIdempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,15 +268,19 @@ func persistEnvironmentVolumeRemovalTaskAndMarker(
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.Transact(context.Background(), []etcd.Condition{
-		{Key: etcd.CapabilityTaskKey(task.ID)}, {Key: markerKey},
+	result, err := store.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testtaskjournal.TaskStorageKey(task.ID)}, {Key: markerKey},
 		{Key: removalrecord.OwnerKey(task.Target)},
 		{Key: removalrecord.EnvironmentLockKey(task.Owner.EnvironmentID)},
-	}, []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskKey(task.ID), Value: taskValue},
-		{Type: etcd.MutationPut, Key: markerKey, Value: markerValue},
-		{Type: etcd.MutationPut, Key: removalrecord.OwnerKey(task.Target), Value: ownerValue},
-		{Type: etcd.MutationPut, Key: removalrecord.EnvironmentLockKey(task.Owner.EnvironmentID), Value: ownerValue},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: testkeyvalue.MutationPut, Key: markerKey, Value: markerValue},
+		{Type: testkeyvalue.MutationPut, Key: removalrecord.OwnerKey(task.Target), Value: ownerValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   removalrecord.EnvironmentLockKey(task.Owner.EnvironmentID),
+			Value: ownerValue,
+		},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("persist root Task/marker = %#v, %v", result, err)
@@ -288,53 +296,50 @@ func assignEnvironmentVolumeRemovalTask(
 ) EnvironmentVolumeRemovalAssignment {
 	t.Helper()
 	ctx := context.Background()
-	stored, err := store.Get(ctx, etcd.CapabilityTaskKey(taskID))
+	stored, err := store.Get(ctx, testtaskjournal.TaskStorageKey(taskID))
 	if err != nil || stored.Entry == nil {
 		t.Fatalf("pending Task = %#v, %v", stored, err)
 	}
-	task, err := etcd.DecodeCapabilityTaskRecord(stored.Entry.Value)
+	task, err := etcd.DecodeTaskRecord(stored.Entry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	running, err := etcd.TransitionCapabilityTaskStatus(
-		task,
-		etcd.TaskStatusPending,
-		etcd.TaskStatusRunning,
-		assignedAt,
+	running, err := etcd.TransitionTaskStatus(
+		task, testtaskjournal.TaskStatusPending, testtaskjournal.TaskStatusRunning, assignedAt,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 70)
 	deadline := assignedAt.Add(time.Duration(task.TimeoutSeconds) * time.Second)
-	assignment := etcd.TaskAssignmentRecord{
+	assignment := testtaskassignments.TaskAssignmentRecord{
 		AssignmentID: ids.NewAt(ids.KindAssignment, task.CreatedAt, 71),
-		TaskID:       task.ID, Executor: etcd.TaskExecutorAgent, AgentID: agentID,
+		TaskID:       task.ID, Executor: testtaskjournal.TaskExecutorAgent, AgentID: agentID,
 		AgentGeneration: 3, ClaimedTaskRevision: stored.Entry.ModRevision,
 		AssignedAt: assignedAt, Deadline: deadline,
 		RecoveryDeadline: deadline.Add(time.Duration(task.TimeoutSeconds) * time.Second),
-		ExecutionMode:    etcd.TaskExecutionModeForward, ExecutionEpoch: 1,
+		ExecutionMode:    testtaskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
-	runningValue, err := etcd.EncodeCapabilityTaskRecord(running)
+	runningValue, err := etcd.EncodeTaskRecord(running)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assignmentValue, err := etcd.EncodeCapabilityTaskAssignment(assignment)
+	assignmentValue, err := testtaskassignments.EncodeTaskAssignment(assignment)
 	if err != nil {
 		t.Fatal(err)
 	}
-	claimKey := etcd.CapabilityTaskExecutionClaimKey(etcd.TaskExecutorAgent, agentID, task.ID)
-	result, err := store.Transact(ctx, []etcd.Condition{
-		{Key: etcd.CapabilityTaskKey(task.ID), ModRevision: stored.Entry.ModRevision},
-		{Key: claimKey}, {Key: etcd.CapabilityTaskAssignmentIndexKey(task.ID)},
-		{Key: etcd.CapabilityTaskTimeoutIndexKey(task.ID, assignment.Deadline)},
-	}, []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskKey(task.ID), Value: runningValue},
-		{Type: etcd.MutationPut, Key: claimKey, Value: assignmentValue},
-		{Type: etcd.MutationPut, Key: etcd.CapabilityTaskAssignmentIndexKey(task.ID), Value: assignmentValue},
+	claimKey := testtaskjournal.TaskExecutionClaimKey(testtaskjournal.TaskExecutorAgent, agentID, task.ID)
+	result, err := store.Transact(ctx, []testkeyvalue.Condition{
+		{Key: testtaskjournal.TaskStorageKey(task.ID), ModRevision: stored.Entry.ModRevision},
+		{Key: claimKey}, {Key: testtaskjournal.TaskAssignmentIndexKey(task.ID)},
+		{Key: testtaskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline)},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: runningValue},
+		{Type: testkeyvalue.MutationPut, Key: claimKey, Value: assignmentValue},
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskAssignmentIndexKey(task.ID), Value: assignmentValue},
 		{
-			Type:  etcd.MutationPut,
-			Key:   etcd.CapabilityTaskTimeoutIndexKey(task.ID, assignment.Deadline),
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline),
 			Value: assignmentValue,
 		},
 	})
@@ -388,30 +393,30 @@ func newMemoryHierarchyStore() *memoryHierarchyStore {
 	return &memoryHierarchyStore{history: make(map[string][]memoryVersion)}
 }
 
-func (store *memoryHierarchyStore) Get(_ context.Context, key string) (*etcd.GetResult, error) {
-	return &etcd.GetResult{Entry: store.valueAt(key, store.revision), ReadRevision: store.revision}, nil
+func (store *memoryHierarchyStore) Get(_ context.Context, key string) (*testkeyvalue.GetResult, error) {
+	return &testkeyvalue.GetResult{Entry: store.valueAt(key, store.revision), ReadRevision: store.revision}, nil
 }
 
 func (store *memoryHierarchyStore) GetMany(
 	_ context.Context,
-	request etcd.GetManyRequest,
-) (*etcd.GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	revision := request.Revision
 	if revision == 0 {
 		revision = store.revision
 	}
-	values := make([]*etcd.KeyValue, len(request.Keys))
+	values := make([]*testkeyvalue.KeyValue, len(request.Keys))
 	for index, key := range request.Keys {
 		values[index] = store.valueAt(key, revision)
 	}
-	return &etcd.GetManyResult{Values: values, ReadRevision: revision, ResponseRevision: store.revision}, nil
+	return &testkeyvalue.GetManyResult{Values: values, ReadRevision: revision, ResponseRevision: store.revision}, nil
 }
 
 func (store *memoryHierarchyStore) Transact(
 	_ context.Context,
-	conditions []etcd.Condition,
-	mutations []etcd.Mutation,
-) (etcd.TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	for _, condition := range conditions {
 		value := store.valueAt(condition.Key, store.revision)
 		actual := int64(0)
@@ -419,30 +424,30 @@ func (store *memoryHierarchyStore) Transact(
 			actual = value.ModRevision
 		}
 		if actual != condition.ModRevision {
-			failure := make([]*etcd.KeyValue, len(conditions))
+			failure := make([]*testkeyvalue.KeyValue, len(conditions))
 			for index, item := range conditions {
 				failure[index] = store.valueAt(item.Key, store.revision)
 			}
-			return etcd.TransactionResult{Revision: store.revision, FailureReads: failure}, nil
+			return testkeyvalue.TransactionResult{Revision: store.revision, FailureReads: failure}, nil
 		}
 	}
 	store.revision++
 	for _, mutation := range mutations {
 		version := memoryVersion{revision: store.revision}
 		switch mutation.Type {
-		case etcd.MutationPut:
+		case testkeyvalue.MutationPut:
 			version.present = true
 			version.value = append([]byte(nil), mutation.Value...)
-		case etcd.MutationDelete:
+		case testkeyvalue.MutationDelete:
 		default:
-			return etcd.TransactionResult{}, errs.New(errs.KindInternal, "fake store received invalid mutation")
+			return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "fake store received invalid mutation")
 		}
 		store.history[mutation.Key] = append(store.history[mutation.Key], version)
 	}
-	return etcd.TransactionResult{Succeeded: true, Revision: store.revision}, nil
+	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
-func (store *memoryHierarchyStore) valueAt(key string, revision int64) *etcd.KeyValue {
+func (store *memoryHierarchyStore) valueAt(key string, revision int64) *testkeyvalue.KeyValue {
 	versions := store.history[key]
 	for index := len(versions) - 1; index >= 0; index-- {
 		version := versions[index]
@@ -456,7 +461,7 @@ func (store *memoryHierarchyStore) valueAt(key string, revision int64) *etcd.Key
 		for previous := index; previous >= 0 && versions[previous].present; previous-- {
 			keyVersion++
 		}
-		return &etcd.KeyValue{
+		return &testkeyvalue.KeyValue{
 			Key:         key,
 			Value:       append([]byte(nil), version.value...),
 			Version:     keyVersion,
@@ -468,27 +473,36 @@ func (store *memoryHierarchyStore) valueAt(key string, revision int64) *etcd.Key
 
 func validVolumeRemovalTask(now time.Time) etcd.TaskRecord {
 	return etcd.TaskRecord{
-		Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorAgent,
+		Actor: testtaskjournal.TaskActorOperator, Executor: testtaskjournal.TaskExecutorAgent,
 		PlanID: ids.NewAt(ids.KindPlan, now, 3), PlanHash: strings.Repeat("a", 64),
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status: testtaskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 }
 
-func pendingVolumeRemovalMarker(task etcd.TaskRecord) etcd.IdempotencyMarker {
+func pendingVolumeRemovalMarker(task etcd.TaskRecord) testidempotency.IdempotencyMarker {
 	ciphertext := []byte("protected-task-intent")
 	digest := sha256.Sum256(ciphertext)
 	body, _ := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: task.ID})
-	return etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
-		Locator: etcd.IdempotencyLocator{ScopeKind: etcd.IdempotencyScopeEnvironment,
+	return testidempotency.IdempotencyMarker{
+		Kind: testidempotency.IdempotencyMarkerTask, State: testidempotency.IdempotencyMarkerPending,
+		Locator: testidempotency.IdempotencyLocator{ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 			ScopeID: ids.NewAt(ids.KindEnvironment, task.CreatedAt, 501), Method: http.MethodPost,
 			Route: "/environments/{environment}/tasks", Key: task.IdempotencyKey},
-		Intent: etcd.ProtectedIntentRecord{EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
-			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext},
-		Response: etcd.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		TaskID:   task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
+		Intent: testidempotency.ProtectedIntentRecord{
+			EnvelopeVersion:  1,
+			Cipher:           "age-x25519",
+			DigestAlgorithm:  "sha256",
+			CiphertextDigest: hex.EncodeToString(digest[:]),
+			Ciphertext:       ciphertext,
+		},
+		Response: testidempotency.IdempotencyResponse{
+			Status:      http.StatusAccepted,
+			ContentKind: "application/json",
+			Body:        body,
+		},
+		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	}
 }
 

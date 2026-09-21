@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,27 +20,37 @@ func TestManualScriptBeforeStartFailureRetainsRetrySources(t *testing.T) {
 	ctx := context.Background()
 	store, scripts, tasks, assignment, execution := claimedManualScriptFixture(t)
 	terminalAt := assignment.Task.Record.CreatedAt.Add(20 * time.Second)
-	result := manualScriptTerminalResult(assignment, TaskStatusFailed)
-	terminal, err := tasks.AcknowledgeTask(ctx, assignment.Assignment.Record.AgentID, 1,
-		assignment.Task.Record.ID, assignment.Assignment.Record.AssignmentID, TaskStatusFailed, result, terminalAt)
-	if err != nil || terminal.Record.Status != TaskStatusFailed || terminal.Record.RetainUntil == nil {
+	result := manualScriptTerminalResult(assignment, testtaskjournal.TaskStatusFailed)
+	terminal, err := tasks.AcknowledgeTask(
+		ctx,
+		assignment.Assignment.Record.AgentID,
+		1,
+		assignment.Task.Record.ID,
+		assignment.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusFailed,
+		result,
+		terminalAt,
+	)
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusFailed || terminal.Record.RetainUntil == nil {
 		t.Fatalf("before-start failure did not terminalize with retention: %v", err)
 	}
-	rootValue := store.valueAt(scriptSourceRootKey(execution.OperationID), store.revision)
+	rootValue := store.valueAt(testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID), store.revision)
 	if rootValue == nil || rootValue.ModRevision != terminal.Revision {
 		t.Fatal("retry availability did not share Task terminal publication")
 	}
-	root, err := decodeScriptOperationSourceRoot(rootValue.Value)
-	if err != nil || root.Phase != ScriptOperationSourceActive ||
-		root.RetryDisposition != ScriptRetryDispositionAvailable {
+	root, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(rootValue.Value)
+	if err != nil || root.Phase != testscriptsourceevidence.ScriptOperationSourceActive ||
+		root.RetryDisposition != testscriptsourcereference.RetryDispositionAvailable {
 		t.Fatalf("before-start failure closed its retry sources: %v", err)
 	}
 	if root.RetryExpiresAt == nil || !root.RetryExpiresAt.Equal(*terminal.Record.RetainUntil) {
 		t.Fatal("retry expiry differs from the terminal Task retention deadline")
 	}
 	retained, err := scripts.GetScriptExecution(ctx, execution.ID)
-	if err != nil || retained.Record.State != ScriptExecutionNotStarted || !retained.Record.ActiveReference ||
-		retained.Record.StartAuthorized || retained.Record.AssignmentID != "" {
+	if err != nil || retained.Record.State != testscriptexecutions.ScriptExecutionNotStarted ||
+		!retained.Record.ActiveReference ||
+		retained.Record.StartAuthorized ||
+		retained.Record.AssignmentID != "" {
 		t.Fatalf("before-start failure changed execution evidence: %v", err)
 	}
 	script, err := scripts.GetScript(ctx, execution.ScriptID)
@@ -49,9 +63,7 @@ func TestManualScriptBeforeStartFailureRetainsRetrySources(t *testing.T) {
 		assignment.Assignment.Record.AgentID,
 		1,
 		assignment.Task.Record.ID,
-		assignment.Assignment.Record.AssignmentID,
-		TaskStatusFailed,
-		result,
+		assignment.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, result,
 		terminalAt.Add(time.Second),
 	)
 	if err != nil || store.revision != revision {
@@ -65,15 +77,22 @@ func TestManualScriptRetryTransfersSealedSources(t *testing.T) {
 	ctx := context.Background()
 	store, scripts, tasks, assignment, execution := claimedManualScriptFixture(t)
 	at := assignment.Task.Record.CreatedAt.Add(20 * time.Second)
-	terminal, err := tasks.AcknowledgeTask(ctx, assignment.Assignment.Record.AgentID, 1,
-		assignment.Task.Record.ID, assignment.Assignment.Record.AssignmentID, TaskStatusFailed,
-		manualScriptTerminalResult(assignment, TaskStatusFailed), at)
+	terminal, err := tasks.AcknowledgeTask(
+		ctx,
+		assignment.Assignment.Record.AgentID,
+		1,
+		assignment.Task.Record.ID,
+		assignment.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusFailed,
+		manualScriptTerminalResult(assignment, testtaskjournal.TaskStatusFailed),
+		at,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	retryID := ids.NewAt(ids.KindTask, at.Add(time.Second), 100)
 	marker := pendingRetryMarker(terminal.Record, retryID, at.Add(time.Second), "manual-script-retry")
-	result, err := tasks.RetryTask(ctx, terminal.Record.ID, retryID, TaskActorOperator, marker)
+	result, err := tasks.RetryTask(ctx, terminal.Record.ID, retryID, testtaskjournal.TaskActorOperator, marker)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("manual retry publication = %v, %v", result.kind, err)
 	}
@@ -83,19 +102,20 @@ func TestManualScriptRetryTransfersSealedSources(t *testing.T) {
 	}
 	transferred, err := scripts.GetScriptExecution(ctx, execution.ID)
 	if err != nil || transferred.Record.CurrentTaskID != retryID || transferred.Revision != retry.Revision ||
-		transferred.Record.State != ScriptExecutionNotStarted || !transferred.Record.ActiveReference ||
+		transferred.Record.State != testscriptexecutions.ScriptExecutionNotStarted || !transferred.Record.ActiveReference ||
 		!bytes.Equal(
 			transferred.Record.Plan,
 			execution.Plan,
 		) || !bytes.Equal(transferred.Record.Snapshot, execution.Snapshot) {
 		t.Fatalf("retry did not atomically transfer the sealed execution: %v", err)
 	}
-	rootValue := store.valueAt(scriptSourceRootKey(execution.OperationID), store.revision)
+	rootValue := store.valueAt(testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID), store.revision)
 	if rootValue == nil || rootValue.ModRevision != retry.Revision {
 		t.Fatal("retry did not transfer its source root atomically")
 	}
-	root, err := decodeScriptOperationSourceRoot(rootValue.Value)
-	if err != nil || root.RetryDisposition != ScriptRetryDispositionTransferred || root.RetryExpiresAt != nil ||
+	root, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(rootValue.Value)
+	if err != nil || root.RetryDisposition != testscriptsourcereference.RetryDispositionTransferred ||
+		root.RetryExpiresAt != nil ||
 		!manualScriptRootMatches(transferred.Record, root) {
 		t.Fatalf("retry changed its immutable source set: %v", err)
 	}
@@ -108,9 +128,9 @@ func TestManualScriptRetryTransfersSealedSources(t *testing.T) {
 		claimed.Assignment.Record.AssignmentID == assignment.Assignment.Record.AssignmentID {
 		t.Fatalf("retry did not acquire fresh assignment authority: %t, %v", found, err)
 	}
-	activeValue := store.valueAt(scriptSourceRootKey(execution.OperationID), store.revision)
-	active, err := decodeScriptOperationSourceRoot(activeValue.Value)
-	if err != nil || active.RetryDisposition != ScriptRetryDispositionUndecided ||
+	activeValue := store.valueAt(testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID), store.revision)
+	active, err := testscriptsourceevidence.DecodeScriptOperationSourceRoot(activeValue.Value)
+	if err != nil || active.RetryDisposition != testscriptsourcereference.RetryDispositionUndecided ||
 		activeValue.ModRevision != claimed.Task.Revision {
 		t.Fatalf("retry claim did not activate its new Task authority: %v", err)
 	}
@@ -121,16 +141,28 @@ func TestManualScriptRetryTransfersSealedSources(t *testing.T) {
 func TestManualScriptRetryRejectsAtRetentionDeadline(t *testing.T) {
 	ctx := context.Background()
 	store, _, tasks, assignment, _ := claimedManualScriptFixture(t)
-	terminal, err := tasks.AcknowledgeTask(ctx, assignment.Assignment.Record.AgentID, 1,
-		assignment.Task.Record.ID, assignment.Assignment.Record.AssignmentID, TaskStatusFailed,
-		manualScriptTerminalResult(assignment, TaskStatusFailed), assignment.Task.Record.CreatedAt.Add(20*time.Second))
+	terminal, err := tasks.AcknowledgeTask(
+		ctx,
+		assignment.Assignment.Record.AgentID,
+		1,
+		assignment.Task.Record.ID,
+		assignment.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusFailed,
+		manualScriptTerminalResult(assignment, testtaskjournal.TaskStatusFailed),
+		assignment.Task.Record.CreatedAt.Add(20*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	revision := store.revision
 	retryID := ids.NewAt(ids.KindTask, *terminal.Record.RetainUntil, 102)
-	_, err = tasks.RetryTask(ctx, terminal.Record.ID, retryID, TaskActorOperator,
-		pendingRetryMarker(terminal.Record, retryID, *terminal.Record.RetainUntil, "expired-manual-retry"))
+	_, err = tasks.RetryTask(
+		ctx,
+		terminal.Record.ID,
+		retryID,
+		testtaskjournal.TaskActorOperator,
+		pendingRetryMarker(terminal.Record, retryID, *terminal.Record.RetainUntil, "expired-manual-retry"),
+	)
 	if !isKind(err, errs.KindScriptRetryUnsafe) || store.revision != revision {
 		t.Fatalf("expired Script retry created authority: %v", err)
 	}
@@ -141,18 +173,30 @@ func TestManualScriptRetryRejectsAtRetentionDeadline(t *testing.T) {
 func TestManualScriptRetryRejectsAfterStart(t *testing.T) {
 	ctx := context.Background()
 	store, scripts, tasks, assignment, execution := claimedManualScriptFixture(t)
-	manualScriptCleanupCheckpoints(t, scripts, assignment, execution, TaskStatusFailed)
+	manualScriptCleanupCheckpoints(t, scripts, assignment, execution, testtaskjournal.TaskStatusFailed)
 	at := assignment.Task.Record.CreatedAt.Add(20 * time.Second)
-	terminal, err := tasks.AcknowledgeTask(ctx, assignment.Assignment.Record.AgentID, 1,
-		assignment.Task.Record.ID, assignment.Assignment.Record.AssignmentID, TaskStatusFailed,
-		manualScriptTerminalResult(assignment, TaskStatusFailed), at)
+	terminal, err := tasks.AcknowledgeTask(
+		ctx,
+		assignment.Assignment.Record.AgentID,
+		1,
+		assignment.Task.Record.ID,
+		assignment.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusFailed,
+		manualScriptTerminalResult(assignment, testtaskjournal.TaskStatusFailed),
+		at,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	revision := store.revision
 	retryID := ids.NewAt(ids.KindTask, at.Add(time.Second), 101)
-	_, err = tasks.RetryTask(ctx, terminal.Record.ID, retryID, TaskActorOperator,
-		pendingRetryMarker(terminal.Record, retryID, at.Add(time.Second), "unsafe-manual-retry"))
+	_, err = tasks.RetryTask(
+		ctx,
+		terminal.Record.ID,
+		retryID,
+		testtaskjournal.TaskActorOperator,
+		pendingRetryMarker(terminal.Record, retryID, at.Add(time.Second), "unsafe-manual-retry"),
+	)
 	if !isKind(err, errs.KindScriptRetryUnsafe) || store.revision != revision {
 		t.Fatalf("started Script was retryable: %v", err)
 	}

@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhostresolution "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,7 +27,7 @@ func TestPlatformResolverBootstrapTaskIsClaimable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	records, err := DefaultPlatformComponents(false)
+	records, err := testplatformcomponents.DefaultPlatformComponents(false)
 	if err != nil {
 		t.Fatalf("DefaultPlatformComponents() error = %v", err)
 	}
@@ -33,7 +36,7 @@ func TestPlatformResolverBootstrapTaskIsClaimable(t *testing.T) {
 		t.Fatalf("EnsurePlatformComponents() error = %v", err)
 	}
 	current := created[0]
-	projection, err := NewHostResolutionProjectionRecord(current.ReadRevision, nil)
+	projection, err := testhostresolution.NewHostResolutionProjectionRecord(current.ReadRevision, nil)
 	if err != nil {
 		t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 	}
@@ -46,7 +49,7 @@ func TestPlatformResolverBootstrapTaskIsClaimable(t *testing.T) {
 	}
 	serviceID := ids.NewAt(ids.KindService, now, 1)
 	composeArtifactID := ids.NewAt(ids.KindConfig, now, 2)
-	input := PlatformComponentTaskRenderInput{
+	input := testplatformcomponents.PlatformComponentTaskRenderInput{
 		PlanID: task.PlanID, TaskID: task.ID, ComponentID: task.Target,
 		DesiredSHA256: desiredSHA256, BaselineGeneration: 1, BaselineSHA256: strings.Repeat("a", 64),
 		HostResolutionInputRevision: projection.InputRevision, HostResolutionSHA256: projection.InputSHA256,
@@ -66,7 +69,7 @@ func TestPlatformResolverBootstrapTaskIsClaimable(t *testing.T) {
 	}
 	task.PlanHash = input.ExecutionPlanSHA256
 	marker := pendingTaskMarker(task)
-	marker.Locator.ScopeKind = IdempotencyScopePlatform
+	marker.Locator.ScopeKind = testidempotency.IdempotencyScopePlatform
 	marker.Locator.ScopeID = "-"
 	marker.Locator.Route = "/components/{id}/update"
 	if err := tasks.PublishPlatformDNSResolverTask(ctx, current, projection, task, input, marker); err != nil {
@@ -93,7 +96,7 @@ func TestPlatformComponentBootstrapProvenanceIsRepositoryOwned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewComponentRepository() error = %v", err)
 	}
-	records, err := DefaultPlatformComponents(false)
+	records, err := testplatformcomponents.DefaultPlatformComponents(false)
 	if err != nil {
 		t.Fatalf("DefaultPlatformComponents() error = %v", err)
 	}

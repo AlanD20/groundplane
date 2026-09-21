@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-// SVC-15: retained source identity outlives its original read revision. Reading
+// SVC-15: the etcd-retained source identity outlives its original read revision. Reading
 // another newly staged snapshot must not substitute that newer file set.
 func TestRetainedConfigurationLoadUsesExactImmutableReference(t *testing.T) {
 	t.Parallel()
 	store := newMemoryStore()
-	repository, err := NewRepository(store)
+	repository, err := newRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -30,25 +34,26 @@ func TestBackupTaskTerminalTransactionFailureLeavesRunningAuthorityIntact(t *tes
 		if _, err := failingTasks.AcknowledgeTask(
 			context.Background(), claim.Assignment.Record.AgentID,
 			claim.Assignment.Record.AgentGeneration, run.TaskID,
-			claim.Assignment.Record.AssignmentID, TaskStatusFailed, result, terminalAt,
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, result, terminalAt,
 		); !errors.Is(err, unknown) {
 			t.Fatalf("AcknowledgeTask(transaction failure) error = %v", err)
 		}
 		assertRunningBackupTerminalAuthority(t, tasks, store, run.TaskID, run.EnvironmentID, claim)
 		currentRun, err := runtime.GetBackupRun(context.Background(), run.TaskID)
-		if err != nil || !backupRunRecordsEqual(currentRun.Record, run) {
+		if err != nil || !testbackupruntime.BackupRunRecordsEqual(currentRun.Record, run) {
 			t.Fatalf("Backup run after transaction failure = %#v, %v", currentRun, err)
 		}
 		terminal, err := failingTasks.AcknowledgeTask(
 			context.Background(), claim.Assignment.Record.AgentID,
 			claim.Assignment.Record.AgentGeneration, run.TaskID,
-			claim.Assignment.Record.AssignmentID, TaskStatusFailed, result, terminalAt,
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, result, terminalAt,
 		)
-		if err != nil || terminal.Record.Status != TaskStatusFailed {
+		if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusFailed {
 			t.Fatalf("AcknowledgeTask(retry) = %#v, %v", terminal, err)
 		}
 		failedRun, err := runtime.GetBackupRun(context.Background(), run.TaskID)
-		if err != nil || failedRun.Record.State != BackupRunFailed || failedRun.Revision != terminal.Revision {
+		if err != nil || failedRun.Record.State != testbackupruntime.BackupRunFailed ||
+			failedRun.Revision != terminal.Revision {
 			t.Fatalf("Backup run after retry = %#v, %v", failedRun, err)
 		}
 	})
@@ -76,30 +81,34 @@ func TestBackupTaskTerminalTransactionFailureLeavesRunningAuthorityIntact(t *tes
 		terminalAt := claim.Assignment.Record.AssignedAt.Add(time.Second)
 		if _, err := failingTasks.AcknowledgeTask(
 			context.Background(), agentID, 1, dispatch.TaskID,
-			claim.Assignment.Record.AssignmentID, TaskStatusFailed, result, terminalAt,
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, result, terminalAt,
 		); !errors.Is(err, unknown) {
 			t.Fatalf("AcknowledgeTask(transaction failure) error = %v", err)
 		}
 		assertRunningBackupTerminalAuthority(
 			t, tasks, store, dispatch.TaskID, dispatch.EnvironmentID, claim,
 		)
-		dispatchEntry := mustOptionalKey(t, store, backupRecoveryPointPruneDispatchKey(dispatch.TaskID))
-		pruneEntry := mustOptionalKey(t, store, backupRecoveryPointPruneKey(pointID))
-		prune, decodeErr := decodeBackupRecoveryPointPruneRecord(pruneEntry.Value)
+		dispatchEntry := mustOptionalKey(
+			t,
+			store,
+			testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID),
+		)
+		pruneEntry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(pointID))
+		prune, decodeErr := testbackupruntime.DecodeBackupRecoveryPointPruneRecord(pruneEntry.Value)
 		if dispatchEntry == nil || pruneEntry == nil || decodeErr != nil ||
-			prune.State != BackupPruneAssigned || prune.TaskID != dispatch.TaskID {
+			prune.State != testbackupruntime.BackupPruneAssigned || prune.TaskID != dispatch.TaskID {
 			t.Fatalf("prune authority after transaction failure = %#v/%#v/%v", dispatchEntry, prune, decodeErr)
 		}
 		terminal, err := failingTasks.AcknowledgeTask(
 			context.Background(), agentID, 1, dispatch.TaskID,
-			claim.Assignment.Record.AssignmentID, TaskStatusFailed, result, terminalAt,
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, result, terminalAt,
 		)
-		if err != nil || terminal.Record.Status != TaskStatusFailed {
+		if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusFailed {
 			t.Fatalf("AcknowledgeTask(retry) = %#v, %v", terminal, err)
 		}
-		pendingEntry := mustOptionalKey(t, store, backupRecoveryPointPruneKey(pointID))
-		pending, decodeErr := decodeBackupRecoveryPointPruneRecord(pendingEntry.Value)
-		if decodeErr != nil || pending.State != BackupPrunePending || pending.TaskID != "" ||
+		pendingEntry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(pointID))
+		pending, decodeErr := testbackupruntime.DecodeBackupRecoveryPointPruneRecord(pendingEntry.Value)
+		if decodeErr != nil || pending.State != testbackupruntime.BackupPrunePending || pending.TaskID != "" ||
 			pendingEntry.ModRevision != terminal.Revision {
 			t.Fatalf("prune authority after retry = %#v/%#v/%v", pendingEntry, pending, decodeErr)
 		}
@@ -154,13 +163,13 @@ func TestTaskRepositoryMixedTimeoutCollectorsContinueAfterPrune(t *testing.T) {
 			}
 			for _, taskID := range []string{dispatch.TaskID, ordinary.ID} {
 				terminal, getErr := tasks.GetTask(context.Background(), taskID)
-				if getErr != nil || terminal.Record.Status != TaskStatusTimedOut {
+				if getErr != nil || terminal.Record.Status != testtaskjournal.TaskStatusTimedOut {
 					t.Fatalf("timed-out Task %s = %#v, %v", taskID, terminal, getErr)
 				}
 			}
-			pendingEntry := mustOptionalKey(t, store, backupRecoveryPointPruneKey(pointID))
-			pending, decodeErr := decodeBackupRecoveryPointPruneRecord(pendingEntry.Value)
-			if decodeErr != nil || pending.State != BackupPrunePending || pending.TaskID != "" {
+			pendingEntry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(pointID))
+			pending, decodeErr := testbackupruntime.DecodeBackupRecoveryPointPruneRecord(pendingEntry.Value)
+			if decodeErr != nil || pending.State != testbackupruntime.BackupPrunePending || pending.TaskID != "" {
 				t.Fatalf("timed-out prune authority = %#v/%#v/%v", pendingEntry, pending, decodeErr)
 			}
 		})
@@ -210,7 +219,7 @@ func TestTaskRepositoryMixedTimeoutCollectorsContinueAfterBackup(t *testing.T) {
 			}
 			for _, taskID := range []string{run.TaskID, ordinary.ID} {
 				terminal, getErr := tasks.GetTask(context.Background(), taskID)
-				if getErr != nil || terminal.Record.Status != TaskStatusTimedOut {
+				if getErr != nil || terminal.Record.Status != testtaskjournal.TaskStatusTimedOut {
 					t.Fatalf("timed-out Task %s = %#v, %v", taskID, terminal, getErr)
 				}
 			}
@@ -225,20 +234,20 @@ type backupTerminalTransactionFailureStore struct {
 
 func (store *backupTerminalTransactionFailureStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.failNext != nil {
 		failure := store.failNext
 		store.failNext = nil
-		return TransactionResult{}, failure
+		return testkeyvalue.TransactionResult{}, failure
 	}
 	return store.hierarchyStore.Transact(ctx, conditions, mutations)
 }
 
 func publishBackupTerminalLifecycleTask(
 	t *testing.T,
-) (*BackupRuntimeRepository, *memoryHierarchyStore, *TaskRepository, BackupRunRecord, TaskAssignment) {
+) (*BackupRuntimeRepository, *memoryHierarchyStore, *TaskRepository, testbackupruntime.BackupRunRecord, TaskAssignment) {
 	t.Helper()
 	runtime, store, run := newBackupRuntimeBareFixture(t)
 	runPlan, err := runtime.prepareBackupRunPublication(
@@ -254,7 +263,7 @@ func publishBackupTerminalLifecycleTask(
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +294,8 @@ func assertRunningBackupTerminalAuthority(
 ) {
 	t.Helper()
 	current, err := tasks.GetTask(context.Background(), taskID)
-	if err != nil || current.Record.Status != TaskStatusRunning || current.Revision != claim.Task.Revision {
+	if err != nil || current.Record.Status != testtaskjournal.TaskStatusRunning ||
+		current.Revision != claim.Task.Revision {
 		t.Fatalf("Task after terminal transaction failure = %#v, %v", current, err)
 	}
 	assignment, err := tasks.GetTaskAssignment(context.Background(), taskID)
@@ -293,7 +303,7 @@ func assertRunningBackupTerminalAuthority(
 		assignment.Assignment.Revision != claim.Assignment.Revision {
 		t.Fatalf("assignment after terminal transaction failure = %#v, %v", assignment, err)
 	}
-	if mustOptionalKey(t, store, environmentOperationLockKey(environmentID)) == nil {
+	if mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(environmentID)) == nil {
 		t.Fatal("terminal transaction failure released the Environment lock")
 	}
 }

@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"testing"
 )
 
@@ -12,7 +14,13 @@ func TestRuntimeConfigurationPublicationPreservesPresealedSource(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
 	task := configurationTaskFixture()
-	seed, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: taskKey(task.ID), Value: []byte("seed")}})
+	seed, err := store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: []byte("seed")},
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

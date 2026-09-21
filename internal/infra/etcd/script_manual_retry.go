@@ -20,7 +20,8 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	ctx context.Context, task TaskRecord, execution scriptexecutions.ScriptExecutionRecord,
 	executionValue, rootValue *etcdstore.KeyValue, status taskjournal.TaskStatus, terminalAt *time.Time,
 ) (scriptTerminalSourceRelease, error) {
-	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
+	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized ||
+		execution.AssignmentID != "" ||
 		!execution.ActiveReference ||
 		execution.ReconciliationRequired {
 		return scriptTerminalSourceRelease{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
@@ -59,9 +60,11 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		!retry.CreatedAt.Before(
 			*source.RetainUntil,
 		) || retry.Type != taskjournal.TaskScript || retry.OperationID != source.OperationID ||
-		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash || retry.Target != source.Target ||
+		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash ||
+		retry.Target != source.Target ||
 		retry.Params[scriptexecutions.ScriptExecutionIDParam] != source.Params[scriptexecutions.ScriptExecutionIDParam] ||
-		len(source.Steps) != 1 || len(retry.Steps) != 1 ||
+		len(source.Steps) != 1 ||
+		len(retry.Steps) != 1 ||
 		retry.Steps[0].ID != source.Steps[0].ID {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script retry authority is unavailable")
 	}
@@ -73,7 +76,8 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
-	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
+	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized ||
+		execution.AssignmentID != "" ||
 		!execution.ActiveReference ||
 		!retry.CreatedAt.After(execution.UpdatedAt) {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script may already have started")

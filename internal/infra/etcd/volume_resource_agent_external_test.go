@@ -11,11 +11,16 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/agent"
+	migratedcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	migratedenvironmentdirectory "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/docker/environmentdirectoryhelper"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	api "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -116,11 +121,11 @@ func TestVolumeResourceProductionAgentCreatesThenVerifiesSlugEdit(t *testing.T) 
 	if err != nil || !found {
 		t.Fatalf("read prior desired fixture: %v", err)
 	}
-	priorValue, err := etcd.EncodeEnvironmentComposeProjectionStorage(prior.Record)
+	priorValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(prior.Record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	appliedKey := etcd.EnvironmentComposeProjectionStorageKey(fixture.EnvironmentID)
+	appliedKey := testenvironmentprojection.EnvironmentComposeProjectionStorageKey(fixture.EnvironmentID)
 	priorRevision, err := fixture.Store.Put(ctx, appliedKey, priorValue)
 	if err != nil {
 		t.Fatal(err)
@@ -183,7 +188,11 @@ func runVolumeResourceAgentTask(
 		t.Fatalf("claim resource Task: %v found=%t", err, found)
 	}
 	task, assigned := claimed.Task.Record, claimed.Assignment.Record
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", fixture.Blueprint, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints(
+		"/var/lib/groundplane/vol",
+		fixture.Blueprint,
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,11 +200,11 @@ func runVolumeResourceAgentTask(
 	if err != nil {
 		t.Fatal(err)
 	}
-	compose, err := agent.NewComposeRuntime(volumeAgentComposeHelper{docker}, volumeAgentObserver{})
+	compose, err := migratedcomposeruntime.New(volumeAgentComposeHelper{docker}, volumeAgentObserver{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	directories, err := agent.NewEnvironmentDirectoryRuntime(path)
+	directories, err := migratedenvironmentdirectory.New(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +220,7 @@ func runVolumeResourceAgentTask(
 	done := make(chan struct{})
 	go func() { pool.Run(ctx); close(done) }()
 	defer func() { cancel(); <-done }()
-	if err := pool.Submit(ctx, agent.Assignment{AssignmentID: assigned.AssignmentID, TaskID: task.ID, OperationID: task.OperationID,
+	if err := pool.Submit(ctx, testtaskassignment.Assignment{AssignmentID: assigned.AssignmentID, TaskID: task.ID, OperationID: task.OperationID,
 		Plan: plan, ExecutionEpoch: assigned.ExecutionEpoch, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 		ForwardDeadline: assigned.Deadline, RecoveryDeadline: assigned.RecoveryDeadline, Deadline: assigned.Deadline}); err != nil {
 		t.Fatal(err)
@@ -223,16 +232,20 @@ func runVolumeResourceAgentTask(
 		case output := <-pool.Outputs():
 			if output.Progress != nil {
 				progress := output.Progress
-				state, wireState := etcd.TaskEventStateRunning, agentpb.TaskState_TASK_STATE_RUNNING
+				state, wireState := testtaskjournal.TaskEventStateRunning, agentpb.TaskState_TASK_STATE_RUNNING
 				if progress.State == agent.TaskProgressCompleted {
-					state, wireState = etcd.TaskEventStateCompleted, agentpb.TaskState_TASK_STATE_COMPLETED
+					state, wireState = testtaskjournal.TaskEventStateCompleted, agentpb.TaskState_TASK_STATE_COMPLETED
 				}
 				if progress.State != agent.TaskProgressRunning && progress.State != agent.TaskProgressCompleted {
 					t.Fatalf("resource step failed: %+v", progress)
 				}
-				_, err := fixture.Tasks.AppendTaskEvent(ctx, etcd.TaskEventInput{Identity: etcd.TaskEventIdentity{
-					AssignmentID: assigned.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID, StepID: progress.StepID,
-					Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal}, State: state, Payload: json.RawMessage(`{}`)}, time.Now().UTC())
+				_, err := fixture.Tasks.AppendTaskEvent(
+					ctx,
+					testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
+						AssignmentID: assigned.AssignmentID, AgentID: agentID, AgentGeneration: 1, TaskID: task.ID, StepID: progress.StepID,
+						Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal}, State: state, Payload: json.RawMessage(`{}`)},
+					time.Now().UTC(),
+				)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -245,8 +258,7 @@ func runVolumeResourceAgentTask(
 				if result.Terminal != agent.TaskTerminalCompleted || result.Compose == nil || result.EnvironmentDirectory != nil {
 					t.Fatalf("resource Task did not complete: %+v", result)
 				}
-				_, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, assigned.AssignmentID, etcd.TaskStatusCompleted,
-					etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, Diagnostic: etcd.TaskResultDiagnosticNone}, time.Now().UTC())
+				_, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, assigned.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, time.Now().UTC())
 				if err != nil {
 					t.Fatal(err)
 				}

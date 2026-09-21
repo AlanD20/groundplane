@@ -67,7 +67,8 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal state is incomplete")
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[0].Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetRoute || tombstone.TargetID != intent.RouteID ||
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetRoute ||
+		tombstone.TargetID != intent.RouteID ||
 		tombstone.TargetRevision != intent.RouteRevision ||
 		tombstone.TaskID != task.ID ||
 		tombstone.Phase != routeRemovalTombstonePhase(intent) {

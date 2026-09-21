@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -75,7 +76,7 @@ func TestStoreScopesCRUDAndRangeKeys(t *testing.T) {
 			{Key: []byte("/groundplane/tasks/task_2"), Value: []byte("two"), ModRevision: 11},
 		},
 	}
-	values, err := store.Range(context.Background(), RangeRequest{
+	values, err := store.Range(context.Background(), testkeyvalue.RangeRequest{
 		Prefix:         "/tasks/",
 		StartExclusive: "/tasks/task_0",
 		Limit:          2,
@@ -115,7 +116,7 @@ func TestStoreRangeRejectsInvalidInputs(t *testing.T) {
 		t.Fatalf("newStore() error = %v", err)
 	}
 
-	cases := []RangeRequest{
+	cases := []testkeyvalue.RangeRequest{
 		{Prefix: "/tasks/", Limit: 0},
 		{Prefix: "/tasks/", Limit: -1},
 		{Prefix: "/tasks/", Limit: 1, Revision: -1},
@@ -163,7 +164,7 @@ func TestStoreGetManyUsesOneHistoricalRevision(t *testing.T) {
 		t.Fatalf("newStore() error = %v", err)
 	}
 
-	result, err := store.GetMany(context.Background(), GetManyRequest{
+	result, err := store.GetMany(context.Background(), testkeyvalue.GetManyRequest{
 		Keys:     []string{"/services/svc_1", "/services/svc_2"},
 		Revision: 14,
 	})
@@ -201,7 +202,7 @@ func TestStoreGetManyRejectsInvalidInputs(t *testing.T) {
 		t.Fatalf("newStore() error = %v", err)
 	}
 
-	cases := []GetManyRequest{
+	cases := []testkeyvalue.GetManyRequest{
 		{},
 		{Keys: []string{"/services/svc_1"}, Revision: -1},
 		{Keys: []string{"services/svc_1"}},
@@ -256,7 +257,7 @@ func TestStoreGetManyClearsValuesAfterMalformedLaterResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.GetMany(context.Background(), GetManyRequest{
+	if _, err := store.GetMany(context.Background(), testkeyvalue.GetManyRequest{
 		Keys: []string{"/secrets/one", "/secrets/two"}, Revision: 14,
 	}); err == nil {
 		t.Fatal("get many accepted malformed later response")
@@ -308,7 +309,7 @@ func TestStoreWatchTranslatesLogicalEvents(t *testing.T) {
 	}}
 	close(backend.watchResponses)
 
-	got := make([]Event, 0, 2)
+	got := make([]testkeyvalue.Event, 0, 2)
 	for event := range stream.Events {
 		got = append(got, event)
 	}
@@ -326,8 +327,8 @@ func TestStoreWatchTranslatesLogicalEvents(t *testing.T) {
 	if revision := clientv3.OpGet("key", backend.watchOptions...).Rev(); revision != 13 {
 		t.Fatalf("Watch() start revision = %d, want 13", revision)
 	}
-	if len(got) != 2 || got[0].Key != "/tasks/task_1" || got[0].Type != EventPut ||
-		got[0].ModRevision != 13 || got[1].Key != "/tasks/task_2" || got[1].Type != EventDelete {
+	if len(got) != 2 || got[0].Key != "/tasks/task_1" || got[0].Type != testkeyvalue.EventPut ||
+		got[0].ModRevision != 13 || got[1].Key != "/tasks/task_2" || got[1].Type != testkeyvalue.EventDelete {
 		t.Fatalf("Watch() events = %#v", got)
 	}
 }
@@ -403,10 +404,10 @@ func TestStoreTransactScopesAtomicCompareAndMutations(t *testing.T) {
 
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: "/tokens/join_1", ModRevision: 19}},
-		[]Mutation{
-			{Type: MutationDelete, Key: "/tokens/join_1"},
-			{Type: MutationPut, Key: "/agents/agent_1", Value: []byte("agent")},
+		[]testkeyvalue.Condition{{Key: "/tokens/join_1", ModRevision: 19}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationDelete, Key: "/tokens/join_1"},
+			{Type: testkeyvalue.MutationPut, Key: "/agents/agent_1", Value: []byte("agent")},
 		},
 	)
 	if err != nil {
@@ -440,8 +441,10 @@ func TestStoreTransactScopesEmptyPrefixCondition(t *testing.T) {
 
 	_, err = store.Transact(
 		context.Background(),
-		[]Condition{{Key: "/v1/records/tasks/", Prefix: true}},
-		[]Mutation{{Type: MutationPut, Key: "/v1/meta/task-journal-schema", Value: []byte("v1")}},
+		[]testkeyvalue.Condition{{Key: "/v1/records/tasks/", Prefix: true}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: "/v1/meta/task-journal-schema", Value: []byte("v1")},
+		},
 	)
 	if err != nil {
 		t.Fatalf("Transact(empty prefix) error = %v", err)
@@ -475,7 +478,9 @@ func TestStoreTransactScopesPrefixDelete(t *testing.T) {
 	_, err = store.Transact(
 		context.Background(),
 		nil,
-		[]Mutation{{Type: MutationDelete, Key: "/v1/secret-values/entries/ev_1/", Prefix: true}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationDelete, Key: "/v1/secret-values/entries/ev_1/", Prefix: true},
+		},
 	)
 	if err != nil {
 		t.Fatalf("Transact() error = %v", err)

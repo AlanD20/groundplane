@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 // SeedEntryRuntimeIntent models completed lifecycle intent independently of the
@@ -12,20 +15,23 @@ func (fixture *ExecutedArtifactFixture) SeedEntryRuntimeIntent(
 	t *testing.T, serviceID string, intent core.ServiceRuntimeIntent,
 ) {
 	t.Helper()
-	value, err := encodeServiceRuntimeRecord(ServiceRuntimeRecord{
+	value, err := testservices.EncodeServiceRuntimeRecord(testservices.ServiceRuntimeRecord{
 		EnvironmentID: fixture.Environment.Record.ID, ServiceID: serviceID,
 		Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: intent},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.store.Put(t.Context(), serviceRuntimeKey(serviceID), value); err != nil {
+	if _, err := fixture.store.Put(t.Context(), testservices.ServiceRuntimeKey(serviceID), value); err != nil {
 		t.Fatal(err)
 	}
 	fixture.AdvanceEntryRuntimeEpoch(t)
 }
 
-func (fixture *ExecutedArtifactFixture) EntryRuntimeMarker(t *testing.T, task TaskRecord) IdempotencyMarker {
+func (fixture *ExecutedArtifactFixture) EntryRuntimeMarker(
+	t *testing.T,
+	task TaskRecord,
+) testidempotency.IdempotencyMarker {
 	t.Helper()
 	marker := environmentBlueprintTestMarker(task, task.Target)
 	marker.Locator.Method, marker.Locator.Route = "POST", "/entries"
@@ -34,7 +40,7 @@ func (fixture *ExecutedArtifactFixture) EntryRuntimeMarker(t *testing.T, task Ta
 
 func (fixture *ExecutedArtifactFixture) AdvanceEntryRuntimeEpoch(t *testing.T) {
 	t.Helper()
-	key := environmentMutationEpochKey(fixture.Environment.Record.ID)
+	key := testhierarchy.EnvironmentMutationEpochKey(fixture.Environment.Record.ID)
 	current, err := fixture.store.Get(t.Context(), key)
 	if err != nil || current.Entry == nil {
 		t.Fatal("capture epoch", err)

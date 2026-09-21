@@ -9,6 +9,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -25,7 +29,7 @@ func TestAttachRuntimePreparationReadsExistingAcknowledgement(t *testing.T) {
 	}
 	attach, _ := testPendingAttach(t, scope, 381, "runtime", nil)
 	task := validTaskRecord(testAttachTime)
-	task.Type, task.Target = TaskAttach, attach.ID
+	task.Type, task.Target = testtaskjournal.TaskAttach, attach.ID
 	prior := nativeAttachRuntimeFixture(t, scope.Environment.Record.ID, attach.ServiceID)
 	plan := nativeAttachFixturePlan(t, prior, task, ids.New(ids.KindConfig), "new-backing", true)
 	if _, err := repository.PrepareAttachRuntime(t.Context(), plan); err == nil {
@@ -61,10 +65,17 @@ func TestAttachRuntimeAcknowledgementAndDetachAreAtomicAndReplayable(t *testing.
 	record, facts := testPendingAttach(t, scope, 382, "runtime", nil)
 	prior := nativeAttachRuntimeFixture(t, scope.Environment.Record.ID, record.ServiceID)
 	putNativeAttachRuntime(t, store, prior)
-	current := createTestAttach(t, t.Context(), attaches, scope, record, &facts,
-		func(input AttachTaskRenderInput, task TaskRecord, _ IdempotencyMarker) (AttachTaskRenderInput, TaskRecord) {
+	current := createTestAttach(
+		t,
+		t.Context(),
+		attaches,
+		scope,
+		record,
+		&facts,
+		func(input testattachrender.AttachTaskRenderInput, task TaskRecord, _ testidempotency.IdempotencyMarker) (testattachrender.AttachTaskRenderInput, TaskRecord) {
 			return prepareNativeAttachEnvelope(t, attaches, prior, input, task, "new-backing")
-		})
+		},
+	)
 	terminal, acknowledged := acknowledgeNativeAttach(
 		t,
 		store,
@@ -79,10 +90,17 @@ func TestAttachRuntimeAcknowledgementAndDetachAreAtomicAndReplayable(t *testing.
 	if err != nil || current.Record.Status != core.AttachReady || current.Revision != terminal.Revision {
 		t.Fatalf("Attach terminal is not atomic: %v", err)
 	}
-	detach := publishTestDetach(t, t.Context(), attaches, scope, current, record.CreatedAt.Add(10*time.Second),
-		func(input AttachTaskRenderInput, task TaskRecord, _ IdempotencyMarker) (AttachTaskRenderInput, TaskRecord) {
+	detach := publishTestDetach(
+		t,
+		t.Context(),
+		attaches,
+		scope,
+		current,
+		record.CreatedAt.Add(10*time.Second),
+		func(input testattachrender.AttachTaskRenderInput, task TaskRecord, _ testidempotency.IdempotencyMarker) (testattachrender.AttachTaskRenderInput, TaskRecord) {
 			return prepareNativeAttachEnvelope(t, attaches, acknowledged, input, task, "remaining-backing")
-		})
+		},
+	)
 	_, detachedRuntime := acknowledgeNativeAttach(t, store, detach.ID, detach.CreatedAt.Add(time.Second))
 	if bytes.Contains(detachedRuntime.Runtime.CurrentArtifact, []byte("new-backing")) ||
 		!bytes.Contains(detachedRuntime.Runtime.CurrentArtifact, []byte("remaining-backing")) {
@@ -96,7 +114,7 @@ func TestAttachRuntimeAcknowledgementAndDetachAreAtomicAndReplayable(t *testing.
 		t.Fatal(err)
 	}
 	// Task pruning owns this input, not the independently retained runtime.
-	if _, err := store.Transact(t.Context(), nil, []Mutation{{Type: MutationDelete, Key: attachTaskRenderInputKey(terminal.Record.PlanID)}}); err != nil {
+	if _, err := store.Transact(t.Context(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: testattachrender.AttachTaskRenderInputKey(terminal.Record.PlanID)}}); err != nil {
 		t.Fatal(err)
 	}
 	after, err := store.Get(t.Context(), serviceruntimerecord.Key(record.ServiceID))
@@ -111,7 +129,7 @@ func acknowledgeNativeAttach(
 	store *attachTestStore,
 	taskID string,
 	at time.Time,
-) (Versioned[TaskRecord], serviceruntimerecord.Record) {
+) (testkeyvalue.Versioned[TaskRecord], serviceruntimerecord.Record) {
 	t.Helper()
 	tasks, err := newTaskRepository(store)
 	if err != nil {
@@ -125,7 +143,7 @@ func acknowledgeNativeAttach(
 	result := completedComposeTaskResult()
 	result.ExecutionEpoch = claim.Assignment.Record.ExecutionEpoch
 	terminal, err := tasks.AcknowledgeTask(t.Context(), agentID, 1, taskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusCompleted, result, at.Add(time.Second))
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result, at.Add(time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +166,7 @@ func acknowledgeNativeAttach(
 		t.Fatal(err)
 	}
 	replay, err := restarted.AcknowledgeTask(t.Context(), agentID, 1, taskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusCompleted, result, at.Add(2*time.Second))
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result, at.Add(2*time.Second))
 	if err != nil || replay.Revision != terminal.Revision {
 		t.Fatalf("terminal replay: %v", err)
 	}
@@ -159,7 +177,7 @@ func acknowledgeNativeAttach(
 	changed := result
 	changed.ExecutionEpoch++
 	if _, err := restarted.AcknowledgeTask(t.Context(), agentID, 1, taskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusCompleted, changed, at.Add(3*time.Second)); err == nil {
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, changed, at.Add(3*time.Second)); err == nil {
 		t.Fatal("changed replay accepted")
 	}
 	return terminal, record
@@ -187,7 +205,7 @@ func TestAttachRuntimeStaleSourceAndFailurePreserveAuthority(t *testing.T) {
 				scope,
 				record,
 				&facts,
-				func(input AttachTaskRenderInput, task TaskRecord, marker IdempotencyMarker) (AttachTaskRenderInput, TaskRecord) {
+				func(input testattachrender.AttachTaskRenderInput, task TaskRecord, marker testidempotency.IdempotencyMarker) (testattachrender.AttachTaskRenderInput, TaskRecord) {
 					input, task = prepareNativeAttachEnvelope(t, attaches, prior, input, task, "new-backing")
 					if phase == "publication" {
 						putNativeAttachRuntime(t, store, prior)
@@ -240,11 +258,11 @@ func TestAttachRuntimeStaleSourceAndFailurePreserveAuthority(t *testing.T) {
 			if phase == "acknowledgement" {
 				putNativeAttachRuntime(t, store, prior)
 			}
-			status := TaskStatusCompleted
+			status := testtaskjournal.TaskStatusCompleted
 			result := completedComposeTaskResult()
 			result.ExecutionEpoch = claim.Assignment.Record.ExecutionEpoch
 			if phase == "failure" {
-				status, result.ExitCode, result.Diagnostic = TaskStatusFailed, 1, TaskResultDiagnosticComposeFailed
+				status, result.ExitCode, result.Diagnostic = testtaskjournal.TaskStatusFailed, 1, testtaskjournal.TaskResultDiagnosticComposeFailed
 			}
 			before, err := store.Get(t.Context(), serviceruntimerecord.Key(record.ServiceID))
 			if err != nil {

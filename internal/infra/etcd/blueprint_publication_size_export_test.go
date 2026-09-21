@@ -6,6 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -30,22 +34,26 @@ func (fixture *ExecutedArtifactFixture) AuditBlueprintPublicationSize() *Bluepri
 }
 
 type blueprintSizeOrdinaryStore struct {
-	Store
+	testkeyvalue.Store
+
 	audit *BlueprintPublicationSizeAudit
 }
 
 func (wrapped *blueprintSizeOrdinaryStore) Transact(
-	ctx context.Context, conditions []Condition, mutations []Mutation,
-) (TransactionResult, error) {
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
-		return TransactionResult{}, errs.New(errs.KindValidationFailed, "fixture exceeded ordinary transaction bound")
+	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
+	if len(conditions)+len(mutations) > testkeyvalue.MaximumOperations {
+		return testkeyvalue.TransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"fixture exceeded ordinary transaction bound",
+		)
 	}
 	shape, err := blueprintPhysicalTransactionSize(conditions, mutations)
 	if err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	for _, mutation := range mutations {
-		if mutation.Type == MutationPut && strings.HasPrefix(mutation.Key, taskAssignmentRootPrefix) {
+		if mutation.Type == testkeyvalue.MutationPut && strings.HasPrefix(mutation.Key, "/v1/runtime/assignments/") {
 			wrapped.audit.Assignment = shape
 		}
 	}
@@ -58,22 +66,25 @@ type blueprintSizePublicationStore struct {
 }
 
 func (wrapped blueprintSizePublicationStore) TransactEnvironmentBlueprint(
-	ctx context.Context, conditions []Condition, mutations []Mutation,
-) (TransactionResult, error) {
+	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if wrapped.audit != nil {
 		if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		shape, err := blueprintPhysicalTransactionSize(conditions, mutations)
 		if err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		wrapped.audit.Publication = shape
 	}
 	return wrapped.hierarchyStore.Transact(ctx, conditions, mutations)
 }
 
-func blueprintPhysicalTransactionSize(conditions []Condition, mutations []Mutation) (BlueprintTransactionSize, error) {
+func blueprintPhysicalTransactionSize(
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (BlueprintTransactionSize, error) {
 	wire := &store{root: "/groundplane"}
 	prepared, err := wire.prepareTransaction(conditions, mutations)
 	if err != nil {
@@ -99,28 +110,37 @@ func (fixture *ExecutedArtifactFixture) AssertBlueprintPublicationRecordSizes(
 ) {
 	t.Helper()
 	ctx := context.Background()
-	publication := task.Params[TaskReleasePublicationParam]
-	read, err := fixture.store.GetMany(ctx, GetManyRequest{Keys: []string{
-		releasePublicationKey(publication), releaseManifestStagingKey(publication),
-		taskAssignmentKey(claim.Assignment.Record.AgentID, task.ID),
-	}})
+	publication := task.Params[testreleaserender.TaskReleasePublicationParam]
+	read, err := fixture.store.GetMany(
+		ctx,
+		testkeyvalue.GetManyRequest{
+			Keys: []string{
+				testreleases.ReleasePublicationKey(publication),
+				testreleases.ReleaseManifestStagingKey(publication),
+				testtaskjournal.TaskAssignmentKey(claim.Assignment.Record.AgentID, task.ID),
+			},
+		},
+	)
 	if err != nil || len(read.Values) != 3 || read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
 		t.Fatalf("size evidence: %v", err)
 	}
 	markerBytes := len(read.Values[0].Value)
-	if markerBytes > maximumReleaseRenderInputBytes ||
+	if markerBytes > testreleases.MaximumReleaseRenderInputBytes ||
 		bytes.Contains(read.Values[0].Value, []byte(`"normalized_compose"`)) ||
 		bytes.Contains(read.Values[0].Value, []byte(`"current_artifact"`)) {
 		t.Fatal("marker embeds bulk native recovery inputs")
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	manifest, err := testreleases.DecodeReleaseRecord[testreleases.ReleaseStagedManifest](
+		read.Values[1].Value,
+		"release-staged-manifest",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	largestInput := 0
 	for _, member := range manifest.Members {
-		stored, err := fixture.store.Get(ctx, releaseRenderInputStagingKey(publication, member.ReleaseID))
-		if err != nil || stored.Entry == nil || len(stored.Entry.Value) > maximumReleaseRenderInputBytes {
+		stored, err := fixture.store.Get(ctx, testreleases.ReleaseRenderInputStagingKey(publication, member.ReleaseID))
+		if err != nil || stored.Entry == nil || len(stored.Entry.Value) > testreleases.MaximumReleaseRenderInputBytes {
 			t.Fatalf("bounded member input: %v", err)
 		}
 		largestInput = max(largestInput, len(stored.Entry.Value))
@@ -130,7 +150,8 @@ func (fixture *ExecutedArtifactFixture) AssertBlueprintPublicationRecordSizes(
 	for _, native := range authority.NativePredecessors {
 		nativeBytes += len(native.CurrentArtifact) + len(native.RetainedPriorArtifact)
 	}
-	if nativeBytes > MaximumTaskRecordBytes || len(read.Values[2].Value) > MaximumTaskRecordBytes {
+	if nativeBytes > testtaskjournal.MaximumTaskRecordBytes ||
+		len(read.Values[2].Value) > testtaskjournal.MaximumTaskRecordBytes {
 		t.Fatal("native assignment exceeds its existing durable bound")
 	}
 	t.Logf("marker=%d largest-render=%d native-witness=%d assignment-record=%d publication=%+v claim=%+v",

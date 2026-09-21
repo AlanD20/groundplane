@@ -310,8 +310,10 @@ func decodePendingScriptAbortExecutions(
 			return nil, releases.CorruptReleaseRecord()
 		}
 		record, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
-		if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
-			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
+		if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil ||
+			record.ID != steps[index].executionID ||
+			record.CurrentTaskID != task.ID ||
+			record.OperationID != task.OperationID ||
 			record.StepID != steps[index].stepID ||
 			record.PlanHash != task.PlanHash {
 			return nil, releases.CorruptReleaseRecord()

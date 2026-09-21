@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,13 +18,13 @@ func TestHierarchyProjectIdempotentMutationPreservesOwnerAndMovesOnlyScopedSlug(
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 501), Slug: "acme", Name: "Acme"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 501), Slug: "acme", Name: "Acme"}
 	if _, err := repository.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	record := ProjectRecord{
+	record := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 502), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Description: "Create-time summary", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Description: "Create-time summary", Kind: testhierarchy.ProjectKindTenant,
 	}
 	if _, err := repository.CreateProject(ctx, record); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
@@ -59,10 +61,15 @@ func TestHierarchyProjectIdempotentMutationPreservesOwnerAndMovesOnlyScopedSlug(
 	}
 }
 
-func projectMutationTestMarker(projectID string, key string, method string, route string) IdempotencyMarker {
+func projectMutationTestMarker(
+	projectID string,
+	key string,
+	method string,
+	route string,
+) testidempotency.IdempotencyMarker {
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeProject, ScopeID: projectID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeProject, ScopeID: projectID,
 		Method: method, Route: route, Key: key,
 	}
 	return marker

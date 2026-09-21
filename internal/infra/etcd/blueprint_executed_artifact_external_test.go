@@ -13,10 +13,17 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -50,7 +57,7 @@ func TestBlueprintSuccessRetainsAcknowledgedServiceRuntime(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			testBlueprintExecutedArtifact(t, addressable, false, func(fixture *etcd.ExecutedArtifactFixture,
-				_ *controller.TaskPlanResolver, render etcd.ReleaseRenderInput, intent domain.Intent,
+				_ *testtaskplanning.TaskPlanResolver, render testreleaserender.ReleaseRenderInput, intent domain.Intent,
 				_ *agentpb.ComposeArtifact) {
 				receipt := fixture.AcknowledgedRuntime(t, render.ServiceID)
 				if receipt.Record.Source.TaskID != intent.OriginatingTaskID ||
@@ -90,7 +97,7 @@ func TestBlueprintSuccessRetainsAcknowledgedServiceRuntime(t *testing.T) {
 func testBlueprintExecutedArtifact(
 	t *testing.T,
 	addressable, servingRace bool,
-	afterProof ...func(*etcd.ExecutedArtifactFixture, *controller.TaskPlanResolver, etcd.ReleaseRenderInput, domain.Intent, *agentpb.ComposeArtifact),
+	afterProof ...func(*etcd.ExecutedArtifactFixture, *testtaskplanning.TaskPlanResolver, testreleaserender.ReleaseRenderInput, domain.Intent, *agentpb.ComposeArtifact),
 ) {
 	testBlueprintExecutedArtifactConfigured(t, addressable, servingRace, nil, afterProof...)
 }
@@ -99,14 +106,14 @@ func testBlueprintExecutedArtifactConfigured(
 	t *testing.T,
 	addressable, servingRace bool,
 	configureProject func(*composetypes.Project),
-	afterProof ...func(*etcd.ExecutedArtifactFixture, *controller.TaskPlanResolver, etcd.ReleaseRenderInput, domain.Intent, *agentpb.ComposeArtifact),
+	afterProof ...func(*etcd.ExecutedArtifactFixture, *testtaskplanning.TaskPlanResolver, testreleaserender.ReleaseRenderInput, domain.Intent, *agentpb.ComposeArtifact),
 ) {
 	ctx := context.Background()
 	fixture := etcd.NewExecutedArtifactFixture(t)
 	task := fixture.Task(t, 950)
 	serviceID, releaseID, artifactID := ids.New(ids.KindService), ids.New(ids.KindDeployment), ids.New(ids.KindConfig)
-	task.Params[etcd.TaskComposeArtifactParam] = artifactID
-	task.Params[etcd.TaskReleasePublicationParam] = ids.NewULID()
+	task.Params[testtaskjournal.TaskComposeArtifactParam] = artifactID
+	task.Params[testreleaserender.TaskReleasePublicationParam] = ids.NewULID()
 	workload := domain.WorkloadSeal{
 		RequestedReference: "example/api:1",
 		LocalImageID:       "sha256:" + strings.Repeat("a", 64),
@@ -137,12 +144,14 @@ func testBlueprintExecutedArtifactConfigured(
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{Project: project, ArtifactID: artifactID,
-		ProjectOwnerKind: controller.ComposeProjectOwnerTenant, TenantID: fixture.Project.Record.TenantID, ProjectID: fixture.Project.Record.ID,
-		EnvironmentID: fixture.Environment.Record.ID, PlanID: task.PlanID, RenderGeneration: 1, AuthorizedVolumeDir: fixture.Environment.Record.VolumeDir,
-		Identities: controller.ComposeIdentitySnapshot{
-			Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}},
-		}})
+	artifact, err := testcomposerender.RenderCompose(
+		testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
+			ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: fixture.Project.Record.TenantID, ProjectID: fixture.Project.Record.ID,
+			EnvironmentID: fixture.Environment.Record.ID, PlanID: task.PlanID, RenderGeneration: 1, AuthorizedVolumeDir: fixture.Environment.Record.VolumeDir,
+			Identities: testcomposeidentity.Snapshot{
+				Services: []testcomposeidentity.Resource{{ID: serviceID, Name: "api"}},
+			}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,13 +159,13 @@ func testBlueprintExecutedArtifactConfigured(
 	if err != nil {
 		t.Fatal(err)
 	}
-	projection := etcd.EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:     fixture.Environment.Record.ID,
 		RevisionID:        task.ID,
 		RenderGeneration:  1,
 		ComposeArtifact:   desiredBytes,
 		NormalizedCompose: normalized,
-		DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: fixture.Environment.Record.ID,
+		DesiredServices: []testservices.EnvironmentServiceProjection{{EnvironmentID: fixture.Environment.Record.ID,
 			Desired: core.Service{
 				ID:       serviceID,
 				Name:     "api",
@@ -165,7 +174,7 @@ func testBlueprintExecutedArtifactConfigured(
 				Strategy: core.StrategyRecreate,
 			}}},
 	}
-	render := etcd.ReleaseRenderInput{
+	render := testreleaserender.ReleaseRenderInput{
 		ReleaseID:           releaseID,
 		PlanID:              task.PlanID,
 		ArtifactID:          artifactID,
@@ -185,7 +194,11 @@ func testBlueprintExecutedArtifactConfigured(
 		AuthorizedVolumeDir: fixture.Environment.Record.VolumeDir,
 		Projection:          projection,
 	}
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", fixture.Hierarchy, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints(
+		"/var/lib/groundplane/vol",
+		fixture.Hierarchy,
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +223,7 @@ func testBlueprintExecutedArtifactConfigured(
 			t.Fatal(err)
 		}
 	}
-	raw, err := etcd.EncodeReleaseRenderInput(render)
+	raw, err := testreleaserender.EncodeReleaseRenderInput(render)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,12 +254,11 @@ func testBlueprintExecutedArtifactConfigured(
 		},
 	}
 	manifest, err := fixture.Ledger.Stage(
-		ctx,
-		etcd.ReleaseStage{
-			PublicationID: task.Params[etcd.TaskReleasePublicationParam],
+		ctx, testreleases.ReleaseStage{
+			PublicationID: task.Params[testreleaserender.TaskReleasePublicationParam],
 			OperationID:   task.OperationID,
 			CreatedAt:     task.CreatedAt,
-			Members: []etcd.ReleaseStageMember{
+			Members: []testreleases.ReleaseStageMember{
 				{
 					Intent:      intent,
 					RenderInput: raw,
@@ -265,10 +277,16 @@ func testBlueprintExecutedArtifactConfigured(
 	task, plan, err := resolver.PrepareBlueprintReleaseTask(
 		ctx,
 		task,
-		controller.BlueprintReleasePlanInput{Members: []etcd.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
+		testtaskplanning.BlueprintReleasePlanInput{
+			Members: []testreleaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
 			ApplyStepIDs: []string{
 				ids.New(ids.KindStep),
-			}, HealthStepIDs: []string{ids.New(ids.KindStep)}, RecoveryProbeStepIDs: []string{ids.New(ids.KindStep)}, RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)}, PostStepIDs: [][]string{nil}},
+			},
+			HealthStepIDs:             []string{ids.New(ids.KindStep)},
+			RecoveryProbeStepIDs:      []string{ids.New(ids.KindStep)},
+			RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)},
+			PostStepIDs:               [][]string{nil},
+		},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -319,14 +337,11 @@ func testBlueprintExecutedArtifactConfigured(
 			agentID,
 			1,
 			task.ID,
-			claim.Assignment.Record.AssignmentID,
-			etcd.TaskStatusCompleted,
-			etcd.TaskResultRecord{
-				Kind:           etcd.TaskResultCompose,
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{
+				Kind:           testtaskjournal.TaskResultCompose,
 				ExecutionEpoch: 1,
-				Diagnostic:     etcd.TaskResultDiagnosticNone,
-			},
-			task.CreatedAt.Add(2*time.Second),
+				Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
+			}, task.CreatedAt.Add(2*time.Second),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -425,8 +440,8 @@ func blueprintTestProxyCatalog(child string) componentsdk.OCIImage {
 func proveSecondAddressableBlueprint(
 	t *testing.T,
 	fixture *etcd.ExecutedArtifactFixture,
-	resolver *controller.TaskPlanResolver,
-	prior etcd.ReleaseRenderInput,
+	resolver *testtaskplanning.TaskPlanResolver,
+	prior testreleaserender.ReleaseRenderInput,
 	priorIntent domain.Intent,
 	first *agentpb.ComposeArtifact,
 ) {
@@ -434,12 +449,12 @@ func proveSecondAddressableBlueprint(
 	ctx := context.Background()
 	task := fixture.Task(t, 952)
 	task.RenderGeneration = 3
-	task.Params[etcd.TaskReleasePublicationParam] = ids.NewULID()
-	task.Params[etcd.TaskComposeArtifactParam] = ids.New(ids.KindConfig)
+	task.Params[testreleaserender.TaskReleasePublicationParam] = ids.NewULID()
+	task.Params[testtaskjournal.TaskComposeArtifactParam] = ids.New(ids.KindConfig)
 	render := prior
 	render.ReleaseID, render.PlanID, render.ArtifactID = ids.New(
 		ids.KindDeployment,
-	), task.PlanID, task.Params[etcd.TaskComposeArtifactParam]
+	), task.PlanID, task.Params[testtaskjournal.TaskComposeArtifactParam]
 	render.Projection.RevisionID, render.Projection.RenderGeneration = task.ID, 3
 	render.PriorArtifactID, render.PriorWorkload = first.ArtifactId, &prior.CandidateWorkload
 	render.PriorProxyGeneration, render.PriorProxyDigest = prior.ProxyGeneration, prior.ProxyConfigDigest
@@ -464,7 +479,7 @@ func proveSecondAddressableBlueprint(
 	if *render.ProxyImage != *prior.ProxyImage {
 		t.Fatal("successor selected today's proxy catalog")
 	}
-	raw, err := etcd.EncodeReleaseRenderInput(render)
+	raw, err := testreleaserender.EncodeReleaseRenderInput(render)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,12 +493,11 @@ func proveSecondAddressableBlueprint(
 		t.Fatal(err)
 	}
 	manifest, err := fixture.Ledger.Stage(
-		ctx,
-		etcd.ReleaseStage{
-			PublicationID: task.Params[etcd.TaskReleasePublicationParam],
+		ctx, testreleases.ReleaseStage{
+			PublicationID: task.Params[testreleaserender.TaskReleasePublicationParam],
 			OperationID:   task.OperationID,
 			CreatedAt:     task.CreatedAt,
-			Members: []etcd.ReleaseStageMember{
+			Members: []testreleases.ReleaseStageMember{
 				{
 					Intent:      intent,
 					RenderInput: raw,
@@ -502,10 +516,16 @@ func proveSecondAddressableBlueprint(
 	task, plan, err := resolver.PrepareBlueprintReleaseTask(
 		ctx,
 		task,
-		controller.BlueprintReleasePlanInput{Members: []etcd.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
+		testtaskplanning.BlueprintReleasePlanInput{
+			Members: []testreleaserender.ReleaseTaskRenderMember{{Intent: intent, Render: render}},
 			ApplyStepIDs: []string{
 				ids.New(ids.KindStep),
-			}, HealthStepIDs: []string{ids.New(ids.KindStep)}, RecoveryProbeStepIDs: []string{ids.New(ids.KindStep)}, RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)}, PostStepIDs: [][]string{nil}},
+			},
+			HealthStepIDs:             []string{ids.New(ids.KindStep)},
+			RecoveryProbeStepIDs:      []string{ids.New(ids.KindStep)},
+			RecoveryCompensateStepIDs: []string{ids.New(ids.KindStep)},
+			PostStepIDs:               [][]string{nil},
+		},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -535,8 +555,7 @@ func proveSecondAddressableBlueprint(
 	if err != nil || !found {
 		t.Fatalf("successor claim=%t,%v", found, err)
 	}
-	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted,
-		etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, ExecutionEpoch: 1, Diagnostic: etcd.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
+	if _, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	firstProxy, secondProxy := blueprintProxyMetadata(t, first), blueprintProxyMetadata(t, plan.Artifacts[0])

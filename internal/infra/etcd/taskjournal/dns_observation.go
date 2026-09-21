@@ -51,7 +51,8 @@ func validateTaskDNSResolverObservationEvidence(
 		evidence.StaticQueryIPv4 == "" &&
 		!evidence.StaticQuerySucceeded
 	if evidence.StaticQueryPresent {
-		staticValid = resolutionrecord.ValidPlatformDNSName(evidence.StaticQueryName) && addressErr == nil && address.Is4() &&
+		staticValid = resolutionrecord.ValidPlatformDNSName(evidence.StaticQueryName) && addressErr == nil &&
+			address.Is4() &&
 			!address.Is4In6() &&
 			evidence.StaticQuerySucceeded
 	}

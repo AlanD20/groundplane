@@ -10,6 +10,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,13 +28,13 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 701), Slug: "acme", Name: "Acme"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 701), Slug: "acme", Name: "Acme"}
 	if _, err := repository.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	projectRecord := ProjectRecord{
+	projectRecord := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 702), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 	}
 	if _, err := repository.CreateProject(ctx, projectRecord); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
@@ -40,11 +47,11 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	task := validTaskRecord(now)
 	task.ID = ids.NewAt(ids.KindTask, now, 703)
 	task.OperationID = ids.NewAt(ids.KindOperation, now, 704)
-	task.Type = TaskCreate
+	task.Type = testtaskjournal.TaskCreate
 	task.Target = ids.NewAt(ids.KindEnvironment, now, 705)
 	task.IdempotencyKey = "environment-create-key-0001"
-	task.Executor = TaskExecutorAgent
-	record, err := NewProvisioningEnvironment(
+	task.Executor = testtaskjournal.TaskExecutorAgent
+	record, err := testhierarchy.NewProvisioningEnvironment(
 		environmentpath.DefaultVolumeRoot,
 		projectRecord,
 		task.Target,
@@ -59,8 +66,8 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	task.Owner = mustEnvironmentTaskOwner(t, project.Record, record)
 	components := environmentCreationTestComponents(t, record.ID, now)
 	marker := pendingTaskMarker(task)
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeProject, ScopeID: projectRecord.ID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeProject, ScopeID: projectRecord.ID,
 		Method: http.MethodPost, Route: "/environments", Key: task.IdempotencyKey,
 	}
 	poolRegistry, err := repository.GetEnvironmentPoolRegistry(ctx)
@@ -87,22 +94,20 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		t.Fatalf("stored Environment pool registry = %#v, %v", storedRegistry.Record, err)
 	}
 	storedEnvironment, err := repository.GetEnvironment(ctx, record.ID)
-	if err != nil || storedEnvironment.Record.ProvisioningState != EnvironmentProvisioningProvisioning ||
+	if err != nil || storedEnvironment.Record.ProvisioningState != testhierarchy.EnvironmentProvisioningProvisioning ||
 		storedEnvironment.Record.CreateTaskID != task.ID {
 		t.Fatalf("stored Environment = %#v, %v", storedEnvironment.Record, err)
 	}
 	assertHierarchyCoordinationRecord(
 		t,
-		store,
-		HierarchyDeletionTargetEnvironment,
-		record.ID,
+		store, testhierarchydeletion.HierarchyDeletionTargetEnvironment, record.ID,
 		storedEnvironment.Revision,
 	)
-	storedEpoch, err := store.Get(ctx, environmentMutationEpochKey(record.ID))
+	storedEpoch, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(record.ID))
 	if err != nil || storedEpoch.Entry == nil || storedEpoch.Entry.ModRevision != storedEnvironment.Revision {
 		t.Fatalf("stored Environment mutation epoch = %#v, %v", storedEpoch, err)
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(storedEpoch.Entry.Value)
+	epoch, err := testbackupruntime.DecodeEnvironmentMutationEpochRecord(storedEpoch.Entry.Value)
 	if err != nil || epoch.EnvironmentID != record.ID {
 		t.Fatalf("decoded Environment mutation epoch = %#v, %v", epoch, err)
 	}
@@ -111,7 +116,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	storedTask, err := tasks.GetTask(ctx, task.ID)
-	if err != nil || storedTask.Record.Target != record.ID || storedTask.Record.Type != TaskCreate {
+	if err != nil || storedTask.Record.Target != record.ID || storedTask.Record.Type != testtaskjournal.TaskCreate {
 		t.Fatalf("stored Task = %#v, %v", storedTask.Record, err)
 	}
 	componentRepository, err := newComponentRepository(store)
@@ -120,8 +125,7 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	}
 	storedComponents, err := componentRepository.ListEnvironmentComponents(
 		ctx,
-		record.ID,
-		PageRequest{Limit: 20},
+		record.ID, testkeyvalue.PageRequest{Limit: 20},
 	)
 	if err != nil || len(storedComponents.Items) != 2 {
 		t.Fatalf("ListEnvironmentComponents() = %#v, %v", storedComponents, err)
@@ -144,43 +148,42 @@ func TestEnvironmentCreationAtomicallyPublishesProvisioningRecordAndTask(t *test
 	if _, found, err := tasks.ClaimNextTask(ctx, agentID, 1, assignedAt); err != nil || !found {
 		t.Fatalf("ClaimNextTask() found/error = %t/%v", found, err)
 	}
-	resultRecord := TaskResultRecord{
-		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+	resultRecord := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 	}
 	terminalAt := assignedAt.Add(time.Second)
 	if _, err := tasks.AcknowledgeTask(
 		ctx, agentID, 1, task.ID, taskAssignmentIDForTest(t, tasks,
-			task.ID),
-		TaskStatusCompleted, resultRecord, terminalAt); !isKind(err, errs.KindStateConflict) {
+			task.ID), testtaskjournal.TaskStatusCompleted, resultRecord, terminalAt); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("generic AcknowledgeTask(Environment create) error = %v", err)
 	}
 	terminal, err := tasks.AcknowledgeEnvironmentCreation(
 		ctx, agentID, 1, task.ID, taskAssignmentIDForTest(t, tasks,
 			task.ID),
-		record.ID, TaskStatusCompleted, resultRecord, terminalAt)
+		record.ID, testtaskjournal.TaskStatusCompleted, resultRecord, terminalAt)
 
-	if err != nil || terminal.Record.Status != TaskStatusCompleted {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeEnvironmentCreation() = %#v, %v", terminal.Record, err)
 	}
 	ready, err := repository.GetEnvironment(ctx, record.ID)
-	if err != nil || ready.Record.ProvisioningState != EnvironmentProvisioningReady {
+	if err != nil || ready.Record.ProvisioningState != testhierarchy.EnvironmentProvisioningReady {
 		t.Fatalf("ready Environment = %#v, %v", ready.Record, err)
 	}
-	readyEpoch, err := store.Get(ctx, environmentMutationEpochKey(record.ID))
+	readyEpoch, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(record.ID))
 	if err != nil || readyEpoch.Entry == nil || readyEpoch.Entry.ModRevision != ready.Revision {
 		t.Fatalf("ready Environment mutation epoch = %#v, %v", readyEpoch, err)
 	}
 }
 
-func environmentCreationTestComponents(t *testing.T, environmentID string, now time.Time) []ComponentRecord {
+func environmentCreationTestComponents(t *testing.T, environmentID string, now time.Time) []testcomponents.Record {
 	t.Helper()
 	kinds := []core.ComponentKind{
 		core.ComponentKindIngressCaddy,
 		core.ComponentKindEdgeCloudflare,
 	}
-	components := make([]ComponentRecord, 0, len(kinds))
+	components := make([]testcomponents.Record, 0, len(kinds))
 	for index, kind := range kinds {
-		component, err := NewComponentRecord(core.Component{
+		component, err := testcomponents.NewRecord(core.Component{
 			ID:      ids.NewAt(ids.KindComponent, now, int64(706+index)),
 			Owner:   core.ComponentOwnerEnvironment,
 			OwnerID: environmentID,

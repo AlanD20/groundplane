@@ -11,11 +11,15 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/agent"
+	migratedcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/runner"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composeobserver"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -25,7 +29,7 @@ import (
 // all use the actual Agent and Controller persistence implementations.
 type mixedRecoveryRuntime struct {
 	t            *testing.T
-	expected     etcd.TaskResultRecord
+	expected     testtaskjournal.TaskResultRecord
 	witness      *agentpb.ComposeArtifact
 	restored     map[string]bool
 	calls        []string
@@ -158,8 +162,8 @@ func (runtime *mixedRecoveryRuntime) ObserveRestoration(
 }
 
 func executeMixedWorkerRecovery(t *testing.T, fixture *etcd.ExecutedArtifactFixture, recovery etcd.TaskAssignment,
-	plan *agentpb.ExecutionPlan, expected etcd.TaskResultRecord,
-) etcd.TaskResultRecord {
+	plan *agentpb.ExecutionPlan, expected testtaskjournal.TaskResultRecord,
+) testtaskjournal.TaskResultRecord {
 	t.Helper()
 	assignment := mixedWorkerAssignment(t, recovery, plan)
 	if len(plan.ScriptBodyArtifacts) != 0 {
@@ -169,7 +173,7 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *etcd.ExecutedArtifactFixt
 			t.Fatalf("actual mixed recovery Script artifacts: %v", err)
 		}
 		assignment.ScriptArtifacts = artifacts
-		service, err := controller.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
+		service, err := testtaskplanning.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +188,7 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *etcd.ExecutedArtifactFixt
 	}
 	witness := proveMixedObservationBoundary(t, assignment)
 	runtime := &mixedRecoveryRuntime{t: t, witness: witness, expected: expected, restored: make(map[string]bool)}
-	compose, err := agent.NewComposeRuntime(runtime, runtime)
+	compose, err := migratedcomposeruntime.New(runtime, runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,18 +222,22 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *etcd.ExecutedArtifactFixt
 			if progress == nil {
 				t.Fatal("unexpected Worker output")
 			}
-			state, wireState := etcd.TaskEventStateRunning, agentpb.TaskState_TASK_STATE_RUNNING
+			state, wireState := testtaskjournal.TaskEventStateRunning, agentpb.TaskState_TASK_STATE_RUNNING
 			if progress.State == agent.TaskProgressCompleted {
-				state, wireState = etcd.TaskEventStateCompleted, agentpb.TaskState_TASK_STATE_COMPLETED
+				state, wireState = testtaskjournal.TaskEventStateCompleted, agentpb.TaskState_TASK_STATE_COMPLETED
 			} else if progress.State == agent.TaskProgressFailed {
-				state, wireState = etcd.TaskEventStateFailed, agentpb.TaskState_TASK_STATE_FAILED
+				state, wireState = testtaskjournal.TaskEventStateFailed, agentpb.TaskState_TASK_STATE_FAILED
 			} else if progress.State != agent.TaskProgressRunning {
 				t.Fatalf("mixed Worker step %s failed: %v", progress.StepID, progress.State)
 			}
-			_, err := fixture.Tasks.AppendTaskEvent(ctx, etcd.TaskEventInput{Identity: etcd.TaskEventIdentity{
-				AssignmentID: progress.AssignmentID, AgentID: recovery.Assignment.Record.AgentID, AgentGeneration: 1,
-				TaskID: progress.TaskID, StepID: progress.StepID, Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
-			}, State: state, Payload: json.RawMessage(`{"message":"actual worker recovery"}`)}, time.Now().UTC())
+			_, err := fixture.Tasks.AppendTaskEvent(
+				ctx,
+				testtaskjournal.TaskEventInput{Identity: testtaskjournal.TaskEventIdentity{
+					AssignmentID: progress.AssignmentID, AgentID: recovery.Assignment.Record.AgentID, AgentGeneration: 1,
+					TaskID: progress.TaskID, StepID: progress.StepID, Attempt: progress.ExecutionEpoch, Ordinal: progress.Ordinal,
+				}, State: state, Payload: json.RawMessage(`{"message":"actual worker recovery"}`)},
+				time.Now().UTC(),
+			)
 			if err != nil {
 				t.Fatalf("durable mixed Worker event: %v", err)
 			}
@@ -252,24 +260,28 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *etcd.ExecutedArtifactFixt
 			runtime.calls,
 		)
 	}
-	result := etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, Diagnostic: etcd.TaskResultDiagnosticNone,
-		ExecutionEpoch: actual.ExecutionEpoch, ReleaseRecoveryRecordSHA256: hex.EncodeToString(actual.ReleaseRecoveryRecordSHA256)}
+	result := testtaskjournal.TaskResultRecord{
+		Kind:                        testtaskjournal.TaskResultCompose,
+		Diagnostic:                  testtaskjournal.TaskResultDiagnosticNone,
+		ExecutionEpoch:              actual.ExecutionEpoch,
+		ReleaseRecoveryRecordSHA256: hex.EncodeToString(actual.ReleaseRecoveryRecordSHA256),
+	}
 	for _, evidence := range actual.Compose.ProxyEvidence {
 		result.ProxyEvidence = append(
 			result.ProxyEvidence,
-			etcd.TaskProxyEvidence{ServiceID: evidence.ServiceId, ReleaseID: evidence.ReleaseId,
+			testtaskjournal.TaskProxyEvidence{ServiceID: evidence.ServiceId, ReleaseID: evidence.ReleaseId,
 				Target: evidence.Target, Compensated: evidence.Compensated, ProxyGeneration: evidence.ProxyGeneration, ConfigSHA256: hex.EncodeToString(evidence.ConfigSha256)},
 		)
 	}
 	for _, evidence := range actual.Compose.RecreateEvidence {
 		result.RecreateEvidence = append(
 			result.RecreateEvidence,
-			etcd.TaskRecreateEvidence{ServiceID: evidence.ServiceId, ReleaseID: evidence.ReleaseId,
+			testtaskjournal.TaskRecreateEvidence{ServiceID: evidence.ServiceId, ReleaseID: evidence.ReleaseId,
 				ArtifactID: evidence.ArtifactId, Target: evidence.Target, Compensated: evidence.Compensated},
 		)
 	}
 	if evidence := actual.Compose.CandidateAbsenceEvidence; evidence != nil {
-		result.CandidateAbsenceEvidence = &etcd.TaskCandidateAbsenceEvidence{
+		result.CandidateAbsenceEvidence = &testtaskjournal.TaskCandidateAbsenceEvidence{
 			AssignmentID: evidence.AssignmentId,
 			PlanHash:     hex.EncodeToString(evidence.PlanHash),
 			AuthoritySHA256: hex.EncodeToString(
@@ -280,14 +292,20 @@ func executeMixedWorkerRecovery(t *testing.T, fixture *etcd.ExecutedArtifactFixt
 			AbsenceProven:       evidence.AbsenceProven,
 		}
 		for _, member := range evidence.Candidates {
-			result.CandidateAbsenceEvidence.Candidates = append(result.CandidateAbsenceEvidence.Candidates,
-				etcd.TaskCandidateAbsenceCandidate{ServiceID: member.ServiceId, ReleaseID: member.ReleaseId})
+			result.CandidateAbsenceEvidence.Candidates = append(
+				result.CandidateAbsenceEvidence.Candidates,
+				testtaskjournal.TaskCandidateAbsenceCandidate{ServiceID: member.ServiceId, ReleaseID: member.ReleaseId},
+			)
 		}
 	}
 	return result
 }
 
-func mixedWorkerAssignment(t *testing.T, recovery etcd.TaskAssignment, plan *agentpb.ExecutionPlan) agent.Assignment {
+func mixedWorkerAssignment(
+	t *testing.T,
+	recovery etcd.TaskAssignment,
+	plan *agentpb.ExecutionPlan,
+) testtaskassignment.Assignment {
 	t.Helper()
 	record, authority := recovery.Assignment.Record, recovery.Assignment.Record.RestorationAuthority
 	wire := &agentpb.ReleaseRestorationAuthority{
@@ -300,7 +318,7 @@ func mixedWorkerAssignment(t *testing.T, recovery etcd.TaskAssignment, plan *age
 	}
 	for _, member := range authority.Candidates {
 		target := agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE
-		if member.Target == etcd.ReleaseRestorationServingPredecessor {
+		if member.Target == testtaskassignments.ReleaseRestorationServingPredecessor {
 			target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR
 		}
 		wire.Candidates = append(
@@ -328,7 +346,7 @@ func mixedWorkerAssignment(t *testing.T, recovery etcd.TaskAssignment, plan *age
 		})
 	}
 	digest := decodeTestDigest(t, record.ReleaseRecoveryRecordSHA256)
-	return agent.Assignment{
+	return testtaskassignment.Assignment{
 		AssignmentID:                record.AssignmentID,
 		TaskID:                      record.TaskID,
 		OperationID:                 authority.OperationID,

@@ -12,6 +12,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,7 +28,7 @@ func TestRouteProviderPinClonePreservesCanonicalOrigin(t *testing.T) {
 	t.Parallel()
 	componentID := ids.New(ids.KindComponent)
 	serviceID := ids.New(ids.KindService)
-	pinned := RouteProviderPin{
+	pinned := testenvironmentchanges.RouteProviderPin{
 		ComponentID: componentID, DefinitionDigest: strings.Repeat("a", 64),
 		CatalogDigest: strings.Repeat("b", 64), InputRevision: 7, InputGeneration: 9,
 		Destination: "components/router/config", ActionID: "activate-config", ServiceID: serviceID,
@@ -38,10 +45,10 @@ func TestRouteProviderPinClonePreservesCanonicalOrigin(t *testing.T) {
 			}},
 		},
 	}
-	if err := validateRouteProviderPin(&pinned); err != nil {
+	if err := testenvironmentchanges.ValidateRouteProviderPin(&pinned); err != nil {
 		t.Fatalf("validateRouteProviderPin() error = %v", err)
 	}
-	cloned := cloneRouteProviderPin(pinned)
+	cloned := testenvironmentchanges.CloneRouteProviderPin(pinned)
 	cloned.Input.Routes[0].Path = "/changed"
 	cloned.Input.Zones[0].Name = "changed"
 	if pinned.Input.Routes[0].Path != "/" || pinned.Input.Zones[0].Name != "frontend" ||
@@ -50,7 +57,7 @@ func TestRouteProviderPinClonePreservesCanonicalOrigin(t *testing.T) {
 	}
 	changed := pinned
 	changed.Input.Origin.URL = "http://another-router:8080"
-	if err := validateRouteProviderPin(&changed); err == nil {
+	if err := testenvironmentchanges.ValidateRouteProviderPin(&changed); err == nil {
 		t.Fatal("validateRouteProviderPin() accepted a changed origin host")
 	}
 }
@@ -60,23 +67,23 @@ func TestRouteRepositoryRejectsPublicationOmittingDesiredService(t *testing.T) {
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	fenceKey := "/v1/test/route-service-fences/" + target.Record.Desired.ID
-	fence, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: fenceKey, Value: []byte(target.Record.Desired.ID),
+	fence, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: fenceKey, Value: []byte(target.Record.Desired.ID),
 	}})
 	if err != nil || !fence.Succeeded {
 		t.Fatalf("seed Route service fence = %#v, %v", fence, err)
 	}
-	target.Record.desiredFenceKey = fenceKey
+	target = refenceServiceFixture(t, store, target, fenceKey, fence.Revision)
 	target.Revision = fence.Revision
 	target.ReadRevision = fence.Revision
 
-	currentProjection, found, err := currentEnvironmentProjectionAtRevision(
+	currentProjection, found, err := testblueprints.ReadProjectionAtRevision(
 		ctx, store, environment.Record.ID, fence.Revision,
 	)
 	if err != nil || !found {
 		t.Fatalf("currentEnvironmentProjectionAtRevision() = %#v/%v/%v", currentProjection, found, err)
 	}
-	headBefore, err := store.Get(ctx, environmentBlueprintHeadKey(environment.Record.ID))
+	headBefore, err := store.Get(ctx, testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID))
 	if err != nil || headBefore.Entry == nil {
 		t.Fatalf("Get(desired head before) = %#v/%v", headBefore, err)
 	}
@@ -88,26 +95,29 @@ func TestRouteRepositoryRejectsPublicationOmittingDesiredService(t *testing.T) {
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 1302)
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 1303)
 	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
-	task.Executor = TaskExecutorController
-	task.Type = TaskCreate
+	task.Executor = testtaskjournal.TaskExecutorController
+	task.Type = testtaskjournal.TaskCreate
 	task.Target = record.Desired.ID
-	task.Status = TaskStatusPending
+	task.Status = testtaskjournal.TaskStatusPending
 	task.Params = map[string]string{
-		TaskResourceKindParam: TaskResourceRoute, TaskRouteEnvironmentParam: environment.Record.ID,
+		testtaskjournal.TaskResourceKindParam:     testtaskjournal.TaskResourceRoute,
+		testtaskjournal.TaskRouteEnvironmentParam: environment.Record.ID,
 	}
-	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, createdAt, 1304)}}
+	task.Steps = []testtaskjournal.TaskStepRecord{
+		{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, createdAt, 1304)},
+	}
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = int32(currentProjection.Record.RenderGeneration + 1)
 	task.PlanHash = strings.Repeat("c", 64)
 	task.IdempotencyKey = "route-omission-task-key-0001"
 
-	intent, err := NewRouteMutationIntent(
+	intent, err := testenvironmentchanges.NewRouteMutationIntent(
 		task.ID, task.OperationID, environment.Record.ID, record, nil, &currentProjection, createdAt,
 	)
 	if err != nil {
 		t.Fatalf("NewRouteMutationIntent() error = %v", err)
 	}
-	candidate, err := ApplyEnvironmentRoute(currentProjection.Record, record)
+	candidate, err := testenvironmentprojection.ApplyEnvironmentRoute(currentProjection.Record, record)
 	if err != nil {
 		t.Fatalf("ApplyEnvironmentRoute() error = %v", err)
 	}
@@ -128,14 +138,10 @@ func TestRouteRepositoryRejectsPublicationOmittingDesiredService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal acceptance: %v", err)
 	}
-	marker, err := NewCompletedDirectIdempotencyMarker(
-		IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
-			Method: http.MethodPost, Route: "/routes", Key: task.IdempotencyKey,
-		},
-		testDirectMarker().Intent,
-		IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		createdAt,
+	marker, err := testidempotency.NewCompletedDirectIdempotencyMarker(testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+		Method: http.MethodPost, Route: "/routes", Key: task.IdempotencyKey,
+	}, testDirectMarker().Intent, testidempotency.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, createdAt,
 	)
 	if err != nil {
 		t.Fatalf("NewCompletedDirectIdempotencyMarker() error = %v", err)
@@ -153,7 +159,7 @@ func TestRouteRepositoryRejectsPublicationOmittingDesiredService(t *testing.T) {
 			mutationErr,
 		)
 	}
-	headAfter, err := store.Get(ctx, environmentBlueprintHeadKey(environment.Record.ID))
+	headAfter, err := store.Get(ctx, testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID))
 	if err != nil || headAfter.Entry == nil {
 		t.Fatalf("Get(desired head after) = %#v/%v", headAfter, err)
 	}
@@ -169,13 +175,13 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1200, "/api/*")
 	fenceKey := "/v1/test/route-service-fences/" + target.Record.Desired.ID
-	fence, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: fenceKey, Value: []byte(target.Record.Desired.ID),
+	fence, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: fenceKey, Value: []byte(target.Record.Desired.ID),
 	}})
 	if err != nil || !fence.Succeeded {
 		t.Fatalf("seed Route service fence = %#v, %v", fence, err)
 	}
-	target.Record.desiredFenceKey = fenceKey
+	target = refenceServiceFixture(t, store, target, fenceKey, fence.Revision)
 	target.Revision = fence.Revision
 	target.ReadRevision = fence.Revision
 	createdAt := serviceRecordTestTime().Add(3 * time.Hour)
@@ -184,20 +190,30 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 1202)
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 1203)
 	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
-	task.Executor = TaskExecutorController
-	task.Type = TaskCreate
+	task.Executor = testtaskjournal.TaskExecutorController
+	task.Type = testtaskjournal.TaskCreate
 	task.Target = record.Desired.ID
-	task.Status = TaskStatusPending
+	task.Status = testtaskjournal.TaskStatusPending
 	task.Params = map[string]string{
-		TaskResourceKindParam:     TaskResourceRoute,
-		TaskRouteEnvironmentParam: environment.Record.ID,
+		testtaskjournal.TaskResourceKindParam:     testtaskjournal.TaskResourceRoute,
+		testtaskjournal.TaskRouteEnvironmentParam: environment.Record.ID,
 	}
-	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, createdAt, 1204)}}
+	task.Steps = []testtaskjournal.TaskStepRecord{
+		{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, createdAt, 1204)},
+	}
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = 1
 	task.PlanHash = strings.Repeat("a", 64)
 	task.IdempotencyKey = "route-create-task-key-0001"
-	intent, err := NewRouteMutationIntent(task.ID, task.OperationID, environment.Record.ID, record, nil, nil, createdAt)
+	intent, err := testenvironmentchanges.NewRouteMutationIntent(
+		task.ID,
+		task.OperationID,
+		environment.Record.ID,
+		record,
+		nil,
+		nil,
+		createdAt,
+	)
 	if err != nil {
 		t.Fatalf("NewRouteMutationIntent() error = %v", err)
 	}
@@ -212,17 +228,13 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	if err != nil {
 		t.Fatalf("marshal acceptance: %v", err)
 	}
-	marker, err := NewCompletedDirectIdempotencyMarker(
-		IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment,
-			ScopeID:   environment.Record.ID,
-			Method:    http.MethodPost,
-			Route:     "/routes",
-			Key:       task.IdempotencyKey,
-		},
-		testDirectMarker().Intent,
-		IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body},
-		createdAt,
+	marker, err := testidempotency.NewCompletedDirectIdempotencyMarker(testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
+		ScopeID:   environment.Record.ID,
+		Method:    http.MethodPost,
+		Route:     "/routes",
+		Key:       task.IdempotencyKey,
+	}, testDirectMarker().Intent, testidempotency.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, createdAt,
 	)
 	if err != nil {
 		t.Fatalf("NewCompletedDirectIdempotencyMarker() error = %v", err)
@@ -258,13 +270,12 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 		t.Fatalf("GetRouteMutationIntent() = %#v/%v/%v", storedIntent, found, err)
 	}
 	companions, err := store.GetMany(
-		ctx,
-		GetManyRequest{
+		ctx, testkeyvalue.GetManyRequest{
 			Keys: []string{
-				taskKey(task.ID),
-				taskQueueKey(task.Executor, task.ID),
-				routeMutationIntentKey(task.ID),
-				componentTaskActiveEnvironmentKey(environment.Record.ID),
+				testtaskjournal.TaskStorageKey(task.ID),
+				testtaskjournal.TaskQueueKey(task.Executor, task.ID),
+				testenvironmentchanges.RouteMutationIntentKey(task.ID),
+				testenvironmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
 			},
 		},
 	)
@@ -284,18 +295,18 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 		t.Fatalf("ClaimNextControllerTask() found/error = %v/%v", found, err)
 	}
 	terminalAt := createdAt.Add(2 * time.Second)
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 	}
-	observationRead, err := store.Get(ctx, routeObservationKey(record.Desired.ID))
+	observationRead, err := store.Get(ctx, testroutes.ObservationKey(record.Desired.ID))
 	if err != nil || observationRead.Entry == nil {
 		t.Fatalf("Get(desired-only observation) = %#v/%v", observationRead, err)
 	}
-	observation, err := decodeRouteObservation(observationRead.Entry.Value)
-	if err != nil || observation.Observation.Status != RouteObservedUnserved {
+	observation, err := testroutes.DecodeObservation(observationRead.Entry.Value)
+	if err != nil || observation.Observation.Status != testroutes.ObservedUnserved {
 		t.Fatalf("desired-only observation = %#v/%v", observation, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, terminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, terminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(replay) error = %v", err)
 	}
 
@@ -303,7 +314,7 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	if err != nil {
 		t.Fatalf("GetRoute(edit predecessor) error = %v", err)
 	}
-	edited, err := ReplaceRouteDesired(current.Record, core.Route{
+	edited, err := testroutes.ReplaceDesired(current.Record, core.Route{
 		ID: record.Desired.ID, Host: record.Desired.Host, Path: record.Desired.Path,
 		Exposure: "internal", TargetServiceID: record.Desired.TargetServiceID,
 		TargetPort: record.Desired.TargetPort,
@@ -317,18 +328,21 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	editTask.OperationID = ids.NewAt(ids.KindOperation, editCreatedAt, 1211)
 	editTask.PlanID = ids.NewAt(ids.KindPlan, editCreatedAt, 1212)
 	editTask.Owner = task.Owner
-	editTask.Executor = TaskExecutorController
-	editTask.Type = TaskUpdate
+	editTask.Executor = testtaskjournal.TaskExecutorController
+	editTask.Type = testtaskjournal.TaskUpdate
 	editTask.Target = edited.Desired.ID
 	editTask.Params = map[string]string{
-		TaskResourceKindParam: TaskResourceRoute, TaskRouteEnvironmentParam: environment.Record.ID,
+		testtaskjournal.TaskResourceKindParam:     testtaskjournal.TaskResourceRoute,
+		testtaskjournal.TaskRouteEnvironmentParam: environment.Record.ID,
 	}
-	editTask.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, editCreatedAt, 1213)}}
+	editTask.Steps = []testtaskjournal.TaskStepRecord{
+		{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, editCreatedAt, 1213)},
+	}
 	editTask.TimeoutSeconds = 30
 	editTask.RenderGeneration = int32(edited.DesiredGeneration)
 	editTask.PlanHash = strings.Repeat("b", 64)
 	editTask.IdempotencyKey = "route-edit-task-key-0001"
-	editIntent, err := NewRouteMutationIntent(
+	editIntent, err := testenvironmentchanges.NewRouteMutationIntent(
 		editTask.ID, editTask.OperationID, environment.Record.ID, edited, &current, nil, editCreatedAt,
 	)
 	if err != nil {
@@ -345,14 +359,10 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 	if err != nil {
 		t.Fatalf("marshal edit acceptance: %v", err)
 	}
-	editMarker, err := NewCompletedDirectIdempotencyMarker(
-		IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
-			Method: http.MethodPatch, Route: "/routes/{id}", Key: editTask.IdempotencyKey,
-		},
-		testDirectMarker().Intent,
-		IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: editBody},
-		editCreatedAt,
+	editMarker, err := testidempotency.NewCompletedDirectIdempotencyMarker(testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environment.Record.ID,
+		Method: http.MethodPatch, Route: "/routes/{id}", Key: editTask.IdempotencyKey,
+	}, testDirectMarker().Intent, testidempotency.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: editBody}, editCreatedAt,
 	)
 	if err != nil {
 		t.Fatalf("NewCompletedDirectIdempotencyMarker(edit) error = %v", err)
@@ -366,18 +376,18 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 		t.Fatalf("ClaimNextControllerTask(edit) found/error = %v/%v", found, err)
 	}
 	editTerminalAt := editCreatedAt.Add(2 * time.Second)
-	failed, err := tasks.AcknowledgeControllerTask(ctx, editTask.ID, TaskStatusFailed, editTerminalAt)
-	if err != nil || failed.Record.Status != TaskStatusFailed {
+	failed, err := tasks.AcknowledgeControllerTask(ctx, editTask.ID, testtaskjournal.TaskStatusFailed, editTerminalAt)
+	if err != nil || failed.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeControllerTask(edit failed) = %#v/%v", failed, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, editTask.ID, TaskStatusFailed, editTerminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, editTask.ID, testtaskjournal.TaskStatusFailed, editTerminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(edit failed replay) error = %v", err)
 	}
 	retryID := ids.NewAt(ids.KindTask, editTerminalAt.Add(time.Second), 1214)
 	retryMarker := pendingRetryMarker(
 		failed.Record, retryID, editTerminalAt.Add(time.Second), "route-edit-retry-key-0001",
 	)
-	result, err = tasks.RetryTask(ctx, editTask.ID, retryID, TaskActorOperator, retryMarker)
+	result, err = tasks.RetryTask(ctx, editTask.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask(edit) error = %v", err)
 	}
@@ -389,17 +399,17 @@ func TestRouteRepositoryPublishesDesiredMutationAndTaskAtomically(t *testing.T) 
 		t.Fatalf("ClaimNextControllerTask(edit retry) found/error = %v/%v", found, err)
 	}
 	retryTerminalAt := editTerminalAt.Add(3 * time.Second)
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, TaskStatusCompleted, retryTerminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, retryTerminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(edit retry) error = %v", err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, TaskStatusCompleted, retryTerminalAt); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, retryTerminalAt); err != nil {
 		t.Fatalf("AcknowledgeControllerTask(edit retry replay) error = %v", err)
 	}
 }
 
-func routeRepositoryTestProviderPin(serviceID string) *RouteProviderPin {
+func routeRepositoryTestProviderPin(serviceID string) *testenvironmentchanges.RouteProviderPin {
 	componentID := ids.New(ids.KindComponent)
-	return &RouteProviderPin{
+	return &testenvironmentchanges.RouteProviderPin{
 		ComponentID: componentID, DefinitionDigest: strings.Repeat("a", 64),
 		CatalogDigest: strings.Repeat("b", 64), InputRevision: 7, InputGeneration: 9,
 		Destination: "components/router/config", ActionID: "activate-config", ServiceID: serviceID,

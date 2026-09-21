@@ -9,6 +9,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -18,16 +22,16 @@ import (
 // deploy B/3 and successful rollback C/2 heads without advancing Blueprint A.
 func (fixture *ExecutedArtifactFixture) SeedRetainedRollback(
 	t *testing.T,
-	original ReleaseRenderInput,
+	original testreleaserender.ReleaseRenderInput,
 	originalIntent domain.Intent,
-) (ReleaseRenderInput, domain.Intent) {
+) (testreleaserender.ReleaseRenderInput, domain.Intent) {
 	t.Helper()
 	ctx := context.Background()
 	priorID := original.ReleaseID
-	var result ReleaseRenderInput
+	var result testreleaserender.ReleaseRenderInput
 	var intent domain.Intent
 	for index, replicas := range []uint32{3, 2} {
-		result = cloneReleaseRenderInput(original)
+		result = testreleaserender.CloneReleaseRenderInput(original)
 		result.ReleaseID, result.PlanID, result.ArtifactID = ids.New(
 			ids.KindDeployment,
 		), ids.New(
@@ -60,7 +64,7 @@ func (fixture *ExecutedArtifactFixture) SeedRetainedRollback(
 		if index == 1 {
 			intent.OperationKind, intent.RollbackSourceReleaseID = domain.OperationRollback, original.ReleaseID
 		}
-		raw, err := EncodeReleaseRenderInput(result)
+		raw, err := testreleaserender.EncodeReleaseRenderInput(result)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,12 +74,11 @@ func (fixture *ExecutedArtifactFixture) SeedRetainedRollback(
 		}
 		publication := ids.NewULID()
 		manifest, err := fixture.Ledger.Stage(
-			ctx,
-			ReleaseStage{
+			ctx, testreleases.ReleaseStage{
 				PublicationID: publication,
 				OperationID:   intent.OperationID,
 				CreatedAt:     intent.CreatedAt,
-				Members: []ReleaseStageMember{
+				Members: []testreleases.ReleaseStageMember{
 					{
 						Intent:      intent,
 						RenderInput: raw,
@@ -91,17 +94,16 @@ func (fixture *ExecutedArtifactFixture) SeedRetainedRollback(
 		if err != nil {
 			t.Fatal(err)
 		}
-		marker, _ := encodeReleaseRecord(
-			"release-publication",
-			ReleasePublicationMarker{
+		marker, _ := testreleases.EncodeReleaseRecord(
+			"release-publication", testreleases.ReleasePublicationMarker{
 				PublicationID:  publication,
 				OperationID:    intent.OperationID,
 				ManifestDigest: manifest.Record.Digest,
 				PublishedAt:    intent.CreatedAt,
 			},
 		)
-		indexBytes, _ := json.Marshal(releaseServiceIndexValue{Schema: 1, PublicationID: publication})
-		projection, _ := encodeReleaseRecord(
+		indexBytes, _ := json.Marshal(testreleases.ReleaseServiceIndexValue{Schema: 1, PublicationID: publication})
+		projection, _ := testreleases.EncodeReleaseRecord(
 			"service-release-projection",
 			domain.ServiceProjection{
 				EnvironmentID:              intent.EnvironmentID,
@@ -110,9 +112,8 @@ func (fixture *ExecutedArtifactFixture) SeedRetainedRollback(
 				CurrentSuccessfulReleaseID: intent.ID,
 			},
 		)
-		head, _ := encodeReleaseRecord(
-			"release-operation",
-			ReleaseOperationHead{
+		head, _ := testreleases.EncodeReleaseRecord(
+			"release-operation", testreleases.ReleaseOperationHead{
 				OperationID:   intent.OperationID,
 				PublicationID: publication,
 				EnvironmentID: intent.EnvironmentID,
@@ -126,15 +127,23 @@ func (fixture *ExecutedArtifactFixture) SeedRetainedRollback(
 		_, err = fixture.store.Transact(
 			ctx,
 			nil,
-			[]Mutation{
-				{Type: MutationPut, Key: releasePublicationKey(publication), Value: marker},
+			[]testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationPut, Key: testreleases.ReleasePublicationKey(publication), Value: marker},
 				{
-					Type:  MutationPut,
-					Key:   releaseServiceIndexKey(intent.EnvironmentID, intent.ServiceID, intent.ID),
+					Type:  testkeyvalue.MutationPut,
+					Key:   testreleases.ReleaseServiceIndexKey(intent.EnvironmentID, intent.ServiceID, intent.ID),
 					Value: indexBytes,
 				},
-				{Type: MutationPut, Key: releaseProjectionKey(intent.ServiceID), Value: projection},
-				{Type: MutationPut, Key: releaseOperationKey(intent.OperationID), Value: head},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testreleases.ReleaseProjectionKey(intent.ServiceID),
+					Value: projection,
+				},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testreleases.ReleaseOperationKey(intent.OperationID),
+					Value: head,
+				},
 			},
 		)
 		if err != nil {
@@ -147,7 +156,7 @@ func (fixture *ExecutedArtifactFixture) SeedRetainedRollback(
 
 func (fixture *ExecutedArtifactFixture) AssertRetainedSourceRaces(
 	t *testing.T,
-	render ReleaseRenderInput,
+	render testreleaserender.ReleaseRenderInput,
 	mixed *agentpb.ComposeArtifact,
 ) {
 	t.Helper()
@@ -179,7 +188,7 @@ func (fixture *ExecutedArtifactFixture) AssertRetainedSourceRaces(
 			if err != nil {
 				t.Fatal(err)
 			}
-			release := ServiceLifecycleRelease{
+			release := testreleaserender.ServiceLifecycleRelease{
 				ServingReleaseID:   render.ReleaseID,
 				ProjectionRevision: serving.ProjectionRevision,
 				IntentRevision:     serving.IntentRevision,
@@ -199,17 +208,17 @@ func (fixture *ExecutedArtifactFixture) AssertRetainedSourceRaces(
 			if err != nil {
 				t.Fatal(err)
 			}
-			key := map[string]string{"intent": releaseIntentStagingKey("", render.ReleaseID), "render": releaseRenderInputStagingKey("", render.ReleaseID), "projection": releaseProjectionKey(render.ServiceID), "applied": environmentComposeProjectionKey(render.EnvironmentID)}[kind]
+			key := map[string]string{"intent": testreleases.ReleaseIntentStagingKey("", render.ReleaseID), "render": testreleases.ReleaseRenderInputStagingKey("", render.ReleaseID), "projection": testreleases.ReleaseProjectionKey(render.ServiceID), "applied": testenvironmentprojection.EnvironmentComposeProjectionStorageKey(render.EnvironmentID)}[kind]
 			before, err := fixture.store.Get(ctx, key)
 			if err != nil || before.Entry == nil {
 				t.Fatalf("read %s: %v", kind, err)
 			}
-			mutation := Mutation{Type: MutationPut, Key: key, Value: before.Entry.Value}
+			mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: before.Entry.Value}
 			if prune {
-				mutation.Type = MutationDelete
+				mutation.Type = testkeyvalue.MutationDelete
 				mutation.Value = nil
 			}
-			if _, err := fixture.store.Transact(ctx, nil, []Mutation{mutation}); err != nil {
+			if _, err := fixture.store.Transact(ctx, nil, []testkeyvalue.Mutation{mutation}); err != nil {
 				t.Fatal(err)
 			}
 			result, err := fixture.store.Transact(ctx, publication.conditions, publication.mutations)
@@ -227,21 +236,21 @@ func (fixture *ExecutedArtifactFixture) AssertRetainedSourceRaces(
 // render, including all mutations already carried by its candidate fragment.
 func (fixture *ExecutedArtifactFixture) AssertRetainedInactiveRenderRaces(
 	t *testing.T,
-	prior, current ReleaseRenderInput,
+	prior, current testreleaserender.ReleaseRenderInput,
 	mixed *agentpb.ComposeArtifact,
 ) {
 	t.Helper()
 	ctx := context.Background()
-	for _, render := range []ReleaseRenderInput{prior, current} {
-		raw, err := EncodeReleaseRenderInput(render)
+	for _, render := range []testreleaserender.ReleaseRenderInput{prior, current} {
+		raw, err := testreleaserender.EncodeReleaseRenderInput(render)
 		if err != nil {
 			t.Fatal(err)
 		}
-		value, err := encodeReleaseRecord("release-render-input", json.RawMessage(raw))
+		value, err := testreleases.EncodeReleaseRecord("release-render-input", json.RawMessage(raw))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := fixture.store.Put(ctx, releaseRenderInputStagingKey("", render.ReleaseID), value); err != nil {
+		if _, err := fixture.store.Put(ctx, testreleases.ReleaseRenderInputStagingKey("", render.ReleaseID), value); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -251,7 +260,7 @@ func (fixture *ExecutedArtifactFixture) AssertRetainedInactiveRenderRaces(
 	}
 	serving.Intent.Strategy, serving.Intent.Slot, serving.Intent.CandidateWorkload = current.Strategy, current.Slot, current.CandidateWorkload
 	serving.Intent.PriorServingReleaseID = prior.ReleaseID
-	raw, err := EncodeReleaseRenderInput(current)
+	raw, err := testreleaserender.EncodeReleaseRenderInput(current)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,11 +268,11 @@ func (fixture *ExecutedArtifactFixture) AssertRetainedInactiveRenderRaces(
 	if err != nil {
 		t.Fatal(err)
 	}
-	value, err := encodeReleaseRecord("release-intent", serving.Intent)
+	value, err := testreleases.EncodeReleaseRecord("release-intent", serving.Intent)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fixture.store.Put(ctx, releaseIntentStagingKey("", current.ReleaseID), value); err != nil {
+	if _, err := fixture.store.Put(ctx, testreleases.ReleaseIntentStagingKey("", current.ReleaseID), value); err != nil {
 		t.Fatal(err)
 	}
 	for _, prune := range []bool{false, true} {
@@ -299,7 +308,7 @@ func (fixture *ExecutedArtifactFixture) AssertRetainedInactiveRenderRaces(
 				if err != nil {
 					t.Fatal(err)
 				}
-				release := ServiceLifecycleRelease{
+				release := testreleaserender.ServiceLifecycleRelease{
 					ServingReleaseID:            current.ReleaseID,
 					ProjectionRevision:          serving.ProjectionRevision,
 					IntentRevision:              serving.IntentRevision,
@@ -310,16 +319,16 @@ func (fixture *ExecutedArtifactFixture) AssertRetainedInactiveRenderRaces(
 					RetainedPriorRenderRevision: inactive.Revision,
 				}
 				task := fixture.Task(t, 1480)
-				task.Params[TaskReleasePublicationParam] = ids.NewULID()
+				task.Params[testreleaserender.TaskReleasePublicationParam] = ids.NewULID()
 				firstKey, secondKey := "/v1/test/retained-first/"+task.ID, "/v1/test/retained-second/"+task.ID
 				candidate, err := newBlueprintReleasePublication(
 					blueprintReleasePublicationInput{
 						EnvironmentID: task.Target,
 						OperationID:   task.OperationID,
-						Conditions:    []Condition{{Key: firstKey}, {Key: secondKey}},
-						Mutations: []Mutation{
-							{Type: MutationPut, Key: firstKey, Value: []byte("first")},
-							{Type: MutationPut, Key: secondKey, Value: []byte("second")},
+						Conditions:    []testkeyvalue.Condition{{Key: firstKey}, {Key: secondKey}},
+						Mutations: []testkeyvalue.Mutation{
+							{Type: testkeyvalue.MutationPut, Key: firstKey, Value: []byte("first")},
+							{Type: testkeyvalue.MutationPut, Key: secondKey, Value: []byte("second")},
 						},
 					},
 				)
@@ -341,17 +350,17 @@ func (fixture *ExecutedArtifactFixture) AssertRetainedInactiveRenderRaces(
 				if err != nil || !ready.Succeeded {
 					t.Fatalf("valid BG publication was not ready: %v", err)
 				}
-				key := releaseRenderInputStagingKey("", prior.ReleaseID)
+				key := testreleases.ReleaseRenderInputStagingKey("", prior.ReleaseID)
 				before, err := fixture.store.Get(ctx, key)
 				if err != nil || before.Entry == nil {
 					t.Fatalf("inactive source absent: %v", err)
 				}
-				mutation := Mutation{Type: MutationPut, Key: key, Value: before.Entry.Value}
+				mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: before.Entry.Value}
 				if prune {
-					mutation.Type = MutationDelete
+					mutation.Type = testkeyvalue.MutationDelete
 					mutation.Value = nil
 				}
-				if _, err := fixture.store.Transact(ctx, nil, []Mutation{mutation}); err != nil {
+				if _, err := fixture.store.Transact(ctx, nil, []testkeyvalue.Mutation{mutation}); err != nil {
 					t.Fatal(err)
 				}
 				result, err := fixture.store.Transact(ctx, publication.conditions, publication.mutations)
@@ -405,13 +414,13 @@ func TestBlueprintRuntimeRetentionExtendsCandidateCompareSet(t *testing.T) {
 				t.Fatal(err)
 			}
 			task := fixture.Task(t, 1301)
-			task.Params[TaskReleasePublicationParam] = ids.NewULID()
+			task.Params[testreleaserender.TaskReleasePublicationParam] = ids.NewULID()
 			candidateKey := "/v1/test/candidate/" + task.ID
 			candidate, err := newBlueprintReleasePublication(
 				blueprintReleasePublicationInput{EnvironmentID: task.Target, OperationID: task.OperationID,
-					Conditions: []Condition{
+					Conditions: []testkeyvalue.Condition{
 						{Key: candidateKey},
-					}, Mutations: []Mutation{{Type: MutationPut, Key: candidateKey, Value: []byte("candidate")}}},
+					}, Mutations: []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: candidateKey, Value: []byte("candidate")}}},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -440,7 +449,7 @@ func TestBlueprintRuntimeRetentionExtendsCandidateCompareSet(t *testing.T) {
 				t.Fatal("candidate Task parameter requirement was removed")
 			}
 			if mutate {
-				if _, err := fixture.store.Put(ctx, releaseProjectionKey(planning[0].Service.Record.Desired.ID), []byte("present")); err != nil {
+				if _, err := fixture.store.Put(ctx, testreleases.ReleaseProjectionKey(planning[0].Service.Record.Desired.ID), []byte("present")); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -471,11 +480,11 @@ func TestBlueprintRuntimeRetentionActualPublisherSources(t *testing.T) {
 			projection.ComposeArtifact, _ = proto.MarshalOptions{Deterministic: true}.Marshal(artifact)
 			fixture.Publish(t, first, projection, BlueprintReleasePublication{})
 			if mutation == "applied-existing" {
-				value, err := encodeEnvironmentComposeProjection(projection)
+				value, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := fixture.store.Put(ctx, environmentComposeProjectionKey(fixture.Environment.Record.ID), value); err != nil {
+				if _, err := fixture.store.Put(ctx, testenvironmentprojection.EnvironmentComposeProjectionStorageKey(fixture.Environment.Record.ID), value); err != nil {
 					t.Fatal(err)
 				}
 				seedTestRuntimeConfigurationHead(
@@ -517,11 +526,11 @@ func TestBlueprintRuntimeRetentionActualPublisherSources(t *testing.T) {
 			}
 			switch mutation {
 			case "applied", "applied-existing":
-				value, err := encodeEnvironmentComposeProjection(projection)
+				value, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := fixture.store.Put(ctx, environmentComposeProjectionKey(fixture.Environment.Record.ID), value); err != nil {
+				if _, err := fixture.store.Put(ctx, testenvironmentprojection.EnvironmentComposeProjectionStorageKey(fixture.Environment.Record.ID), value); err != nil {
 					t.Fatal(err)
 				}
 				seedTestRuntimeConfigurationHead(
@@ -531,7 +540,7 @@ func TestBlueprintRuntimeRetentionActualPublisherSources(t *testing.T) {
 					projection.RenderGeneration,
 				)
 			case "absent-release":
-				if _, err := fixture.store.Put(ctx, releaseProjectionKey(planning[0].Service.Record.Desired.ID), []byte("changed")); err != nil {
+				if _, err := fixture.store.Put(ctx, testreleases.ReleaseProjectionKey(planning[0].Service.Record.Desired.ID), []byte("changed")); err != nil {
 					t.Fatal(err)
 				}
 			case "tampered-artifact":
@@ -593,8 +602,7 @@ func TestBlueprintRuntimeRetentionAuthorityDetectorUsesPhysicalRoles(t *testing.
 				t.Fatal(err)
 			}
 			err = (BlueprintReleasePublication{}).validateRetainedRuntime(
-				task,
-				EnvironmentComposeProjection{ComposeArtifact: value},
+				task, testenvironmentprojection.EnvironmentComposeProjection{ComposeArtifact: value},
 			)
 			if role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED {
 				if err != nil {

@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +22,7 @@ func TestManualScriptPublicationReplayDoesNotReserveSourcesAgain(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			store, sources, execution, task, marker := manualScriptLifecycleFixture(t)
-			scripts := &ScriptRepository{store: store}
+			scripts := composeScriptRepository(store)
 			published, err := scripts.PublishExecutionWithTask(ctx, sources, execution, task, marker)
 			if err != nil || published.kind != idempotencyTransactionApplied {
 				t.Fatalf("initial publication = %v", err)
@@ -49,14 +52,17 @@ func TestManualScriptPublicationReplayDoesNotReserveSourcesAgain(t *testing.T) {
 func TestManualScriptPublicationUnknownCommitReplaysWithoutWrites(t *testing.T) {
 	ctx := context.Background()
 	store, sources, execution, task, marker := manualScriptLifecycleFixture(t)
-	faults := &manualScriptPublicationLostResponseStore{memoryHierarchyStore: store, taskKey: taskKey(task.ID)}
-	scripts := &ScriptRepository{store: faults}
+	faults := &manualScriptPublicationLostResponseStore{
+		memoryHierarchyStore: store,
+		taskKey:              testtaskjournal.TaskStorageKey(task.ID),
+	}
+	scripts := composeScriptRepository(faults)
 	_, err := scripts.PublishExecutionWithTask(ctx, sources, execution, task, marker)
 	if !isKind(err, errs.KindInternal) || !faults.lost {
 		t.Fatalf("unknown publication outcome = %v", err)
 	}
-	taskValue := store.valueAt(taskKey(task.ID), store.revision)
-	rootValue := store.valueAt(scriptSourceRootKey(task.OperationID), store.revision)
+	taskValue := store.valueAt(testtaskjournal.TaskStorageKey(task.ID), store.revision)
+	rootValue := store.valueAt(testscriptsourceevidence.ScriptSourceRootKey(task.OperationID), store.revision)
 	if taskValue == nil || rootValue == nil || taskValue.ModRevision != rootValue.ModRevision {
 		t.Fatal("unknown publication did not retain its atomic Task/root authority")
 	}
@@ -65,7 +71,7 @@ func TestManualScriptPublicationUnknownCommitReplaysWithoutWrites(t *testing.T) 
 		t.Fatalf("unknown publication abandoned active source authority: %v", err)
 	}
 	revision := store.revision
-	restarted := &ScriptRepository{store: store}
+	restarted := composeScriptRepository(store)
 	replay, err := restarted.PublishExecutionWithTask(ctx, sources, execution, task, marker)
 	if err != nil || replay.kind != idempotencyTransactionExisting || store.revision != revision {
 		t.Fatalf("unknown publication replay wrote state: %v", err)
@@ -79,16 +85,19 @@ type manualScriptPublicationLostResponseStore struct {
 }
 
 func (store *manualScriptPublicationLostResponseStore) Transact(
-	ctx context.Context, conditions []Condition, mutations []Mutation,
-) (TransactionResult, error) {
+	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	result, err := store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 	if err != nil || !result.Succeeded || store.lost {
 		return result, err
 	}
 	for _, mutation := range mutations {
-		if mutation.Type == MutationPut && mutation.Key == store.taskKey {
+		if mutation.Type == testkeyvalue.MutationPut && mutation.Key == store.taskKey {
 			store.lost = true
-			return TransactionResult{}, errs.New(errs.KindInternal, "injected lost manual publication response")
+			return testkeyvalue.TransactionResult{}, errs.New(
+				errs.KindInternal,
+				"injected lost manual publication response",
+			)
 		}
 	}
 	return result, nil

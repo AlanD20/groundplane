@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -162,9 +163,9 @@ func TestVolumeEvidenceSealRejectsIncompleteOrChangedRows(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := fixture.Store.Transact(ctx, nil, []etcd.Mutation{
-					{Type: etcd.MutationPut, Key: removal.EvidenceRowKey(manifest.OperationID, 23), Value: value},
-					{Type: etcd.MutationPut, Key: removal.EvidenceCursorKey(manifest.OperationID), Value: stored.Entry.Value},
+				if _, err := fixture.Store.Transact(ctx, nil, []testkeyvalue.Mutation{
+					{Type: testkeyvalue.MutationPut, Key: removal.EvidenceRowKey(manifest.OperationID, 23), Value: value},
+					{Type: testkeyvalue.MutationPut, Key: removal.EvidenceCursorKey(manifest.OperationID), Value: stored.Entry.Value},
 				}); err != nil {
 					t.Fatal(err)
 				}
@@ -221,9 +222,9 @@ func TestVolumeEvidenceSealFencesMetadataAndRecoversWinner(t *testing.T) {
 				}
 			case "cleanup-between-pages":
 				backend.afterRange = func() {
-					if _, err := fixture.Store.Transact(ctx, nil, []etcd.Mutation{
-						{Type: etcd.MutationDelete, Key: removal.EvidenceCursorKey(manifest.OperationID)},
-						{Type: etcd.MutationDelete, Key: removal.EvidenceRowKey(manifest.OperationID, 45)},
+					if _, err := fixture.Store.Transact(ctx, nil, []testkeyvalue.Mutation{
+						{Type: testkeyvalue.MutationDelete, Key: removal.EvidenceCursorKey(manifest.OperationID)},
+						{Type: testkeyvalue.MutationDelete, Key: removal.EvidenceRowKey(manifest.OperationID, 45)},
 					}); err != nil {
 						t.Fatal(err)
 					}
@@ -268,12 +269,15 @@ func TestVolumeEvidenceSealFencesMetadataAndRecoversWinner(t *testing.T) {
 
 type volumeEvidenceSealStore struct {
 	*etcd.VolumeEvidenceStageAudit
-	ranges     []etcd.RangeRequest
+	ranges     []testkeyvalue.RangeRequest
 	afterRange func()
 	rangeError error
 }
 
-func (store *volumeEvidenceSealStore) Range(ctx context.Context, request etcd.RangeRequest) (*etcd.RangeResult, error) {
+func (store *volumeEvidenceSealStore) Range(
+	ctx context.Context,
+	request testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	store.ranges = append(store.ranges, request)
 	if store.rangeError != nil {
 		return nil, store.rangeError

@@ -447,7 +447,8 @@ func validateAttachCreationTask(
 		record.Operation == attachrecord.AttachOperationProvision &&
 		record.TaskID == task.ID &&
 		record.CreatedAt.Equal(task.CreatedAt)
-	validTaskShape := task.Type == taskjournal.TaskAttach && task.Target == record.ID && task.Executor == taskjournal.TaskExecutorAgent &&
+	validTaskShape := task.Type == taskjournal.TaskAttach && task.Target == record.ID &&
+		task.Executor == taskjournal.TaskExecutorAgent &&
 		task.Status == taskjournal.TaskStatusPending &&
 		len(task.Params) == 1 &&
 		len(task.Materializations) == 0 &&
@@ -455,8 +456,10 @@ func validateAttachCreationTask(
 	if !pendingAttachOwned || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach creation Task does not own its pending Attach")
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != record.EnvironmentID ||
 		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) ||

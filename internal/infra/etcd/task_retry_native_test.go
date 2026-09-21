@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,16 +15,26 @@ import (
 func TestNativeControllerTaskCannotBeClonedForRetry(t *testing.T) {
 	now := taskJournalTime()
 	source := validTaskRecord(now)
-	source.Params[TaskResourceKindParam] = TaskResourceController
-	running, err := transitionTaskStatus(source, TaskStatusPending, TaskStatusRunning, now.Add(time.Second))
+	source.Params[testtaskjournal.TaskResourceKindParam] = testtaskjournal.TaskResourceController
+	running, err := TransitionTaskStatus(
+		source,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	failed, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusFailed, now.Add(2*time.Second))
+	failed, err := TransitionTaskStatus(
+		running,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusFailed,
+		now.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cloneRetryTask(failed, ids.New(ids.KindTask), TaskActorOperator, now.Add(3*time.Second)); !errors.Is(
+	if _, err := CloneRetryTask(failed, ids.New(ids.KindTask), testtaskjournal.TaskActorOperator, now.Add(3*time.Second)); !errors.Is(
 		err,
 		errs.New(errs.KindTaskNotRetryable, ""),
 	) {

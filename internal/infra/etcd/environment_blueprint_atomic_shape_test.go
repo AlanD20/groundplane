@@ -5,6 +5,13 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -120,15 +127,7 @@ func TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority(
 		)
 	}
 	for _, key := range append(
-		[]string{
-			environmentBlueprintHeadKey(published.environmentID),
-			taskKey(published.task.ID),
-			taskQueueKey(published.task.Executor, published.task.ID),
-			published.markerKey,
-			releasePublicationKey(published.releasePublicationID),
-			backupKeyKey(published.environmentID),
-			backupKeyValueKey(published.environmentID),
-		},
+		[]string{testblueprints.EnvironmentBlueprintHeadKey(published.environmentID), testtaskjournal.TaskStorageKey(published.task.ID), testtaskjournal.TaskQueueKey(published.task.Executor, published.task.ID), published.markerKey, testreleases.ReleasePublicationKey(published.releasePublicationID), testbackuppolicy.BackupKeyKey(published.environmentID), testbackuppolicy.BackupKeyValueKey(published.environmentID)},
 		published.candidateAttachKeys()...,
 	) {
 		read, getErr := published.store.Get(context.Background(), key)
@@ -137,10 +136,7 @@ func TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority(
 		}
 	}
 	for _, sourceID := range published.newBackupSourceIDs {
-		for _, key := range []string{
-			backupSourceKey(sourceID),
-			backupSourceEnvironmentKey(published.environmentID, sourceID),
-		} {
+		for _, key := range []string{testbackuppolicy.BackupSourceKey(sourceID), testbackuppolicy.BackupSourceEnvironmentKey(published.environmentID, sourceID)} {
 			read, getErr := published.store.Get(context.Background(), key)
 			if getErr != nil || read.Entry != nil {
 				t.Fatalf("failed publication exposed %q = %#v, %v", key, read, getErr)
@@ -148,7 +144,7 @@ func TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority(
 		}
 	}
 	for _, source := range published.newBackupSources {
-		read, getErr := published.store.Get(context.Background(), backupSourceIdentityKey(
+		read, getErr := published.store.Get(context.Background(), testbackuppolicy.BackupSourceIdentityKey(
 			published.environmentID, source.Kind, source.TargetID,
 		))
 		if getErr != nil || read.Entry != nil {
@@ -162,18 +158,21 @@ func TestEnvironmentBlueprintCombinedMaximumInjectedFailurePublishesNoAuthority(
 		}
 	}
 	for _, retained := range published.retainedAttachRevisions {
-		read, getErr := published.store.Get(context.Background(), attachKey(retained.Record.ID))
+		read, getErr := published.store.Get(context.Background(), testattachments.AttachKey(retained.Record.ID))
 		if getErr != nil || read.Entry == nil || read.Entry.ModRevision != retained.Revision {
 			t.Fatalf("failed publication changed retained Attach %q = %#v, %v", retained.Record.ID, read, getErr)
 		}
 	}
 	for _, relation := range published.retainedGrantRelations {
-		read, getErr := published.store.Get(context.Background(), attachGrantedByKey(relation[0], relation[1]))
+		read, getErr := published.store.Get(
+			context.Background(),
+			testattachments.AttachGrantedByKey(relation[0], relation[1]),
+		)
 		if getErr != nil || read.Entry != nil {
 			t.Fatalf("failed publication exposed retained grant relation %#v = %#v, %v", relation, read, getErr)
 		}
 	}
-	active, getErr := published.store.Get(context.Background(), scriptSetActiveKey(published.environmentID))
+	active, getErr := published.store.Get(context.Background(), testscripts.ScriptSetActiveKey(published.environmentID))
 	if getErr != nil || active.Entry == nil || active.Entry.ModRevision != published.activeScriptRevision {
 		t.Fatalf("failed publication changed active Script generation = %#v, %v", active, getErr)
 	}
@@ -195,12 +194,7 @@ func TestEnvironmentBlueprintRetainedAttachDetachRaceHasOneWinner(t *testing.T) 
 		t.Fatalf("direct detach did not win = %#v", published.detachWinner)
 	}
 	for _, key := range append(
-		[]string{
-			environmentBlueprintHeadKey(published.environmentID),
-			taskKey(published.task.ID),
-			taskQueueKey(published.task.Executor, published.task.ID),
-			published.markerKey,
-		},
+		[]string{testblueprints.EnvironmentBlueprintHeadKey(published.environmentID), testtaskjournal.TaskStorageKey(published.task.ID), testtaskjournal.TaskQueueKey(published.task.Executor, published.task.ID), published.markerKey},
 		published.candidateAttachKeys()...,
 	) {
 		read, getErr := published.store.Get(context.Background(), key)
@@ -209,7 +203,10 @@ func TestEnvironmentBlueprintRetainedAttachDetachRaceHasOneWinner(t *testing.T) 
 		}
 	}
 	for _, relation := range published.retainedGrantRelations {
-		read, getErr := published.store.Get(context.Background(), attachGrantedByKey(relation[0], relation[1]))
+		read, getErr := published.store.Get(
+			context.Background(),
+			testattachments.AttachGrantedByKey(relation[0], relation[1]),
+		)
 		if getErr != nil || read.Entry != nil {
 			t.Fatalf("raced publication exposed retained grant relation %#v = %#v, %v", relation, read, getErr)
 		}
@@ -228,12 +225,7 @@ func TestEnvironmentBlueprintRetainedAttachDeletionRacePublishesNothing(t *testi
 		t.Fatalf("retained Attach deletion race = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	for _, key := range append(
-		[]string{
-			environmentBlueprintHeadKey(published.environmentID),
-			taskKey(published.task.ID),
-			taskQueueKey(published.task.Executor, published.task.ID),
-			published.markerKey,
-		},
+		[]string{testblueprints.EnvironmentBlueprintHeadKey(published.environmentID), testtaskjournal.TaskStorageKey(published.task.ID), testtaskjournal.TaskQueueKey(published.task.Executor, published.task.ID), published.markerKey},
 		published.candidateAttachKeys()...,
 	) {
 		read, getErr := published.store.Get(context.Background(), key)
@@ -242,13 +234,16 @@ func TestEnvironmentBlueprintRetainedAttachDeletionRacePublishesNothing(t *testi
 		}
 	}
 	for _, relation := range published.retainedGrantRelations {
-		read, getErr := published.store.Get(context.Background(), attachGrantedByKey(relation[0], relation[1]))
+		read, getErr := published.store.Get(
+			context.Background(),
+			testattachments.AttachGrantedByKey(relation[0], relation[1]),
+		)
 		if getErr != nil || read.Entry != nil {
 			t.Fatalf("deletion-raced publication exposed retained grant relation %#v = %#v, %v", relation, read, getErr)
 		}
 	}
 	tombstone, getErr := published.store.Get(
-		context.Background(), deletionTombstoneKey("attach", published.retainedAttachRevisions[0].Record.ID),
+		context.Background(), testdeletions.TombstoneKey("attach", published.retainedAttachRevisions[0].Record.ID),
 	)
 	if getErr != nil || tombstone.Entry == nil {
 		t.Fatalf("retained Attach deletion tombstone = %#v, %v", tombstone, getErr)

@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,13 +22,13 @@ type blueprintTerminalFaultStore struct {
 
 func (store *blueprintTerminalFaultStore) TransactBlueprintTaskTerminal(
 	ctx context.Context, envelope BlueprintTaskTerminalTransaction,
-) (TransactionResult, error) {
+) (testkeyvalue.TransactionResult, error) {
 	store.calls++
 	conditions, mutations, err := envelope.Operations()
 	if err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer testkeyvalue.ClearMutationValues(mutations)
 	if store.calls != 1 {
 		store.t.Fatal("terminal persistence repeated after authority loss or uncertain commit")
 	}
@@ -35,7 +38,7 @@ func (store *blueprintTerminalFaultStore) TransactBlueprintTaskTerminal(
 			store.t.Fatal("terminal fault fixture has no Environment epoch")
 		}
 		// Same bytes, new ModRevision: force the actual old compare to fail.
-		if _, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: store.epochKey, Value: value.Value}}); err != nil {
+		if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: store.epochKey, Value: value.Value}}); err != nil {
 			store.t.Fatal(err)
 		}
 		before := store.revision
@@ -56,12 +59,12 @@ func (store *blueprintTerminalFaultStore) TransactBlueprintTaskTerminal(
 			continue // Prefix semantics are covered by the production store tests.
 		}
 		value := store.valueAt(mutation.Key, store.revision)
-		if mutation.Type == MutationPut && (value == nil || value.ModRevision != result.Revision) ||
-			mutation.Type == MutationDelete && value != nil {
+		if mutation.Type == testkeyvalue.MutationPut && (value == nil || value.ModRevision != result.Revision) ||
+			mutation.Type == testkeyvalue.MutationDelete && value != nil {
 			store.t.Fatalf("terminal mutation did not share the atomic commit: %s", mutation.Key)
 		}
 	}
-	return TransactionResult{}, errs.New(errs.KindInternal, "injected lost terminal commit response")
+	return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "injected lost terminal commit response")
 }
 
 func (fixture *ExecutedArtifactFixture) proveClosingTerminalFaults(t *testing.T, current TaskAssignment) {
@@ -72,7 +75,7 @@ func (fixture *ExecutedArtifactFixture) proveClosingTerminalFaults(t *testing.T,
 		t.Fatalf("fault proof requires an original closing report: %v", err)
 	}
 	faults := &blueprintTerminalFaultStore{memoryHierarchyStore: fixture.store.memoryHierarchyStore,
-		t: t, epochKey: environmentMutationEpochKey(current.Task.Record.Owner.EnvironmentID), fault: fixture.TerminalCommitFault}
+		t: t, epochKey: testhierarchy.EnvironmentMutationEpochKey(current.Task.Record.Owner.EnvironmentID), fault: fixture.TerminalCommitFault}
 	repository, err := newTaskRepository(faults)
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +117,7 @@ func (fixture *ExecutedArtifactFixture) proveClosingTerminalFaults(t *testing.T,
 	if replayed.Record.FinishedAt == nil || !replayed.Record.FinishedAt.Equal(report.ObservedAt) {
 		t.Fatal("uncertain terminal replay lost the original completion time")
 	}
-	for _, key := range []string{scriptSourceRootKey(current.Task.Record.OperationID), blueprintClosingReportKey(report.TaskID)} {
+	for _, key := range []string{testscriptsourceevidence.ScriptSourceRootKey(current.Task.Record.OperationID), blueprintClosingReportKey(report.TaskID)} {
 		if fixture.store.valueAt(key, fixture.store.revision) != nil {
 			t.Fatalf("uncertain commit retained terminal continuation: %s", key)
 		}

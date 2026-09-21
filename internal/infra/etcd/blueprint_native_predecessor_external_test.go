@@ -7,11 +7,16 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -25,7 +30,7 @@ func TestBlueprintCandidateAfterNativeRollbackUsesSealedPredecessor(t *testing.T
 		t,
 		true,
 		false,
-		func(fixture *etcd.ExecutedArtifactFixture, resolver *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, intent domain.Intent, applied *agentpb.ComposeArtifact) {
+		func(fixture *etcd.ExecutedArtifactFixture, resolver *testtaskplanning.TaskPlanResolver, original testreleaserender.ReleaseRenderInput, intent domain.Intent, applied *agentpb.ComposeArtifact) {
 			current, _ := fixture.SeedRetainedRollback(t, original, intent)
 			fixture.SeedNativeCandidateDesired(t, current, 3)
 			proveNativeCandidatePreparation(t, fixture, resolver, current, applied, "")
@@ -36,8 +41,8 @@ func TestBlueprintCandidateAfterNativeRollbackUsesSealedPredecessor(t *testing.T
 func proveNativeCandidatePreparation(
 	t *testing.T,
 	fixture *etcd.ExecutedArtifactFixture,
-	resolver *controller.TaskPlanResolver,
-	current etcd.ReleaseRenderInput,
+	resolver *testtaskplanning.TaskPlanResolver,
+	current testreleaserender.ReleaseRenderInput,
 	applied *agentpb.ComposeArtifact,
 	fault string,
 ) {
@@ -52,7 +57,7 @@ func proveNativeCandidatePreparation(
 	if err != nil {
 		t.Fatal(err)
 	}
-	native := etcd.ServiceLifecycleRelease{ServingReleaseID: current.ReleaseID, Current: current}
+	native := testreleaserender.ServiceLifecycleRelease{ServingReleaseID: current.ReleaseID, Current: current}
 	if current.Strategy == domain.StrategyBlueGreen {
 		prior, readErr := fixture.Ledger.GetReleaseRenderInputAt(
 			ctx,
@@ -86,7 +91,7 @@ func proveNativeCandidatePreparation(
 	if err := resolver.EnableScriptPlans(scripts); err != nil {
 		t.Fatal(err)
 	}
-	scriptArtifacts, err := controller.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
+	scriptArtifacts, err := testtaskplanning.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +101,7 @@ func proveNativeCandidatePreparation(
 		resolver,
 		scriptArtifacts,
 		sources,
-		fixture.ImageLookupAgent(t),
+		blueprintImageLookupAgent(t, fixture),
 		imageResolver,
 	)
 	if err != nil {
@@ -104,7 +109,7 @@ func proveNativeCandidatePreparation(
 	}
 	desired := planning[0].Service.Record
 	desired.Desired.Replicas = int(current.CandidateWorkload.ReplicaCount)
-	changes := []etcd.EnvironmentBlueprintServiceChange{{Current: &planning[0].Service, Record: desired}}
+	changes := []testblueprints.EnvironmentBlueprintServiceChange{{Current: &planning[0].Service, Record: desired}}
 	project := &composetypes.Project{Name: "test", Services: composetypes.Services{current.ServiceName: {
 		Name: current.ServiceName, Image: current.CandidateWorkload.RequestedReference, Scale: &desired.Desired.Replicas,
 		NetworkMode: "none", Expose: []string{"8080"}, HealthCheck: &composetypes.HealthCheckConfig{Test: []string{"CMD", "true"}},
@@ -123,20 +128,22 @@ func proveNativeCandidatePreparation(
 	task.UpdatedAt = task.CreatedAt
 	task.RenderGeneration = 3
 	artifactID := ids.New(ids.KindConfig)
-	task.Params[controller.EnvironmentBlueprintArtifactParam] = artifactID
+	task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
 	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(taskcontract.BlueprintComposeProcedureNone)
-	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{Project: project, ArtifactID: artifactID,
-		ProjectOwnerKind: controller.ComposeProjectOwnerTenant, TenantID: current.TenantID, ProjectID: current.ProjectID,
-		EnvironmentID: current.EnvironmentID, PlanID: task.PlanID, RenderGeneration: 3, AuthorizedVolumeDir: current.AuthorizedVolumeDir,
-		Identities: controller.ComposeIdentitySnapshot{
-			Services: []controller.ComposeResourceIdentity{{ID: current.ServiceID, Name: current.ServiceName}},
-		}})
+	artifact, err := testcomposerender.RenderCompose(
+		testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
+			ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: current.TenantID, ProjectID: current.ProjectID,
+			EnvironmentID: current.EnvironmentID, PlanID: task.PlanID, RenderGeneration: 3, AuthorizedVolumeDir: current.AuthorizedVolumeDir,
+			Identities: testcomposeidentity.Snapshot{
+				Services: []testcomposeidentity.Resource{{ID: current.ServiceID, Name: current.ServiceName}},
+			}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	projection := current.Projection
 	projection.RevisionID, projection.RenderGeneration = task.ID, 3
-	projection.DesiredServices = []etcd.EnvironmentServiceProjection{
+	projection.DesiredServices = []testservices.EnvironmentServiceProjection{
 		{EnvironmentID: current.EnvironmentID, Desired: desired.Desired},
 	}
 	projection.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
@@ -238,7 +245,7 @@ func TestBlueprintNativePredecessorBlueGreenSnapshot(t *testing.T) {
 				t,
 				true,
 				false,
-				func(fixture *etcd.ExecutedArtifactFixture, resolver *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, intent domain.Intent, applied *agentpb.ComposeArtifact) {
+				func(fixture *etcd.ExecutedArtifactFixture, resolver *testtaskplanning.TaskPlanResolver, original testreleaserender.ReleaseRenderInput, intent domain.Intent, applied *agentpb.ComposeArtifact) {
 					current, serving := fixture.SeedRetainedRollback(t, original, intent)
 					current = fixture.SeedNativeBlueGreenPredecessor(t, current, serving)
 					fixture.SeedNativeCandidateDesired(t, current, 2)
@@ -258,7 +265,7 @@ func TestBlueprintNativePredecessorSourceCAS(t *testing.T) {
 				t,
 				true,
 				false,
-				func(fixture *etcd.ExecutedArtifactFixture, resolver *controller.TaskPlanResolver, original etcd.ReleaseRenderInput, intent domain.Intent, applied *agentpb.ComposeArtifact) {
+				func(fixture *etcd.ExecutedArtifactFixture, resolver *testtaskplanning.TaskPlanResolver, original testreleaserender.ReleaseRenderInput, intent domain.Intent, applied *agentpb.ComposeArtifact) {
 					current, _ := fixture.SeedRetainedRollback(t, original, intent)
 					fixture.SeedNativeCandidateDesired(t, current, 3)
 					proveNativeCandidatePreparation(t, fixture, resolver, current, applied, fault)

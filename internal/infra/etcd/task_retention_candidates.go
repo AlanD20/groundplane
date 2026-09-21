@@ -99,11 +99,13 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		sources.Values[1].Value,
 		"script-execution",
 	)
-	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
+	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+		!taskOwnsScriptExecution(task, execution) ||
 		!manualScriptRootMatches(
 			execution,
 			root,
-		) || execution.PlanHash != task.PlanHash ||
+		) ||
+		execution.PlanHash != task.PlanHash ||
 		execution.OperationID != task.OperationID {
 		return false, taskjournal.CorruptPruneIntent()
 	}

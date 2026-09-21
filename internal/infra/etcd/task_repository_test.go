@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,7 +24,7 @@ func TestTaskRepositoryKeysMatchTheApprovedLayout(t *testing.T) {
 	taskID := ids.NewAt(ids.KindTask, now, 21)
 	operationID := ids.NewAt(ids.KindOperation, now, 22)
 	stepID := ids.NewAt(ids.KindStep, now, 23)
-	identity := TaskEventIdentity{
+	identity := testtaskjournal.TaskEventIdentity{
 		AssignmentID: taskEventTestAssignmentID,
 		AgentID:      taskEventTestAgentID, AgentGeneration: 1,
 		TaskID: taskID, StepID: stepID, Attempt: 3, Ordinal: 17,
@@ -32,23 +35,24 @@ func TestTaskRepositoryKeysMatchTheApprovedLayout(t *testing.T) {
 	environmentTaskPath := "/v1/indexes/tasks/by-environment/" + environmentID + "/" + taskID
 
 	wants := map[string]string{
-		taskKey(taskID): "/v1/tasks/" + taskID,
-		taskOperationIndexKey(operationID, taskID): "/v1/indexes/tasks/operation/" + operationID + "/" + taskID,
-		taskActiveOperationKey(operationID):        "/v1/indexes/tasks/active-operation/" + operationID,
-		taskEventKey(taskID, 42):                   "/v1/runtime/task-events/" + taskID + "/00000000000000000042",
-		taskEventDedupKey(identity): "/v1/runtime/task-event-dedup/" + taskID + "/" +
+		testtaskjournal.TaskStorageKey(taskID):                     "/v1/tasks/" + taskID,
+		testtaskjournal.TaskOperationIndexKey(operationID, taskID): "/v1/indexes/tasks/operation/" + operationID + "/" + taskID,
+		testtaskjournal.TaskActiveOperationKey(operationID):        "/v1/indexes/tasks/active-operation/" + operationID,
+		testtaskjournal.TaskEventKey(taskID, 42):                   "/v1/runtime/task-events/" + taskID + "/00000000000000000042",
+		testtaskjournal.TaskEventDedupKey(identity): "/v1/runtime/task-event-dedup/" + taskID + "/" +
 			taskEventTestAssignmentID + "/" + stepID + "/3/17",
-		deletionTombstoneKey("environment", environmentID): "/v1/runtime/deletions/environment/" + environmentID,
-		taskWorkspacePlatformIndexKey(taskID):              "/v1/indexes/tasks/by-workspace/platform/" + taskID,
-		taskWorkspaceTenantIndexKey(tenantID, taskID):      tenantWorkspacePath,
-		taskEnvironmentIndexKey(environmentID, taskID):     environmentTaskPath,
+		testdeletions.TombstoneKey("environment", environmentID):       "/v1/runtime/deletions/environment/" + environmentID,
+		testtaskjournal.TaskWorkspacePlatformIndexKey(taskID):          "/v1/indexes/tasks/by-workspace/platform/" + taskID,
+		testtaskjournal.TaskWorkspaceTenantIndexKey(tenantID, taskID):  tenantWorkspacePath,
+		testtaskjournal.TaskEnvironmentIndexKey(environmentID, taskID): environmentTaskPath,
 	}
 	for got, want := range wants {
 		if got != want {
 			t.Fatalf("key = %q, want %q", got, want)
 		}
 	}
-	if sequence, err := taskEventSequenceFromKey(taskID, taskEventKey(taskID, 42)); err != nil || sequence != 42 {
+	if sequence, err := testtaskjournal.TaskEventSequenceFromKey(taskID, testtaskjournal.TaskEventKey(taskID, 42)); err != nil ||
+		sequence != 42 {
 		t.Fatalf("taskEventSequenceFromKey() = %d, %v, want 42", sequence, err)
 	}
 }
@@ -64,7 +68,7 @@ func TestTaskRepositoryAppendIsRestartSafeAndDeduplicated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	first, err := repository.AppendTaskEvent(ctx, input, taskJournalTime().Add(time.Second))
 	if err != nil {
 		t.Fatalf("AppendTaskEvent(first) error = %v", err)
@@ -119,7 +123,7 @@ func TestTaskRepositoryConcurrentAppendsAllocateUniqueSequences(t *testing.T) {
 			defer workers.Done()
 			result, err := repository.AppendTaskEvent(
 				ctx,
-				taskEventInput(task.ID, uint64(ordinal), TaskEventStateRunning),
+				taskEventInput(task.ID, uint64(ordinal), testtaskjournal.TaskEventStateRunning),
 				taskJournalTime().Add(time.Duration(ordinal)*time.Second),
 			)
 			if err != nil {
@@ -174,7 +178,7 @@ func TestTaskRepositoryBacksOffAfterCASConflicts(t *testing.T) {
 	}
 	result, err := repository.AppendTaskEvent(
 		ctx,
-		taskEventInput(task.ID, 1, TaskEventStateRunning),
+		taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning),
 		taskJournalTime().Add(time.Second),
 	)
 	if err != nil {
@@ -213,7 +217,7 @@ func TestTaskRepositoryBacksOffAfterCASConflicts(t *testing.T) {
 	}
 	result, err = repository.AppendTaskEvent(
 		context.Background(),
-		taskEventInput(task.ID, 1, TaskEventStateRunning),
+		taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning),
 		taskJournalTime().Add(time.Second),
 	)
 	if err != nil {
@@ -254,7 +258,7 @@ func TestTaskRepositoryDoesNotInferSuccessAfterUnknownOutcome(t *testing.T) {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	store.failAfterCommit(errs.New(errs.KindStorageUnavailable, "unknown write outcome"))
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	if _, err := repository.AppendTaskEvent(
 		ctx,
 		input,
@@ -283,23 +287,23 @@ func TestTaskRepositoryRejectsSequenceCollisionAndEventCap(t *testing.T) {
 	store := newMemoryTaskStore()
 	task := validTaskRecord(taskJournalTime())
 	seedTaskRepositoryRunningTask(t, store, task)
-	collidingInput := taskEventInput(task.ID, 99, TaskEventStateRunning)
+	collidingInput := taskEventInput(task.ID, 99, testtaskjournal.TaskEventStateRunning)
 	colliding, err := prepareTaskEvent(task, collidingInput, nil, taskJournalTime().Add(time.Second))
 	if err != nil {
 		t.Fatalf("prepareTaskEvent(collision) error = %v", err)
 	}
-	encodedCollision, err := encodeTaskEventRecord(colliding.Event)
+	encodedCollision, err := testtaskjournal.EncodeTaskEventRecord(colliding.Event)
 	if err != nil {
 		t.Fatalf("encodeTaskEventRecord(collision) error = %v", err)
 	}
-	seedTaskRepositoryValue(t, store, taskEventKey(task.ID, 1), encodedCollision)
+	seedTaskRepositoryValue(t, store, testtaskjournal.TaskEventKey(task.ID, 1), encodedCollision)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	if _, err := repository.AppendTaskEvent(
 		ctx,
-		taskEventInput(task.ID, 1, TaskEventStateRunning),
+		taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning),
 		taskJournalTime().Add(2*time.Second),
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("AppendTaskEvent(collision) error = %v, want internal", err)
@@ -307,8 +311,8 @@ func TestTaskRepositoryRejectsSequenceCollisionAndEventCap(t *testing.T) {
 
 	cappedStore := newMemoryTaskStore()
 	capped := validTaskRecord(taskJournalTime())
-	capped.EventCount = MaximumTaskEvents
-	capped.NextEventSequence = MaximumTaskEvents + 1
+	capped.EventCount = testtaskjournal.MaximumTaskEvents
+	capped.NextEventSequence = testtaskjournal.MaximumTaskEvents + 1
 	seedTaskRepositoryRunningTask(t, cappedStore, capped)
 	cappedRepository, err := newTaskRepository(cappedStore)
 	if err != nil {
@@ -316,7 +320,7 @@ func TestTaskRepositoryRejectsSequenceCollisionAndEventCap(t *testing.T) {
 	}
 	if _, err := cappedRepository.AppendTaskEvent(
 		ctx,
-		taskEventInput(capped.ID, MaximumTaskEvents+1, TaskEventStateRunning),
+		taskEventInput(capped.ID, testtaskjournal.MaximumTaskEvents+1, testtaskjournal.TaskEventStateRunning),
 		taskJournalTime().Add(time.Second),
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("AppendTaskEvent(missing oldest event) error = %v, want internal", err)
@@ -334,7 +338,7 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	if _, err := repository.AppendTaskEvent(ctx, input, taskJournalTime().Add(time.Second)); err != nil {
 		t.Fatalf("AppendTaskEvent(first) error = %v", err)
 	}
@@ -343,25 +347,25 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 		t.Fatalf("GetTask() error = %v", err)
 	}
 	running := current.Record
-	terminal, err := transitionTaskStatus(
+	terminal, err := TransitionTaskStatus(
 		running,
-		TaskStatusRunning,
-		TaskStatusCompleted,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusCompleted,
 		taskJournalTime().Add(3*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("transitionTaskStatus(terminal) error = %v", err)
 	}
-	encoded, err := encodeTaskRecord(terminal)
+	encoded, err := EncodeTaskRecord(terminal)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord(terminal) error = %v", err)
 	}
-	transition, err := store.Transact(ctx, []Condition{{
-		Key: taskKey(task.ID), ModRevision: current.Revision,
-	}}, []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: encoded},
-		{Type: MutationDelete, Key: taskAssignmentKey(taskEventTestAgentID, task.ID)},
-		{Type: MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
+	transition, err := store.Transact(ctx, []testkeyvalue.Condition{{
+		Key: testtaskjournal.TaskStorageKey(task.ID), ModRevision: current.Revision,
+	}}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: encoded},
+		{Type: testkeyvalue.MutationDelete, Key: testtaskjournal.TaskAssignmentKey(taskEventTestAgentID, task.ID)},
+		{Type: testkeyvalue.MutationDelete, Key: testtaskjournal.TaskAssignmentIndexKey(task.ID)},
 	})
 	if err != nil || !transition.Succeeded {
 		t.Fatalf("persist terminal Task = %#v, %v", transition, err)
@@ -378,7 +382,7 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 	changedPayload.Payload = json.RawMessage(`{"message":"changed"}`)
 	changedAssignment := input
 	changedAssignment.Identity.AssignmentID = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	for _, changed := range []TaskEventInput{changedPayload, changedAssignment} {
+	for _, changed := range []testtaskjournal.TaskEventInput{changedPayload, changedAssignment} {
 		if _, replayErr := repository.AppendTaskEvent(ctx, changed, taskJournalTime().Add(5*time.Second)); !errors.Is(
 			replayErr,
 			errs.New(errs.KindInternal, ""),
@@ -388,7 +392,7 @@ func TestTaskRepositoryTerminalReplayDoesNotPermitNewWrites(t *testing.T) {
 	}
 	if _, err := repository.AppendTaskEvent(
 		ctx,
-		taskEventInput(task.ID, 2, TaskEventStateRunning),
+		taskEventInput(task.ID, 2, testtaskjournal.TaskEventStateRunning),
 		taskJournalTime().Add(5*time.Second),
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("AppendTaskEvent(new terminal identity) error = %v, want internal", err)
@@ -413,7 +417,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	page, err := repository.ListTasks(ctx, PageRequest{Limit: 1})
+	page, err := repository.ListTasks(ctx, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil {
 		t.Fatalf("ListTasks(first page) error = %v", err)
 	}
@@ -424,7 +428,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	third.ID = ids.NewAt(ids.KindTask, taskJournalTime().Add(2*time.Second), 33)
 	third.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), 34)
 	seedTaskRepositoryRunningTask(t, store, third)
-	secondPage, err := repository.ListTasks(ctx, PageRequest{Limit: 1, Cursor: page.NextCursor})
+	secondPage, err := repository.ListTasks(ctx, testkeyvalue.PageRequest{Limit: 1, Cursor: page.NextCursor})
 	if err != nil {
 		t.Fatalf("ListTasks(second page) error = %v", err)
 	}
@@ -435,7 +439,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 
 	one, err := repository.AppendTaskEvent(
 		ctx,
-		taskEventInput(first.ID, 1, TaskEventStateRunning),
+		taskEventInput(first.ID, 1, testtaskjournal.TaskEventStateRunning),
 		taskJournalTime().Add(time.Second),
 	)
 	if err != nil {
@@ -450,7 +454,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	}
 	if _, err := repository.AppendTaskEvent(
 		ctx,
-		taskEventInput(first.ID, 2, TaskEventStateRunning),
+		taskEventInput(first.ID, 2, testtaskjournal.TaskEventStateRunning),
 		taskJournalTime().Add(2*time.Second),
 	); err != nil {
 		t.Fatalf("AppendTaskEvent(two) error = %v", err)
@@ -466,7 +470,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 
 func seedTaskRepositoryTask(t *testing.T, store *memoryTaskStore, task TaskRecord) {
 	t.Helper()
-	value, err := encodeTaskRecord(task)
+	value, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatalf("encodeTaskRecord(seed) error = %v", err)
 	}
@@ -474,11 +478,16 @@ func seedTaskRepositoryTask(t *testing.T, store *memoryTaskStore, task TaskRecor
 	if err != nil {
 		t.Fatalf("taskOwnerIndexKeys(seed) error = %v", err)
 	}
-	conditions := []Condition{{Key: taskKey(task.ID)}}
-	mutations := []Mutation{{Type: MutationPut, Key: taskKey(task.ID), Value: value}}
+	conditions := []testkeyvalue.Condition{{Key: testtaskjournal.TaskStorageKey(task.ID)}}
+	mutations := []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: value},
+	}
 	for _, key := range keys {
-		conditions = append(conditions, Condition{Key: key})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: []byte(task.ID)})
+		conditions = append(conditions, testkeyvalue.Condition{Key: key})
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: []byte(task.ID)},
+		)
 	}
 	result, err := store.Transact(context.Background(), conditions, mutations)
 	if err != nil || !result.Succeeded {
@@ -488,8 +497,8 @@ func seedTaskRepositoryTask(t *testing.T, store *memoryTaskStore, task TaskRecor
 
 func seedTaskRepositoryValue(t *testing.T, store *memoryTaskStore, key string, value []byte) {
 	t.Helper()
-	if _, err := store.Transact(context.Background(), []Condition{{Key: key}}, []Mutation{{
-		Type: MutationPut, Key: key, Value: value,
+	if _, err := store.Transact(context.Background(), []testkeyvalue.Condition{{Key: key}}, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: key, Value: value,
 	}}); err != nil {
 		t.Fatalf("seed %s: %v", key, err)
 	}
@@ -515,7 +524,7 @@ type memoryTaskStore struct {
 type memoryTaskWatcher struct {
 	prefix        string
 	startRevision int64
-	events        chan Event
+	events        chan testkeyvalue.Event
 	errors        chan error
 }
 
@@ -546,19 +555,19 @@ func (store *memoryTaskStore) currentRevision() int64 {
 	return store.revision
 }
 
-func (store *memoryTaskStore) Get(ctx context.Context, key string) (*GetResult, error) {
+func (store *memoryTaskStore) Get(ctx context.Context, key string) (*testkeyvalue.GetResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	return &GetResult{Entry: store.valueAtLocked(key, store.revision), ReadRevision: store.revision}, nil
+	return &testkeyvalue.GetResult{Entry: store.valueAtLocked(key, store.revision), ReadRevision: store.revision}, nil
 }
 
 func (store *memoryTaskStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -568,11 +577,11 @@ func (store *memoryTaskStore) GetMany(
 	if revision == 0 {
 		revision = store.revision
 	}
-	values := make([]*KeyValue, len(request.Keys))
+	values := make([]*testkeyvalue.KeyValue, len(request.Keys))
 	for index, key := range request.Keys {
 		values[index] = store.valueAtLocked(key, revision)
 	}
-	return &GetManyResult{
+	return &testkeyvalue.GetManyResult{
 		Values: values, ReadRevision: revision, ResponseRevision: store.revision,
 	}, nil
 }
@@ -581,7 +590,7 @@ func (store *memoryTaskStore) Watch(
 	ctx context.Context,
 	prefix string,
 	startRevision int64,
-) (*WatchStream, error) {
+) (*testkeyvalue.WatchStream, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -589,9 +598,9 @@ func (store *memoryTaskStore) Watch(
 	if startRevision == 0 {
 		startRevision = store.revision + 1
 	}
-	events := make(chan Event, 4096)
+	events := make(chan testkeyvalue.Event, 4096)
 	errorsFound := make(chan error, 1)
-	history := make([]Event, 0)
+	history := make([]testkeyvalue.Event, 0)
 	for key, versions := range store.history {
 		if !strings.HasPrefix(key, prefix) {
 			continue
@@ -600,9 +609,9 @@ func (store *memoryTaskStore) Watch(
 			if version.revision < startRevision {
 				continue
 			}
-			event := Event{Key: key, ModRevision: version.revision, Type: EventDelete}
+			event := testkeyvalue.Event{Key: key, ModRevision: version.revision, Type: testkeyvalue.EventDelete}
 			if version.present {
-				event.Type = EventPut
+				event.Type = testkeyvalue.EventPut
 				event.Value = append([]byte(nil), version.value...)
 			}
 			history = append(history, event)
@@ -639,22 +648,22 @@ func (store *memoryTaskStore) Watch(
 		}
 		store.mu.Unlock()
 	}()
-	return &WatchStream{Events: events, Errors: errorsFound}, nil
+	return &testkeyvalue.WatchStream{Events: events, Errors: errorsFound}, nil
 }
 
 func (store *memoryTaskStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if err := ctx.Err(); err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if store.conflictsRemaining > 0 {
 		store.conflictsRemaining--
-		return TransactionResult{Revision: store.revision}, nil
+		return testkeyvalue.TransactionResult{Revision: store.revision}, nil
 	}
 	for _, condition := range conditions {
 		value := store.conditionValueLocked(condition, store.revision)
@@ -663,26 +672,29 @@ func (store *memoryTaskStore) Transact(
 			actual = value.ModRevision
 		}
 		if actual != condition.ModRevision {
-			failureReads := make([]*KeyValue, len(conditions))
+			failureReads := make([]*testkeyvalue.KeyValue, len(conditions))
 			for index, failedCondition := range conditions {
 				failureReads[index] = store.conditionValueLocked(failedCondition, store.revision)
 			}
-			return TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
+			return testkeyvalue.TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
 		}
 	}
 	store.revision++
 	for _, mutation := range mutations {
 		version := memoryTaskVersion{revision: store.revision}
-		event := Event{Key: mutation.Key, ModRevision: store.revision, Type: EventDelete}
+		event := testkeyvalue.Event{Key: mutation.Key, ModRevision: store.revision, Type: testkeyvalue.EventDelete}
 		switch mutation.Type {
-		case MutationPut:
+		case testkeyvalue.MutationPut:
 			version.present = true
 			version.value = append([]byte(nil), mutation.Value...)
-			event.Type = EventPut
+			event.Type = testkeyvalue.EventPut
 			event.Value = append([]byte(nil), mutation.Value...)
-		case MutationDelete:
+		case testkeyvalue.MutationDelete:
 		default:
-			return TransactionResult{}, errs.New(errs.KindInternal, "fake task store received invalid mutation")
+			return testkeyvalue.TransactionResult{}, errs.New(
+				errs.KindInternal,
+				"fake task store received invalid mutation",
+			)
 		}
 		store.history[mutation.Key] = append(store.history[mutation.Key], version)
 		for _, watcher := range store.watchers {
@@ -694,24 +706,27 @@ func (store *memoryTaskStore) Transact(
 	if store.failAfterCommitOnce != nil {
 		err := store.failAfterCommitOnce
 		store.failAfterCommitOnce = nil
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
-	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
+	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
 func (store *memoryTaskStore) MeasureTransaction(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionBudget, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionBudget, error) {
 	return MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
 }
 
-func (store *memoryTaskStore) conditionValueLocked(condition Condition, revision int64) *KeyValue {
+func (store *memoryTaskStore) conditionValueLocked(
+	condition testkeyvalue.Condition,
+	revision int64,
+) *testkeyvalue.KeyValue {
 	if !condition.Prefix {
 		return store.valueAtLocked(condition.Key, revision)
 	}
-	var first *KeyValue
+	var first *testkeyvalue.KeyValue
 	for key := range store.history {
 		if !strings.HasPrefix(key, condition.Key) {
 			continue
@@ -750,7 +765,7 @@ func (store *memoryTaskStore) watchStartCount() int {
 	return len(store.watchStarts)
 }
 
-func (store *memoryTaskStore) valueAtLocked(key string, revision int64) *KeyValue {
+func (store *memoryTaskStore) valueAtLocked(key string, revision int64) *testkeyvalue.KeyValue {
 	versions := store.history[key]
 	for index := len(versions) - 1; index >= 0; index-- {
 		version := versions[index]
@@ -764,7 +779,7 @@ func (store *memoryTaskStore) valueAtLocked(key string, revision int64) *KeyValu
 		for previous := index; previous >= 0 && versions[previous].present; previous-- {
 			keyVersion++
 		}
-		return &KeyValue{
+		return &testkeyvalue.KeyValue{
 			Key: key, Value: append([]byte(nil), version.value...),
 			Version: keyVersion, ModRevision: version.revision,
 		}

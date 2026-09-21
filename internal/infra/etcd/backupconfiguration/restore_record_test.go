@@ -1,13 +1,12 @@
-package etcd
+package backupconfiguration
 
 import (
-	"bytes"
-	"errors"
-	"strconv"
-	"testing"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/pkg/errs"
+	bytes "bytes"
+	errors "errors"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	strconv "strconv"
+	testing "testing"
 )
 
 // Rationale: a staged restore Entry must preserve exact artifact evidence
@@ -294,7 +293,9 @@ func TestBackupConfigRestoreBatchIdentitiesPreserveExactReplayAndRejectDuplicate
 		destination string
 	}{
 		"ordinal": {
-			mutate:      func(record *BackupConfigRestoreEntryRecord) { record.EntryOrdinal = first.EntryOrdinal },
+			mutate: func(record *BackupConfigRestoreEntryRecord) {
+				record.EntryOrdinal = first.EntryOrdinal
+			},
 			destination: "env/SECOND",
 		},
 		"Entry id": {

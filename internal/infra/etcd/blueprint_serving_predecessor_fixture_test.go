@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -21,15 +23,18 @@ type blueprintEpochMutationRejectingStore struct {
 
 func (store *blueprintEpochMutationRejectingStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	epochMutations := 0
 	for _, mutation := range mutations {
-		if mutation.Type == MutationPut && mutation.Key == store.epochKey {
+		if mutation.Type == testkeyvalue.MutationPut && mutation.Key == store.epochKey {
 			epochMutations++
 			if epochMutations > 1 {
-				return TransactionResult{}, errs.New(errs.KindInternal, "duplicate Blueprint epoch mutation")
+				return testkeyvalue.TransactionResult{}, errs.New(
+					errs.KindInternal,
+					"duplicate Blueprint epoch mutation",
+				)
 			}
 		}
 	}
@@ -42,12 +47,12 @@ func (store *blueprintEpochMutationRejectingStore) Transact(
 func (store *blueprintEpochMutationRejectingStore) TransactBlueprintTaskTerminal(
 	ctx context.Context,
 	envelope BlueprintTaskTerminalTransaction,
-) (TransactionResult, error) {
+) (testkeyvalue.TransactionResult, error) {
 	conditions, mutations, err := envelope.Operations()
 	if err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer testkeyvalue.ClearMutationValues(mutations)
 	return store.Transact(ctx, conditions, mutations)
 }
 
@@ -62,10 +67,10 @@ func (store *blueprintEpochMutationRejectingStore) ValidateBlueprintTaskTerminal
 // distinguishes an applied serving predecessor from configured-only intent.
 func blueprintServingPredecessorFixture(
 	t *testing.T,
-	projection EnvironmentComposeProjection,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 	taskID, releaseID string,
 	workload *domain.WorkloadSeal,
-) (EnvironmentComposeProjection, string) {
+) (testenvironmentprojection.EnvironmentComposeProjection, string) {
 	t.Helper()
 	projection.RevisionID = taskID
 	projection.RenderGeneration = 1

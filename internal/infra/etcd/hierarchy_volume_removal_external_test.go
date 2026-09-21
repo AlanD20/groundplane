@@ -5,6 +5,10 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -12,8 +16,7 @@ import (
 // Rationale: parent deletion cannot adopt a separately owned Volume removal.
 // A real removal publication must also defeat deletion's final epoch CAS.
 func TestHierarchyDeletionExcludesPublishedVolumeRemoval(t *testing.T) {
-	for _, kind := range []etcd.HierarchyDeletionTargetKind{etcd.HierarchyDeletionTargetEnvironment,
-		etcd.HierarchyDeletionTargetProject, etcd.HierarchyDeletionTargetTenant} {
+	for _, kind := range []testhierarchydeletion.HierarchyDeletionTargetKind{testhierarchydeletion.HierarchyDeletionTargetEnvironment, testhierarchydeletion.HierarchyDeletionTargetProject, testhierarchydeletion.HierarchyDeletionTargetTenant} {
 		for _, mode := range []string{"unlocked", "held", "late", "retained", "corrupt"} {
 			t.Run(string(kind)+"/"+mode, func(t *testing.T) {
 				ctx := context.Background()
@@ -74,12 +77,11 @@ func TestHierarchyDeletionExcludesPublishedVolumeRemoval(t *testing.T) {
 				if got, _ := errs.KindOf(err); got != wantKind || fixture.Revision() != before+writes {
 					t.Fatalf("deletion ignored removal: %v; revision delta %d", err, fixture.Revision()-before)
 				}
-				marker, err := etcd.CapabilityIdempotencyMarkerKey(begin.Marker.Locator)
+				marker, err := testidempotency.IdempotencyMarkerKey(begin.Marker.Locator)
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, key := range []string{etcd.HierarchyDeletionTombstoneKey(string(kind), begin.TargetID),
-					etcd.CapabilityTaskKey(begin.TaskID), marker} {
+				for _, key := range []string{testhierarchydeletion.HierarchyDeletionTombstoneKey(string(kind), begin.TargetID), testtaskjournal.TaskStorageKey(begin.TaskID), marker} {
 					read, err := fixture.Store.Get(ctx, key)
 					if err != nil || read.Entry != nil {
 						t.Fatalf("losing deletion wrote %s: %v", key, err)
@@ -91,12 +93,13 @@ func TestHierarchyDeletionExcludesPublishedVolumeRemoval(t *testing.T) {
 }
 
 type hierarchyVolumePublicationRaceStore struct {
-	etcd.Store
+	testkeyvalue.Store
+
 	publish func()
 }
 
 func (store *hierarchyVolumePublicationRaceStore) Transact(ctx context.Context,
-	conditions []etcd.Condition, mutations []etcd.Mutation) (etcd.TransactionResult, error) {
+	conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation) (testkeyvalue.TransactionResult, error) {
 	if store.publish != nil {
 		publish := store.publish
 		store.publish = nil

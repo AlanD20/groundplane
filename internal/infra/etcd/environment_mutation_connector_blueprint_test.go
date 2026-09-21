@@ -6,6 +6,14 @@ import (
 	"testing"
 	"time"
 
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -26,7 +34,7 @@ func TestConnectorMutationUsesFixedRevisionAndAdvancesEpoch(t *testing.T) {
 		13020,
 		"fixed-revision",
 	)
-	credentials, err := NewConnectorEncryptedCredentials(
+	credentials, err := testconnectors.NewEncryptedCredentials(
 		record.Connector.ID,
 		[]byte("sealed-credentials"),
 	)
@@ -81,7 +89,7 @@ func TestConnectorEpochRacePerformsNoDomainWrites(t *testing.T) {
 		13030,
 		"epoch-race",
 	)
-	credentials, err := NewConnectorEncryptedCredentials(
+	credentials, err := testconnectors.NewEncryptedCredentials(
 		record.Connector.ID,
 		[]byte("sealed-credentials"),
 	)
@@ -94,12 +102,7 @@ func TestConnectorEpochRacePerformsNoDomainWrites(t *testing.T) {
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("CreateConnector(epoch race) error = %v", err)
 	}
-	for _, key := range []string{
-		connectorRecordKey(record.Connector.ID),
-		connectorEnvironmentKey(environment.Record.ID, record.Connector.ID),
-		connectorNameKey(environment.Record.ID, record.Connector.Name),
-		connectorCredentialValueKey(record.Connector.ID),
-	} {
+	for _, key := range []string{testconnectors.RecordKey(record.Connector.ID), testconnectors.ConnectorEnvironmentKey(environment.Record.ID, record.Connector.ID), testconnectors.ConnectorNameKey(environment.Record.ID, record.Connector.Name), testconnectors.CredentialValueKey(record.Connector.ID)} {
 		result, getErr := base.Get(context.Background(), key)
 		if getErr != nil || result.Entry != nil {
 			t.Fatalf("failed Connector publication key %q = %#v, %v", key, result, getErr)
@@ -123,7 +126,7 @@ func TestConnectorCreateReplayDoesNotAdvanceEpoch(t *testing.T) {
 		13040,
 		"replay",
 	)
-	credentials, err := NewConnectorEncryptedCredentials(
+	credentials, err := testconnectors.NewEncryptedCredentials(
 		record.Connector.ID,
 		[]byte("sealed-credentials"),
 	)
@@ -132,8 +135,8 @@ func TestConnectorCreateReplayDoesNotAdvanceEpoch(t *testing.T) {
 	}
 	defer clear(credentials.Ciphertext)
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 		ScopeID:   environment.Record.ID,
 		Method:    http.MethodPost,
 		Route:     "/connectors",
@@ -209,11 +212,7 @@ func TestConnectorDeletionRejectsHeldEnvironmentLockWithoutWrites(t *testing.T) 
 	); !isKind(err, errs.KindResourceInUse) {
 		t.Fatalf("BeginConnectorDeletionWithTask(held lock) error = %v", err)
 	}
-	for _, key := range []string{
-		taskKey(task.ID),
-		deletionTombstoneKey(string(DeletionTargetConnector), fixture.connector.Record.Connector.ID),
-		connectorRemovalIntentKey(task.ID),
-	} {
+	for _, key := range []string{testtaskjournal.TaskStorageKey(task.ID), testdeletions.TombstoneKey(string(testdeletions.DeletionTargetConnector), fixture.connector.Record.Connector.ID), testconnectors.RemovalIntentKey(task.ID)} {
 		result, getErr := fixture.store.Get(context.Background(), key)
 		if getErr != nil || result.Entry != nil {
 			t.Fatalf("blocked Connector deletion key %q = %#v, %v", key, result, getErr)
@@ -259,7 +258,7 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 		environment,
 		0,
 		claim,
-		EnvironmentDesiredRevisionIdentity{
+		testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: revision.EnvironmentID,
 			RevisionID:    revision.RevisionID,
 		},
@@ -267,9 +266,9 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 		zoneChanges,
 		serviceChanges,
 		routeChanges,
-		ReleaseGroupBlueprintPreparedMutation{},
-		ComponentTaskPreparation{},
-		BlueprintAttachTaskPreparation{},
+		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
+		testcomponentplanning.ComponentTaskPreparation{},
+		testblueprintplanning.BlueprintAttachTaskPreparation{},
 		task,
 		marker,
 	)
@@ -314,7 +313,7 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 		environment,
 		0,
 		claim,
-		EnvironmentDesiredRevisionIdentity{
+		testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: revision.EnvironmentID,
 			RevisionID:    revision.RevisionID,
 		},
@@ -322,9 +321,9 @@ func TestEnvironmentBlueprintUsesFixedRevisionAdvancesEpochAndReplaysReadOnly(t 
 		zoneChanges,
 		serviceChanges,
 		routeChanges,
-		ReleaseGroupBlueprintPreparedMutation{},
-		ComponentTaskPreparation{},
-		BlueprintAttachTaskPreparation{},
+		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
+		testcomponentplanning.ComponentTaskPreparation{},
+		testblueprintplanning.BlueprintAttachTaskPreparation{},
 		task,
 		marker,
 	)
@@ -373,13 +372,14 @@ func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := publishEnvironmentBlueprintClaimTest(repository,
+	result, err := publishEnvironmentBlueprintClaimTest(
+		repository,
 		ctx,
 		project,
 		environment,
 		0,
 		claim,
-		EnvironmentDesiredRevisionIdentity{
+		testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: revision.EnvironmentID,
 			RevisionID:    revision.RevisionID,
 		},
@@ -387,9 +387,9 @@ func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
 		zoneChanges,
 		serviceChanges,
 		routeChanges,
-		ReleaseGroupBlueprintPreparedMutation{},
-		ComponentTaskPreparation{},
-		BlueprintAttachTaskPreparation{},
+		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
+		testcomponentplanning.ComponentTaskPreparation{},
+		testblueprintplanning.BlueprintAttachTaskPreparation{},
 		task,
 		marker,
 	)
@@ -401,10 +401,7 @@ func TestEnvironmentBlueprintEpochRacePerformsNoDomainWrites(t *testing.T) {
 		!isKind(conflict, errs.KindStateConflict) {
 		t.Fatalf("Blueprint race = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	for _, key := range []string{
-		environmentBlueprintHeadKey(environment.Record.ID),
-		taskKey(task.ID),
-	} {
+	for _, key := range []string{testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), testtaskjournal.TaskStorageKey(task.ID)} {
 		stored, getErr := store.Get(ctx, key)
 		if getErr != nil || stored.Entry != nil {
 			t.Fatalf("failed Blueprint publication key %q = %#v, %v", key, stored, getErr)
@@ -436,7 +433,7 @@ func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T)
 			13001,
 			"locked",
 		)
-		credentials, err := NewConnectorEncryptedCredentials(record.Connector.ID, []byte("sealed"))
+		credentials, err := testconnectors.NewEncryptedCredentials(record.Connector.ID, []byte("sealed"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -471,13 +468,14 @@ func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T)
 				13010,
 			),
 		)
-		_, err = publishEnvironmentBlueprintClaimTest(repository,
+		_, err = publishEnvironmentBlueprintClaimTest(
+			repository,
 			context.Background(),
 			project,
 			environment,
 			0,
 			claim,
-			EnvironmentDesiredRevisionIdentity{
+			testblueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: revision.EnvironmentID,
 				RevisionID:    revision.RevisionID,
 			},
@@ -485,9 +483,9 @@ func TestConnectorAndBlueprintPublicationRejectHeldEnvironmentLock(t *testing.T)
 			nil,
 			nil,
 			nil,
-			ReleaseGroupBlueprintPreparedMutation{},
-			ComponentTaskPreparation{},
-			BlueprintAttachTaskPreparation{},
+			testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
+			testcomponentplanning.ComponentTaskPreparation{},
+			testblueprintplanning.BlueprintAttachTaskPreparation{},
 			task,
 			marker,
 		)
@@ -537,26 +535,25 @@ func TestEnvironmentBlueprintPublicationPartitionsAreIndependentlyBounded(t *tes
 func TestEnvironmentBlueprintTotalFileByteCeilingIsExact(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 24, 23, 20, 0, 0, time.UTC)
-	revision := EnvironmentBlueprintRevision{
+	revision := testblueprints.EnvironmentBlueprintRevision{
 		EnvironmentID:  "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		RevisionID:     "task_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		RootPath:       "one.yaml",
 		ComposeSources: []string{"one.yaml"},
-		Files: []EnvironmentBlueprintFile{
-			{Path: "one.yaml", Content: make([]byte, environmentBlueprintMaxFileBytes)},
-			{Path: "three.yaml", Content: make([]byte, environmentBlueprintMaxFileBytes)},
-			{Path: "two.yaml", Content: make([]byte, environmentBlueprintMaxFileBytes)},
+		Files: []testblueprints.EnvironmentBlueprintFile{
+			{Path: "one.yaml", Content: make([]byte, testblueprints.EnvironmentBlueprintMaxFileBytes)},
+			{Path: "three.yaml", Content: make([]byte, testblueprints.EnvironmentBlueprintMaxFileBytes)},
+			{Path: "two.yaml", Content: make([]byte, testblueprints.EnvironmentBlueprintMaxFileBytes)},
 		},
 		CreatedAt: at,
 	}
-	if err := validateEnvironmentBlueprintRevision(revision); err != nil {
+	if err := testblueprints.ValidateEnvironmentBlueprintRevision(revision); err != nil {
 		t.Fatalf("validateEnvironmentBlueprintRevision(exact) error = %v", err)
 	}
 	revision.Files = append(
-		revision.Files,
-		EnvironmentBlueprintFile{Path: "four.yaml", Content: []byte("x")},
+		revision.Files, testblueprints.EnvironmentBlueprintFile{Path: "four.yaml", Content: []byte("x")},
 	)
-	if err := validateEnvironmentBlueprintRevision(
+	if err := testblueprints.ValidateEnvironmentBlueprintRevision(
 		revision,
 	); !isKind(
 		err,

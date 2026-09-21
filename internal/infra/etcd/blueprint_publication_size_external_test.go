@@ -12,11 +12,19 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskmaterializationowner "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -47,7 +55,11 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 	ctx := context.Background()
 	fixture := etcd.NewExecutedArtifactFixture(t)
 	audit := fixture.AuditBlueprintPublicationSize()
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", fixture.Hierarchy, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints(
+		"/var/lib/groundplane/vol",
+		fixture.Hierarchy,
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,12 +73,12 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 	if err := resolver.EnableScriptPlans(scripts); err != nil {
 		t.Fatal(err)
 	}
-	artifacts, err := controller.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
+	artifacts, err := testtaskplanning.NewScriptArtifactService(scripts, unexpectedHookEntryResolver{t: t})
 	if err != nil {
 		t.Fatal(err)
 	}
 	producer, err := blueprintrelease.NewService(fixture.Ledger, scripts, resolver, artifacts, sources,
-		fixture.ImageLookupAgent(t), publicationSizeImages{})
+		blueprintImageLookupAgent(t, fixture), publicationSizeImages{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,20 +95,23 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		task.UpdatedAt = task.CreatedAt
 		task.RenderGeneration = int32(pass + 1)
 		artifactID := ids.New(ids.KindConfig)
-		task.Params[controller.EnvironmentBlueprintArtifactParam] = artifactID
+		task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
 		task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(
 			taskcontract.BlueprintComposeProcedureNone,
 		)
 		project := &composetypes.Project{Name: "test", Services: composetypes.Services{}}
-		changes := make([]etcd.EnvironmentBlueprintServiceChange, len(serviceIDs))
-		identities := make([]controller.ComposeResourceIdentity, len(serviceIDs))
-		projection := etcd.EnvironmentComposeProjection{EnvironmentID: fixture.Environment.Record.ID,
-			RevisionID: task.ID, RenderGeneration: uint64(pass + 1)}
+		changes := make([]testblueprints.EnvironmentBlueprintServiceChange, len(serviceIDs))
+		identities := make([]testcomposeidentity.Resource, len(serviceIDs))
+		projection := testenvironmentprojection.EnvironmentComposeProjection{
+			EnvironmentID:    fixture.Environment.Record.ID,
+			RevisionID:       task.ID,
+			RenderGeneration: uint64(pass + 1),
+		}
 		for index, serviceID := range serviceIDs {
 			name := fmt.Sprintf("worker-%d", index)
 			desired := core.Service{ID: serviceID, Name: name, Image: "example/api:1",
 				Replicas: pass + 1, Strategy: core.StrategyRecreate}
-			record, err := etcd.NewServiceRecord(fixture.Environment.Record.ID, desired, "")
+			record, err := testservices.NewServiceRecord(fixture.Environment.Record.ID, desired, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -120,9 +135,14 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 				definition.Environment[fmt.Sprintf("PUBLIC_FIXTURE_%d", field)] = &value
 			}
 			project.Services[name] = definition
-			identities[index] = controller.ComposeResourceIdentity{ID: serviceID, Name: name}
-			projection.DesiredServices = append(projection.DesiredServices,
-				etcd.EnvironmentServiceProjection{EnvironmentID: fixture.Environment.Record.ID, Desired: desired})
+			identities[index] = testcomposeidentity.Resource{ID: serviceID, Name: name}
+			projection.DesiredServices = append(
+				projection.DesiredServices,
+				testservices.EnvironmentServiceProjection{
+					EnvironmentID: fixture.Environment.Record.ID,
+					Desired:       desired,
+				},
+			)
 		}
 		memberships, err := blueprintrelease.BuildNormalizedServiceMemberships(previous, project)
 		if err != nil {
@@ -132,12 +152,12 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		if err != nil {
 			t.Fatalf("pass%d preflight: %v", pass, err)
 		}
-		artifact, err := controller.RenderCompose(
-			controller.ComposeRenderInput{Project: project, ArtifactID: artifactID,
-				ProjectOwnerKind: controller.ComposeProjectOwnerTenant, TenantID: tenant.Record.ID,
+		artifact, err := testcomposerender.RenderCompose(
+			testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
+				ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: tenant.Record.ID,
 				ProjectID: fixture.Project.Record.ID, EnvironmentID: fixture.Environment.Record.ID, PlanID: task.PlanID,
 				RenderGeneration: uint64(pass + 1), AuthorizedVolumeDir: fixture.Environment.Record.VolumeDir,
-				Identities: controller.ComposeIdentitySnapshot{Services: identities}},
+				Identities: testcomposeidentity.Snapshot{Services: identities}},
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -217,11 +237,19 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 			t.Fatal("complete publication/assignment transaction exceeds its existing budget")
 		}
 		proveBoundedBlueprintAgentAdmission(t, claim, replayed)
-		result := etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, ExecutionEpoch: 1,
-			Diagnostic: etcd.TaskResultDiagnosticNone}
-		completed, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, claim.Assignment.Record.AssignmentID,
-			etcd.TaskStatusCompleted, result, task.CreatedAt.Add(time.Minute))
-		if err != nil || completed.Record.Status != etcd.TaskStatusCompleted {
+		result := testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1,
+			Diagnostic: testtaskjournal.TaskResultDiagnosticNone}
+		completed, err := fixture.Tasks.AcknowledgeTask(
+			ctx,
+			agentID,
+			1,
+			task.ID,
+			claim.Assignment.Record.AssignmentID,
+			testtaskjournal.TaskStatusCompleted,
+			result,
+			task.CreatedAt.Add(time.Minute),
+		)
+		if err != nil || completed.Record.Status != testtaskjournal.TaskStatusCompleted {
 			t.Fatalf("pass%d terminal completion: %v", pass, err)
 		}
 		replayedTerminal, err := fixture.Tasks.AcknowledgeTask(
@@ -229,9 +257,7 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 			agentID,
 			1,
 			task.ID,
-			claim.Assignment.Record.AssignmentID,
-			etcd.TaskStatusCompleted,
-			result,
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, result,
 			task.CreatedAt.Add(2*time.Minute),
 		)
 		if err != nil || replayedTerminal.Revision != completed.Revision {
@@ -246,22 +272,39 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 	}
 }
 
-func prepareBlueprintFileFixture(t *testing.T, task *etcd.TaskRecord, projection *etcd.EnvironmentComposeProjection,
-	artifactID string, pass int) []*agentpb.ExecutionStep {
+func prepareBlueprintFileFixture(
+	t *testing.T,
+	task *etcd.TaskRecord,
+	projection *testenvironmentprojection.EnvironmentComposeProjection,
+	artifactID string,
+	pass int,
+) []*agentpb.ExecutionStep {
 	t.Helper()
 	content := []byte("configuration " + strconv.Itoa(pass))
 	digest := sha256.Sum256(content)
 	const destination = "config/runtime.yaml"
 	projection.RuntimeFiles = []core.BlueprintFile{{Path: destination, Content: content}}
-	record := etcd.TaskMaterializationRecord{StepID: ids.New(ids.KindStep), MaterializationID: ids.New(ids.KindConfig),
-		EnvironmentID: task.Target, Destination: destination, OutputKind: etcd.TaskMaterializationOutputPlainFile,
+	record := testtaskmaterializationowner.Record{
+		StepID:            ids.New(ids.KindStep),
+		MaterializationID: ids.New(ids.KindConfig),
+		EnvironmentID:     task.Target,
+		Destination:       destination,
+		OutputKind:        testtaskmaterializationowner.OutputPlainFile,
 		UID: uint32(
 			100 + pass,
-		), GID: 100, Mode: 0o444, Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
-		Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceBlueprintFile,
-			BlueprintFile: &etcd.TaskBlueprintFileValueReference{RevisionID: task.ID, Path: destination}}}
-	task.Materializations = []etcd.TaskMaterializationRecord{record}
-	step, err := controller.BuildTaskMaterializationStep(record, artifactID, uint32(task.TimeoutSeconds))
+		),
+		GID:    100,
+		Mode:   0o444,
+		Length: uint64(len(content)),
+		SHA256: hex.EncodeToString(digest[:]),
+		Source: testtaskmaterializationowner.Source{Kind: testtaskmaterializationowner.SourceBlueprintFile,
+			BlueprintFile: &testtaskmaterializationowner.BlueprintFileValueReference{
+				RevisionID: task.ID,
+				Path:       destination,
+			}},
+	}
+	task.Materializations = []testtaskmaterializationowner.Record{record}
+	step, err := testtaskmaterialization.BuildTaskMaterializationStep(record, artifactID, uint32(task.TimeoutSeconds))
 	if err != nil {
 		t.Fatal(err)
 	}

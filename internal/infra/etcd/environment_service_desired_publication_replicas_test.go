@@ -6,6 +6,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 // Rationale: changing an operator-owned Service from one to three replicas
@@ -18,7 +21,7 @@ func TestServiceMutationAllowsScalingScriptTargetFromOneToThree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newScriptRepository() error = %v", err)
 	}
-	script, err := NewScriptRecord(environment.Record.ID, target.Record.Desired.ID, core.Script{
+	script, err := testscripts.NewRecord(environment.Record.ID, target.Record.Desired.ID, core.Script{
 		ID: ids.New(ids.KindScript), Slug: "release", ServiceName: target.Record.Desired.Name,
 		Body: "printf release", When: core.ScriptPostDeploy,
 	})
@@ -39,7 +42,7 @@ func TestServiceMutationAllowsScalingScriptTargetFromOneToThree(t *testing.T) {
 	}
 	desired := target.Record.Desired
 	desired.Replicas = 3
-	replacement, err := ReplaceServiceDesired(target.Record, desired)
+	replacement, err := testservices.ReplaceServiceDesired(target.Record, desired)
 	if err != nil {
 		t.Fatalf("ReplaceServiceDesired() error = %v", err)
 	}
@@ -52,10 +55,10 @@ func TestServiceMutationAllowsScalingScriptTargetFromOneToThree(t *testing.T) {
 	claim := stageDirectServicePublicationForTest(t, ctx, store, fixture, marker, currentProjection.Revision)
 	result, err := hierarchy.PublishEnvironmentServiceDesiredRevisionDirect(ctx, EnvironmentServiceDesiredPublication{
 		Project: project, Environment: environment, ExpectedHeadRevision: currentProjection.Revision,
-		Claim: claim, Revision: EnvironmentDesiredRevisionIdentity{
+		Claim: claim, Revision: testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: environment.Record.ID, RevisionID: fixture.Projection.Record.RevisionID,
 		}, Projection: fixture.Projection.Record,
-		Change: EnvironmentBlueprintServiceChange{Current: &target, Record: replacement}, Marker: marker,
+		Change: testblueprints.EnvironmentBlueprintServiceChange{Current: &target, Record: replacement}, Marker: marker,
 	})
 	if err != nil {
 		t.Fatalf("PublishEnvironmentServiceDesiredRevisionDirect() error = %v", err)

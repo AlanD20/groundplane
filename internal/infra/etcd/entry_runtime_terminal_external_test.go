@@ -8,6 +8,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -25,9 +26,8 @@ func completeEntryRuntimePublication(
 			t.Fatalf("claim materialization-only Entry = %t, %v", found, err)
 		}
 		if _, err := fixture.Tasks.AcknowledgeTask(t.Context(), claim.Assignment.Record.AgentID, 1, task.ID,
-			claim.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted,
-			etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, ExecutionEpoch: 1,
-				Diagnostic: etcd.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1,
+				Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -51,19 +51,25 @@ func completeEntryRuntimePublication(
 	if race == "before acknowledgement" {
 		fixture.AdvanceAcknowledgedRuntime(t, serviceID)
 		if _, err := fixture.Tasks.AcknowledgeTask(t.Context(), agentID, 1, task.ID,
-			claim.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted,
-			etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, ExecutionEpoch: 1,
-				Diagnostic: etcd.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); !errors.Is(
+			claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1,
+				Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); !errors.Is(
 			err, errs.New(errs.KindStateConflict, ""),
 		) {
 			t.Fatalf("terminal accepted changed Entry runtime: %v", err)
 		}
 		return
 	}
-	terminal, err := fixture.Tasks.AcknowledgeTask(t.Context(), agentID, 1, task.ID,
-		claim.Assignment.Record.AssignmentID, etcd.TaskStatusCompleted,
-		etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, ExecutionEpoch: 1,
-			Diagnostic: etcd.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second))
+	terminal, err := fixture.Tasks.AcknowledgeTask(
+		t.Context(),
+		agentID,
+		1,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1,
+			Diagnostic: testtaskjournal.TaskResultDiagnosticNone},
+		task.CreatedAt.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

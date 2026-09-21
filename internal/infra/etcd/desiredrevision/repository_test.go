@@ -10,6 +10,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -26,18 +30,18 @@ func TestRepositoryClaimsWinnerAndSealsTypedMutationRevision(t *testing.T) {
 	taskID := ids.NewAt(ids.KindTask, now, 2)
 	ciphertext := []byte("protected-volume-add")
 	intentDigest := sha256.Sum256(ciphertext)
-	request := etcd.EnvironmentBlueprintStageClaimRequest{
+	request := testblueprints.EnvironmentBlueprintStageClaimRequest{
 		EnvironmentID: environmentID, CandidateRevisionID: taskID, CandidateTaskID: taskID,
-		Locator: etcd.IdempotencyLocator{
-			ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
 			Method: http.MethodPost, Route: "/environments/{id}/volumes", Key: "volume-add-key-0001",
 		},
-		Intent: etcd.ProtectedIntentRecord{
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: ciphertext,
 		},
-		SourceKind: etcd.EnvironmentBlueprintSourceMutation, RenderGeneration: 1,
-		ProjectionSchema: etcd.EnvironmentDesiredProjectionSchema, CreatedAt: now,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: 1,
+		ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: now,
 	}
 	claim, err := repository.ClaimEnvironmentBlueprintStage(ctx, request)
 	if err != nil || claim.Existing {
@@ -53,27 +57,29 @@ func TestRepositoryClaimsWinnerAndSealsTypedMutationRevision(t *testing.T) {
 
 	volumeID := ids.NewAt(ids.KindVolume, now, 4)
 	projection := mutationProjection(t, now, environmentID, taskID, volumeID)
-	dependencyDigest, err := etcd.EnvironmentBlueprintDependencyDigest(projection)
+	dependencyDigest, err := testblueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		t.Fatal(err)
 	}
-	seal, err := repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	seal, err := repository.StageEnvironmentBlueprintRevision(ctx, testblueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
-		Mutation: &etcd.EnvironmentDesiredMutationAudit{Volume: &etcd.EnvironmentVolumeMutationAudit{
-			Action: etcd.EnvironmentVolumeMutationAdd, VolumeID: volumeID,
-			Slug: "application-data", Key: "application_data", KeySupplied: true,
-		}},
+		Mutation: &testblueprints.EnvironmentDesiredMutationAudit{
+			Volume: &testblueprints.EnvironmentVolumeMutationAudit{
+				Action: testblueprints.EnvironmentVolumeMutationAdd, VolumeID: volumeID,
+				Slug: "application-data", Key: "application_data", KeySupplied: true,
+			},
+		},
 		Projection: projection, DependencyDigest: dependencyDigest,
 	})
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != taskID ||
-		seal.SourceKind != etcd.EnvironmentBlueprintSourceMutation || seal.ProjectionBytes == 0 {
+		seal.SourceKind != testblueprints.EnvironmentBlueprintSourceMutation || seal.ProjectionBytes == 0 {
 		t.Fatalf("Stage() = %#v, %v", seal, err)
 	}
-	root, err := store.Get(ctx, etcd.DesiredRevisionRootKey(environmentID, taskID))
+	root, err := store.Get(ctx, testblueprints.EnvironmentBlueprintRootKey(environmentID, taskID))
 	if err != nil || root.Entry == nil {
 		t.Fatalf("sealed root = %#v, %v", root, err)
 	}
-	stored, err := etcd.DecodeDesiredRevisionSeal(root.Entry.Value)
+	stored, err := testblueprints.DecodeEnvironmentBlueprintSeal(root.Entry.Value)
 	if err != nil || stored != seal {
 		t.Fatalf("sealed root decode = %#v, %v", stored, err)
 	}
@@ -83,7 +89,7 @@ func mutationProjection(
 	t *testing.T,
 	now time.Time,
 	environmentID, taskID, volumeID string,
-) etcd.EnvironmentComposeProjection {
+) testenvironmentprojection.EnvironmentComposeProjection {
 	t.Helper()
 	canonicalYAML := []byte("services: {}\nvolumes:\n  application_data: {}\n")
 	digest := sha256.Sum256(canonicalYAML)
@@ -97,13 +103,13 @@ func mutationProjection(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return etcd.EnvironmentComposeProjection{
+	return testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:     environmentID,
 		RevisionID:        taskID,
 		RenderGeneration:  1,
 		ComposeArtifact:   artifact,
 		NormalizedCompose: canonicalYAML,
-		Volumes: []etcd.EnvironmentVolumeIdentity{
+		Volumes: []testenvironmentprojection.EnvironmentVolumeIdentity{
 			{ID: volumeID, Slug: "application-data", Key: "application_data"},
 		},
 	}
@@ -120,37 +126,45 @@ type memoryStore struct {
 }
 
 func newMemoryStore() *memoryStore { return &memoryStore{history: make(map[string][]memoryVersion)} }
-func (store *memoryStore) Get(_ context.Context, key string) (*etcd.GetResult, error) {
-	return &etcd.GetResult{Entry: store.valueAt(key, store.revision), ReadRevision: store.revision}, nil
+func (store *memoryStore) Get(_ context.Context, key string) (*testkeyvalue.GetResult, error) {
+	return &testkeyvalue.GetResult{Entry: store.valueAt(key, store.revision), ReadRevision: store.revision}, nil
 }
-func (store *memoryStore) GetMany(_ context.Context, request etcd.GetManyRequest) (*etcd.GetManyResult, error) {
+
+func (store *memoryStore) GetMany(
+	_ context.Context,
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	revision := request.Revision
 	if revision == 0 {
 		revision = store.revision
 	}
-	values := make([]*etcd.KeyValue, len(request.Keys))
+	values := make([]*testkeyvalue.KeyValue, len(request.Keys))
 	for index, key := range request.Keys {
 		values[index] = store.valueAt(key, revision)
 	}
-	return &etcd.GetManyResult{Values: values, ReadRevision: revision, ResponseRevision: store.revision}, nil
+	return &testkeyvalue.GetManyResult{Values: values, ReadRevision: revision, ResponseRevision: store.revision}, nil
 }
-func (store *memoryStore) Range(_ context.Context, request etcd.RangeRequest) (*etcd.RangeResult, error) {
-	return &etcd.RangeResult{ReadRevision: store.revision, ResponseRevision: store.revision}, nil
+
+func (store *memoryStore) Range(
+	_ context.Context,
+	request testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
+	return &testkeyvalue.RangeResult{ReadRevision: store.revision, ResponseRevision: store.revision}, nil
 }
 
 func (store *memoryStore) MeasureTransaction(
 	ctx context.Context,
-	conditions []etcd.Condition,
-	mutations []etcd.Mutation,
-) (etcd.TransactionBudget, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionBudget, error) {
 	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
 }
 
 func (store *memoryStore) Transact(
 	_ context.Context,
-	conditions []etcd.Condition,
-	mutations []etcd.Mutation,
-) (etcd.TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	for _, condition := range conditions {
 		value := store.valueAt(condition.Key, store.revision)
 		actual := int64(0)
@@ -158,29 +172,29 @@ func (store *memoryStore) Transact(
 			actual = value.ModRevision
 		}
 		if actual != condition.ModRevision {
-			failureReads := make([]*etcd.KeyValue, len(conditions))
+			failureReads := make([]*testkeyvalue.KeyValue, len(conditions))
 			for index, failed := range conditions {
 				failureReads[index] = store.valueAt(failed.Key, store.revision)
 			}
-			return etcd.TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
+			return testkeyvalue.TransactionResult{Revision: store.revision, FailureReads: failureReads}, nil
 		}
 	}
 	store.revision++
 	for _, mutation := range mutations {
 		version := memoryVersion{revision: store.revision}
 		switch mutation.Type {
-		case etcd.MutationPut:
+		case testkeyvalue.MutationPut:
 			version.present = true
 			version.value = append([]byte(nil), mutation.Value...)
-		case etcd.MutationDelete:
+		case testkeyvalue.MutationDelete:
 		default:
 			panic("invalid mutation")
 		}
 		store.history[mutation.Key] = append(store.history[mutation.Key], version)
 	}
-	return etcd.TransactionResult{Succeeded: true, Revision: store.revision}, nil
+	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
-func (store *memoryStore) valueAt(key string, revision int64) *etcd.KeyValue {
+func (store *memoryStore) valueAt(key string, revision int64) *testkeyvalue.KeyValue {
 	versions := store.history[key]
 	for index := len(versions) - 1; index >= 0; index-- {
 		version := versions[index]
@@ -194,7 +208,7 @@ func (store *memoryStore) valueAt(key string, revision int64) *etcd.KeyValue {
 		for previous := index; previous >= 0 && versions[previous].present; previous-- {
 			count++
 		}
-		return &etcd.KeyValue{
+		return &testkeyvalue.KeyValue{
 			Key:         key,
 			Value:       append([]byte(nil), version.value...),
 			Version:     count,

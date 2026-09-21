@@ -8,6 +8,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -31,7 +38,7 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 	current.AuthorizedVolumeDir = "/var/lib/groundplane/vol/test"
 	current.Projection = projection
 	current.ServiceDependencyPlans = projection.ServiceDependencyPlans.Clone()
-	input := ServiceLifecycleRenderInput{
+	input := testreleaserender.ServiceLifecycleRenderInput{
 		PlanID: ids.NewAt(ids.KindPlan, at, 2), ServiceID: serviceID,
 		TenantID: current.TenantID, TenantSlug: "acme",
 		ProjectID: current.ProjectID, ProjectSlug: "shop",
@@ -39,16 +46,16 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		ArtifactID:          current.ArtifactID,
 		Projection:          projection, AppliedProjectionRevision: 20,
-		Release: ServiceLifecycleRelease{
+		Release: testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID: current.ReleaseID, ProjectionRevision: 21, IntentRevision: 22,
 			RenderRevision: 23, Current: current,
 		},
 	}
-	value, err := encodeServiceLifecycleRenderInput(input)
+	value, err := testreleaserender.EncodeServiceLifecycleRenderInput(input)
 	if err != nil {
 		t.Fatalf("encodeServiceLifecycleRenderInput() error = %v", err)
 	}
-	decoded, err := decodeServiceLifecycleRenderInput(value)
+	decoded, err := testreleaserender.DecodeServiceLifecycleRenderInput(value)
 	if err != nil || decoded.PlanID != input.PlanID || decoded.Projection.DesiredServices[0].Desired.ID != serviceID {
 		t.Fatalf("decodeServiceLifecycleRenderInput() = %#v, %v", decoded, err)
 	}
@@ -68,10 +75,10 @@ func TestServiceLifecycleProjectionFenceUsesAppliedProjection(t *testing.T) {
 		1,
 	)
 	got := serviceLifecycleProjectionFenceKey(environmentID)
-	if want := environmentComposeProjectionKey(environmentID); got != want {
+	if want := testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environmentID); got != want {
 		t.Fatalf("serviceLifecycleProjectionFenceKey() = %q, want %q", got, want)
 	}
-	if got == environmentBlueprintHeadKey(environmentID) {
+	if got == testblueprints.EnvironmentBlueprintHeadKey(environmentID) {
 		t.Fatalf("Service lifecycle fence still selects desired state: %q", got)
 	}
 }
@@ -95,27 +102,27 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
 	at := time.Date(2026, time.August, 23, 13, 30, 0, 0, time.UTC)
-	tenant, err := hierarchy.CreateTenant(ctx, TenantRecord{
+	tenant, err := hierarchy.CreateTenant(ctx, testhierarchy.TenantRecord{
 		ID: ids.NewAt(ids.KindTenant, at, 1), Slug: "acme", Name: "Acme",
 	})
 	if err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	project, err := hierarchy.CreateProject(ctx, ProjectRecord{
+	project, err := hierarchy.CreateProject(ctx, testhierarchy.ProjectRecord{
 		ID: ids.NewAt(ids.KindProject, at, 2), TenantID: tenant.Record.ID,
-		Slug: "shop", Name: "Shop", Kind: ProjectKindTenant,
+		Slug: "shop", Name: "Shop", Kind: testhierarchy.ProjectKindTenant,
 	})
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 3)
-	environment, err := hierarchy.CreateEnvironment(ctx, EnvironmentRecord{
+	environment, err := hierarchy.CreateEnvironment(ctx, testhierarchy.EnvironmentRecord{
 		ID:                environmentID,
 		ProjectID:         project.Record.ID,
 		Name:              "production",
 		NetworkPool:       "10.70.0.0/24",
 		VolumeDir:         "/var/lib/groundplane/vol/" + tenant.Record.ID + "/" + project.Record.ID + "/" + environmentID,
-		ProvisioningState: EnvironmentProvisioningReady,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      ids.NewAt(ids.KindTask, at, 4),
 		CreatedAt:         at,
 	})
@@ -129,7 +136,7 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	}
 	projection := serviceRecordTestProjection(t, environment.Record.ID, desired)
 	seedServiceRepositoryTestDesiredProjection(t, store, projection)
-	seedServiceRepositoryTestRuntime(t, store, ServiceRuntimeRecord{
+	seedServiceRepositoryTestRuntime(t, store, testservices.ServiceRuntimeRecord{
 		EnvironmentID: environment.Record.ID, ServiceID: serviceID,
 		Runtime: core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
 	})
@@ -141,19 +148,25 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	replacement.Runtime.RuntimeIntent = core.ServiceRuntimeIntentStopped
 	task := validTaskRecord(at.Add(time.Second))
 	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
-	task.Executor = TaskExecutorController
-	task.Type = TaskStop
+	task.Executor = testtaskjournal.TaskExecutorController
+	task.Type = testtaskjournal.TaskStop
 	task.Target = serviceID
 	task.Params = map[string]string{
-		TaskResourceKindParam: TaskResourceService, TaskServiceEnvironmentParam: environment.Record.ID,
+		testtaskjournal.TaskResourceKindParam:       testtaskjournal.TaskResourceService,
+		testtaskjournal.TaskServiceEnvironmentParam: environment.Record.ID,
 	}
-	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, 6)}}
+	task.Steps = []testtaskjournal.TaskStepRecord{
+		{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, 6)},
+	}
 	task.RenderGeneration = 1
 	task.TimeoutSeconds = 30
 	marker := pendingTaskMarker(task)
 	marker.Locator.ScopeID = environment.Record.ID
 	marker.Locator.Route = "/services/{id}/stop"
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetService, ID: serviceID}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetService,
+		ID:   serviceID,
+	}
 	result, err := services.BeginServiceLifecycleWithTask(
 		ctx, tenant, project, environment, current, replacement, nil, nil, task, marker,
 	)
@@ -164,16 +177,16 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	if err != nil || conflict != nil || outcome != IdempotencyKnownApplied {
 		t.Fatalf("Service lifecycle outcome/conflict/error = %v/%v/%v", outcome, conflict, err)
 	}
-	runtimeRead, err := store.Get(ctx, serviceRuntimeKey(serviceID))
+	runtimeRead, err := store.Get(ctx, testservices.ServiceRuntimeKey(serviceID))
 	if err != nil || runtimeRead.Entry == nil || runtimeRead.Entry.ModRevision != result.revision {
 		t.Fatalf("Service runtime sidecar after lifecycle = %#v, %v", runtimeRead, err)
 	}
-	runtimeRecord, err := decodeServiceRuntimeRecord(runtimeRead.Entry.Value)
+	runtimeRecord, err := testservices.DecodeServiceRuntimeRecord(runtimeRead.Entry.Value)
 	if err != nil || runtimeRecord.Runtime.RuntimeIntent != core.ServiceRuntimeIntentStopped ||
 		runtimeRecord.ServiceID != serviceID || runtimeRecord.EnvironmentID != environment.Record.ID {
 		t.Fatalf("decoded Service runtime sidecar = %#v, %v", runtimeRecord, err)
 	}
-	epoch, err := store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
+	epoch, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(environment.Record.ID))
 	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != result.revision {
 		t.Fatalf("Service lifecycle mutation epoch = %#v, %v", epoch, err)
 	}
@@ -181,11 +194,11 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AbortPendingTask() error = %v", err)
 	}
-	epoch, err = store.Get(ctx, environmentMutationEpochKey(environment.Record.ID))
+	epoch, err = store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(environment.Record.ID))
 	if err != nil || epoch.Entry == nil || epoch.Entry.ModRevision != aborted.Revision {
 		t.Fatalf("terminal Service lifecycle mutation epoch = %#v, %v", epoch, err)
 	}
-	active, err := store.Get(ctx, serviceLifecycleActiveKey(serviceID))
+	active, err := store.Get(ctx, testservices.ServiceLifecycleActiveKey(serviceID))
 	if err != nil || active.Entry != nil {
 		t.Fatalf("active Service lifecycle fence after abort = %#v, %v", active, err)
 	}
@@ -197,11 +210,16 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	staleTask.IdempotencyKey = "service-stale-runtime-key-0001"
 	staleTask.CreatedAt = staleAt
 	staleTask.UpdatedAt = staleAt
-	staleTask.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.NewAt(ids.KindStep, staleAt, 11)}}
+	staleTask.Steps = []testtaskjournal.TaskStepRecord{
+		{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, staleAt, 11)},
+	}
 	staleMarker := pendingTaskMarker(staleTask)
 	staleMarker.Locator.ScopeID = environment.Record.ID
 	staleMarker.Locator.Route = "/services/{id}/stop"
-	staleMarker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetService, ID: serviceID}
+	staleMarker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetService,
+		ID:   serviceID,
+	}
 	staleReplacement := current.Record
 	staleReplacement.Runtime.RuntimeIntent = core.ServiceRuntimeIntentStopped
 	if _, err := services.BeginServiceLifecycleWithTask(
@@ -212,7 +230,7 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	retryAt := task.CreatedAt.Add(2 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 7)
 	retryMarker := pendingRetryMarker(aborted.Record, retryID, retryAt, "service-retry-key-0001")
-	retryResult, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
+	retryResult, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -223,7 +241,7 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	); epochRevision != retryResult.revision {
 		t.Fatalf("Service lifecycle retry epoch = %d, want %d", epochRevision, retryResult.revision)
 	}
-	replay, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
+	replay, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask(replay) error = %v", err)
 	}
@@ -231,7 +249,7 @@ func TestServiceLifecycleAbortReleasesActiveFence(t *testing.T) {
 	if classifyErr != nil || conflict != nil || outcome != IdempotencyKnownExisting {
 		t.Fatalf("RetryTask(replay) outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
-	retryActive, err := store.Get(ctx, serviceLifecycleActiveKey(serviceID))
+	retryActive, err := store.Get(ctx, testservices.ServiceLifecycleActiveKey(serviceID))
 	if err != nil || retryActive.Entry == nil || retryActive.Entry.ModRevision != retryResult.revision {
 		t.Fatalf("active Service lifecycle retry fence = %#v, %v", retryActive, err)
 	}

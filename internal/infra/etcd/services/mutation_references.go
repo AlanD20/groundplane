@@ -99,7 +99,8 @@ func ClassifyServiceMutationReferenceConflict(
 }
 
 func ValidateServiceMutationMarker(marker idempotencyrecord.IdempotencyMarker, environmentID string) error {
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environmentID {
 		return errs.New(

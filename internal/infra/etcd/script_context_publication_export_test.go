@@ -6,6 +6,10 @@ import (
 	"errors"
 	"testing"
 
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -33,10 +37,7 @@ func (fixture *ManualScriptAdmissionFixture) AssertContextPublicationRejected(
 	if fixture.store.revision != before {
 		t.Fatal("invalid context caused durable writes before rejection")
 	}
-	for _, key := range []string{
-		taskKey(fixture.Task.ID), scriptExecutionKey(execution.ID), scriptRunnerSnapshotKey(execution.SnapshotID),
-		scriptSourceRootKey(fixture.Task.OperationID), scriptSourcePreparationKey(fixture.Task.OperationID),
-	} {
+	for _, key := range []string{testtaskjournal.TaskStorageKey(fixture.Task.ID), testscriptexecutions.ScriptExecutionKey(execution.ID), testscriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID), testscriptsourceevidence.ScriptSourceRootKey(fixture.Task.OperationID), testscriptsourcereference.PreparationKey(fixture.Task.OperationID)} {
 		if fixture.store.valueAt(key, fixture.store.revision) != nil {
 			t.Fatal("invalid context left a Task, runner snapshot or source preparation")
 		}

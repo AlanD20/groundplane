@@ -11,6 +11,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -69,15 +76,22 @@ func TestResolveEnvironmentLogTargetsUsesOneFixedRevisionThroughDeletion(t *test
 	base := &releaseLogMemoryStore{memoryHierarchyStore: memory}
 	race := &releaseLogDeletionRaceStore{releaseLogMemoryStore: base}
 	race.afterEnvironmentRead = func() {
-		mutations := []Mutation{
-			{Type: MutationDelete, Key: environmentKey(environment.Record.ID)},
-			{Type: MutationDelete, Key: environmentBlueprintHeadKey(environment.Record.ID)},
+		mutations := []testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationDelete, Key: testhierarchy.EnvironmentKey(environment.Record.ID)},
+			{Type: testkeyvalue.MutationDelete, Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID)},
 		}
 		for index, fixture := range fixtures {
 			releaseID := ids.NewAt(ids.KindDeployment, serviceRecordTestTime(), int64(1200+index))
-			mutations = append(mutations,
-				Mutation{Type: MutationDelete, Key: releaseProjectionKey(fixture.ID)},
-				Mutation{Type: MutationDelete, Key: releaseIntentStagingKey("", releaseID)},
+			mutations = append(
+				mutations,
+				testkeyvalue.Mutation{
+					Type: testkeyvalue.MutationDelete,
+					Key:  testreleases.ReleaseProjectionKey(fixture.ID),
+				},
+				testkeyvalue.Mutation{
+					Type: testkeyvalue.MutationDelete,
+					Key:  testreleases.ReleaseIntentStagingKey("", releaseID),
+				},
 			)
 		}
 		if _, err := memory.Transact(context.Background(), nil, mutations); err != nil {
@@ -110,8 +124,8 @@ type releaseLogServiceFixture struct {
 func stageReleaseLogDesiredProjection(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
 	names []string,
 ) []releaseLogServiceFixture {
 	t.Helper()
@@ -119,17 +133,17 @@ func stageReleaseLogDesiredProjection(
 	sortedNames := append([]string(nil), names...)
 	sort.Strings(sortedNames)
 	task := environmentBlueprintTestTask(t, project.Record, environment.Record, 4000)
-	projection := EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:    environment.Record.ID,
 		RevisionID:       task.ID,
 		RenderGeneration: 1,
-		DesiredServices:  make([]EnvironmentServiceProjection, len(sortedNames)),
+		DesiredServices:  make([]testservices.EnvironmentServiceProjection, len(sortedNames)),
 	}
 	fixtures := make([]releaseLogServiceFixture, len(sortedNames))
 	for index, name := range sortedNames {
 		serviceID := ids.NewAt(ids.KindService, now, int64(300+index))
 		fixtures[index] = releaseLogServiceFixture{ID: serviceID, Name: name}
-		projection.DesiredServices[index] = EnvironmentServiceProjection{
+		projection.DesiredServices[index] = testservices.EnvironmentServiceProjection{
 			EnvironmentID: environment.Record.ID,
 			Desired: core.Service{
 				ID:       serviceID,
@@ -147,13 +161,13 @@ func stageReleaseLogDesiredProjection(
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
-	headValue, err := encodeTaskReference(task.ID)
+	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
-	if _, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type:  MutationPut,
-		Key:   environmentBlueprintHeadKey(environment.Record.ID),
+	if _, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type:  testkeyvalue.MutationPut,
+		Key:   testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
 		Value: headValue,
 	}}); err != nil {
 		t.Fatalf("Put(Environment blueprint head) error = %v", err)
@@ -165,7 +179,7 @@ func installServingRelease(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	environmentID string,
-	project ProjectRecord,
+	project testhierarchy.ProjectRecord,
 	serviceID string,
 	offset int64,
 ) {
@@ -191,23 +205,23 @@ func installServingRelease(
 		EnvironmentID: environmentID, ServiceID: serviceID,
 		ServingReleaseID: releaseID, CurrentSuccessfulReleaseID: releaseID, Revision: 1,
 	}
-	intentValue, err := encodeReleaseRecord("release-intent", intent)
+	intentValue, err := testreleases.EncodeReleaseRecord("release-intent", intent)
 	if err != nil {
 		t.Fatalf("encode intent: %v", err)
 	}
-	projectionValue, err := encodeReleaseRecord("service-release-projection", projection)
+	projectionValue, err := testreleases.EncodeReleaseRecord("service-release-projection", projection)
 	if err != nil {
 		t.Fatalf("encode projection: %v", err)
 	}
-	if _, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: releaseIntentStagingKey("", releaseID), Value: intentValue},
-		{Type: MutationPut, Key: releaseProjectionKey(serviceID), Value: projectionValue},
+	if _, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testreleases.ReleaseIntentStagingKey("", releaseID), Value: intentValue},
+		{Type: testkeyvalue.MutationPut, Key: testreleases.ReleaseProjectionKey(serviceID), Value: projectionValue},
 	}); err != nil {
 		t.Fatalf("install serving Release: %v", err)
 	}
 }
 
-func testReleaseLogLedger(t *testing.T, store Store) *ReleaseLedger {
+func testReleaseLogLedger(t *testing.T, store testkeyvalue.Store) *ReleaseLedger {
 	t.Helper()
 	tasks, err := newTaskRepository(store)
 	if err != nil {
@@ -226,14 +240,18 @@ type releaseLogMemoryStore struct {
 
 func (store *releaseLogMemoryStore) Health(context.Context) error { return nil }
 func (store *releaseLogMemoryStore) Put(ctx context.Context, key string, value []byte) (int64, error) {
-	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: value}})
+	result, err := store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}},
+	)
 	return result.Revision, err
 }
 func (store *releaseLogMemoryStore) Delete(ctx context.Context, key string) (int64, error) {
-	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: key}})
+	result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}})
 	return result.Revision, err
 }
-func (store *releaseLogMemoryStore) Watch(context.Context, string, int64) (*WatchStream, error) {
+func (store *releaseLogMemoryStore) Watch(context.Context, string, int64) (*testkeyvalue.WatchStream, error) {
 	return nil, errs.New(errs.KindInternal, "memory log target store does not implement watches")
 }
 func (store *releaseLogMemoryStore) Snapshot(context.Context, io.Writer) error {
@@ -247,7 +265,7 @@ type releaseLogDeletionRaceStore struct {
 	injected             bool
 }
 
-func (store *releaseLogDeletionRaceStore) Get(ctx context.Context, key string) (*GetResult, error) {
+func (store *releaseLogDeletionRaceStore) Get(ctx context.Context, key string) (*testkeyvalue.GetResult, error) {
 	result, err := store.releaseLogMemoryStore.Get(ctx, key)
 	if err == nil && !store.injected && store.afterEnvironmentRead != nil {
 		store.injected = true
@@ -256,5 +274,5 @@ func (store *releaseLogDeletionRaceStore) Get(ctx context.Context, key string) (
 	return result, err
 }
 
-var _ Store = (*releaseLogMemoryStore)(nil)
-var _ Store = (*releaseLogDeletionRaceStore)(nil)
+var _ testkeyvalue.Store = (*releaseLogMemoryStore)(nil)
+var _ testkeyvalue.Store = (*releaseLogDeletionRaceStore)(nil)

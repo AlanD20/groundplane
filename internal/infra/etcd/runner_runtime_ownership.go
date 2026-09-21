@@ -144,7 +144,8 @@ func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
-	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || runnerrecord.ValidateRunnerRecord(current.Record) != nil ||
+	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 ||
+		runnerrecord.ValidateRunnerRecord(current.Record) != nil ||
 		current.Record.ProvisioningState != runnerrecord.RunnerProvisioningFailed ||
 		current.Record.ContainerID == "" {
 		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(
@@ -234,8 +235,10 @@ func (repository *RunnerRepository) DeleteRunnerRuntimeOwnershipAfterCleanup(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return 0, err
 	}
-	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || runnerrecord.ValidateRunnerRecord(current.Record) != nil ||
-		runnerrecord.ValidateRunnerRuntimeOwnership(expected) != nil || expected.RunnerID != current.Record.Desired.ID ||
+	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 ||
+		runnerrecord.ValidateRunnerRecord(current.Record) != nil ||
+		runnerrecord.ValidateRunnerRuntimeOwnership(expected) != nil ||
+		expected.RunnerID != current.Record.Desired.ID ||
 		current.Record.ContainerID == "" ||
 		current.Record.RuntimeEpoch <= expected.RuntimeEpoch {
 		return 0, errs.New(errs.KindValidationFailed, "runner runtime cleanup proof does not match its lifecycle")

@@ -5,10 +5,22 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	desiredstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	migratedentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -34,12 +46,12 @@ func TestEntryRemovalRetainedTaskPinsCleanupAfterResponseExpiry(t *testing.T) {
 func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireResponse ...bool) {
 	t.Helper()
 	testBlueprintExecutedArtifactConfigured(t, false, false, nil,
-		func(fixture *etcd.ExecutedArtifactFixture, resolver *controller.TaskPlanResolver,
-			_ etcd.ReleaseRenderInput, _ domain.Intent, _ *agentpb.ComposeArtifact) {
+		func(fixture *etcd.ExecutedArtifactFixture, resolver *testtaskplanning.TaskPlanResolver,
+			_ testreleaserender.ReleaseRenderInput, _ domain.Intent, _ *agentpb.ComposeArtifact) {
 			ctx := t.Context()
 			publishEntry := fixture.PublishAppliedRemovalJourneyEntry
 			if !applied {
-				publishEntry = func(t *testing.T, value string) (*etcd.EntryValueGenerationRepository, *etcd.SecretRepository, etcd.EntryRecord) {
+				publishEntry = func(t *testing.T, value string) (*migratedentryvalues.Repository, *etcd.SecretRepository, testentries.Record) {
 					return fixture.PublishManualJourneyEntry(t, value, nil, "")
 				}
 			}
@@ -50,7 +62,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 			}
 			protector, ciphertext := manualJourneyEncryptedValue(t, "intent-test")
 			defer clear(ciphertext)
-			materials, err := controller.NewTaskMaterializationResolver(
+			materials, err := testtaskmaterialization.NewTaskMaterializationResolver(
 				fixture.Hierarchy,
 				values,
 				secrets,
@@ -60,7 +72,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 			if err != nil {
 				t.Fatal(err)
 			}
-			planner, err := controller.NewEntryRemovalPlanner(resolver, materials, fixture.Hierarchy)
+			planner, err := testtaskplanning.NewEntryRemovalPlanner(resolver, materials, fixture.Hierarchy)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,18 +81,20 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 			if err != nil {
 				t.Fatal(err)
 			}
-			claim, err := desired.ClaimEnvironmentBlueprintStage(ctx, etcd.EnvironmentBlueprintStageClaimRequest{
-				EnvironmentID: entry.EnvironmentID, CandidateRevisionID: task.ID, CandidateTaskID: task.ID,
-				Locator: marker.Locator, Intent: marker.Intent, BaselineHeadRevision: current.Revision,
-				SourceKind: etcd.EnvironmentBlueprintSourceMutation, RenderGeneration: current.Record.RenderGeneration + 1,
-				ProjectionSchema: etcd.EnvironmentDesiredProjectionSchema, CreatedAt: task.CreatedAt,
-			})
+			claim, err := desired.ClaimEnvironmentBlueprintStage(
+				ctx,
+				testblueprints.EnvironmentBlueprintStageClaimRequest{
+					EnvironmentID: entry.EnvironmentID, CandidateRevisionID: task.ID, CandidateTaskID: task.ID,
+					Locator: marker.Locator, Intent: marker.Intent, BaselineHeadRevision: current.Revision,
+					SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: current.Record.RenderGeneration + 1,
+					ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: task.CreatedAt,
+				},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			candidate, _, err := controller.ProjectEnvironmentEntryMutation(
-				current.Record,
-				controller.EnvironmentEntryArtifactMutation{
+			candidate, _, err := testcomposerender.ProjectEnvironmentEntryMutation(
+				current.Record, testcomposerender.EnvironmentEntryArtifactMutation{
 					RevisionID: task.ID, ArtifactID: ids.New(ids.KindConfig), PlanID: task.PlanID,
 					RenderGeneration: claim.RenderGeneration, Entries: nil,
 				},
@@ -93,17 +107,17 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 				t.Fatal(err)
 			}
 			if !applied &&
-				(task.Executor != etcd.TaskExecutorController || task.TimeoutSeconds != 30 || len(task.Materializations) != 0) {
+				(task.Executor != testtaskjournal.TaskExecutorController || task.TimeoutSeconds != 30 || len(task.Materializations) != 0) {
 				t.Fatal("never-applied removal contains host work")
 			}
-			digest, err := etcd.EnvironmentBlueprintDependencyDigest(candidate)
+			digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(candidate)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := desired.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+			if _, err := desired.StageEnvironmentBlueprintRevision(ctx, testblueprints.EnvironmentBlueprintStageRequest{
 				Claim: claim, Projection: candidate, DependencyDigest: digest,
-				Mutation: &etcd.EnvironmentDesiredMutationAudit{Entry: &etcd.EnvironmentEntryMutationAudit{
-					Action: etcd.EnvironmentEntryMutationRemove, EntryID: entry.Entry.ID, BaseRevisionID: current.Record.RevisionID,
+				Mutation: &testblueprints.EnvironmentDesiredMutationAudit{Entry: &testblueprints.EnvironmentEntryMutationAudit{
+					Action: testblueprints.EnvironmentEntryMutationRemove, EntryID: entry.Entry.ID, BaseRevisionID: current.Record.RevisionID,
 				}},
 			}); err != nil {
 				t.Fatal(err)
@@ -115,14 +129,17 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 					fixture.Environment,
 					current.Revision,
 					claim,
-					etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: entry.EnvironmentID, RevisionID: task.ID},
+					testblueprints.EnvironmentDesiredRevisionIdentity{
+						EnvironmentID: entry.EnvironmentID,
+						RevisionID:    task.ID,
+					},
 					candidate,
 					nil,
 					nil,
 					nil,
-					etcd.ReleaseGroupBlueprintPreparedMutation{},
-					etcd.ComponentTaskPreparation{},
-					etcd.BlueprintAttachTaskPreparation{},
+					testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
+					testcomponentplanning.ComponentTaskPreparation{},
+					testblueprintplanning.BlueprintAttachTaskPreparation{},
 					task,
 					marker,
 				)
@@ -145,9 +162,9 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 			}
 			if applied {
 				if failFirst {
-					failed := acknowledgeEntryRemoval(t, fixture, task, etcd.TaskStatusFailed)
+					failed := acknowledgeEntryRemoval(t, fixture, task, testtaskjournal.TaskStatusFailed)
 					if len(expireResponse) != 0 && expireResponse[0] {
-						markerKey, err := etcd.CapabilityIdempotencyMarkerKey(marker.Locator)
+						markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -155,7 +172,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 							t.Fatal(err)
 						}
 						if _, err := desired.CleanupEnvironmentBlueprintStaging(ctx,
-							time.Now().UTC().Add(2*etcd.EnvironmentBlueprintStageExpiry), 128); err != nil {
+							time.Now().UTC().Add(2*testblueprints.EnvironmentBlueprintStageExpiry), 128); err != nil {
 							t.Fatal(err)
 						}
 					}
@@ -165,7 +182,13 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 						t.Fatal("failed cleanup changed desired Entry state", err)
 					}
 					retryID, retryMarker := fixture.EntryRemovalRetryMarker(t, failed.Record)
-					result, err := fixture.Tasks.RetryTask(ctx, task.ID, retryID, etcd.TaskActorOperator, retryMarker)
+					result, err := fixture.Tasks.RetryTask(
+						ctx,
+						task.ID,
+						retryID,
+						testtaskjournal.TaskActorOperator,
+						retryMarker,
+					)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -189,7 +212,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 				if err != nil || !found || claimed.Task.Record.ID != task.ID {
 					t.Fatalf("Controller finalizer claim: %v / %v", found, err)
 				}
-				if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, etcd.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second)); err != nil {
+				if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second)); err != nil {
 					t.Fatal(err)
 				}
 				if claimed, found, err := fixture.Tasks.ClaimNextTask(ctx, ids.New(ids.KindAgent), 1, time.Now().UTC()); err != nil || !found || claimed.Task.Record.ID != competingTask {
@@ -223,8 +246,8 @@ func acknowledgeEntryRemoval(
 	t *testing.T,
 	fixture *etcd.ExecutedArtifactFixture,
 	task etcd.TaskRecord,
-	status etcd.TaskStatus,
-) etcd.Versioned[etcd.TaskRecord] {
+	status testtaskjournal.TaskStatus,
+) testkeyvalue.Versioned[etcd.TaskRecord] {
 	t.Helper()
 	ctx := t.Context()
 	agentID := ids.New(ids.KindAgent)
@@ -232,13 +255,13 @@ func acknowledgeEntryRemoval(
 	if err != nil || !found || assigned.Task.Record.ID != task.ID {
 		t.Fatalf("cleanup assignment: %v / %v", found, err)
 	}
-	result := etcd.TaskResultRecord{
-		Kind:           etcd.TaskResultCompose,
+	result := testtaskjournal.TaskResultRecord{
+		Kind:           testtaskjournal.TaskResultCompose,
 		ExecutionEpoch: 1,
-		Diagnostic:     etcd.TaskResultDiagnosticNone,
+		Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
 	}
-	if status == etcd.TaskStatusFailed {
-		result.Diagnostic = etcd.TaskResultDiagnosticComposeFailed
+	if status == testtaskjournal.TaskStatusFailed {
+		result.Diagnostic = testtaskjournal.TaskResultDiagnosticComposeFailed
 	}
 	completed, err := fixture.Tasks.AcknowledgeTask(ctx, agentID, 1, task.ID, assigned.Assignment.Record.AssignmentID,
 		status, result, task.CreatedAt.Add(2*time.Second))

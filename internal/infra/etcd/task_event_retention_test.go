@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -22,12 +25,12 @@ func TestTaskEventRollingWindowPreservesRecoveryAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	for ordinal := uint64(1); ordinal <= 1003; ordinal++ {
-		state := TaskEventStatePending
+		state := testtaskjournal.TaskEventStatePending
 		if ordinal == 1 {
-			state = TaskEventStateRunning
+			state = testtaskjournal.TaskEventStateRunning
 		}
 		if ordinal == 2 {
-			state = TaskEventStateCompleted
+			state = testtaskjournal.TaskEventStateCompleted
 		}
 		if ordinal == 1001 {
 			store.conflictNextTransactions(1)
@@ -64,7 +67,7 @@ func TestTaskEventRollingWindowPreservesRecoveryAndReplay(t *testing.T) {
 		if ordinal == 1002 {
 			replay, err := repository.AppendTaskEvent(
 				ctx,
-				taskEventInput(task.ID, 2, TaskEventStateRunning),
+				taskEventInput(task.ID, 2, testtaskjournal.TaskEventStateRunning),
 				taskJournalTime().Add(time.Hour),
 			)
 			if err != nil || !replay.Duplicate || replay.Sequence != 1 {
@@ -84,8 +87,8 @@ func TestTaskEventRollingWindowPreservesRecoveryAndReplay(t *testing.T) {
 		!snapshot.Task.EventCheckpoints[0].Completed {
 		t.Fatal("trimmed mutation evidence was lost")
 	}
-	for _, prefix := range []string{taskEventScopePrefix(task.ID), taskEventDedupScopePrefix(task.ID)} {
-		page, err := store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1001})
+	for _, prefix := range []string{testtaskjournal.TaskEventScopePrefix(task.ID), testtaskjournal.TaskEventDedupScopePrefix(task.ID)} {
+		page, err := store.Range(ctx, testkeyvalue.RangeRequest{Prefix: prefix, Limit: 1001})
 		if err != nil || page.More || len(page.Values) != 1000 {
 			t.Fatalf("retained records = %v, %v", page, err)
 		}
@@ -93,26 +96,26 @@ func TestTaskEventRollingWindowPreservesRecoveryAndReplay(t *testing.T) {
 	for _, ordinal := range []uint64{3, 1003} {
 		replay, err := repository.AppendTaskEvent(
 			ctx,
-			taskEventInput(task.ID, ordinal, TaskEventStatePending),
+			taskEventInput(task.ID, ordinal, testtaskjournal.TaskEventStatePending),
 			taskJournalTime().Add(time.Hour),
 		)
 		if err != nil || !replay.Duplicate || replay.Sequence != ordinal {
 			t.Fatalf("replay %d: %+v %v", ordinal, replay, err)
 		}
 	}
-	if _, err := repository.AppendTaskEvent(ctx, taskEventInput(task.ID, 1, TaskEventStateRunning), taskJournalTime().Add(time.Hour)); !errors.Is(
+	if _, err := repository.AppendTaskEvent(ctx, taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning), taskJournalTime().Add(time.Hour)); !errors.Is(
 		err,
 		errs.New(errs.KindStateConflict, ""),
 	) {
 		t.Fatalf("old replay = %v", err)
 	}
-	if _, err := repository.AppendTaskEvent(ctx, taskEventInput(task.ID, 3, TaskEventStateFailed), taskJournalTime().Add(time.Hour)); !errors.Is(
+	if _, err := repository.AppendTaskEvent(ctx, taskEventInput(task.ID, 3, testtaskjournal.TaskEventStateFailed), taskJournalTime().Add(time.Hour)); !errors.Is(
 		err,
 		errs.New(errs.KindInternal, ""),
 	) {
 		t.Fatalf("changed watermark replay = %v", err)
 	}
-	assignment := TaskAssignmentRecord{
+	assignment := testtaskassignments.TaskAssignmentRecord{
 		AssignmentID:    taskEventTestAssignmentID,
 		AgentID:         taskEventTestAgentID,
 		AgentGeneration: 1,
@@ -147,7 +150,7 @@ func TestTaskEventRollingWindowPreservesRecoveryAndReplay(t *testing.T) {
 			ctx,
 			snapshot,
 			after,
-			func(event TaskEventRecord) error { last = event.Sequence; count++; return nil },
+			func(event testtaskjournal.TaskEventRecord) error { last = event.Sequence; count++; return nil },
 		)
 		want := 1
 		if after == 0 {
@@ -159,10 +162,8 @@ func TestTaskEventRollingWindowPreservesRecoveryAndReplay(t *testing.T) {
 	}
 	stream := &TaskEventStream{taskID: task.ID}
 	last, err := stream.consumeEvent(
-		ctx,
-		Event{Type: EventDelete, Key: taskEventKey(task.ID, 3)},
-		1003,
-		func(TaskEventRecord) error { t.Fatal("emitted deletion"); return nil },
+		ctx, testkeyvalue.Event{Type: testkeyvalue.EventDelete, Key: testtaskjournal.TaskEventKey(task.ID, 3)}, 1003,
+		func(testtaskjournal.TaskEventRecord) error { t.Fatal("emitted deletion"); return nil },
 	)
 	if err != nil || last != 1003 {
 		t.Fatalf("live trim: %d %v", last, err)
@@ -173,7 +174,7 @@ func TestTaskEventRollingWindowPreservesRecoveryAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	count := 0
-	if err := closed.Run(ctx, func(event TaskEventRecord) error {
+	if err := closed.Run(ctx, func(event testtaskjournal.TaskEventRecord) error {
 		count++
 		if event.Sequence != 1003 {
 			t.Fatal("wrong terminal suffix")

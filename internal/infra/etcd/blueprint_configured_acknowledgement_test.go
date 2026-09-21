@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: BP-05/H33: Apply can execute Components without publishing native
@@ -15,12 +18,12 @@ func TestConfiguredBlueprintAcknowledgementRetainsAppliedArtifact(t *testing.T) 
 	for _, test := range []struct {
 		name      string
 		blueprint bool
-		status    TaskStatus
+		status    testtaskjournal.TaskStatus
 		applies   bool
 	}{
-		{"completed apply", true, TaskStatusCompleted, true},
-		{"failed apply", true, TaskStatusFailed, false},
-		{"metadata edit", false, TaskStatusCompleted, false},
+		{"completed apply", true, testtaskjournal.TaskStatusCompleted, true},
+		{"failed apply", true, testtaskjournal.TaskStatusFailed, false},
+		{"metadata edit", false, testtaskjournal.TaskStatusCompleted, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -37,12 +40,12 @@ func TestConfiguredBlueprintAcknowledgementRetainsAppliedArtifact(t *testing.T) 
 			}
 			baseline := environmentBlueprintTestProjection(environment.Record.ID, task, 1)
 			baseline.RevisionID = ids.NewAt(ids.KindTask, task.CreatedAt, 370)
-			value, err := encodeEnvironmentComposeProjection(baseline)
+			value, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(baseline)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut,
-				Key: environmentComposeProjectionKey(environment.Record.ID), Value: value}}); err != nil {
+			if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut,
+				Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environment.Record.ID), Value: value}}); err != nil {
 				t.Fatal(err)
 			}
 			candidate := environmentBlueprintTestProjection(environment.Record.ID, task, 2)
@@ -53,7 +56,10 @@ func TestConfiguredBlueprintAcknowledgementRetainsAppliedArtifact(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			read, err := store.Get(ctx, environmentComposeProjectionKey(environment.Record.ID))
+			read, err := store.Get(
+				ctx,
+				testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -79,7 +85,9 @@ func TestConfiguredBlueprintAcknowledgementRetainsAppliedArtifact(t *testing.T) 
 			if len(change.mutations) != 1 || len(change.conditions) != 2 {
 				t.Fatal("Apply lost its sealed-root and applied-predecessor guards")
 			}
-			applied, err := decodeEnvironmentComposeProjection(change.mutations[0].Value)
+			applied, err := testenvironmentprojection.DecodeEnvironmentComposeProjectionStorage(
+				change.mutations[0].Value,
+			)
 			if err != nil || applied.RevisionID != task.ID || applied.RenderGeneration != 2 ||
 				!bytes.Equal(applied.ComposeArtifact, candidate.ComposeArtifact) {
 				t.Fatalf("Apply failed to retain its exact sealed artifact: %v", err)

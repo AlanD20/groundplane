@@ -7,6 +7,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -51,7 +53,7 @@ func TestEntryEpochRacePerformsNoWrites(t *testing.T) {
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("publication error = %v", err)
 	}
-	stored, err := base.Get(context.Background(), entryRecordKey(stableID))
+	stored, err := base.Get(context.Background(), testentries.RecordKey(stableID))
 	if err != nil || stored.Entry != nil {
 		t.Fatalf("failed publication primary = %#v, %v", stored, err)
 	}
@@ -92,8 +94,7 @@ func TestEntryReplacementUsesFixedRevisionOwnerEvidence(t *testing.T) {
 		project,
 		created,
 		desired,
-		generationID,
-		EntryValueGeneration{Plain: &next},
+		generationID, testentries.EntryValueGeneration{Plain: &next},
 	); err != nil {
 		t.Fatalf("ReplaceEntry() error = %v", err)
 	}
@@ -133,9 +134,9 @@ type entryVolumeEpochRaceStore struct {
 
 func (store *entryVolumeEpochRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.beforeTransact != nil {
 		before := store.beforeTransact
 		store.beforeTransact = nil
@@ -152,8 +153,8 @@ type entryMutationRevisionAuditStore struct {
 
 func (store *entryMutationRevisionAuditStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	result, err := store.hierarchyStore.GetMany(ctx, request)
 	if err == nil && request.Revision == 0 && store.anchorRevision == 0 {
 		store.anchorRevision = result.ReadRevision
@@ -167,7 +168,7 @@ func environmentMutationTestEntry(
 	t *testing.T,
 	environmentID string,
 	seed int64,
-) (EntryRecord, EntryValueGeneration) {
+) (testentries.Record, testentries.EntryValueGeneration) {
 	t.Helper()
 	at := serviceRecordTestTime()
 	entryID := ids.NewAt(ids.KindEnvEntry, at, seed)
@@ -177,10 +178,10 @@ func environmentMutationTestEntry(
 		Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: "initial"},
 		Exposure: []string{"all"},
 	}
-	record, err := NewEntryRecord(environmentID, desired, generationID)
+	record, err := testentries.NewRecord(environmentID, desired, generationID)
 	if err != nil {
 		t.Fatalf("NewEntryRecord() error = %v", err)
 	}
 	generation := testPlainGeneration(environmentID, entryID, generationID, "initial", at)
-	return record, EntryValueGeneration{Plain: &generation}
+	return record, testentries.EntryValueGeneration{Plain: &generation}
 }

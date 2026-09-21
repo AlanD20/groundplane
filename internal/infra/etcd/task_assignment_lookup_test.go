@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -41,7 +42,7 @@ func TestGetTaskAssignmentResolvesTheTaskIndexedExecutionClaim(t *testing.T) {
 	if err != nil || resolved.Assignment.Record != claim.Assignment.Record ||
 		resolved.Assignment.Revision != claim.Assignment.Revision || resolved.Task.Revision != claim.Task.Revision ||
 		resolved.Assignment.ReadRevision != resolved.Task.ReadRevision ||
-		resolved.Task.Record.ID != task.ID || resolved.Task.Record.Status != TaskStatusRunning {
+		resolved.Task.Record.ID != task.ID || resolved.Task.Record.Status != testtaskjournal.TaskStatusRunning {
 		t.Fatalf("GetTaskAssignment() = %#v, %v", resolved, err)
 	}
 

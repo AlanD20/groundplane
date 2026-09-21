@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 )
 
 func TestHierarchyProjectDescriptionRoundTrips(t *testing.T) {
@@ -14,13 +15,13 @@ func TestHierarchyProjectDescriptionRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 301), Slug: "acme", Name: "Acme"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 301), Slug: "acme", Name: "Acme"}
 	if _, err := repository.CreateTenant(context.Background(), tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	record := ProjectRecord{
+	record := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 302), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Description: "Operator interface", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Description: "Operator interface", Kind: testhierarchy.ProjectKindTenant,
 	}
 	created, err := repository.CreateProject(context.Background(), record)
 	if err != nil {

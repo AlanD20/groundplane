@@ -19,8 +19,10 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 	if err != nil {
 		return hierarchydeletionplanning.HierarchyDeletionFrozenMembership{}, err
 	}
-	if current.Tombstone.Phase != hierarchydeletion.HierarchyDeletionPlanning || current.Tombstone.SnapshotRevision <= 0 ||
-		current.Tombstone.TargetRevision <= 0 || current.Tombstone.PlanCount != nil ||
+	if current.Tombstone.Phase != hierarchydeletion.HierarchyDeletionPlanning ||
+		current.Tombstone.SnapshotRevision <= 0 ||
+		current.Tombstone.TargetRevision <= 0 ||
+		current.Tombstone.PlanCount != nil ||
 		current.Tombstone.PlanDigest != nil {
 		return hierarchydeletionplanning.HierarchyDeletionFrozenMembership{}, errs.New(
 			errs.KindStateConflict,

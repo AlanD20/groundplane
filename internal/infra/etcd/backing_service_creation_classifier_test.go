@@ -5,6 +5,13 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -12,10 +19,10 @@ func TestClassifyBackingServiceCreationUsesCurrentConditionLayout(t *testing.T) 
 	publication := environmentBlueprintPublicationEvidence{
 		rootRevision: 11, descriptorRevision: 12, locatorRevision: 13,
 	}
-	values := make([]*KeyValue, 30)
-	values[5] = &KeyValue{ModRevision: publication.rootRevision}
-	values[6] = &KeyValue{ModRevision: publication.descriptorRevision}
-	values[7] = &KeyValue{ModRevision: publication.locatorRevision}
+	values := make([]*testkeyvalue.KeyValue, 30)
+	values[5] = &testkeyvalue.KeyValue{ModRevision: publication.rootRevision}
+	values[6] = &testkeyvalue.KeyValue{ModRevision: publication.descriptorRevision}
+	values[7] = &testkeyvalue.KeyValue{ModRevision: publication.locatorRevision}
 
 	err := classifyBackingServiceCreation(BackingServiceCreation{}, publication, len(values))(1, values)
 	if err == nil || !strings.Contains(err.Error(), "Backing-service creation raced") {
@@ -25,7 +32,7 @@ func TestClassifyBackingServiceCreationUsesCurrentConditionLayout(t *testing.T) 
 
 func TestValidateBackingServiceComponentsRejectsNonEmpty(t *testing.T) {
 	t.Parallel()
-	err := validateBackingServiceComponents([]ComponentRecord{{}})
+	err := validateBackingServiceComponents([]testcomponents.Record{{}})
 	if err == nil {
 		t.Fatal("validateBackingServiceComponents() accepted non-empty Components")
 	}
@@ -88,29 +95,32 @@ func TestBackingServiceCreationValidatesDesiredTopology(t *testing.T) {
 	service := core.Service{
 		ID: serviceID, Name: "postgres", Image: "postgres:16-alpine",
 		Strategy: core.StrategyRecreate, Adapter: "postgres:16", Command: []string{"postgres"},
+		Mounts: []core.Mount{{Volume: volumeID, Mount: "/var/lib/postgresql/data"}},
 	}
 	creation := BackingServiceCreation{
-		Project:     ProjectRecord{ID: projectID},
-		Environment: EnvironmentRecord{ID: environmentID},
-		Zone:        ZoneRecord{EnvironmentID: environmentID, Desired: zone},
-		Service: ServiceRecord{
+		Project:     testhierarchy.ProjectRecord{ID: projectID},
+		Environment: testhierarchy.EnvironmentRecord{ID: environmentID},
+		Zone:        testzones.Record{EnvironmentID: environmentID, Desired: zone},
+		Service: testservices.ServiceRecord{
 			EnvironmentID: environmentID, BackingNetworkID: networkID, Desired: service,
 		},
-		Claim: EnvironmentBlueprintStageClaim{
+		Claim: testblueprints.EnvironmentBlueprintStageClaim{
 			EnvironmentID: environmentID, RevisionID: taskID, TaskID: taskID,
-			SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1,
+			SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1,
 		},
-		Revision: EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: taskID},
+		Revision: testblueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: taskID},
 		Task:     TaskRecord{ID: taskID},
-		Projection: EnvironmentComposeProjection{
+		Projection: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID: environmentID, RevisionID: taskID, RenderGeneration: 1,
 			ComposeArtifact: []byte{1},
-			DesiredZones:    []EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: zone}},
-			DesiredServices: []EnvironmentServiceProjection{{
+			DesiredZones: []testenvironmentprojection.EnvironmentZoneProjection{
+				{EnvironmentID: environmentID, Desired: zone},
+			},
+			DesiredServices: []testservices.EnvironmentServiceProjection{{
 				EnvironmentID: environmentID, BackingNetworkID: networkID, Desired: service,
 			}},
-			Volumes: []EnvironmentVolumeIdentity{{ID: volumeID}},
-			VolumeMounts: []EnvironmentServiceVolumeMount{{
+			Volumes: []testenvironmentprojection.EnvironmentVolumeIdentity{{ID: volumeID}},
+			VolumeMounts: []testenvironmentprojection.EnvironmentServiceVolumeMount{{
 				ServiceID: serviceID, VolumeID: volumeID, Target: "/var/lib/postgresql/data",
 			}},
 		},
@@ -121,7 +131,7 @@ func TestBackingServiceCreationValidatesDesiredTopology(t *testing.T) {
 
 	changedService := creation
 	changedService.Projection.DesiredServices = append(
-		[]EnvironmentServiceProjection(nil), creation.Projection.DesiredServices...,
+		[]testservices.EnvironmentServiceProjection(nil), creation.Projection.DesiredServices...,
 	)
 	changedService.Projection.DesiredServices[0].Desired.Image = "postgres:17-alpine"
 	if err := validateBackingServiceProjection(changedService); err == nil {
@@ -130,7 +140,7 @@ func TestBackingServiceCreationValidatesDesiredTopology(t *testing.T) {
 
 	changedZone := creation
 	changedZone.Projection.DesiredZones = append(
-		[]EnvironmentZoneProjection(nil), creation.Projection.DesiredZones...,
+		[]testenvironmentprojection.EnvironmentZoneProjection(nil), creation.Projection.DesiredZones...,
 	)
 	changedZone.Projection.DesiredZones[0].Desired.Internal = true
 	if err := validateBackingServiceProjection(changedZone); err == nil {

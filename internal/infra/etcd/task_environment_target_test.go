@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,10 +16,10 @@ func TestTaskEnvironmentTargetAcceptsSameOwnerEffectsOnly(t *testing.T) {
 	t.Parallel()
 	task := configurationTaskFixture()
 	for _, foreign := range []bool{false, true} {
-		task.Params[TaskMaterializationEnvironmentParam] = task.Owner.EnvironmentID
-		task.Params[TaskEntryEnvironmentParam] = task.Owner.EnvironmentID
+		task.Params[testtaskjournal.TaskMaterializationEnvironmentParam] = task.Owner.EnvironmentID
+		task.Params[testtaskjournal.TaskEntryEnvironmentParam] = task.Owner.EnvironmentID
 		if foreign {
-			task.Params[TaskEntryEnvironmentParam] = ids.New(ids.KindEnvironment)
+			task.Params[testtaskjournal.TaskEntryEnvironmentParam] = ids.New(ids.KindEnvironment)
 		}
 		target, present, err := ordinaryTaskEnvironmentMutationTarget(task, true, false, true, false, false)
 		if foreign {
@@ -38,23 +39,23 @@ func TestRouteFileWriterRequiresExactMutationOwner(t *testing.T) {
 	for _, scenario := range []string{"create", "edit", "foreign owner", "foreign parameter", "wrong target", "wrong kind", "unsupported action"} {
 		t.Run(scenario, func(t *testing.T) {
 			task := configurationTaskFixture()
-			task.Type, task.Target = TaskCreate, ids.New(ids.KindRoute)
-			task.Params[TaskResourceKindParam] = TaskResourceRoute
-			task.Params[TaskMaterializationEnvironmentParam] = task.Owner.EnvironmentID
-			task.Params[TaskRouteEnvironmentParam] = task.Owner.EnvironmentID
+			task.Type, task.Target = testtaskjournal.TaskCreate, ids.New(ids.KindRoute)
+			task.Params[testtaskjournal.TaskResourceKindParam] = testtaskjournal.TaskResourceRoute
+			task.Params[testtaskjournal.TaskMaterializationEnvironmentParam] = task.Owner.EnvironmentID
+			task.Params[testtaskjournal.TaskRouteEnvironmentParam] = task.Owner.EnvironmentID
 			switch scenario {
 			case "edit":
-				task.Type = TaskUpdate
+				task.Type = testtaskjournal.TaskUpdate
 			case "foreign owner":
 				task.Owner.EnvironmentID = ids.New(ids.KindEnvironment)
 			case "foreign parameter":
-				task.Params[TaskRouteEnvironmentParam] = ids.New(ids.KindEnvironment)
+				task.Params[testtaskjournal.TaskRouteEnvironmentParam] = ids.New(ids.KindEnvironment)
 			case "wrong target":
 				task.Target = ids.New(ids.KindService)
 			case "wrong kind":
-				task.Params[TaskResourceKindParam] = TaskResourceVolume
+				task.Params[testtaskjournal.TaskResourceKindParam] = testtaskjournal.TaskResourceVolume
 			case "unsupported action":
-				task.Type = TaskDeploy
+				task.Type = testtaskjournal.TaskDeploy
 			}
 			_, present, err := taskMaterializationEnvironment(task)
 			if scenario == "create" || scenario == "edit" {

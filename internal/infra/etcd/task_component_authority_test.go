@@ -8,23 +8,25 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func TestTaskComponentAuthoritySurvivesStorageAndRetry(t *testing.T) {
 	now := taskJournalTime()
 	task := validTaskRecord(now)
 	task.ComponentActionStepIDs = []string{task.Steps[0].ID}
-	task.ManagedComponentTeardownSources = []ManagedComponentRuntimeSource{{
+	task.ManagedComponentTeardownSources = []testenvironmentprojection.ManagedComponentRuntimeSource{{
 		ComponentKind: core.ComponentKindIngressCaddy, ComponentID: ids.NewAt(ids.KindComponent, now, 10),
 		ServiceID: ids.NewAt(ids.KindService, now, 11), ComposeName: "caddy",
 		RevisionID: ids.NewAt(ids.KindTask, now, 12), ArtifactID: ids.NewAt(ids.KindConfig, now, 13),
 		ArtifactSHA256: strings.Repeat("a", 64),
 	}}
-	encoded, err := encodeTaskRecord(task)
+	encoded, err := EncodeTaskRecord(task)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stored, err := decodeTaskRecord(encoded)
+	stored, err := DecodeTaskRecord(encoded)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,15 +36,30 @@ func TestTaskComponentAuthoritySurvivesStorageAndRetry(t *testing.T) {
 	if !reflect.DeepEqual(task.ManagedComponentTeardownSources, stored.ManagedComponentTeardownSources) {
 		t.Fatal("storage lost managed Component teardown authority")
 	}
-	running, err := transitionTaskStatus(stored, TaskStatusPending, TaskStatusRunning, now.Add(time.Second))
+	running, err := TransitionTaskStatus(
+		stored,
+		testtaskjournal.TaskStatusPending,
+		testtaskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	failed, err := transitionTaskStatus(running, TaskStatusRunning, TaskStatusFailed, now.Add(2*time.Second))
+	failed, err := TransitionTaskStatus(
+		running,
+		testtaskjournal.TaskStatusRunning,
+		testtaskjournal.TaskStatusFailed,
+		now.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	retry, err := cloneRetryTask(failed, ids.NewAt(ids.KindTask, now, 99), TaskActorOperator, now.Add(3*time.Second))
+	retry, err := CloneRetryTask(
+		failed,
+		ids.NewAt(ids.KindTask, now, 99),
+		testtaskjournal.TaskActorOperator,
+		now.Add(3*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +79,7 @@ func TestTaskComponentAuthoritySurvivesStorageAndRetry(t *testing.T) {
 	for _, ids := range [][]string{{"missing"}, {task.Steps[0].ID, task.Steps[0].ID}} {
 		changed := cloneTaskRecord(task)
 		changed.ComponentActionStepIDs = ids
-		if _, err := encodeTaskRecord(changed); err == nil {
+		if _, err := EncodeTaskRecord(changed); err == nil {
 			t.Fatalf("accepted invalid effect authority: %v", ids)
 		}
 	}

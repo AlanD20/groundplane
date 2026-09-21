@@ -8,6 +8,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,19 +22,19 @@ func TestHierarchyEnvironmentIdempotentRenameMovesOnlyScopedName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 601), Slug: "acme", Name: "Acme"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 601), Slug: "acme", Name: "Acme"}
 	if _, err := repository.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	project := ProjectRecord{
+	project := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 602), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 	}
 	if _, err := repository.CreateProject(ctx, project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
 	createdAt := time.Date(2026, 8, 22, 14, 0, 0, 0, time.UTC)
-	record, err := NewProvisioningEnvironment(
+	record, err := testhierarchy.NewProvisioningEnvironment(
 		environmentpath.DefaultVolumeRoot,
 		project,
 		hierarchyTestID(ids.KindEnvironment, 603),
@@ -88,7 +92,7 @@ func TestHierarchyEnvironmentRenameReturnsNameConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProject() error = %v", err)
 	}
-	duplicate, err := NewProvisioningEnvironment(
+	duplicate, err := testhierarchy.NewProvisioningEnvironment(
 		environmentpath.DefaultVolumeRoot,
 		project.Record,
 		hierarchyTestID(ids.KindEnvironment, 615),
@@ -128,7 +132,7 @@ func TestHierarchyEnvironmentMutationRejectsProvisioningChanges(t *testing.T) {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
 	createdAt := time.Date(2026, 8, 22, 15, 0, 0, 0, time.UTC)
-	record := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
+	record := testhierarchy.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID:        hierarchyTestID(ids.KindEnvironment, 605),
 		ProjectID: hierarchyTestID(ids.KindProject, 606),
 		Name:      "production",
@@ -139,15 +143,15 @@ func TestHierarchyEnvironmentMutationRejectsProvisioningChanges(t *testing.T) {
 			ids.KindEnvironment,
 			605,
 		),
-		ProvisioningState: EnvironmentProvisioningProvisioning,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningProvisioning,
 		CreateTaskID:      hierarchyTestID(ids.KindTask, 607),
 		CreatedAt:         createdAt,
 	}
 	replacement := record
-	replacement.ProvisioningState = EnvironmentProvisioningFailed
+	replacement.ProvisioningState = testhierarchy.EnvironmentProvisioningFailed
 	_, err = repository.MutateEnvironmentIdempotent(
 		ctx,
-		Versioned[EnvironmentRecord]{Record: record, Revision: 1, ReadRevision: 1},
+		testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{Record: record, Revision: 1, ReadRevision: 1},
 		replacement,
 		environmentMutationTestMarker(record.ID, "environment-rename-key-0002"),
 	)
@@ -161,7 +165,7 @@ func TestHierarchyEnvironmentMutationRejectsProvisioningChanges(t *testing.T) {
 func TestHierarchyEnvironmentMutationRejectsNetworkPoolChanges(t *testing.T) {
 	t.Parallel()
 	createdAt := time.Date(2026, 8, 22, 15, 30, 0, 0, time.UTC)
-	record := EnvironmentRecord{
+	record := testhierarchy.EnvironmentRecord{
 		ID:          hierarchyTestID(ids.KindEnvironment, 612),
 		ProjectID:   hierarchyTestID(ids.KindProject, 613),
 		Name:        "production",
@@ -170,7 +174,7 @@ func TestHierarchyEnvironmentMutationRejectsNetworkPoolChanges(t *testing.T) {
 			ids.KindProject,
 			613,
 		) + "/" + hierarchyTestID(ids.KindEnvironment, 612),
-		ProvisioningState: EnvironmentProvisioningReady,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      hierarchyTestID(ids.KindTask, 614),
 		CreatedAt:         createdAt,
 	}
@@ -182,7 +186,7 @@ func TestHierarchyEnvironmentMutationRejectsNetworkPoolChanges(t *testing.T) {
 	}
 	_, err = repository.MutateEnvironmentIdempotent(
 		context.Background(),
-		Versioned[EnvironmentRecord]{Record: record, Revision: 1, ReadRevision: 1},
+		testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{Record: record, Revision: 1, ReadRevision: 1},
 		replacement,
 		environmentMutationTestMarker(record.ID, "environment-rename-key-0005"),
 	)
@@ -197,9 +201,9 @@ func TestHierarchyEnvironmentRenameRejectsDeletingTenant(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	repository, store, tenant, current := environmentMutationTestHierarchy(t, newMemoryHierarchyStore())
-	tombstoneKey := deletionTombstoneKey("tenant", tenant.ID)
-	result, err := store.Transact(ctx, []Condition{{Key: tombstoneKey}}, []Mutation{{
-		Type: MutationPut, Key: tombstoneKey, Value: []byte(`{"phase":"requested"}`),
+	tombstoneKey := testdeletions.TombstoneKey("tenant", tenant.ID)
+	result, err := store.Transact(ctx, []testkeyvalue.Condition{{Key: tombstoneKey}}, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: tombstoneKey, Value: []byte(`{"phase":"requested"}`),
 	}})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("create Tenant deletion tombstone = %#v, %v", result, err)
@@ -230,7 +234,7 @@ func TestHierarchyEnvironmentRenameTenantDeletionRaceRetriesAndReplays(t *testin
 	base := newMemoryHierarchyStore()
 	racing := &deletionRaceHierarchyStore{memoryHierarchyStore: base}
 	repository, _, tenant, current := environmentMutationTestHierarchy(t, racing)
-	tombstoneKey := deletionTombstoneKey("tenant", tenant.ID)
+	tombstoneKey := testdeletions.TombstoneKey("tenant", tenant.ID)
 	racing.tombstoneKey = tombstoneKey
 	replacement := current.Record
 	replacement.Name = "live"
@@ -259,7 +263,11 @@ func TestHierarchyEnvironmentRenameTenantDeletionRaceRetriesAndReplays(t *testin
 		t.Fatalf("ResolveEnvironment(replacement after race) error = %v", err)
 	}
 
-	transaction, err := base.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: tombstoneKey}})
+	transaction, err := base.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: tombstoneKey}},
+	)
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("remove Tenant deletion tombstone = %#v, %v", transaction, err)
 	}
@@ -276,7 +284,7 @@ func TestHierarchyEnvironmentRenameTenantDeletionRaceRetriesAndReplays(t *testin
 func environmentMutationTestHierarchy(
 	t *testing.T,
 	store hierarchyStore,
-) (*HierarchyRepository, *memoryHierarchyStore, TenantRecord, Versioned[EnvironmentRecord]) {
+) (*HierarchyRepository, *memoryHierarchyStore, testhierarchy.TenantRecord, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]) {
 	t.Helper()
 	base, ok := store.(*memoryHierarchyStore)
 	if !ok {
@@ -288,18 +296,18 @@ func environmentMutationTestHierarchy(
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 608), Slug: "acme", Name: "Acme"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 608), Slug: "acme", Name: "Acme"}
 	if _, err := repository.CreateTenant(context.Background(), tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	project := ProjectRecord{
+	project := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 609), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 	}
 	if _, err := repository.CreateProject(context.Background(), project); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	record, err := NewProvisioningEnvironment(
+	record, err := testhierarchy.NewProvisioningEnvironment(
 		environmentpath.DefaultVolumeRoot,
 		project,
 		hierarchyTestID(ids.KindEnvironment, 610),
@@ -321,10 +329,10 @@ func environmentMutationTestHierarchy(
 	return repository, base, tenant, current
 }
 
-func environmentMutationTestMarker(environmentID string, key string) IdempotencyMarker {
+func environmentMutationTestMarker(environmentID string, key string) testidempotency.IdempotencyMarker {
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment, ScopeID: environmentID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: http.MethodPost, Route: "/environments/{id}/rename", Key: key,
 	}
 	return marker

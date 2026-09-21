@@ -2,6 +2,9 @@ package etcd
 
 import (
 	"context"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testenvironmentcoordination "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"testing"
 )
 
@@ -19,17 +22,17 @@ func TestManualBackupRunPublicationFencesConcurrentPolicyTransition(t *testing.T
 	}
 	defer plan.clear()
 
-	policy := mustOptionalKey(t, store, backupPolicyKey(run.EnvironmentID))
-	coordination := mustOptionalKey(t, store, environmentCoordinationKey(run.EnvironmentID))
+	policy := mustOptionalKey(t, store, testbackuppolicy.BackupPolicyKey(run.EnvironmentID))
+	coordination := mustOptionalKey(t, store, testenvironmentcoordination.Key(run.EnvironmentID))
 	if policy == nil || coordination == nil {
 		t.Fatal("manual Backup fixture has no policy coordination")
 	}
-	transition, err := store.Transact(context.Background(), []Condition{
+	transition, err := store.Transact(context.Background(), []testkeyvalue.Condition{
 		{Key: policy.Key, ModRevision: policy.ModRevision},
 		{Key: coordination.Key, ModRevision: coordination.ModRevision},
-	}, []Mutation{
-		{Type: MutationPut, Key: policy.Key, Value: append([]byte(nil), policy.Value...)},
-		{Type: MutationPut, Key: coordination.Key, Value: append([]byte(nil), coordination.Value...)},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: policy.Key, Value: append([]byte(nil), policy.Value...)},
+		{Type: testkeyvalue.MutationPut, Key: coordination.Key, Value: append([]byte(nil), coordination.Value...)},
 	})
 	if err != nil || !transition.Succeeded {
 		t.Fatalf("replace policy while manual Backup is prepared = %#v, %v", transition, err)
@@ -40,7 +43,7 @@ func TestManualBackupRunPublicationFencesConcurrentPolicyTransition(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}

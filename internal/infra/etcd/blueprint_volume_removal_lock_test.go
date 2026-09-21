@@ -6,6 +6,12 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -39,7 +45,7 @@ func TestBlueprintPublicationExcludesVolumeRemovalLock(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut,
+				if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut,
 					Key: removalrecord.EnvironmentLockKey(environment.Record.ID), Value: value}}); err != nil {
 					t.Fatal(err)
 				}
@@ -54,7 +60,7 @@ func TestBlueprintPublicationExcludesVolumeRemovalLock(t *testing.T) {
 				environment,
 				0,
 				claim,
-				EnvironmentDesiredRevisionIdentity{
+				testblueprints.EnvironmentDesiredRevisionIdentity{
 					EnvironmentID: environment.Record.ID,
 					RevisionID:    task.ID,
 				},
@@ -62,9 +68,9 @@ func TestBlueprintPublicationExcludesVolumeRemovalLock(t *testing.T) {
 				zones,
 				services,
 				routes,
-				ReleaseGroupBlueprintPreparedMutation{},
-				ComponentTaskPreparation{},
-				BlueprintAttachTaskPreparation{},
+				testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
+				testcomponentplanning.ComponentTaskPreparation{},
+				testblueprintplanning.BlueprintAttachTaskPreparation{},
 				task,
 				marker,
 			)
@@ -83,8 +89,7 @@ func TestBlueprintPublicationExcludesVolumeRemovalLock(t *testing.T) {
 			}
 			// Private source staging may advance storage revision; no public
 			// authority may appear, and the original removal lock must survive.
-			for _, key := range []string{taskKey(task.ID), taskQueueKey(task.Executor, task.ID),
-				environmentBlueprintHeadKey(environment.Record.ID), runtimeConfigurationHeadKey(environment.Record.ID)} {
+			for _, key := range []string{testtaskjournal.TaskStorageKey(task.ID), testtaskjournal.TaskQueueKey(task.Executor, task.ID), testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), runtimeConfigurationHeadKey(environment.Record.ID)} {
 				if store.valueAt(key, store.revision) != nil {
 					t.Fatalf("rejected Blueprint published %q", key)
 				}

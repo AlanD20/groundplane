@@ -7,22 +7,31 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testhostresolution "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestPlatformComponentTaskClassifierRejectsActiveFence(t *testing.T) {
 	t.Parallel()
-	records, err := DefaultPlatformComponents(false)
+	records, err := testplatformcomponents.DefaultPlatformComponents(false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	componentID := records[0].Desired.ID
-	current := Versioned[ComponentRecord]{Record: records[0], Revision: 7}
-	indexes := &GetManyResult{Values: []*KeyValue{
+	current := testkeyvalue.Versioned[testcomponents.Record]{Record: records[0], Revision: 7}
+	indexes := &testkeyvalue.GetManyResult{Values: []*testkeyvalue.KeyValue{
 		{Value: []byte(componentID), ModRevision: 8},
 		{Value: []byte(componentID), ModRevision: 9},
 	}}
-	values := []*KeyValue{
+	values := []*testkeyvalue.KeyValue{
 		{ModRevision: 7},
 		{Value: []byte(componentID), ModRevision: 8},
 		{Value: []byte(componentID), ModRevision: 9},
@@ -44,12 +53,12 @@ func TestPlatformDNSResolverTaskAttemptIncludesOperatorMutation(t *testing.T) {
 		"cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		time.Date(2026, time.August, 30, 1, 0, 0, 0, time.UTC),
 	)
-	task.Actor = TaskActorOperator
+	task.Actor = testtaskjournal.TaskActorOperator
 	delete(task.Params, TaskAutomaticReconcileParam)
 	if !isPlatformDNSResolverTaskAttempt(task) {
 		t.Fatal("operator Component mutation is not a resolver Task attempt")
 	}
-	task.Actor = TaskActorSystem
+	task.Actor = testtaskjournal.TaskActorSystem
 	if isPlatformDNSResolverTaskAttempt(task) {
 		t.Fatal("unmarked system Task was accepted as resolver reconciliation")
 	}
@@ -66,13 +75,13 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	records, err := DefaultPlatformComponents(false)
+	records, err := testplatformcomponents.DefaultPlatformComponents(false)
 	if err != nil {
 		t.Fatalf("DefaultPlatformComponents() error = %v", err)
 	}
 	now := time.Date(2026, time.August, 30, 2, 0, 0, 0, time.UTC)
 	serviceID := ids.NewAt(ids.KindService, now, 1)
-	records[0], err = SetComponentRuntime(records[0], []string{serviceID}, "10.200.0.2", true)
+	records[0], err = testcomponents.SetRuntime(records[0], []string{serviceID}, "10.200.0.2", true)
 	if err != nil {
 		t.Fatalf("SetComponentRuntime() error = %v", err)
 	}
@@ -80,18 +89,18 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil {
 		t.Fatalf("CreatePlatformComponent() error = %v", err)
 	}
-	projection, err := NewHostResolutionProjectionRecord(current.ReadRevision, nil)
+	projection, err := testhostresolution.NewHostResolutionProjectionRecord(current.ReadRevision, nil)
 	if err != nil {
 		t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 	}
-	projectionValue, err := encodeHostResolutionProjectionRecord(projection)
+	projectionValue, err := testhostresolution.EncodeHostResolutionProjectionRecord(projection)
 	if err != nil {
 		t.Fatalf("encodeHostResolutionProjectionRecord() error = %v", err)
 	}
 	if result, err := store.Transact(
 		ctx,
 		nil,
-		[]Mutation{{Type: MutationPut, Key: hostResolutionProjectionKey, Value: projectionValue}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: testhostresolution.StorageKey, Value: projectionValue}},
 	); err != nil ||
 		!result.Succeeded {
 		t.Fatalf("seed projection transaction = %#v, %v", result, err)
@@ -102,9 +111,9 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		t.Fatalf("PlatformComponentDesiredDigest() error = %v", err)
 	}
 	preparedTasks := make(map[string]TaskRecord)
-	preparedInputs := make(map[string]PlatformComponentTaskRenderInput)
-	tasks.platformResolverTaskPreparer = func(_ context.Context, component Versioned[ComponentRecord], input HostResolutionProjectionRecord, task TaskRecord, observation *ComponentObservationRecord) (PlatformComponentTaskRenderInput, error) {
-		prepared := PlatformComponentTaskRenderInput{
+	preparedInputs := make(map[string]testplatformcomponents.PlatformComponentTaskRenderInput)
+	tasks.platformResolverTaskPreparer = func(_ context.Context, component testkeyvalue.Versioned[testcomponents.Record], input testhostresolution.HostResolutionProjectionRecord, task TaskRecord, observation *testplatformcomponents.ComponentObservationRecord) (testplatformcomponents.PlatformComponentTaskRenderInput, error) {
+		prepared := testplatformcomponents.PlatformComponentTaskRenderInput{
 			PlanID:                      task.PlanID,
 			TaskID:                      task.ID,
 			ComponentID:                 component.Record.Desired.ID,
@@ -157,11 +166,26 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 			}
 		}
 		preparedTasks[task.ID] = cloneTaskRecord(task)
-		preparedInputs[task.ID] = clonePlatformComponentTaskRenderInput(prepared)
+		captured := prepared
+		captured.Config = *core.CloneComponentConfig(core.ComponentConfig{CoreDNS: &prepared.Config}).CoreDNS
+		captured.Hosts = make([]testplatformcomponents.PlatformDNSHost, len(prepared.Hosts))
+		for index, host := range prepared.Hosts {
+			captured.Hosts[index] = testplatformcomponents.PlatformDNSHost{
+				Address:   host.Address,
+				Hostnames: append([]string(nil), host.Hostnames...),
+			}
+		}
+		if prepared.ComposeArtifact != nil {
+			captured.ComposeArtifact = proto.Clone(prepared.ComposeArtifact).(*agentpb.ComposeArtifact)
+		}
+		if prepared.RollbackComposeArtifact != nil {
+			captured.RollbackComposeArtifact = proto.Clone(prepared.RollbackComposeArtifact).(*agentpb.ComposeArtifact)
+		}
+		preparedInputs[task.ID] = captured
 		return prepared, nil
 	}
 	operatorTask := newPlatformDNSResolverTask(current.Record.Desired.ID, now.Add(-time.Second))
-	operatorTask.Actor = TaskActorOperator
+	operatorTask.Actor = testtaskjournal.TaskActorOperator
 	operatorTask.IdempotencyKey = "platform-component-abort-0001"
 	delete(operatorTask.Params, TaskAutomaticReconcileParam)
 	operatorInput, err := tasks.platformResolverTaskPreparer(
@@ -171,12 +195,12 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		t.Fatalf("prepare operator resolver Task = %v", err)
 	}
 	operatorTask.PlanHash = operatorInput.ExecutionPlanSHA256
-	operatorDesired, err := ProjectComponentRecord(current.Record)
+	operatorDesired, err := testcomponents.ProjectRecord(current.Record)
 	if err != nil {
 		t.Fatalf("ProjectComponentRecord(operator resolver) = %v", err)
 	}
 	marker := pendingTaskMarker(operatorTask)
-	marker.Locator.ScopeKind = IdempotencyScopePlatform
+	marker.Locator.ScopeKind = testidempotency.IdempotencyScopePlatform
 	marker.Locator.ScopeID = "-"
 	marker.Locator.Route = "/components/{id}/update"
 	published, err := tasks.ReplacePlatformComponentDesiredWithTask(
@@ -190,7 +214,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		t.Fatalf("publish operator resolver Task outcome/conflict/error = %v/%v/%v", outcome, conflict, classifyErr)
 	}
 	aborted, err := tasks.AbortPendingTask(ctx, operatorTask.ID, now)
-	if err != nil || aborted.Record.Status != TaskStatusAborted {
+	if err != nil || aborted.Record.Status != testtaskjournal.TaskStatusAborted {
 		t.Fatalf("AbortPendingTask(operator resolver) = %#v, %v", aborted, err)
 	}
 	if activeRead, readErr := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID)); readErr != nil ||
@@ -225,21 +249,21 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || activeEntry.Entry == nil {
 		t.Fatalf("active resolver Task = %#v, %v", activeEntry, err)
 	}
-	active := KeyValue{
+	active := testkeyvalue.KeyValue{
 		Key:         activeEntry.Entry.Key,
 		Value:       append([]byte(nil), activeEntry.Entry.Value...),
 		ModRevision: activeEntry.Entry.ModRevision,
 	}
-	firstRenderRead, err := store.Get(ctx, platformComponentTaskRenderInputKey(first.PlanID))
+	firstRenderRead, err := store.Get(ctx, testplatformcomponents.PlatformComponentTaskRenderInputKey(first.PlanID))
 	if err != nil || firstRenderRead.Entry == nil {
 		t.Fatalf("predecessor resolver render input = %#v, %v", firstRenderRead, err)
 	}
-	firstInput, err := decodePlatformComponentTaskRenderInput(firstRenderRead.Entry.Value)
+	firstInput, err := testplatformcomponents.DecodePlatformComponentTaskRenderInput(firstRenderRead.Entry.Value)
 	if err != nil {
 		t.Fatalf("decode predecessor resolver render input: %v", err)
 	}
 	firstTerminal := cloneTaskRecord(first)
-	firstTerminal.Status = TaskStatusCompleted
+	firstTerminal.Status = testtaskjournal.TaskStatusCompleted
 	firstResult := platformDNSProof(firstInput, uint64(first.RenderGeneration), now.Add(time.Second))
 	firstTerminal.Result = &firstResult
 	second := newPlatformDNSResolverTask(current.Record.Desired.ID, now.Add(time.Second))
@@ -269,23 +293,24 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || updated.Entry == nil || string(updated.Entry.Value) != second.ID {
 		t.Fatalf("active resolver successor = %#v, %v", updated, err)
 	}
-	if firstRead, err := store.Get(ctx, taskKey(first.ID)); err != nil || firstRead.Entry == nil {
+	if firstRead, err := store.Get(ctx, testtaskjournal.TaskStorageKey(first.ID)); err != nil ||
+		firstRead.Entry == nil {
 		t.Fatalf("first resolver Task disappeared = %#v, %v", firstRead, err)
 	}
-	secondRead, err := store.Get(ctx, taskKey(second.ID))
+	secondRead, err := store.Get(ctx, testtaskjournal.TaskStorageKey(second.ID))
 	if err != nil || secondRead.Entry == nil {
 		t.Fatalf("successor resolver Task missing = %#v, %v", secondRead, err)
 	}
-	secondRecord, err := decodeTaskRecord(secondRead.Entry.Value)
+	secondRecord, err := DecodeTaskRecord(secondRead.Entry.Value)
 	if err != nil || len(secondRecord.Steps) != 2 || secondRecord.RetryOf != "" ||
 		secondRecord.OperationID == first.OperationID || secondRecord.PlanID == first.PlanID {
 		t.Fatalf("automatic resolver Task steps = %#v, %v", secondRecord.Steps, err)
 	}
-	renderRead, err := store.Get(ctx, platformComponentTaskRenderInputKey(second.PlanID))
+	renderRead, err := store.Get(ctx, testplatformcomponents.PlatformComponentTaskRenderInputKey(second.PlanID))
 	if err != nil || renderRead.Entry == nil {
 		t.Fatalf("successor resolver render input = %#v, %v", renderRead, err)
 	}
-	secondInput, err := decodePlatformComponentTaskRenderInput(renderRead.Entry.Value)
+	secondInput, err := testplatformcomponents.DecodePlatformComponentTaskRenderInput(renderRead.Entry.Value)
 	if err != nil {
 		t.Fatalf("decode successor resolver render input: %v", err)
 	}
@@ -316,7 +341,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	observedAt := now.Add(2 * time.Second)
 	proofResult := platformDNSProof(secondInput, uint64(secondRecord.RenderGeneration), observedAt)
 	agentID := ids.NewAt(ids.KindAgent, now, 8)
-	predecessorObservation := ComponentObservationRecord{
+	predecessorObservation := testplatformcomponents.ComponentObservationRecord{
 		ComponentID: secondInput.ComponentID, ServiceID: secondInput.GeneratedServiceID,
 		PlanID: secondInput.OwnershipPlanID, ComposeArtifactID: secondInput.ComposeArtifactID,
 		Enabled: true, Healthy: true, DesiredGeneration: uint64(current.Revision),
@@ -331,72 +356,72 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 			secondInput.ImageConfigDigest,
 		),
 	}
-	observationValue, err := encodeComponentObservation(predecessorObservation)
+	observationValue, err := testplatformcomponents.EncodeComponentObservation(predecessorObservation)
 	if err != nil {
 		t.Fatalf("encode predecessor observation: %v", err)
 	}
-	seedObservation, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: componentObservationKey(secondInput.ComponentID), Value: observationValue,
+	seedObservation, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testplatformcomponents.ComponentObservationKey(secondInput.ComponentID), Value: observationValue,
 	}})
 	if err != nil || !seedObservation.Succeeded {
 		t.Fatalf("seed predecessor observation = %#v, %v", seedObservation, err)
 	}
 	finishedAt := observedAt.Add(time.Second)
 	secondRecord.FinishedAt = &finishedAt
-	secondRecord.TerminalAssignment = &TaskTerminalAssignmentRecord{
+	secondRecord.TerminalAssignment = &testtaskjournal.TaskTerminalAssignmentRecord{
 		AssignmentID: ids.NewAt(ids.KindAssignment, now, 10), AgentID: agentID, AgentGeneration: 1,
 	}
 	terminalResult := platformDNSProof(secondInput, uint64(secondRecord.RenderGeneration), finishedAt)
 	ackChange, err := tasks.preparePlatformComponentTaskAcknowledgement(
-		ctx, secondRecord, TaskStatusCompleted, &terminalResult, seedObservation.Revision,
+		ctx, secondRecord, testtaskjournal.TaskStatusCompleted, &terminalResult, seedObservation.Revision,
 	)
 	if err != nil || !ackChange.applies {
 		t.Fatalf("successor acknowledgement after predecessor replacement = %#v, %v", ackChange, err)
 	}
 	clearPlatformComponentTaskChange(ackChange)
 
-	wrongFence, err := store.Transact(ctx, []Condition{{
+	wrongFence, err := store.Transact(ctx, []testkeyvalue.Condition{{
 		Key: platformComponentTaskActiveKey(current.Record.Desired.ID), ModRevision: updated.Entry.ModRevision,
-	}}, []Mutation{{
-		Type: MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(first.ID),
+	}}, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(first.ID),
 	}})
 	if err != nil || !wrongFence.Succeeded {
 		t.Fatalf("replace active fence = %#v, %v", wrongFence, err)
 	}
 	if _, err := tasks.preparePlatformComponentTaskAcknowledgement(
-		ctx, secondRecord, TaskStatusCompleted, &terminalResult, wrongFence.Revision,
+		ctx, secondRecord, testtaskjournal.TaskStatusCompleted, &terminalResult, wrongFence.Revision,
 	); err == nil {
 		t.Fatal("automatic resolver acknowledgement accepted mismatched active-fence ownership")
 	}
-	restoredFence, err := store.Transact(ctx, []Condition{{
+	restoredFence, err := store.Transact(ctx, []testkeyvalue.Condition{{
 		Key: platformComponentTaskActiveKey(current.Record.Desired.ID), ModRevision: wrongFence.Revision,
-	}}, []Mutation{{
-		Type: MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(second.ID),
+	}}, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(second.ID),
 	}})
 	if err != nil || !restoredFence.Succeeded {
 		t.Fatalf("restore active fence = %#v, %v", restoredFence, err)
 	}
 	updated.Entry.ModRevision = restoredFence.Revision
-	if _, err := store.Transact(ctx, []Condition{{
+	if _, err := store.Transact(ctx, []testkeyvalue.Condition{{
 		Key: platformComponentTaskActiveKey(current.Record.Desired.ID), ModRevision: updated.Entry.ModRevision,
-	}}, []Mutation{{Type: MutationDelete, Key: platformComponentTaskActiveKey(current.Record.Desired.ID)}}); err != nil {
+	}}, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: platformComponentTaskActiveKey(current.Record.Desired.ID)}}); err != nil {
 		t.Fatalf("clear terminal resolver fence: %v", err)
 	}
-	sourceRead, err := store.Get(ctx, taskKey(second.ID))
+	sourceRead, err := store.Get(ctx, testtaskjournal.TaskStorageKey(second.ID))
 	if err != nil || sourceRead.Entry == nil {
 		t.Fatalf("retry source resolver Task = %#v, %v", sourceRead, err)
 	}
-	source, err := decodeTaskRecord(sourceRead.Entry.Value)
+	source, err := DecodeTaskRecord(sourceRead.Entry.Value)
 	if err != nil {
 		t.Fatalf("decode retry source resolver Task: %v", err)
 	}
-	source.Actor = TaskActorOperator
+	source.Actor = testtaskjournal.TaskActorOperator
 	delete(source.Params, TaskAutomaticReconcileParam)
 	retry := cloneTaskRecord(source)
 	retry.ID = ids.NewAt(ids.KindTask, now, 4)
 	retry.RetryOf = source.ID
-	retry.Actor = TaskActorOperator
-	retryChange, err := tasks.preparePlatformDNSResolverTaskRetry(ctx, Versioned[TaskRecord]{
+	retry.Actor = testtaskjournal.TaskActorOperator
+	retryChange, err := tasks.preparePlatformDNSResolverTaskRetry(ctx, testkeyvalue.Versioned[TaskRecord]{
 		Record: source, Revision: sourceRead.Entry.ModRevision, ReadRevision: sourceRead.ReadRevision,
 	}, retry)
 	if err != nil || !retryChange.applies {

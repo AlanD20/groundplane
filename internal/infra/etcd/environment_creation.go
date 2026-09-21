@@ -70,8 +70,10 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 			"Environment creation Task does not own its provisioning record",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject ||
 		marker.Locator.ScopeID != project.Record.ID ||
 		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {

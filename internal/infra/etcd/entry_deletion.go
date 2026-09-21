@@ -67,8 +67,10 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		ID:   entry.Record.Entry.ID,
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
+		marker.TaskID != task.ID ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != environment.Record.ID ||
+		marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget ||
 		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {

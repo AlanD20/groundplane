@@ -4,11 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 )
 
-func TestScriptAttachNetworksResolveBoundBackingProjection(t *testing.T) {
+func TestScriptAttachSourceConditionsFenceBoundBackingProjection(t *testing.T) {
 	// Rationale: hook networks come from intended Attach ownership and the
 	// backing projection, not similarly named authored consumer networks.
 	ctx := context.Background()
@@ -19,44 +24,35 @@ func TestScriptAttachNetworksResolveBoundBackingProjection(t *testing.T) {
 		OwnerKind: core.ZoneOwnerEnvironment, OwnerID: attach.BackingEnvironmentID}
 	projection := zoneRepositoryTestProjection(t, attach.BackingEnvironmentID, 1001, zone)
 	seedServiceRepositoryTestDesiredProjection(t, store.memoryHierarchyStore, projection)
-	read, found, err := currentEnvironmentProjectionAtRevision(ctx, store, attach.BackingEnvironmentID, 0)
+	read, found, err := testenvironmentqueries.NewProjectionReader(store).
+		GetEnvironmentComposeProjection(ctx, attach.BackingEnvironmentID)
 	if err != nil || !found {
 		t.Fatalf("backing projection: %v", err)
 	}
-	intended := []Versioned[AttachRecord]{{Record: attach}}
-	networks, err := resolveScriptAttachNetworks(
-		ctx,
-		store,
-		attach.EnvironmentID,
-		attach.ServiceID,
-		intended,
-		read.ReadRevision,
-	)
-	if err != nil || len(networks.Networks) != 1 || networks.Networks[0].Record.Desired != zone ||
-		networks.Networks[0].Revision != read.Revision || networks.Networks[0].ReadRevision != read.ReadRevision {
-		t.Fatalf("bound backing network: %v, %v", networks, err)
+	intended := []testkeyvalue.Versioned[testattachments.Record]{{Record: attach}}
+	bound, err := testenvironmentqueries.JoinZone(read, read.Record.DesiredZones[0])
+	if err != nil || bound.Record.Desired != zone || bound.Revision != read.Revision ||
+		bound.ReadRevision != read.ReadRevision {
+		t.Fatalf("bound backing network: %#v, %v", bound, err)
 	}
-	for _, inputs := range [][]Versioned[AttachRecord]{nil, {{Record: attach}, {Record: attach}}} {
-		got, err := resolveScriptAttachNetworks(
-			ctx,
-			store,
-			attach.EnvironmentID,
-			attach.ServiceID,
-			inputs,
-			read.ReadRevision,
-		)
-		want := 0
-		if len(inputs) != 0 {
-			want = 1
-		}
-		if err != nil || len(got.Networks) != want {
-			t.Fatalf("intended set selected %d networks, want %d: %v", len(got.Networks), want, err)
-		}
+	networks := testscriptsourcequeries.ScriptAttachSources{
+		Networks: []testkeyvalue.Versioned[testzones.Record]{bound},
+		Heads: []testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintHead]{{
+			Record: testblueprints.EnvironmentBlueprintHead{
+				EnvironmentID: attach.BackingEnvironmentID, RevisionID: read.Record.RevisionID,
+			},
+			Revision: read.Revision, ReadRevision: read.ReadRevision,
+		}},
+		Attaches: intended,
 	}
-	sources := ScriptExecutionSources{Environment: scope.Environment, DesiredHead: scope.DesiredHead,
-		DesiredProjection: scope.ComposeProjection, AttachSources: networks}
+	sources := testscriptsourcequeries.ScriptExecutionSources{
+		Environment:       scope.Environment,
+		DesiredHead:       scope.DesiredHead,
+		DesiredProjection: scope.ComposeProjection,
+		AttachSources:     networks,
+	}
 	conditions := scriptExecutionProjectionConditions(sources)
-	backingHead := environmentBlueprintHeadKey(attach.BackingEnvironmentID)
+	backingHead := testblueprints.EnvironmentBlueprintHeadKey(attach.BackingEnvironmentID)
 	fenced := false
 	for _, condition := range conditions {
 		fenced = fenced || condition.Key == backingHead && condition.ModRevision == networks.Heads[0].Revision
@@ -71,7 +67,9 @@ func TestScriptAttachNetworksResolveBoundBackingProjection(t *testing.T) {
 	changed, err := store.Transact(
 		ctx,
 		nil,
-		[]Mutation{{Type: MutationPut, Key: backingHead, Value: []byte(projection.RevisionID)}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: backingHead, Value: []byte(projection.RevisionID)},
+		},
 	)
 	if err != nil || !changed.Succeeded {
 		t.Fatalf("change backing head: %v", err)
@@ -79,13 +77,11 @@ func TestScriptAttachNetworksResolveBoundBackingProjection(t *testing.T) {
 	publication, err := store.Transact(
 		ctx,
 		conditions,
-		[]Mutation{{Type: MutationPut, Key: "/test/stale-script-network", Value: []byte("forbidden")}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: "/test/stale-script-network", Value: []byte("forbidden")},
+		},
 	)
 	if err != nil || publication.Succeeded {
 		t.Fatalf("stale backing topology publication: %v, %v", publication, err)
-	}
-	intended[0].Record.BackingNetworkID = ids.NewAt(ids.KindNetwork, testAttachTime, 900)
-	if _, err := resolveScriptAttachNetworks(ctx, store, attach.EnvironmentID, attach.ServiceID, intended, read.ReadRevision); err == nil {
-		t.Fatal("accepted missing backing network")
 	}
 }

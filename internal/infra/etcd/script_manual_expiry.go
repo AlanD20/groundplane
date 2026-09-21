@@ -39,7 +39,8 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		read.Values[1].Value,
 		"script-execution",
 	)
-	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
+	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+		!taskOwnsScriptExecution(task, execution) ||
 		execution.OperationID != task.OperationID ||
 		execution.PlanHash != task.PlanHash ||
 		execution.EnvironmentID != task.Owner.EnvironmentID {
@@ -140,7 +141,9 @@ func expireManualScriptExecution(
 	now time.Time,
 ) (scriptexecutions.ScriptExecutionRecord, error) {
 	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
-		!execution.ActiveReference || execution.StartAuthorized || execution.AssignmentID != "" ||
+		!execution.ActiveReference ||
+		execution.StartAuthorized ||
+		execution.AssignmentID != "" ||
 		!now.After(execution.UpdatedAt) {
 		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
 			errs.KindStateConflict,
@@ -172,7 +175,9 @@ func expireManualScriptExecution(
 func manualScriptExpiryExecutionMatches(execution scriptexecutions.ScriptExecutionRecord, deadline time.Time) bool {
 	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
 		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualRetryExpiry || execution.ActiveReference ||
-		execution.Outcome == nil || execution.Outcome.Reason != scriptexecutions.ScriptOutcomeExpiryBeforeStart || execution.Cleanup == nil ||
+		execution.Outcome == nil ||
+		execution.Outcome.Reason != scriptexecutions.ScriptOutcomeExpiryBeforeStart ||
+		execution.Cleanup == nil ||
 		!execution.UpdatedAt.Equal(execution.Outcome.ObservedAt) ||
 		execution.UpdatedAt.Before(deadline) {
 		return false

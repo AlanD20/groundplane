@@ -7,6 +7,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func TestBlueprintAttachTaskAdvancesEveryCandidateWithOneLifecycle(t *testing.T) {
@@ -21,7 +24,7 @@ func TestBlueprintAttachTaskAdvancesEveryCandidateWithOneLifecycle(t *testing.T)
 	backingNetworkID := ids.NewAt(ids.KindNetwork, now, 6)
 	ownerID := ids.NewAt(ids.KindAttach, now, 7)
 	dependentID := ids.NewAt(ids.KindAttach, now, 8)
-	owner, err := NewPendingAttachRecord(
+	owner, err := testattachments.NewPendingAttachRecord(
 		ownerID, task.Target, "api-db", backingProjectID, backingEnvironmentID,
 		backingServiceID, backingNetworkID, ids.NewAt(ids.KindService, now, 9),
 		ownerID, nil, nil, task.ID, now,
@@ -29,7 +32,7 @@ func TestBlueprintAttachTaskAdvancesEveryCandidateWithOneLifecycle(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord(owner) error = %v", err)
 	}
-	dependent, err := NewPendingAttachRecord(
+	dependent, err := testattachments.NewPendingAttachRecord(
 		dependentID, task.Target, "worker-db", backingProjectID, backingEnvironmentID,
 		backingServiceID, backingNetworkID, ids.NewAt(ids.KindService, now, 10),
 		ownerID, nil, nil, task.ID, now,
@@ -37,24 +40,29 @@ func TestBlueprintAttachTaskAdvancesEveryCandidateWithOneLifecycle(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewPendingAttachRecord(dependent) error = %v", err)
 	}
-	intent := BlueprintAttachTaskIntent{
-		TaskID: task.ID, EnvironmentID: task.Target, Status: TaskStatusPending,
-		OwnsEnvironmentFence: true, Candidates: []AttachRecord{owner, dependent}, CreatedAt: now,
+	intent := testattachments.BlueprintAttachTaskIntent{
+		TaskID: task.ID, EnvironmentID: task.Target, Status: testtaskjournal.TaskStatusPending,
+		OwnsEnvironmentFence: true, Candidates: []testattachments.Record{owner, dependent}, CreatedAt: now,
 	}
-	intentValue, err := encodeBlueprintAttachTaskIntent(intent)
+	intentValue, err := testattachments.EncodeBlueprintAttachTaskIntent(intent)
 	if err != nil {
 		t.Fatalf("encodeBlueprintAttachTaskIntent() error = %v", err)
 	}
 	store := newMemoryTaskStore()
-	seedTaskRepositoryValue(t, store, blueprintAttachTaskIntentKey(task.ID), intentValue)
-	for _, record := range []AttachRecord{owner, dependent} {
-		value, encodeErr := encodeAttachRecord(record)
+	seedTaskRepositoryValue(t, store, testattachments.BlueprintAttachTaskIntentKey(task.ID), intentValue)
+	for _, record := range []testattachments.Record{owner, dependent} {
+		value, encodeErr := testattachments.EncodeAttachRecord(record)
 		if encodeErr != nil {
 			t.Fatalf("encodeAttachRecord(%s) error = %v", record.ID, encodeErr)
 		}
-		seedTaskRepositoryValue(t, store, attachKey(record.ID), value)
+		seedTaskRepositoryValue(t, store, testattachments.AttachKey(record.ID), value)
 	}
-	seedTaskRepositoryValue(t, store, componentTaskActiveEnvironmentKey(task.Target), []byte(task.ID))
+	seedTaskRepositoryValue(
+		t,
+		store,
+		testenvironmentchanges.ComponentTaskActiveEnvironmentKey(task.Target),
+		[]byte(task.ID),
+	)
 	repository, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
@@ -68,23 +76,23 @@ func TestBlueprintAttachTaskAdvancesEveryCandidateWithOneLifecycle(t *testing.T)
 
 	terminalAt := now.Add(time.Minute)
 	terminal, err := repository.prepareBlueprintAttachTaskAcknowledgement(
-		ctx, task, TaskStatusCompleted, terminalAt, store.revision,
+		ctx, task, testtaskjournal.TaskStatusCompleted, terminalAt, store.revision,
 	)
 	if err != nil {
 		t.Fatalf("prepareBlueprintAttachTaskAcknowledgement() error = %v", err)
 	}
 	applyBlueprintAttachTaskChange(t, store, terminal)
 	assertBlueprintAttachStatuses(t, store, []string{ownerID, dependentID}, core.AttachReady)
-	storedIntent, err := store.Get(ctx, blueprintAttachTaskIntentKey(task.ID))
+	storedIntent, err := store.Get(ctx, testattachments.BlueprintAttachTaskIntentKey(task.ID))
 	if err != nil || storedIntent.Entry == nil {
 		t.Fatalf("Get(intent) = %#v, %v", storedIntent, err)
 	}
-	completed, err := decodeBlueprintAttachTaskIntent(storedIntent.Entry.Value)
-	if err != nil || completed.Status != TaskStatusCompleted || completed.TerminalAt == nil ||
+	completed, err := testattachments.DecodeBlueprintAttachTaskIntent(storedIntent.Entry.Value)
+	if err != nil || completed.Status != testtaskjournal.TaskStatusCompleted || completed.TerminalAt == nil ||
 		!completed.TerminalAt.Equal(terminalAt) {
 		t.Fatalf("terminal intent = %#v, %v", completed, err)
 	}
-	active, err := store.Get(ctx, componentTaskActiveEnvironmentKey(task.Target))
+	active, err := store.Get(ctx, testenvironmentchanges.ComponentTaskActiveEnvironmentKey(task.Target))
 	if err != nil || active.Entry != nil {
 		t.Fatalf("active Environment fence = %#v, %v, want absent", active, err)
 	}
@@ -107,11 +115,11 @@ func assertBlueprintAttachStatuses(
 ) {
 	t.Helper()
 	for _, attachID := range attachIDs {
-		stored, err := store.Get(context.Background(), attachKey(attachID))
+		stored, err := store.Get(context.Background(), testattachments.AttachKey(attachID))
 		if err != nil || stored.Entry == nil {
 			t.Fatalf("Get(Attach %s) = %#v, %v", attachID, stored, err)
 		}
-		record, err := decodeAttachRecord(stored.Entry.Value)
+		record, err := testattachments.DecodeAttachRecord(stored.Entry.Value)
 		if err != nil || record.Status != want {
 			t.Fatalf("Attach %s = %#v, %v, want status %s", attachID, record, err, want)
 		}

@@ -146,7 +146,9 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		ID:   current.Record.Desired.ID,
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != task.ID ||
-		marker.Locator != intent.Claim.Locator || marker.ReplayTarget == nil || *marker.ReplayTarget != wantReplay ||
+		marker.Locator != intent.Claim.Locator ||
+		marker.ReplayTarget == nil ||
+		*marker.ReplayTarget != wantReplay ||
 		!blueprints.SameBlueprintProtectedIntent(marker.Intent, intent.Claim.Intent) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {

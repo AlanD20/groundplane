@@ -7,6 +7,12 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,18 +22,18 @@ func TestReleaseHookRetryRequiresDurableNotStartedState(t *testing.T) {
 	now := time.Date(2026, 9, 2, 18, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name string
-		seed func(t *testing.T, record ScriptExecutionRecord) *ScriptExecutionRecord
+		seed func(t *testing.T, record testscriptexecutions.ScriptExecutionRecord) *testscriptexecutions.ScriptExecutionRecord
 	}{
 		{
 			name: "start authorized",
-			seed: func(t *testing.T, record ScriptExecutionRecord) *ScriptExecutionRecord {
+			seed: func(t *testing.T, record testscriptexecutions.ScriptExecutionRecord) *testscriptexecutions.ScriptExecutionRecord {
 				input := scriptCheckpointTestInput(record, now.Add(time.Second))
-				input.State = ScriptExecutionStartAuthorized
-				input.Evidence = ScriptCheckpointEvidence{
-					Kind:            ScriptCheckpointEvidenceStartAuthorized,
-					StartAuthorized: &ScriptStartAuthorizedEvidence{},
+				input.State = testscriptexecutions.ScriptExecutionStartAuthorized
+				input.Evidence = testscriptexecutions.ScriptCheckpointEvidence{
+					Kind:            testscriptexecutions.ScriptCheckpointEvidenceStartAuthorized,
+					StartAuthorized: &testscriptexecutions.ScriptStartAuthorizedEvidence{},
 				}
-				started, err := advanceScriptExecutionRecord(record, input)
+				started, err := testscriptexecutions.AdvanceScriptExecutionRecord(record, input)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -36,11 +42,13 @@ func TestReleaseHookRetryRequiresDurableNotStartedState(t *testing.T) {
 		},
 		{
 			name: "unknown execution",
-			seed: func(*testing.T, ScriptExecutionRecord) *ScriptExecutionRecord { return nil },
+			seed: func(*testing.T, testscriptexecutions.ScriptExecutionRecord) *testscriptexecutions.ScriptExecutionRecord {
+				return nil
+			},
 		},
 		{
 			name: "lineage mismatch",
-			seed: func(_ *testing.T, record ScriptExecutionRecord) *ScriptExecutionRecord {
+			seed: func(_ *testing.T, record testscriptexecutions.ScriptExecutionRecord) *testscriptexecutions.ScriptExecutionRecord {
 				record.CurrentTaskID = ids.NewAt(ids.KindTask, now, 98)
 				return &record
 			},
@@ -63,23 +71,32 @@ func TestReleaseHookRetryRequiresDurableNotStartedState(t *testing.T) {
 				now.Add(2*time.Second),
 			)
 			retry.RetryOf = source.ID
-			retry.Params[TaskReleasePublicationParam] = source.Params[TaskReleasePublicationParam]
-			retry.Params[EnvironmentDesiredRevisionParam] = source.Params[EnvironmentDesiredRevisionParam]
+			retry.Params[testreleaserender.TaskReleasePublicationParam] = source.Params[testreleaserender.TaskReleasePublicationParam]
+			retry.Params[testblueprints.EnvironmentDesiredRevisionParam] = source.Params[testblueprints.EnvironmentDesiredRevisionParam]
 			if seeded := test.seed(t, record); seeded != nil {
-				value, encodeErr := encodeEnvelope("script-execution", *seeded)
+				value, encodeErr := testrecordcodec.Encode("script-execution", *seeded)
 				if encodeErr != nil {
 					t.Fatal(encodeErr)
 				}
 				transaction, seedErr := store.Transact(
 					ctx,
 					nil,
-					[]Mutation{{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: value}},
+					[]testkeyvalue.Mutation{
+						{
+							Type:  testkeyvalue.MutationPut,
+							Key:   testscriptexecutions.ScriptExecutionKey(record.ID),
+							Value: value,
+						},
+					},
 				)
 				if seedErr != nil || !transaction.Succeeded {
 					t.Fatalf("seed execution = %#v, %v", transaction, seedErr)
 				}
 			}
-			revision, readErr := store.GetMany(ctx, GetManyRequest{Keys: []string{scriptExecutionKey(record.ID)}})
+			revision, readErr := store.GetMany(
+				ctx,
+				testkeyvalue.GetManyRequest{Keys: []string{testscriptexecutions.ScriptExecutionKey(record.ID)}},
+			)
 			if readErr != nil {
 				t.Fatal(readErr)
 			}
@@ -101,14 +118,16 @@ func TestReleaseHookRetryTransfersExactNotStartedAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	record := scriptCheckpointTestRecord(now)
-	value, err := encodeEnvelope("script-execution", record)
+	value, err := testrecordcodec.Encode("script-execution", record)
 	if err != nil {
 		t.Fatal(err)
 	}
 	seeded, err := store.Transact(
 		ctx,
 		nil,
-		[]Mutation{{Type: MutationPut, Key: scriptExecutionKey(record.ID), Value: value}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testscriptexecutions.ScriptExecutionKey(record.ID), Value: value},
+		},
 	)
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed execution = %#v, %v", seeded, err)
@@ -116,8 +135,8 @@ func TestReleaseHookRetryTransfersExactNotStartedAuthority(t *testing.T) {
 	source := releaseHookRetryTestTask(record, record.CurrentTaskID, now)
 	retry := releaseHookRetryTestTask(record, ids.NewAt(ids.KindTask, now.Add(time.Second), 21), now.Add(time.Second))
 	retry.RetryOf = source.ID
-	retry.Params[TaskReleasePublicationParam] = source.Params[TaskReleasePublicationParam]
-	retry.Params[EnvironmentDesiredRevisionParam] = source.Params[EnvironmentDesiredRevisionParam]
+	retry.Params[testreleaserender.TaskReleasePublicationParam] = source.Params[testreleaserender.TaskReleasePublicationParam]
+	retry.Params[testblueprints.EnvironmentDesiredRevisionParam] = source.Params[testblueprints.EnvironmentDesiredRevisionParam]
 	change, err := repository.prepareReleaseHookExecutionRetryTransfer(ctx, source, retry, seeded.Revision)
 	if err != nil {
 		t.Fatalf("prepare transfer error = %v", err)
@@ -127,33 +146,46 @@ func TestReleaseHookRetryTransfersExactNotStartedAuthority(t *testing.T) {
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("apply transfer = %#v, %v", transaction, err)
 	}
-	read, err := store.GetMany(ctx, GetManyRequest{Keys: []string{scriptExecutionKey(record.ID)}})
+	read, err := store.GetMany(
+		ctx,
+		testkeyvalue.GetManyRequest{Keys: []string{testscriptexecutions.ScriptExecutionKey(record.ID)}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	transferred, err := decodeEnvelope[ScriptExecutionRecord](read.Values[0].Value, "script-execution")
+	transferred, err := testrecordcodec.Decode[testscriptexecutions.ScriptExecutionRecord](
+		read.Values[0].Value,
+		"script-execution",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if transferred.CurrentTaskID != retry.ID || transferred.State != ScriptExecutionNotStarted ||
+	if transferred.CurrentTaskID != retry.ID || transferred.State != testscriptexecutions.ScriptExecutionNotStarted ||
 		transferred.StartAuthorized || transferred.OperationID != record.OperationID ||
 		transferred.PlanHash != record.PlanHash || transferred.ID != record.ID {
 		t.Fatalf("transferred authority = %#v", transferred)
 	}
 }
 
-func releaseHookRetryTestTask(record ScriptExecutionRecord, taskID string, createdAt time.Time) TaskRecord {
+func releaseHookRetryTestTask(
+	record testscriptexecutions.ScriptExecutionRecord,
+	taskID string,
+	createdAt time.Time,
+) TaskRecord {
 	return TaskRecord{
-		ID: taskID, OperationID: record.OperationID, Executor: TaskExecutorAgent,
+		ID: taskID, OperationID: record.OperationID, Executor: testtaskjournal.TaskExecutorAgent,
 		PlanID: ids.NewAt(ids.KindPlan, record.CreatedAt, 22), PlanHash: record.PlanHash,
-		Type: TaskUpdate, Target: record.EnvironmentID, CreatedAt: createdAt,
-		Owner: TaskOwner{WorkspaceType: TaskWorkspaceTenant, EnvironmentID: record.EnvironmentID},
-		Params: map[string]string{
-			ReleaseHookStepExecutionParam(record.StepID): record.ID,
-			TaskReleasePublicationParam:                  ids.NewULID(),
-			TaskMaterializationEnvironmentParam:          record.EnvironmentID,
-			EnvironmentDesiredRevisionParam:              record.CurrentTaskID,
+		Type: testtaskjournal.TaskUpdate, Target: record.EnvironmentID, CreatedAt: createdAt,
+		Owner: testtaskjournal.TaskOwner{
+			WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
+			EnvironmentID: record.EnvironmentID,
 		},
-		Steps: []TaskStepRecord{{Kind: TaskStepOperation, ID: record.StepID}},
+		Params: map[string]string{
+			testreleaserender.ReleaseHookStepExecutionParam(record.StepID): record.ID,
+			testreleaserender.TaskReleasePublicationParam:                  ids.NewULID(),
+			testtaskjournal.TaskMaterializationEnvironmentParam:            record.EnvironmentID,
+			testblueprints.EnvironmentDesiredRevisionParam:                 record.CurrentTaskID,
+		},
+		Steps: []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: record.StepID}},
 	}
 }

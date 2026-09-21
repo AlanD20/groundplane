@@ -8,6 +8,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,13 +25,13 @@ func TestConnectorIdempotentCreateCommitsCredentialsAndReplays(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 23, 16, 0, 0, 0, time.UTC)
 	record := testConnectorRecord(t, environment.Record.ID, now, 50, "idempotent-backups")
-	credentials, err := NewConnectorEncryptedCredentials(record.Connector.ID, []byte("encrypted-value"))
+	credentials, err := testconnectors.NewEncryptedCredentials(record.Connector.ID, []byte("encrypted-value"))
 	if err != nil {
 		t.Fatalf("NewConnectorEncryptedCredentials() error = %v", err)
 	}
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 		ScopeID:   environment.Record.ID,
 		Method:    http.MethodPost,
 		Route:     "/api/v1/connectors",
@@ -85,12 +89,12 @@ func TestConnectorIdempotentCreateFencesPlatformSecretFallback(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 24, 8, 0, 0, 0, time.UTC)
 	secretID := ids.NewAt(ids.KindSecret, now, 70)
-	secret, err := NewPlatformSecretRecord(secretID, "S3_ACCESS_KEY", core.SecretKindEnvVar, "", now)
+	secret, err := testsecrets.NewPlatformRecord(secretID, "S3_ACCESS_KEY", core.SecretKindEnvVar, "", now)
 	if err != nil {
 		t.Fatalf("NewPlatformSecretRecord() error = %v", err)
 	}
 	if _, err := secrets.CreateSecret(
-		context.Background(), PlatformSecretOwner(), secret,
+		context.Background(), testsecrets.PlatformOwner(), secret,
 		testSecretEncryptedValue(secretID, "platform-access-key"),
 	); err != nil {
 		t.Fatalf("CreateSecret() error = %v", err)
@@ -103,7 +107,7 @@ func TestConnectorIdempotentCreateFencesPlatformSecretFallback(t *testing.T) {
 	record.Connector.Credentials[core.ConnectorCredentialAccessKey] = core.ConnectorCredential{
 		Kind: core.ConnectorCredentialSecretRef, SecretRef: "S3_ACCESS_KEY",
 	}
-	credentials, err := NewConnectorEncryptedCredentials(record.Connector.ID, []byte("encrypted-direct-values"))
+	credentials, err := testconnectors.NewEncryptedCredentials(record.Connector.ID, []byte("encrypted-direct-values"))
 	if err != nil {
 		t.Fatalf("NewConnectorEncryptedCredentials() error = %v", err)
 	}
@@ -126,27 +130,27 @@ func TestConnectorIdempotentCreateRejectsSecretValueRace(t *testing.T) {
 	}
 	now := time.Date(2026, 8, 24, 9, 0, 0, 0, time.UTC)
 	secretID := ids.NewAt(ids.KindSecret, now, 80)
-	secret, err := NewProjectSecretRecord(
+	secret, err := testsecrets.NewProjectRecord(
 		secretID, project.Record.ID, "S3_ACCESS_KEY", core.SecretKindEnvVar, "", now,
 	)
 	if err != nil {
 		t.Fatalf("NewProjectSecretRecord() error = %v", err)
 	}
 	if _, err := secrets.CreateSecret(
-		context.Background(), ProjectSecretOwner(project), secret,
+		context.Background(), testsecrets.ProjectOwner(project), secret,
 		testSecretEncryptedValue(secretID, "project-access-key"),
 	); err != nil {
 		t.Fatalf("CreateSecret() error = %v", err)
 	}
 	racing := &connectorSecretRaceStore{hierarchyStore: base}
 	racing.beforeTransact = func() {
-		changed, encodeErr := encodeSecretEncryptedValue(testSecretEncryptedValue(secretID, "rotated-access-key"))
+		changed, encodeErr := testsecrets.EncodeEncryptedValue(testSecretEncryptedValue(secretID, "rotated-access-key"))
 		if encodeErr != nil {
 			t.Fatalf("encodeSecretEncryptedValue() error = %v", encodeErr)
 		}
 		defer clear(changed)
-		result, mutateErr := base.Transact(context.Background(), nil, []Mutation{{
-			Type: MutationPut, Key: secretValueKey(secretID), Value: changed,
+		result, mutateErr := base.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testsecrets.ValueKey(secretID), Value: changed,
 		}})
 		if mutateErr != nil || !result.Succeeded {
 			t.Fatalf("rotate Secret = %#v, %v", result, mutateErr)
@@ -160,7 +164,7 @@ func TestConnectorIdempotentCreateRejectsSecretValueRace(t *testing.T) {
 	record.Connector.Credentials[core.ConnectorCredentialAccessKey] = core.ConnectorCredential{
 		Kind: core.ConnectorCredentialSecretRef, SecretRef: "S3_ACCESS_KEY",
 	}
-	credentials, err := NewConnectorEncryptedCredentials(record.Connector.ID, []byte("encrypted-direct-values"))
+	credentials, err := testconnectors.NewEncryptedCredentials(record.Connector.ID, []byte("encrypted-direct-values"))
 	if err != nil {
 		t.Fatalf("NewConnectorEncryptedCredentials() error = %v", err)
 	}
@@ -176,7 +180,7 @@ func TestConnectorIdempotentCreateRejectsSecretValueRace(t *testing.T) {
 		outcome != IdempotencyKnownConflict {
 		t.Fatalf("CreateConnectorIdempotent(Secret race) result = %v/%v/%v", outcome, conflict, err)
 	}
-	stored, getErr := base.Get(context.Background(), connectorRecordKey(record.Connector.ID))
+	stored, getErr := base.Get(context.Background(), testconnectors.RecordKey(record.Connector.ID))
 	if getErr != nil || stored.Entry != nil {
 		t.Fatalf("racing Connector primary = %#v, %v", stored, getErr)
 	}
@@ -189,9 +193,9 @@ type connectorSecretRaceStore struct {
 
 func (store *connectorSecretRaceStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if store.beforeTransact != nil {
 		before := store.beforeTransact
 		store.beforeTransact = nil
@@ -200,10 +204,10 @@ func (store *connectorSecretRaceStore) Transact(
 	return store.hierarchyStore.Transact(ctx, conditions, mutations)
 }
 
-func connectorCreateMarker(environmentID string, key string) IdempotencyMarker {
+func connectorCreateMarker(environmentID string, key string) testidempotency.IdempotencyMarker {
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 		ScopeID:   environmentID,
 		Method:    http.MethodPost,
 		Route:     "/api/v1/connectors",

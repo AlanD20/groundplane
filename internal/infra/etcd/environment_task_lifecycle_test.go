@@ -9,6 +9,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -23,13 +28,13 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 711), Slug: "retry", Name: "Retry"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 711), Slug: "retry", Name: "Retry"}
 	if _, err := hierarchy.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	projectRecord := ProjectRecord{
+	projectRecord := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 712), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 	}
 	if _, err := hierarchy.CreateProject(ctx, projectRecord); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
@@ -43,11 +48,11 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	source := validTaskRecord(now)
 	source.ID = ids.NewAt(ids.KindTask, now, 713)
 	source.OperationID = ids.NewAt(ids.KindOperation, now, 714)
-	source.Type = TaskCreate
+	source.Type = testtaskjournal.TaskCreate
 	source.Target = ids.NewAt(ids.KindEnvironment, now, 715)
 	source.IdempotencyKey = "environment-retry-source-key-0001"
-	source.Executor = TaskExecutorAgent
-	environment, err := NewProvisioningEnvironment(
+	source.Executor = testtaskjournal.TaskExecutorAgent
+	environment, err := testhierarchy.NewProvisioningEnvironment(
 		environmentpath.DefaultVolumeRoot,
 		projectRecord,
 		source.Target,
@@ -61,8 +66,8 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	}
 	source.Owner = mustEnvironmentTaskOwner(t, project.Record, environment)
 	marker := pendingTaskMarker(source)
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeProject, ScopeID: projectRecord.ID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeProject, ScopeID: projectRecord.ID,
 		Method: http.MethodPost, Route: "/environments", Key: source.IdempotencyKey,
 	}
 	poolRegistry, err := hierarchy.GetEnvironmentPoolRegistry(ctx)
@@ -102,8 +107,8 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	if err != nil || !found || claim.Task.Record.ID != source.ID {
 		t.Fatalf("ClaimNextTask(source) = %#v, %t, %v", claim, found, err)
 	}
-	failedResult := TaskResultRecord{
-		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone, ExitCode: 1,
+	failedResult := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone, ExitCode: 1,
 	}
 	terminalAt := assignedAt.Add(time.Second)
 	failed, err := tasks.AcknowledgeEnvironmentCreation(
@@ -114,12 +119,10 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 
 			source.ID),
 
-		environment.ID,
-		TaskStatusFailed,
-		failedResult,
+		environment.ID, testtaskjournal.TaskStatusFailed, failedResult,
 		terminalAt)
 
-	if err != nil || failed.Record.Status != TaskStatusFailed {
+	if err != nil || failed.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeEnvironmentCreation(failed) = %#v, %v", failed.Record, err)
 	}
 
@@ -140,7 +143,7 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	failedEpoch := mustEnvironmentCreationEpoch(t, store, environment.ID)
 	putEnvironmentCreationHeldLock(t, store, environment.ID, now, 730)
 	if _, err := tasks.RetryTask(
-		ctx, source.ID, retryID, TaskActorOperator, retryMarker,
+		ctx, source.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker,
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("RetryTask(held lock) error = %v", err)
 	}
@@ -158,7 +161,7 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 		)
 	}
 	deleteEnvironmentCreationHeldLock(t, store, environment.ID)
-	retryResult, err := tasks.RetryTask(ctx, source.ID, retryID, TaskActorOperator, retryMarker)
+	retryResult, err := tasks.RetryTask(ctx, source.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -174,7 +177,7 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	if err != nil {
 		t.Fatalf("GetEnvironment(retrying) error = %v", err)
 	}
-	if retrying.Record.ProvisioningState != EnvironmentProvisioningProvisioning ||
+	if retrying.Record.ProvisioningState != testhierarchy.EnvironmentProvisioningProvisioning ||
 		retrying.Record.CreateTaskID != retryID || retrying.Revision != retryTask.Revision {
 		t.Fatalf("retrying Environment/Task = %#v/%#v", retrying, retryTask)
 	}
@@ -188,8 +191,8 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 	if err != nil || !found || retryClaim.Task.Record.ID != retryID {
 		t.Fatalf("ClaimNextTask(retry) = %#v, %t, %v", retryClaim, found, err)
 	}
-	completedResult := TaskResultRecord{
-		Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone,
+	completedResult := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 	}
 	// Rationale: acknowledgement uses the same lock fence and must leave the
 	// running Task companion and epoch unchanged while the lock is held.
@@ -203,15 +206,13 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 
 			retryID),
 
-		environment.ID,
-		TaskStatusCompleted,
-		completedResult,
+		environment.ID, testtaskjournal.TaskStatusCompleted, completedResult,
 		retryAssignedAt.Add(time.Second)); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("AcknowledgeEnvironmentCreation(held lock) error = %v", err)
 	}
 	unchangedRetrying, err := hierarchy.GetEnvironment(ctx, environment.ID)
 	if err != nil || unchangedRetrying.Revision != retrying.Revision ||
-		unchangedRetrying.Record.ProvisioningState != EnvironmentProvisioningProvisioning ||
+		unchangedRetrying.Record.ProvisioningState != testhierarchy.EnvironmentProvisioningProvisioning ||
 		unchangedRetrying.Record.CreateTaskID != retryID {
 		t.Fatalf("Environment after blocked acknowledgement = %#v, %v", unchangedRetrying, err)
 	}
@@ -232,20 +233,18 @@ func TestEnvironmentCreationRetryAtomicallyTransfersProvisioningOwnership(t *tes
 
 			retryID),
 
-		environment.ID,
-		TaskStatusCompleted,
-		completedResult,
+		environment.ID, testtaskjournal.TaskStatusCompleted, completedResult,
 		retryAssignedAt.Add(time.Second))
 
-	if err != nil || completed.Record.Status != TaskStatusCompleted {
+	if err != nil || completed.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeEnvironmentCreation(retry) = %#v, %v", completed.Record, err)
 	}
 	ready, err := hierarchy.GetEnvironment(ctx, environment.ID)
-	if err != nil || ready.Record.ProvisioningState != EnvironmentProvisioningReady ||
+	if err != nil || ready.Record.ProvisioningState != testhierarchy.EnvironmentProvisioningReady ||
 		ready.Record.CreateTaskID != retryID || ready.Revision != completed.Revision {
 		t.Fatalf("ready Environment/completed Task = %#v/%#v, %v", ready, completed, err)
 	}
-	readyEpoch, err := store.Get(ctx, environmentMutationEpochKey(environment.ID))
+	readyEpoch, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(environment.ID))
 	if err != nil || readyEpoch.Entry == nil || readyEpoch.Entry.ModRevision != ready.Revision {
 		t.Fatalf("ready Environment mutation epoch = %#v, %v", readyEpoch, err)
 	}
@@ -255,9 +254,9 @@ func mustEnvironmentCreationEpoch(
 	t *testing.T,
 	store *memoryHierarchyStore,
 	environmentID string,
-) *KeyValue {
+) *testkeyvalue.KeyValue {
 	t.Helper()
-	result, err := store.Get(context.Background(), environmentMutationEpochKey(environmentID))
+	result, err := store.Get(context.Background(), testhierarchy.EnvironmentMutationEpochKey(environmentID))
 	if err != nil || result.Entry == nil {
 		t.Fatalf("Get(Environment mutation epoch) = %#v, %v", result, err)
 	}
@@ -272,23 +271,29 @@ func putEnvironmentCreationHeldLock(
 	seed int64,
 ) {
 	t.Helper()
-	record := BackupOperationLockRecord{
+	record := testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: environmentID,
 		OperationID:   ids.NewAt(ids.KindOperation, now, seed),
 		TaskID:        ids.NewAt(ids.KindTask, now, seed+1),
-		Kind:          BackupOperationBackup,
+		Kind:          testbackupruntime.BackupOperationBackup,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
-	value, err := encodeBackupOperationLockRecord(record)
+	value, err := testbackupruntime.EncodeBackupOperationLockRecord(record)
 	if err != nil {
 		t.Fatalf("encodeBackupOperationLockRecord() error = %v", err)
 	}
 	defer clear(value)
 	transaction, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: environmentOperationLockKey(environmentID)}},
-		[]Mutation{{Type: MutationPut, Key: environmentOperationLockKey(environmentID), Value: value}},
+		[]testkeyvalue.Condition{{Key: testhierarchy.EnvironmentOperationLockKey(environmentID)}},
+		[]testkeyvalue.Mutation{
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testhierarchy.EnvironmentOperationLockKey(environmentID),
+				Value: value,
+			},
+		},
 	)
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("put Environment operation lock = %#v, %v", transaction, err)
@@ -297,8 +302,8 @@ func putEnvironmentCreationHeldLock(
 
 func deleteEnvironmentCreationHeldLock(t *testing.T, store *memoryHierarchyStore, environmentID string) {
 	t.Helper()
-	transaction, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationDelete, Key: environmentOperationLockKey(environmentID),
+	transaction, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationDelete, Key: testhierarchy.EnvironmentOperationLockKey(environmentID),
 	}})
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("delete Environment operation lock = %#v, %v", transaction, err)
@@ -316,13 +321,13 @@ func TestEnvironmentCreationPendingAbortAtomicallyFailsProvisioning(t *testing.T
 	if err != nil {
 		t.Fatalf("newHierarchyRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 718), Slug: "abort", Name: "Abort"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 718), Slug: "abort", Name: "Abort"}
 	if _, err := hierarchy.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	projectRecord := ProjectRecord{
+	projectRecord := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 719), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 	}
 	if _, err := hierarchy.CreateProject(ctx, projectRecord); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
@@ -336,11 +341,11 @@ func TestEnvironmentCreationPendingAbortAtomicallyFailsProvisioning(t *testing.T
 	task := validTaskRecord(now)
 	task.ID = ids.NewAt(ids.KindTask, now, 720)
 	task.OperationID = ids.NewAt(ids.KindOperation, now, 721)
-	task.Type = TaskCreate
+	task.Type = testtaskjournal.TaskCreate
 	task.Target = ids.NewAt(ids.KindEnvironment, now, 722)
 	task.IdempotencyKey = "environment-abort-source-key-0001"
-	task.Executor = TaskExecutorAgent
-	environment, err := NewProvisioningEnvironment(
+	task.Executor = testtaskjournal.TaskExecutorAgent
+	environment, err := testhierarchy.NewProvisioningEnvironment(
 		environmentpath.DefaultVolumeRoot,
 		projectRecord,
 		task.Target,
@@ -354,8 +359,8 @@ func TestEnvironmentCreationPendingAbortAtomicallyFailsProvisioning(t *testing.T
 	}
 	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment)
 	marker := pendingTaskMarker(task)
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeProject, ScopeID: projectRecord.ID,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeProject, ScopeID: projectRecord.ID,
 		Method: http.MethodPost, Route: "/environments", Key: task.IdempotencyKey,
 	}
 	poolRegistry, err := hierarchy.GetEnvironmentPoolRegistry(ctx)
@@ -389,11 +394,11 @@ func TestEnvironmentCreationPendingAbortAtomicallyFailsProvisioning(t *testing.T
 
 	terminalAt := now.Add(time.Second)
 	aborted, err := tasks.AbortPendingTask(ctx, task.ID, terminalAt)
-	if err != nil || aborted.Record.Status != TaskStatusAborted {
+	if err != nil || aborted.Record.Status != testtaskjournal.TaskStatusAborted {
 		t.Fatalf("AbortPendingTask() = %#v, %v", aborted.Record, err)
 	}
 	failed, err := hierarchy.GetEnvironment(ctx, environment.ID)
-	if err != nil || failed.Record.ProvisioningState != EnvironmentProvisioningFailed ||
+	if err != nil || failed.Record.ProvisioningState != testhierarchy.EnvironmentProvisioningFailed ||
 		failed.Record.CreateTaskID != task.ID || failed.Revision != aborted.Revision {
 		t.Fatalf("failed Environment/aborted Task = %#v/%#v, %v", failed, aborted, err)
 	}
@@ -405,11 +410,11 @@ func TestEnvironmentCreationPendingAbortAtomicallyFailsProvisioning(t *testing.T
 	retryAt := terminalAt.Add(2 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 723)
 	retryMarker := pendingRetryMarker(aborted.Record, retryID, retryAt, "environment-abort-retry-key-0001")
-	if _, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker); err != nil {
+	if _, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker); err != nil {
 		t.Fatalf("RetryTask(aborted Environment) error = %v", err)
 	}
 	retrying, err := hierarchy.GetEnvironment(ctx, environment.ID)
-	if err != nil || retrying.Record.ProvisioningState != EnvironmentProvisioningProvisioning ||
+	if err != nil || retrying.Record.ProvisioningState != testhierarchy.EnvironmentProvisioningProvisioning ||
 		retrying.Record.CreateTaskID != retryID {
 		t.Fatalf("retrying Environment = %#v, %v", retrying, err)
 	}

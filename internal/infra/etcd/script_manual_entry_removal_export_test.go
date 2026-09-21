@@ -7,10 +7,14 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (fixture *ExecutedArtifactFixture) EntryRemovalStore() Store { return fixture.store }
+func (fixture *ExecutedArtifactFixture) EntryRemovalStore() testkeyvalue.Store { return fixture.store }
 
 func (fixture *ExecutedArtifactFixture) QueueEntryRemovalCompetingWriter(t *testing.T) string {
 	t.Helper()
@@ -19,20 +23,26 @@ func (fixture *ExecutedArtifactFixture) QueueEntryRemovalCompetingWriter(t *test
 	return task.ID
 }
 
-func (fixture *ExecutedArtifactFixture) EntryRemovalTask(t *testing.T, entryID string) (TaskRecord, IdempotencyMarker) {
+func (fixture *ExecutedArtifactFixture) EntryRemovalTask(
+	t *testing.T,
+	entryID string,
+) (TaskRecord, testidempotency.IdempotencyMarker) {
 	t.Helper()
 	task := fixture.Task(t, 956)
-	task.Type, task.Target = TaskRemove, entryID
+	task.Type, task.Target = testtaskjournal.TaskRemove, entryID
 	marker := environmentBlueprintTestMarker(task, fixture.Environment.Record.ID)
 	marker.Locator.Method, marker.Locator.Route = "DELETE", "/entries/{id}"
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetEntry, ID: entryID}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetEntry,
+		ID:   entryID,
+	}
 	return task, marker
 }
 
 func (fixture *ExecutedArtifactFixture) EntryRemovalRetryMarker(
 	t *testing.T,
 	failed TaskRecord,
-) (string, IdempotencyMarker) {
+) (string, testidempotency.IdempotencyMarker) {
 	t.Helper()
 	createdAt := failed.FinishedAt.Add(time.Second)
 	id := ids.New(ids.KindTask)
@@ -46,7 +56,7 @@ func (fixture *ExecutedArtifactFixture) CheckManualJourneyEntryRemoval(t *testin
 	if err != nil || !found || len(current.Record.Entries) != 1 || current.Record.Entries[0].Entry.ID != entryID {
 		t.Fatal("manual Entry removal lost its current desired source")
 	}
-	headKey := environmentBlueprintHeadKey(fixture.Environment.Record.ID)
+	headKey := testblueprints.EnvironmentBlueprintHeadKey(fixture.Environment.Record.ID)
 	before := fixture.store.valueAt(headKey, fixture.store.revision)
 	task := fixture.Task(t, 953)
 	task.RenderGeneration = int32(current.Record.RenderGeneration + 1)
@@ -61,7 +71,7 @@ func (fixture *ExecutedArtifactFixture) CheckManualJourneyEntryRemoval(t *testin
 		after := fixture.store.valueAt(headKey, fixture.store.revision)
 		if before == nil || after == nil || before.ModRevision != after.ModRevision ||
 			!bytes.Equal(before.Value, after.Value) ||
-			fixture.store.valueAt(taskKey(task.ID), fixture.store.revision) != nil {
+			fixture.store.valueAt(testtaskjournal.TaskStorageKey(task.ID), fixture.store.revision) != nil {
 			t.Fatal("rejected Entry removal published desired state or a Task")
 		}
 		return
@@ -75,9 +85,7 @@ func (fixture *ExecutedArtifactFixture) CheckManualJourneyEntryRemoval(t *testin
 		t.Fatalf("Entry removal claim = %t, %v", found, err)
 	}
 	if _, err := fixture.Tasks.AcknowledgeTask(ctx, claim.Assignment.Record.AgentID, 1, task.ID,
-		claim.Assignment.Record.AssignmentID, TaskStatusCompleted,
-		TaskResultRecord{Kind: TaskResultCompose, ExecutionEpoch: 1, Diagnostic: TaskResultDiagnosticNone},
-		task.CreatedAt.Add(2*time.Second)); err != nil {
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, testtaskjournal.TaskResultRecord{Kind: testtaskjournal.TaskResultCompose, ExecutionEpoch: 1, Diagnostic: testtaskjournal.TaskResultDiagnosticNone}, task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	remaining, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(ctx, fixture.Environment.Record.ID)

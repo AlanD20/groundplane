@@ -41,8 +41,10 @@ func (repository *ScriptRepository) manualScriptExecutionAtRevision(
 		return scriptexecutions.ScriptExecutionRecord{}, nil, err
 	}
 	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
-	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
-		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
+	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+		!taskOwnsScriptExecution(task, execution) ||
+		execution.CurrentTaskID != task.ID ||
+		execution.OperationID != task.OperationID ||
 		execution.EnvironmentID != task.Owner.EnvironmentID ||
 		execution.PlanHash != task.PlanHash ||
 		execution.SourceMembershipCount == 0 {

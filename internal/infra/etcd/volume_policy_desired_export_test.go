@@ -9,6 +9,18 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testenvironmentcoordination "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -16,15 +28,15 @@ import (
 // VolumePolicyDesiredFixture uses real policy preparation and publication;
 // only the pre-existing desired baseline and storage are hermetic fixtures.
 type VolumePolicyDesiredFixture struct {
-	Store                            Store
+	Store                            testkeyvalue.Store
 	Task                             TaskRecord
-	Marker                           IdempotencyMarker
-	Request                          EnvironmentBlueprintStageRequest
+	Marker                           testidempotency.IdempotencyMarker
+	Request                          testblueprints.EnvironmentBlueprintStageRequest
 	HeadRevision                     int64
 	Initial                          *removalrecord.InitialPublication
 	OwnerBeforePublication           *removalrecord.Owner
 	EnvironmentLockBeforePublication *removalrecord.Owner
-	ParentBeforePublication          *HierarchyCoordinationRecord
+	ParentBeforePublication          *testhierarchydeletion.HierarchyCoordinationRecord
 	EvidenceBeforePublication        func()
 	writerBeforePublication          *taskMaterializationWriterRecord
 	prepared                         VolumeRemovalBackupPolicyPreparation
@@ -42,14 +54,14 @@ func (fixture *VolumePolicyDesiredFixture) TaskRepository(t *testing.T) *TaskRep
 }
 
 func (fixture *VolumePolicyDesiredFixture) ParentDeletionBegin(
-	kind HierarchyDeletionTargetKind,
+	kind testhierarchydeletion.HierarchyDeletionTargetKind,
 ) HierarchyDeletionBegin {
-	id, operation := fixture.Task.Owner.EnvironmentID, HierarchyDeletionOperationEnvironment
+	id, operation := fixture.Task.Owner.EnvironmentID, testhierarchydeletion.HierarchyDeletionOperationEnvironment
 	switch kind {
-	case HierarchyDeletionTargetProject:
-		id, operation = fixture.Task.Owner.ProjectID, HierarchyDeletionOperationProject
-	case HierarchyDeletionTargetTenant:
-		id, operation = fixture.Task.Owner.TenantID, HierarchyDeletionOperationTenant
+	case testhierarchydeletion.HierarchyDeletionTargetProject:
+		id, operation = fixture.Task.Owner.ProjectID, testhierarchydeletion.HierarchyDeletionOperationProject
+	case testhierarchydeletion.HierarchyDeletionTargetTenant:
+		id, operation = fixture.Task.Owner.TenantID, testhierarchydeletion.HierarchyDeletionOperationTenant
 	}
 	return hierarchyDeletionCreationTestBegin(fixture.Task.CreatedAt, kind, id, operation, "7")
 }
@@ -119,9 +131,13 @@ func (fixture *VolumePolicyDesiredFixture) seedRemovalEvidence(
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := fixture.Store.Transact(ctx, nil, []Mutation{
-		{Type: MutationPut, Key: removalrecord.EvidenceManifestKey(runtime.OperationID), Value: manifestValue},
-		{Type: MutationPut, Key: removalrecord.EvidenceCursorKey(runtime.OperationID), Value: cursorValue},
+	result, err := fixture.Store.Transact(ctx, nil, []testkeyvalue.Mutation{
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   removalrecord.EvidenceManifestKey(runtime.OperationID),
+			Value: manifestValue,
+		},
+		{Type: testkeyvalue.MutationPut, Key: removalrecord.EvidenceCursorKey(runtime.OperationID), Value: cursorValue},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatal("seed evidence metadata", err)
@@ -140,14 +156,15 @@ func (fixture *VolumePolicyDesiredFixture) seedRemovalEvidence(
 }
 
 type volumePolicyDesiredAuditStore struct {
-	Store
-	conditions                       []Condition
-	mutations                        []Mutation
+	testkeyvalue.Store
+
+	conditions                       []testkeyvalue.Condition
+	mutations                        []testkeyvalue.Mutation
 	bytes                            int
 	finalPublications                int
 	ownerBeforePublication           *removalrecord.Owner
 	environmentLockBeforePublication *removalrecord.Owner
-	parentBeforePublication          *HierarchyCoordinationRecord
+	parentBeforePublication          *testhierarchydeletion.HierarchyCoordinationRecord
 	writerBeforePublication          *taskMaterializationWriterRecord
 	terminalBeforeCommit             func()
 	loseTerminalResponse             bool
@@ -155,10 +172,10 @@ type volumePolicyDesiredAuditStore struct {
 }
 
 func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
-	ctx context.Context, conditions []Condition, mutations []Mutation,
-) (TransactionResult, error) {
+	ctx context.Context, conditions []testkeyvalue.Condition, mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	if audit.evidenceBeforePublication != nil {
 		before := audit.evidenceBeforePublication
@@ -167,13 +184,13 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 	}
 	if audit.parentBeforePublication != nil {
 		parent := *audit.parentBeforePublication
-		value, err := encodeHierarchyCoordination(parent)
+		value, err := testhierarchydeletion.EncodeHierarchyCoordination(parent)
 		if err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		defer clear(value)
-		if _, err := audit.Store.Put(ctx, HierarchyCoordinationKey(string(parent.TargetKind), parent.TargetID), value); err != nil {
-			return TransactionResult{}, err
+		if _, err := audit.Store.Put(ctx, testhierarchydeletion.HierarchyCoordinationKey(string(parent.TargetKind), parent.TargetID), value); err != nil {
+			return testkeyvalue.TransactionResult{}, err
 		}
 		audit.parentBeforePublication = nil
 	}
@@ -181,11 +198,11 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 		writer := *audit.writerBeforePublication
 		value, err := encodeTaskMaterializationWriter(writer)
 		if err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		defer clear(value)
-		if _, err := audit.Store.Put(ctx, taskMaterializationWriterKey(writer.EnvironmentID), value); err != nil {
-			return TransactionResult{}, err
+		if _, err := audit.Store.Put(ctx, testtaskjournal.TaskMaterializationWriterKey(writer.EnvironmentID), value); err != nil {
+			return testkeyvalue.TransactionResult{}, err
 		}
 		audit.writerBeforePublication = nil
 	}
@@ -193,11 +210,11 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 		owner := *audit.ownerBeforePublication
 		value, err := removalrecord.EncodeOwner(owner)
 		if err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		defer clear(value)
 		if _, err := audit.Store.Put(ctx, removalrecord.OwnerKey(owner.VolumeID), value); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		audit.ownerBeforePublication = nil
 	}
@@ -205,11 +222,11 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 		owner := *audit.environmentLockBeforePublication
 		value, err := removalrecord.EncodeOwner(owner)
 		if err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		defer clear(value)
 		if _, err := audit.Store.Put(ctx, removalrecord.EnvironmentLockKey(owner.EnvironmentID), value); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		audit.environmentLockBeforePublication = nil
 	}
@@ -219,15 +236,15 @@ func (audit *volumePolicyDesiredAuditStore) TransactEnvironmentBlueprint(
 
 func (audit *volumePolicyDesiredAuditStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
-	audit.conditions = append([]Condition(nil), conditions...)
-	audit.mutations = append([]Mutation(nil), mutations...)
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
+	audit.conditions = append([]testkeyvalue.Condition(nil), conditions...)
+	audit.mutations = append([]testkeyvalue.Mutation(nil), mutations...)
 	sizer := &store{root: "/groundplane"}
 	bytes, err := sizer.transactionSize(conditions, mutations)
 	if err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	audit.bytes = bytes
 	// The older hierarchy double implements exact-key compares only. Model
@@ -236,9 +253,9 @@ func (audit *volumePolicyDesiredAuditStore) Transact(
 	for index, condition := range conditions {
 		keys[index] = condition.Key
 	}
-	read, err := audit.Store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := audit.Store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: keys})
 	if err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	prefixConflict := false
 	for index, condition := range conditions {
@@ -246,17 +263,16 @@ func (audit *volumePolicyDesiredAuditStore) Transact(
 			continue
 		}
 		if condition.ModRevision != 0 {
-			return TransactionResult{}, errs.New(
+			return testkeyvalue.TransactionResult{}, errs.New(
 				errs.KindInternal,
 				"policy publication fixture only supports prefix absence",
 			)
 		}
 		matching, err := audit.Store.Range(
-			ctx,
-			RangeRequest{Prefix: condition.Key, Limit: 1, Revision: read.ReadRevision},
+			ctx, testkeyvalue.RangeRequest{Prefix: condition.Key, Limit: 1, Revision: read.ReadRevision},
 		)
 		if err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 		if len(matching.Values) != 0 {
 			read.Values[index] = &matching.Values[0]
@@ -264,11 +280,11 @@ func (audit *volumePolicyDesiredAuditStore) Transact(
 		}
 	}
 	if prefixConflict {
-		return TransactionResult{Revision: read.ReadRevision, FailureReads: read.Values}, nil
+		return testkeyvalue.TransactionResult{Revision: read.ReadRevision, FailureReads: read.Values}, nil
 	}
 	terminal := false
 	for _, mutation := range mutations {
-		if mutation.Type == MutationDelete && mutation.Prefix {
+		if mutation.Type == testkeyvalue.MutationDelete && mutation.Prefix {
 			terminal = true
 		}
 	}
@@ -280,7 +296,7 @@ func (audit *volumePolicyDesiredAuditStore) Transact(
 	result, err := audit.Store.Transact(ctx, conditions, mutations)
 	if err == nil && result.Succeeded && terminal && audit.loseTerminalResponse {
 		audit.loseTerminalResponse = false
-		return TransactionResult{}, errs.New(errs.KindRequestFailed, "fixture lost terminal response")
+		return testkeyvalue.TransactionResult{}, errs.New(errs.KindRequestFailed, "fixture lost terminal response")
 	}
 	return result, err
 }
@@ -293,14 +309,14 @@ func (fixture *VolumePolicyDesiredFixture) LoseRemovalTerminalResponse() {
 	fixture.store.loseTerminalResponse = true
 }
 
-func (fixture *VolumePolicyDesiredFixture) AssertRemovalAttemptBudget(t *testing.T, status TaskStatus) {
+func (fixture *VolumePolicyDesiredFixture) AssertRemovalAttemptBudget(t *testing.T, status testtaskjournal.TaskStatus) {
 	t.Helper()
 	compares, writes, size := len(fixture.store.conditions), len(fixture.store.mutations), fixture.store.bytes
 	if compares > 24 || writes > 24 || compares+writes > 48 || size > 900*1024 {
 		t.Fatalf("attempt transaction exceeds ADR0049 budget: %d/%d/%d", compares, writes, size)
 	}
 	wantBytes := 7969
-	if status == TaskStatusTimedOut {
+	if status == testtaskjournal.TaskStatusTimedOut {
 		wantBytes = 7972
 	}
 	if compares != 23 || writes != 9 || size != wantBytes {
@@ -361,13 +377,21 @@ func (fixture *VolumePolicyDesiredFixture) AssertRemovalSuccessorTerminal(t *tes
 
 func (fixture *VolumePolicyDesiredFixture) PutRemovalDerivedIndexes(t *testing.T, taskID string, at time.Time) {
 	t.Helper()
-	value, err := encodeTaskReference(taskID)
+	value, err := testidempotency.EncodeTaskReference(taskID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := fixture.store.Store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: taskQueueKey(TaskExecutorAgent, taskID), Value: value},
-		{Type: MutationPut, Key: taskRetentionIndexKey(taskID, at.Add(markerRetention)), Value: value},
+	result, err := fixture.store.Store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskQueueKey(testtaskjournal.TaskExecutorAgent, taskID),
+			Value: value,
+		},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskRetentionIndexKey(taskID, at.Add(testidempotency.MarkerRetention)),
+			Value: value,
+		},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed late Task indexes: %v", err)
@@ -377,11 +401,11 @@ func (fixture *VolumePolicyDesiredFixture) PutRemovalDerivedIndexes(t *testing.T
 func (fixture *VolumePolicyDesiredFixture) assertRemovalTerminal(t *testing.T, revision int64, at time.Time,
 	compares, writes, size int) {
 	t.Helper()
-	markerKey, err := idempotencyMarkerKey(fixture.Marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(fixture.Marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	retentionKey, err := idempotencyRetentionKey(markerKey, at.Add(markerRetention))
+	retentionKey, err := testidempotency.IdempotencyRetentionKey(markerKey, at.Add(testidempotency.MarkerRetention))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,8 +414,8 @@ func (fixture *VolumePolicyDesiredFixture) assertRemovalTerminal(t *testing.T, r
 		t.Fatalf("full-TTL root retention was not atomic: %v", err)
 	}
 	for _, mutation := range fixture.store.mutations {
-		if mutation.Key == environmentBlueprintHeadKey(fixture.Task.Owner.EnvironmentID) ||
-			mutation.Key == backupPolicyKey(fixture.Task.Owner.EnvironmentID) {
+		if mutation.Key == testblueprints.EnvironmentBlueprintHeadKey(fixture.Task.Owner.EnvironmentID) ||
+			mutation.Key == testbackuppolicy.BackupPolicyKey(fixture.Task.Owner.EnvironmentID) {
 			t.Fatal("runtime finalization republished desired state or Backup policy")
 		}
 	}
@@ -409,10 +433,12 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 	ctx := context.Background()
 	policy := newBackupPolicyReplacementFixture(t, true)
 	volume := policy.sources[0].Source.Record
-	seed, err := policy.repository.PrepareBackupPolicyReplacement(ctx, BackupPolicyReplacementInput{
+	seed, err := policy.repository.PrepareBackupPolicyReplacement(ctx, testbackuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: policy.environment.Record.ID, Enabled: true, Frequency: "*-*-* 02:00:00",
 		Keep: 7, Encryption: "none", ConnectorID: policy.connector.Record.Connector.ID,
-		Sources: []BackupPolicySourceSelection{{Kind: core.BackupSourceVolume, TargetID: volume.TargetID}},
+		Sources: []testbackuppolicy.BackupPolicySourceSelection{
+			{Kind: core.BackupSourceVolume, TargetID: volume.TargetID},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -430,13 +456,15 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 	seedServiceRepositoryTestDesiredProjection(
 		t,
 		policy.store,
-		withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+		withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID: policy.environment.Record.ID, RevisionID: ids.New(ids.KindTask), RenderGeneration: 1,
-			Volumes: []EnvironmentVolumeIdentity{{ID: volume.TargetID, Slug: "backup-data", Key: "backup-data"}},
-			Backup: &EnvironmentBlueprintBackupPolicy{
+			Volumes: []testenvironmentprojection.EnvironmentVolumeIdentity{
+				{ID: volume.TargetID, Slug: "backup-data", Key: "backup-data"},
+			},
+			Backup: &testenvironmentprojection.EnvironmentBlueprintBackupPolicy{
 				Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "none",
 				ConnectorID: policy.connector.Record.Connector.ID,
-				Sources: []EnvironmentBlueprintBackupPolicySource{
+				Sources: []testenvironmentprojection.EnvironmentBlueprintBackupPolicySource{
 					{ID: volume.ID, Kind: volume.Kind, TargetID: volume.TargetID},
 				},
 			},
@@ -465,32 +493,37 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 		t.Fatalf("read projection: %v", err)
 	}
 	task := environmentBlueprintTestTask(t, policy.project.Record, policy.environment.Record, 32000)
-	task.Type, task.Target, task.RenderGeneration = TaskRemove, volume.TargetID, 2
-	task.Params[TaskResourceKindParam] = TaskResourceVolume
+	task.Type, task.Target, task.RenderGeneration = testtaskjournal.TaskRemove, volume.TargetID, 2
+	task.Params[testtaskjournal.TaskResourceKindParam] = testtaskjournal.TaskResourceVolume
 	marker := environmentBlueprintTestMarker(task, policy.environment.Record.ID)
 	marker.Locator.Method, marker.Locator.Route = "DELETE", "/volumes/{id}"
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetVolume, ID: volume.TargetID}
-	projection := cloneEnvironmentComposeProjection(current.Record)
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetVolume,
+		ID:   volume.TargetID,
+	}
+	projection := testenvironmentprojection.CloneEnvironmentComposeProjection(current.Record)
 	projection.RevisionID, projection.RenderGeneration = task.ID, 2
 	projection.Volumes, projection.VolumeMounts = nil, nil
 	projection.Backup = prepared.Projection()
 	projection = withTestEnvironmentComposeArtifact(projection)
-	digest, err := EnvironmentBlueprintDependencyDigest(projection)
+	digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		t.Fatal(err)
 	}
-	precondition, err := EnvironmentBlueprintDependencyDigest(current.Record)
+	precondition, err := testblueprints.EnvironmentBlueprintDependencyDigest(current.Record)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return &VolumePolicyDesiredFixture{
 		Store: store, Task: task, Marker: marker, HeadRevision: head.Revision, prepared: prepared, policy: policy, store: store,
-		Request: EnvironmentBlueprintStageRequest{
+		Request: testblueprints.EnvironmentBlueprintStageRequest{
 			Projection: projection, DependencyDigest: digest,
-			Mutation: &EnvironmentDesiredMutationAudit{Volume: &EnvironmentVolumeMutationAudit{
-				Action: EnvironmentVolumeMutationRemove, VolumeID: volume.TargetID,
-				Slug: "backup-data", Key: "backup-data", KeySupplied: true, PreconditionDigest: precondition,
-			}},
+			Mutation: &testblueprints.EnvironmentDesiredMutationAudit{
+				Volume: &testblueprints.EnvironmentVolumeMutationAudit{
+					Action: testblueprints.EnvironmentVolumeMutationRemove, VolumeID: volume.TargetID,
+					Slug: "backup-data", Key: "backup-data", KeySupplied: true, PreconditionDigest: precondition,
+				},
+			},
 		},
 	}
 }
@@ -531,7 +564,7 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 		fixture.policy.environment,
 		fixture.HeadRevision,
 		fixture.Request.Claim,
-		EnvironmentDesiredRevisionIdentity{
+		testblueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: fixture.Task.Owner.EnvironmentID,
 			RevisionID:    fixture.Task.ID,
 		},
@@ -539,10 +572,10 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 		nil,
 		nil,
 		nil,
-		ReleaseGroupBlueprintPreparedMutation{},
-		ComponentTaskPreparation{},
-		BlueprintAttachTaskPreparation{},
-		BlueprintBackupPolicyPreparation{},
+		testreleasegroups.ReleaseGroupBlueprintPreparedMutation{},
+		testcomponentplanning.ComponentTaskPreparation{},
+		testblueprintplanning.BlueprintAttachTaskPreparation{},
+		testblueprintplanning.BlueprintBackupPolicyPreparation{},
 		BlueprintScriptPublication{},
 		BlueprintReleasePublication{},
 		BlueprintRequirementGate{},
@@ -568,7 +601,7 @@ func (fixture *VolumePolicyDesiredFixture) HoldMaterializationWriter(t *testing.
 		t.Fatal(err)
 	}
 	defer clear(value)
-	if _, err := fixture.Store.Put(context.Background(), taskMaterializationWriterKey(writer.EnvironmentID), value); err != nil {
+	if _, err := fixture.Store.Put(context.Background(), testtaskjournal.TaskMaterializationWriterKey(writer.EnvironmentID), value); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -578,27 +611,29 @@ func (fixture *VolumePolicyDesiredFixture) HoldMaterializationWriter(t *testing.
 func (fixture *VolumePolicyDesiredFixture) UseMaximumSelection(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: fixture.Task.Owner.EnvironmentID, RevisionID: ids.New(ids.KindTask), RenderGeneration: 1,
-		Volumes: []EnvironmentVolumeIdentity{{ID: fixture.Task.Target, Slug: "backup-data", Key: "backup-data"}},
+		Volumes: []testenvironmentprojection.EnvironmentVolumeIdentity{
+			{ID: fixture.Task.Target, Slug: "backup-data", Key: "backup-data"},
+		},
 	})
 	first := fixture.policy.sources[0].Source.Record
-	input := EnvironmentBlueprintBackupPolicyInput{
+	input := testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 		EnvironmentID: projection.EnvironmentID, TaskID: projection.RevisionID,
 		ReadRevision: fixture.Revision(), Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 7, Encryption: "none",
 		ConnectorName: fixture.policy.connector.Record.Connector.Name, CreatedAt: fixture.policy.now.Add(time.Minute),
-		Sources: []EnvironmentBlueprintBackupPolicySourceInput{
+		Sources: []testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
 			{CandidateID: first.ID, Kind: first.Kind, TargetID: first.TargetID},
 		},
 	}
-	for index := 1; index < MaximumBackupPolicySources; index++ {
+	for index := 1; index < testbackuppolicy.MaximumBackupPolicySources; index++ {
 		volumeID := ids.New(ids.KindVolume)
 		label := "volume-" + string(rune('a'+index))
 		projection.Volumes = append(
 			projection.Volumes,
-			EnvironmentVolumeIdentity{ID: volumeID, Slug: label, Key: label},
+			testenvironmentprojection.EnvironmentVolumeIdentity{ID: volumeID, Slug: label, Key: label},
 		)
-		input.Sources = append(input.Sources, EnvironmentBlueprintBackupPolicySourceInput{
+		input.Sources = append(input.Sources, testblueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
 			CandidateID: ids.New(ids.KindBackupSource), Kind: core.BackupSourceVolume, TargetID: volumeID,
 		})
 	}
@@ -609,15 +644,17 @@ func (fixture *VolumePolicyDesiredFixture) UseMaximumSelection(t *testing.T) {
 	}
 	defer seed.Clear()
 	projection.Backup = seed.Projection()
-	publication, err := prepareBlueprintBackupPolicyPublication(
-		TaskRecord{ID: projection.RevisionID, Target: projection.EnvironmentID}, projection,
-		BlueprintAttachTaskPreparation{}, seed,
+	publication, err := testblueprintplanning.PrepareBlueprintBackupPolicyPublication(
+		testblueprintplanning.TaskIdentity{ID: projection.RevisionID, Target: projection.EnvironmentID},
+		projection,
+		testblueprintplanning.BlueprintAttachTaskPreparation{},
+		seed,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clearPreparedBlueprintBackupPolicyPublication(publication)
-	result, err := fixture.policy.store.Transact(ctx, publication.conditions, publication.mutations)
+	defer testblueprintplanning.ClearPreparedBlueprintBackupPolicyPublication(publication)
+	result, err := fixture.policy.store.Transact(ctx, publication.Conditions(), publication.Mutations())
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed maximum policy: %v", err)
 	}
@@ -633,7 +670,7 @@ func (fixture *VolumePolicyDesiredFixture) UseMaximumSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	precondition, err := EnvironmentBlueprintDependencyDigest(projection)
+	precondition, err := testblueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -641,7 +678,7 @@ func (fixture *VolumePolicyDesiredFixture) UseMaximumSelection(t *testing.T) {
 	projection.Volumes = projection.Volumes[1:]
 	projection.Backup = fixture.prepared.Projection()
 	projection = withTestEnvironmentComposeArtifact(projection)
-	digest, err := EnvironmentBlueprintDependencyDigest(projection)
+	digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -654,17 +691,17 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 	if fixture.store.finalPublications != 1 {
 		t.Fatal("Volume removal did not use the dedicated final publisher")
 	}
-	task := fixture.policy.store.valueAt(taskKey(fixture.Task.ID), fixture.Revision())
+	task := fixture.policy.store.valueAt(testtaskjournal.TaskStorageKey(fixture.Task.ID), fixture.Revision())
 	policy, found, err := fixture.policy.repository.GetBackupPolicy(
 		context.Background(),
 		fixture.Task.Owner.EnvironmentID,
 	)
 	if err != nil || !found || task == nil || task.ModRevision != policy.Revision || !policy.Record.Enabled ||
-		len(policy.Record.SourceIDs) != MaximumBackupPolicySources-1 {
+		len(policy.Record.SourceIDs) != testbackuppolicy.MaximumBackupPolicySources-1 {
 		t.Fatalf("maximum policy was not replaced with its Task: %v", err)
 	}
 	for _, source := range fixture.prepared.state.sources {
-		value := fixture.policy.store.valueAt(backupSourceKey(source.ID), fixture.Revision())
+		value := fixture.policy.store.valueAt(testbackuppolicy.BackupSourceKey(source.ID), fixture.Revision())
 		if value == nil {
 			t.Fatal("historical source was removed")
 		}
@@ -708,11 +745,11 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 func (fixture *VolumePolicyDesiredFixture) AssertAtomicPolicy(t *testing.T, earliest time.Time) {
 	t.Helper()
 	ctx := context.Background()
-	task := fixture.policy.store.valueAt(taskKey(fixture.Task.ID), fixture.policy.store.revision)
+	task := fixture.policy.store.valueAt(testtaskjournal.TaskStorageKey(fixture.Task.ID), fixture.policy.store.revision)
 	if task == nil {
 		t.Fatal("publisher did not write Task")
 	}
-	for _, key := range []string{backupPolicyKey(fixture.Task.Owner.EnvironmentID), environmentCoordinationKey(fixture.Task.Owner.EnvironmentID), environmentBlueprintHeadKey(fixture.Task.Owner.EnvironmentID)} {
+	for _, key := range []string{testbackuppolicy.BackupPolicyKey(fixture.Task.Owner.EnvironmentID), testenvironmentcoordination.Key(fixture.Task.Owner.EnvironmentID), testblueprints.EnvironmentBlueprintHeadKey(fixture.Task.Owner.EnvironmentID)} {
 		value := fixture.policy.store.valueAt(key, fixture.policy.store.revision)
 		if value == nil || value.ModRevision != task.ModRevision {
 			t.Fatalf("%s was not published in the Task transaction", key)
@@ -724,18 +761,18 @@ func (fixture *VolumePolicyDesiredFixture) AssertAtomicPolicy(t *testing.T, earl
 		t.Fatalf("last-source replacement or publication clock incorrect: %v", err)
 	}
 	coordinationValue := fixture.policy.store.valueAt(
-		environmentCoordinationKey(fixture.Task.Owner.EnvironmentID),
+		testenvironmentcoordination.Key(fixture.Task.Owner.EnvironmentID),
 		fixture.Revision(),
 	)
-	coordination, err := decodeEnvironmentCoordinationRecord(coordinationValue.Value)
+	coordination, err := testenvironmentcoordination.Decode(coordinationValue.Value)
 	if err != nil || coordination.CurrentBackupScheduleState != nil ||
 		!coordination.ScheduleClockFloor.Equal(policy.Record.UpdatedAt) {
 		t.Fatalf("scheduling floor does not use the exact publication clock: %v", err)
 	}
-	if value := fixture.policy.store.valueAt(backupSourceKey(fixture.policy.sources[0].Source.Record.ID), fixture.policy.store.revision); value == nil {
+	if value := fixture.policy.store.valueAt(testbackuppolicy.BackupSourceKey(fixture.policy.sources[0].Source.Record.ID), fixture.policy.store.revision); value == nil {
 		t.Fatal("historical source was removed")
 	}
-	if value := fixture.policy.store.valueAt(backupPolicyConnectorReferenceKey(fixture.policy.connector.Record.Connector.ID, fixture.Task.Owner.EnvironmentID), fixture.policy.store.revision); value != nil {
+	if value := fixture.policy.store.valueAt(testbackuppolicy.BackupPolicyConnectorReferenceKey(fixture.policy.connector.Record.Connector.ID, fixture.Task.Owner.EnvironmentID), fixture.policy.store.revision); value != nil {
 		t.Fatal("disabled policy retained its active Connector reference")
 	}
 	wantConditions, wantMutations, maximumBytes := 28, 16, 11076
@@ -773,7 +810,7 @@ func TestVolumePublicationTimestampEncodingChangesWireSize(t *testing.T) {
 			publication.conditions,
 			publication.mutations,
 		)
-		clearBackupRuntimeMutations(publication.mutations)
+		testkeyvalue.ClearMutationValues(publication.mutations)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -785,19 +822,18 @@ func TestVolumePublicationTimestampEncodingChangesWireSize(t *testing.T) {
 
 func (fixture *VolumePolicyDesiredFixture) AssertRemovalAncestry(t *testing.T, baselineRevision int64) {
 	t.Helper()
-	for _, identity := range []HierarchyCoordinationRecord{
-		{TargetKind: HierarchyDeletionTargetProject, TargetID: fixture.Task.Owner.ProjectID},
-		{TargetKind: HierarchyDeletionTargetTenant, TargetID: fixture.Task.Owner.TenantID},
+	for _, identity := range []testhierarchydeletion.HierarchyCoordinationRecord{
+		{TargetKind: testhierarchydeletion.HierarchyDeletionTargetProject, TargetID: fixture.Task.Owner.ProjectID},
+		{TargetKind: testhierarchydeletion.HierarchyDeletionTargetTenant, TargetID: fixture.Task.Owner.TenantID},
 	} {
-		key := HierarchyCoordinationKey(string(identity.TargetKind), identity.TargetID)
+		key := testhierarchydeletion.HierarchyCoordinationKey(string(identity.TargetKind), identity.TargetID)
 		previous, err := fixture.Store.GetMany(
-			context.Background(),
-			GetManyRequest{Keys: []string{key}, Revision: baselineRevision},
+			context.Background(), testkeyvalue.GetManyRequest{Keys: []string{key}, Revision: baselineRevision},
 		)
 		if err != nil || previous == nil || len(previous.Values) != 1 || previous.Values[0] == nil {
 			t.Fatalf("parent baseline: %v", err)
 		}
-		before, err := decodeHierarchyCoordination(previous.Values[0].Value)
+		before, err := testhierarchydeletion.DecodeHierarchyCoordination(previous.Values[0].Value)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -805,7 +841,7 @@ func (fixture *VolumePolicyDesiredFixture) AssertRemovalAncestry(t *testing.T, b
 		if err != nil || current == nil || current.Entry == nil {
 			t.Fatalf("parent publication: %v", err)
 		}
-		after, err := decodeHierarchyCoordination(current.Entry.Value)
+		after, err := testhierarchydeletion.DecodeHierarchyCoordination(current.Entry.Value)
 		before.MutationEpoch++
 		if err != nil || after != before || current.Entry.ModRevision != fixture.Revision() {
 			t.Fatalf("removal did not atomically advance %s deletion epoch: %v", identity.TargetKind, err)
@@ -814,17 +850,17 @@ func (fixture *VolumePolicyDesiredFixture) AssertRemovalAncestry(t *testing.T, b
 }
 
 func (fixture *VolumePolicyDesiredFixture) CorruptRemovalParent(
-	t *testing.T, kind HierarchyDeletionTargetKind, change string,
+	t *testing.T, kind testhierarchydeletion.HierarchyDeletionTargetKind, change string,
 ) {
 	t.Helper()
 	id := fixture.Task.Owner.ProjectID
 	idKind := ids.KindProject
-	if kind == HierarchyDeletionTargetTenant {
+	if kind == testhierarchydeletion.HierarchyDeletionTargetTenant {
 		id, idKind = fixture.Task.Owner.TenantID, ids.KindTenant
 	}
-	key := HierarchyCoordinationKey(string(kind), id)
+	key := testhierarchydeletion.HierarchyCoordinationKey(string(kind), id)
 	if change == "missing" {
-		if _, err := fixture.Store.Transact(context.Background(), nil, []Mutation{{Type: MutationDelete, Key: key}}); err != nil {
+		if _, err := fixture.Store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}}); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -832,9 +868,11 @@ func (fixture *VolumePolicyDesiredFixture) CorruptRemovalParent(
 	value := []byte("corrupt")
 	if change == "identity" {
 		var err error
-		value, err = encodeHierarchyCoordination(HierarchyCoordinationRecord{
-			Schema: 1, TargetKind: kind, TargetID: ids.New(idKind), MutationEpoch: 1,
-		})
+		value, err = testhierarchydeletion.EncodeHierarchyCoordination(
+			testhierarchydeletion.HierarchyCoordinationRecord{
+				Schema: 1, TargetKind: kind, TargetID: ids.New(idKind), MutationEpoch: 1,
+			},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -847,11 +885,11 @@ func (fixture *VolumePolicyDesiredFixture) CorruptRemovalParent(
 func (fixture *VolumePolicyDesiredFixture) Race(t *testing.T, authority string) {
 	t.Helper()
 	keys := map[string]string{
-		"policy":       backupPolicyKey(fixture.Task.Owner.EnvironmentID),
-		"coordination": environmentCoordinationKey(fixture.Task.Owner.EnvironmentID),
-		"epoch":        environmentMutationEpochKey(fixture.Task.Owner.EnvironmentID),
-		"source":       backupSourceKey(fixture.policy.sources[0].Source.Record.ID),
-		"connector reference": backupPolicyConnectorReferenceKey(
+		"policy":       testbackuppolicy.BackupPolicyKey(fixture.Task.Owner.EnvironmentID),
+		"coordination": testenvironmentcoordination.Key(fixture.Task.Owner.EnvironmentID),
+		"epoch":        testhierarchy.EnvironmentMutationEpochKey(fixture.Task.Owner.EnvironmentID),
+		"source":       testbackuppolicy.BackupSourceKey(fixture.policy.sources[0].Source.Record.ID),
+		"connector reference": testbackuppolicy.BackupPolicyConnectorReferenceKey(
 			fixture.policy.connector.Record.Connector.ID,
 			fixture.Task.Owner.EnvironmentID,
 		),
@@ -871,14 +909,17 @@ func (fixture *VolumePolicyDesiredFixture) AssertUnpublished(t *testing.T, revis
 	if fixture.Revision() != revision {
 		t.Fatal("rejected publication wrote storage")
 	}
-	if value := fixture.policy.store.valueAt(taskKey(fixture.Task.ID), revision); value != nil {
+	if value := fixture.policy.store.valueAt(testtaskjournal.TaskStorageKey(fixture.Task.ID), revision); value != nil {
 		t.Fatal("rejected publication wrote Task")
 	}
-	head := fixture.policy.store.valueAt(environmentBlueprintHeadKey(fixture.Task.Owner.EnvironmentID), revision)
+	head := fixture.policy.store.valueAt(
+		testblueprints.EnvironmentBlueprintHeadKey(fixture.Task.Owner.EnvironmentID),
+		revision,
+	)
 	if head == nil || head.ModRevision != fixture.HeadRevision {
 		t.Fatal("rejected publication changed desired head")
 	}
-	markerKey, err := idempotencyMarkerKey(fixture.Marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(fixture.Marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -901,24 +942,24 @@ func TestVolumePolicyDesiredPreparationBinding(t *testing.T) {
 	for _, changed := range []string{"control", "source kind", "environment", "removed Volume", "Task type", "Task target", "resource kind", "method", "route", "unprepared"} {
 		t.Run(changed, func(t *testing.T) {
 			prepared := fixture.prepared
-			claim := EnvironmentBlueprintStageClaim{
-				SourceKind: EnvironmentBlueprintSourceMutation, EnvironmentID: fixture.Task.Owner.EnvironmentID,
+			claim := testblueprints.EnvironmentBlueprintStageClaim{
+				SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, EnvironmentID: fixture.Task.Owner.EnvironmentID,
 			}
 			task, marker := cloneTaskRecord(fixture.Task), fixture.Marker
 			removed := fixture.Task.Target
 			switch changed {
 			case "source kind":
-				claim.SourceKind = EnvironmentBlueprintSourceApply
+				claim.SourceKind = testblueprints.EnvironmentBlueprintSourceApply
 			case "environment":
 				claim.EnvironmentID = ids.New(ids.KindEnvironment)
 			case "removed Volume":
 				removed = ids.New(ids.KindVolume)
 			case "Task type":
-				task.Type = TaskUpdate
+				task.Type = testtaskjournal.TaskUpdate
 			case "Task target":
 				task.Target = ids.New(ids.KindVolume)
 			case "resource kind":
-				task.Params[TaskResourceKindParam] = TaskResourceEntry
+				task.Params[testtaskjournal.TaskResourceKindParam] = testtaskjournal.TaskResourceEntry
 			case "method":
 				marker.Locator.Method = "PATCH"
 			case "route":

@@ -7,7 +7,13 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/core"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,13 +34,13 @@ func TestRecoverySecretPinsFollowPublishedTaskSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := store.valueAt(tasksecretpins.RootKey(task.OperationID), store.revision)
-	published := store.valueAt(taskKey(task.ID), store.revision)
+	published := store.valueAt(testtaskjournal.TaskStorageKey(task.ID), store.revision)
 	if task.Configuration == nil || task.Configuration.SecretPins == nil || root == nil ||
 		published == nil || root.ModRevision != published.ModRevision {
 		t.Fatal("Task and exact pin binding were not published atomically")
 	}
 	assertRecoverySecretDeletionBlocked(t, secrets, project, secret)
-	terminal := acknowledgeRecoverySecretTask(t, tasks, task, TaskStatusCompleted)
+	terminal := acknowledgeRecoverySecretTask(t, tasks, task, testtaskjournal.TaskStatusCompleted)
 	root = store.valueAt(tasksecretpins.RootKey(task.OperationID), store.revision)
 	if root == nil || root.ModRevision != terminal.Revision {
 		t.Fatal("successful Task did not atomically authorize pin release")
@@ -44,14 +50,15 @@ func TestRecoverySecretPinsFollowPublishedTaskSuccess(t *testing.T) {
 	if err := RecoverTaskSecretPinSources(ctx, store); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := secrets.DeleteSecret(ctx, ProjectSecretOwner(project), secret); err != nil {
+	if _, err := secrets.DeleteSecret(ctx, testsecrets.ProjectOwner(project), secret); err != nil {
 		t.Fatalf("released Secret deletion = %v", err)
 	}
-	if store.valueAt(secretRecordKey(secret.Record.Secret.ID), store.revision) != nil ||
-		store.valueAt(secretValueKey(secret.Record.Secret.ID), store.revision) != nil {
+	if store.valueAt(testsecrets.RecordKey(secret.Record.Secret.ID), store.revision) != nil ||
+		store.valueAt(testsecrets.ValueKey(secret.Record.Secret.ID), store.revision) != nil {
 		t.Fatal("successful deletion retained Secret metadata or ciphertext")
 	}
-	if stored, err := tasks.GetTask(ctx, task.ID); err != nil || stored.Record.Status != TaskStatusCompleted {
+	if stored, err := tasks.GetTask(ctx, task.ID); err != nil ||
+		stored.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("source release changed Task history: %v", err)
 	}
 }
@@ -70,7 +77,7 @@ func TestRecoverySecretPinsSurviveFailedTaskAndRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	failed := acknowledgeRecoverySecretTask(t, tasks, task, TaskStatusFailed)
+	failed := acknowledgeRecoverySecretTask(t, tasks, task, testtaskjournal.TaskStatusFailed)
 	if err := RecoverTaskSecretPinSources(ctx, store); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +88,7 @@ func TestRecoverySecretPinsSurviveFailedTaskAndRetry(t *testing.T) {
 	retryAt := task.CreatedAt.Add(3 * time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 802)
 	marker := pendingRetryMarker(failed.Record, retryID, retryAt, "pinned-recovery-retry-0001")
-	result, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, marker)
+	result, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, marker)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,14 +101,15 @@ func TestRecoverySecretPinsSurviveFailedTaskAndRetry(t *testing.T) {
 		*retry.Record.Configuration.SecretPins != *task.Configuration.SecretPins {
 		t.Fatalf("Retry lost original pin authority: %v", err)
 	}
-	acknowledgeRecoverySecretTask(t, tasks, retry.Record, TaskStatusCompleted)
+	acknowledgeRecoverySecretTask(t, tasks, retry.Record, testtaskjournal.TaskStatusCompleted)
 	if progressed, err := tasks.ResumeTaskSourceReleases(ctx); err != nil || !progressed {
 		t.Fatalf("successful Retry release = %t/%v", progressed, err)
 	}
-	if _, err := secrets.DeleteSecret(ctx, ProjectSecretOwner(project), secret); err != nil {
+	if _, err := secrets.DeleteSecret(ctx, testsecrets.ProjectOwner(project), secret); err != nil {
 		t.Fatal(err)
 	}
-	if original, err := tasks.GetTask(ctx, task.ID); err != nil || original.Record.Status != TaskStatusFailed ||
+	if original, err := tasks.GetTask(ctx, task.ID); err != nil ||
+		original.Record.Status != testtaskjournal.TaskStatusFailed ||
 		original.Revision != failed.Revision {
 		t.Fatalf("Retry rewrote failed Task history: %v", err)
 	}
@@ -121,8 +129,8 @@ func TestRecoverySecretPinsExpiryWaitsForLatestAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	failed := acknowledgeRecoverySecretTask(t, tasks, task, TaskStatusFailed)
-	pins, err := recoverySecretPinRepository(store, project.Record.ID)
+	failed := acknowledgeRecoverySecretTask(t, tasks, task, testtaskjournal.TaskStatusFailed)
+	pins, err := tasksecretpins.NewEtcdRepository(store, project.Record.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +146,7 @@ func TestRecoverySecretPinsExpiryWaitsForLatestAttempt(t *testing.T) {
 	retryAt := task.CreatedAt.Add(time.Hour)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 803)
 	marker := pendingRetryMarker(failed.Record, retryID, retryAt, "pin-expiry-retry-0001")
-	result, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, marker)
+	result, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, marker)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,8 +158,8 @@ func TestRecoverySecretPinsExpiryWaitsForLatestAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	latest := acknowledgeRecoverySecretTask(t, tasks, retry.Record, TaskStatusFailed)
-	conditions, writes, err := recoverySecretPinFragment(staleExpiry)
+	latest := acknowledgeRecoverySecretTask(t, tasks, retry.Record, testtaskjournal.TaskStatusFailed)
+	conditions, writes, err := tasksecretpins.EtcdFragment(staleExpiry)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,13 +175,13 @@ func TestRecoverySecretPinsExpiryWaitsForLatestAttempt(t *testing.T) {
 	if _, err := tasks.PruneExpiredTasks(ctx, latest.Record.RetainUntil.Add(time.Nanosecond)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := secrets.DeleteSecret(ctx, ProjectSecretOwner(project), secret); err != nil {
+	if _, err := secrets.DeleteSecret(ctx, testsecrets.ProjectOwner(project), secret); err != nil {
 		t.Fatal(err)
 	}
 	lateAt := latest.Record.RetainUntil.Add(time.Second)
 	lateID := ids.NewAt(ids.KindTask, lateAt, 804)
 	lateMarker := pendingRetryMarker(latest.Record, lateID, lateAt, "expired-pin-retry-0001")
-	if _, err := tasks.RetryTask(ctx, retryID, lateID, TaskActorOperator, lateMarker); !isKind(
+	if _, err := tasks.RetryTask(ctx, retryID, lateID, testtaskjournal.TaskActorOperator, lateMarker); !isKind(
 		err,
 		errs.KindTaskNotRetryable,
 	) {
@@ -191,23 +199,38 @@ func TestRecoverySecretPreparationRejectsWrongSourcesAndReclaimsUnpublishedPins(
 	task.Owner.ProjectID = project.Record.ID
 	task.Owner.TenantID = project.Record.TenantID
 	file := task.Materializations[3]
-	file.Source.GeneratedEnvironment.Values = []TaskGeneratedEnvironmentEntryReference{{Name: "TOKEN",
-		Secret: &TaskSecretValueReference{SecretID: secret.Record.Secret.ID,
-			Revision: secret.Revision, CiphertextSHA256: encrypted.CiphertextSHA256}}}
-	task.Materializations = []TaskMaterializationRecord{file}
+	file.Source.GeneratedEnvironment.Values = []testtaskmaterialization.GeneratedEnvironmentEntryReference{
+		{Name: "TOKEN",
+			Secret: &testtaskmaterialization.SecretValueReference{SecretID: secret.Record.Secret.ID,
+				Revision: secret.Revision, CiphertextSHA256: encrypted.CiphertextSHA256}},
+	}
+	task.Materializations = []testtaskmaterialization.Record{file}
 	prepared, err := prepareRuntimeConfigurationTask(ctx, store, task, store.revision)
 	if err != nil {
 		t.Fatal(err)
 	}
-	adapter := recoverySecretPinStore{store: store, projectID: ids.New(ids.KindProject)}
-	pin := tasksecretpinrecord.Record{OperationID: task.OperationID, SecretID: secret.Record.Secret.ID,
+	foreign, err := tasksecretpins.NewEtcdRepository(store, ids.New(ids.KindProject))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := tasksecretpinrecord.Record{OperationID: ids.New(ids.KindOperation), SecretID: secret.Record.Secret.ID,
 		MetadataRevision: secret.Revision, CiphertextSHA256: encrypted.CiphertextSHA256}
-	if _, err := adapter.VerifySecret(ctx, pin); !isKind(err, errs.KindStateConflict) {
+	if _, err := foreign.Prepare(ctx, pin.OperationID, ids.New(ids.KindTask), []tasksecretpinrecord.Record{pin}); !isKind(
+		err,
+		errs.KindStateConflict,
+	) {
 		t.Fatalf("foreign Project pin = %v", err)
 	}
-	adapter.projectID = project.Record.ID
+	owned, err := tasksecretpins.NewEtcdRepository(store, project.Record.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin.OperationID = ids.New(ids.KindOperation)
 	pin.CiphertextSHA256 = strings.Repeat("0", 64)
-	if _, err := adapter.VerifySecret(ctx, pin); !isKind(err, errs.KindStateConflict) {
+	if _, err := owned.Prepare(ctx, pin.OperationID, ids.New(ids.KindTask), []tasksecretpinrecord.Record{pin}); !isKind(
+		err,
+		errs.KindStateConflict,
+	) {
 		t.Fatalf("changed ciphertext pin = %v", err)
 	}
 	prepared, pins, err := prepareRecoverySecretPins(ctx, store, prepared)
@@ -223,27 +246,31 @@ func TestRecoverySecretPreparationRejectsWrongSourcesAndReclaimsUnpublishedPins(
 		t.Fatal(err)
 	}
 	defer clearTaskMaterializationProjectionChange(activation)
-	value, err := encodeTaskRecord(prepared)
+	value, err := EncodeTaskRecord(prepared)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(value)
 	activation.mutations = append(
 		activation.mutations,
-		Mutation{Type: MutationPut, Key: taskKey(task.ID), Value: value},
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskStorageKey(task.ID),
+			Value: value,
+		},
 	)
 	commit, err := store.Transact(ctx, activation.conditions, activation.mutations)
-	if err != nil || commit.Succeeded || store.valueAt(taskKey(task.ID), store.revision) != nil {
+	if err != nil || commit.Succeeded || store.valueAt(testtaskjournal.TaskStorageKey(task.ID), store.revision) != nil {
 		t.Fatalf("abandoned preparation published a Task: %#v/%v", commit, err)
 	}
-	if _, err := secrets.DeleteSecret(ctx, ProjectSecretOwner(project), secret); err != nil {
+	if _, err := secrets.DeleteSecret(ctx, testsecrets.ProjectOwner(project), secret); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func publishRecoverySecretTask(
 	t *testing.T,
-) (*memoryHierarchyStore, Versioned[ProjectRecord], Versioned[SecretRecord], TaskRecord) {
+) (*memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.ProjectRecord], testkeyvalue.Versioned[testsecrets.Record], TaskRecord) {
 	t.Helper()
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
@@ -258,7 +285,7 @@ func publishRecoverySecretTask(
 	if err != nil {
 		t.Fatal(err)
 	}
-	record, err := NewProjectSecretRecord(
+	record, err := testsecrets.NewProjectRecord(
 		ids.New(ids.KindSecret),
 		project.Record.ID,
 		"RECOVERY_TOKEN",
@@ -270,7 +297,7 @@ func publishRecoverySecretTask(
 		t.Fatal(err)
 	}
 	encrypted := testSecretEncryptedValue(record.Secret.ID, "opaque-lifecycle-ciphertext")
-	secret, err := secrets.CreateSecret(ctx, ProjectSecretOwner(project), record, encrypted)
+	secret, err := secrets.CreateSecret(ctx, testsecrets.ProjectOwner(project), record, encrypted)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,25 +305,40 @@ func publishRecoverySecretTask(
 	file.StepID, file.EnvironmentID = task.Steps[0].ID, environment.Record.ID
 	file.ServiceID, file.ServiceName = projection.DesiredServices[0].Desired.ID, "api"
 	file.Destination = "secrets/.env." + environment.Record.ID + ".api"
-	file.Source.GeneratedEnvironment.Values = []TaskGeneratedEnvironmentEntryReference{{Name: "TOKEN",
-		Secret: &TaskSecretValueReference{SecretID: record.Secret.ID,
-			Revision: secret.Revision, CiphertextSHA256: encrypted.CiphertextSHA256}}}
-	task.Materializations = []TaskMaterializationRecord{file}
-	result := publishEnvironmentBlueprintTestRevision(t, hierarchy, project, environment, 0,
-		environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"), projection,
+	file.Source.GeneratedEnvironment.Values = []testtaskmaterialization.GeneratedEnvironmentEntryReference{
+		{Name: "TOKEN",
+			Secret: &testtaskmaterialization.SecretValueReference{SecretID: record.Secret.ID,
+				Revision: secret.Revision, CiphertextSHA256: encrypted.CiphertextSHA256}},
+	}
+	task.Materializations = []testtaskmaterialization.Record{file}
+	result := publishEnvironmentBlueprintTestRevision(
+		t,
+		hierarchy,
+		project,
+		environment,
+		0,
+		environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
+		projection,
 		environmentBlueprintTestZoneChanges(t, hierarchy, projection),
 		environmentBlueprintTestServiceChanges(t, hierarchy, projection),
-		environmentBlueprintTestRouteChanges(t, hierarchy, projection), ComponentTaskPreparation{}, task,
-		environmentBlueprintTestMarker(task, environment.Record.ID))
+		environmentBlueprintTestRouteChanges(
+			t,
+			hierarchy,
+			projection,
+		),
+		testcomponentplanning.ComponentTaskPreparation{},
+		task,
+		environmentBlueprintTestMarker(task, environment.Record.ID),
+	)
 	if outcome, _, conflict, err := result.Classify(); err != nil || conflict != nil ||
 		outcome != IdempotencyKnownApplied {
 		t.Fatalf("Task publication = %v/%v/%v", outcome, conflict, err)
 	}
-	stored := store.valueAt(taskKey(task.ID), store.revision)
+	stored := store.valueAt(testtaskjournal.TaskStorageKey(task.ID), store.revision)
 	if stored == nil {
 		t.Fatal("published Task is missing")
 	}
-	task, err = decodeTaskRecord(stored.Value)
+	task, err = DecodeTaskRecord(stored.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,8 +349,8 @@ func acknowledgeRecoverySecretTask(
 	t *testing.T,
 	tasks *TaskRepository,
 	task TaskRecord,
-	status TaskStatus,
-) Versioned[TaskRecord] {
+	status testtaskjournal.TaskStatus,
+) testkeyvalue.Versioned[TaskRecord] {
 	t.Helper()
 	ctx := context.Background()
 	agentID := ids.NewAt(ids.KindAgent, task.CreatedAt, 801)
@@ -317,7 +359,7 @@ func acknowledgeRecoverySecretTask(
 		t.Fatalf("claim = %t/%v", found, err)
 	}
 	result := completedComposeTaskResult()
-	if status != TaskStatusCompleted {
+	if status != testtaskjournal.TaskStatusCompleted {
 		result.ExitCode = 1
 	}
 	terminal, err := tasks.AcknowledgeTask(ctx, agentID, 1, task.ID,
@@ -331,11 +373,11 @@ func acknowledgeRecoverySecretTask(
 func assertRecoverySecretDeletionBlocked(
 	t *testing.T,
 	secrets *SecretRepository,
-	project Versioned[ProjectRecord],
-	secret Versioned[SecretRecord],
+	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	secret testkeyvalue.Versioned[testsecrets.Record],
 ) {
 	t.Helper()
-	if _, err := secrets.DeleteSecret(context.Background(), ProjectSecretOwner(project), secret); !isKind(
+	if _, err := secrets.DeleteSecret(context.Background(), testsecrets.ProjectOwner(project), secret); !isKind(
 		err,
 		errs.KindResourceInUse,
 	) {

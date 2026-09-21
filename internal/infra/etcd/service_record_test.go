@@ -9,6 +9,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 func TestServiceProjectionJoinDefaultsMissingRuntimeSidecarToRunning(t *testing.T) {
@@ -21,8 +25,8 @@ func TestServiceProjectionJoinDefaultsMissingRuntimeSidecarToRunning(t *testing.
 	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
 	projection := serviceRecordTestProjection(t, environmentID, service)
 	store := newMemoryHierarchyStore()
-	if _, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: "service-record-test-revision", Value: []byte("revision"),
+	if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: "service-record-test-revision", Value: []byte("revision"),
 	}}); err != nil {
 		t.Fatalf("seed revision: %v", err)
 	}
@@ -31,17 +35,27 @@ func TestServiceProjectionJoinDefaultsMissingRuntimeSidecarToRunning(t *testing.
 		t.Fatalf("read revision: %#v, %v", read, err)
 	}
 
-	joined, err := joinEnvironmentService(ctx, store, Versioned[EnvironmentComposeProjection]{
-		Record: projection, Revision: read.Entry.ModRevision, ReadRevision: read.ReadRevision,
-	}, service.ID, environmentBlueprintHeadKey(projection.EnvironmentID))
+	joined, err := joinServiceFixture(
+		ctx,
+		store,
+		testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+			Record: projection, Revision: read.Entry.ModRevision, ReadRevision: read.ReadRevision,
+		},
+		service.ID,
+		testblueprints.EnvironmentBlueprintHeadKey(projection.EnvironmentID),
+	)
 	if err != nil {
-		t.Fatalf("joinEnvironmentService() error = %v", err)
+		t.Fatalf("joinServiceFixture() error = %v", err)
 	}
 	if joined.Record.Desired.ID != service.ID || joined.Record.Desired.Name != service.Name ||
 		joined.Record.Runtime.ServiceID != service.ID ||
 		joined.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning ||
-		joined.Record.runtimeRevision != 0 {
-		t.Fatalf("joined Service = %#v, runtime revision = %d", joined.Record, joined.Record.runtimeRevision)
+		testservices.ServiceRuntimeRevision(joined) != 0 {
+		t.Fatalf(
+			"joined Service = %#v, runtime revision = %d",
+			joined.Record,
+			testservices.ServiceRuntimeRevision(joined),
+		)
 	}
 }
 
@@ -54,31 +68,41 @@ func TestServiceProjectionJoinUsesMutableRuntimeSidecar(t *testing.T) {
 	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
 	projection := serviceRecordTestProjection(t, environmentID, service)
 	store := newMemoryHierarchyStore()
-	runtime := ServiceRuntimeRecord{
+	runtime := testservices.ServiceRuntimeRecord{
 		EnvironmentID: projection.EnvironmentID, ServiceID: service.ID,
 		Runtime: core.ServiceRuntime{ServiceID: service.ID, RuntimeIntent: core.ServiceRuntimeIntentStopped},
 	}
-	runtimeValue, err := encodeServiceRuntimeRecord(runtime)
+	runtimeValue, err := testservices.EncodeServiceRuntimeRecord(runtime)
 	if err != nil {
 		t.Fatalf("encodeServiceRuntimeRecord() error = %v", err)
 	}
-	runtimeWrite, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: serviceRuntimeKey(service.ID), Value: runtimeValue,
+	runtimeWrite, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testservices.ServiceRuntimeKey(service.ID), Value: runtimeValue,
 	}})
 	clear(runtimeValue)
 	if err != nil || !runtimeWrite.Succeeded {
 		t.Fatalf("seed Service runtime sidecar = %#v, %v", runtimeWrite, err)
 	}
-	joined, err := joinEnvironmentService(ctx, store, Versioned[EnvironmentComposeProjection]{
-		Record: projection, Revision: runtimeWrite.Revision, ReadRevision: runtimeWrite.Revision,
-	}, service.ID, environmentBlueprintHeadKey(projection.EnvironmentID))
+	joined, err := joinServiceFixture(
+		ctx,
+		store,
+		testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+			Record: projection, Revision: runtimeWrite.Revision, ReadRevision: runtimeWrite.Revision,
+		},
+		service.ID,
+		testblueprints.EnvironmentBlueprintHeadKey(projection.EnvironmentID),
+	)
 	if err != nil {
-		t.Fatalf("joinEnvironmentService() error = %v", err)
+		t.Fatalf("joinServiceFixture() error = %v", err)
 	}
 	if joined.Record.Desired.Image != service.Image ||
 		joined.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentStopped ||
-		joined.Record.runtimeRevision != runtimeWrite.Revision {
-		t.Fatalf("joined Service = %#v, runtime revision = %d", joined.Record, joined.Record.runtimeRevision)
+		testservices.ServiceRuntimeRevision(joined) != runtimeWrite.Revision {
+		t.Fatalf(
+			"joined Service = %#v, runtime revision = %d",
+			joined.Record,
+			testservices.ServiceRuntimeRevision(joined),
+		)
 	}
 }
 
@@ -88,11 +112,11 @@ func TestServiceProjectionAndRuntimeEnvelopesRoundTripStrictly(t *testing.T) {
 	service := serviceRecordTestDesired()
 	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
 	projection := serviceRecordTestProjection(t, environmentID, service)
-	encodedProjection, err := encodeEnvironmentComposeProjection(projection)
+	encodedProjection, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentComposeProjection() error = %v", err)
 	}
-	decodedProjection, err := decodeEnvironmentComposeProjection(encodedProjection)
+	decodedProjection, err := testenvironmentprojection.DecodeEnvironmentComposeProjectionStorage(encodedProjection)
 	if err != nil || decodedProjection.EnvironmentID != projection.EnvironmentID ||
 		decodedProjection.DesiredServices[0].Desired.ID != projection.DesiredServices[0].Desired.ID {
 		t.Fatalf("projection round trip = %#v, %v", decodedProjection, err)
@@ -102,23 +126,23 @@ func TestServiceProjectionAndRuntimeEnvelopesRoundTripStrictly(t *testing.T) {
 		"duplicate projection field": bytes.Replace(encodedProjection, []byte(`"desired_services":`), []byte(`"desired_services":[],"desired_services":`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeEnvironmentComposeProjection(corrupt); err == nil {
+			if _, err := testenvironmentprojection.DecodeEnvironmentComposeProjectionStorage(corrupt); err == nil {
 				t.Fatal("decodeEnvironmentComposeProjection() accepted corrupt projection")
 			}
 		})
 	}
 
-	runtime := ServiceRuntimeRecord{
+	runtime := testservices.ServiceRuntimeRecord{
 		EnvironmentID: projection.EnvironmentID, ServiceID: projection.DesiredServices[0].Desired.ID,
 		Runtime: core.ServiceRuntime{
 			ServiceID: projection.DesiredServices[0].Desired.ID, RuntimeIntent: core.ServiceRuntimeIntentStopped,
 		},
 	}
-	encodedRuntime, err := encodeServiceRuntimeRecord(runtime)
+	encodedRuntime, err := testservices.EncodeServiceRuntimeRecord(runtime)
 	if err != nil {
 		t.Fatalf("encodeServiceRuntimeRecord() error = %v", err)
 	}
-	decodedRuntime, err := decodeServiceRuntimeRecord(encodedRuntime)
+	decodedRuntime, err := testservices.DecodeServiceRuntimeRecord(encodedRuntime)
 	if err != nil || decodedRuntime != runtime {
 		t.Fatalf("runtime round trip = %#v, %v", decodedRuntime, err)
 	}
@@ -127,7 +151,7 @@ func TestServiceProjectionAndRuntimeEnvelopesRoundTripStrictly(t *testing.T) {
 		"duplicate runtime field": bytes.Replace(encodedRuntime, []byte(`"runtime":`), []byte(`"runtime":{},"runtime":`), 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeServiceRuntimeRecord(corrupt); err == nil {
+			if _, err := testservices.DecodeServiceRuntimeRecord(corrupt); err == nil {
 				t.Fatal("decodeServiceRuntimeRecord() accepted corrupt sidecar")
 			}
 		})
@@ -143,13 +167,13 @@ func TestBackingServiceProjectionRequiresStableNetworkBinding(t *testing.T) {
 	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 1)
 	projection := serviceRecordTestProjection(t, environmentID, desired)
 	projection.DesiredServices[0].BackingNetworkID = ""
-	if err := validateEnvironmentComposeProjection(projection); err == nil {
+	if err := testenvironmentprojection.ValidateEnvironmentComposeProjection(projection); err == nil {
 		t.Fatal("projection accepted adapter-backed Service without a backing network")
 	}
 	networkID := ids.NewAt(ids.KindNetwork, serviceRecordTestTime(), 7)
 	projection.DesiredServices[0].BackingNetworkID = networkID
 	projection = withTestEnvironmentComposeArtifact(projection)
-	if err := validateEnvironmentComposeProjection(projection); err != nil {
+	if err := testenvironmentprojection.ValidateEnvironmentComposeProjection(projection); err != nil {
 		t.Fatalf("validateEnvironmentComposeProjection() error = %v", err)
 	}
 	projection.DesiredServices[0].Desired.Image = "postgres:16.1-alpine"
@@ -163,10 +187,10 @@ func TestServiceProjectionKeysUseStableEnvironmentAndRuntimeAuthorities(t *testi
 	// only durable Service authorities at the current head.
 	environmentID := ids.NewAt(ids.KindEnvironment, serviceRecordTestTime(), 4)
 	serviceID := serviceRecordTestDesired().ID
-	if got := environmentComposeProjectionKey(environmentID); got != "/v1/records/environment-compose-projections/"+environmentID {
+	if got := testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environmentID); got != "/v1/records/environment-compose-projections/"+environmentID {
 		t.Fatalf("environmentComposeProjectionKey() = %q", got)
 	}
-	if got := serviceRuntimeKey(serviceID); got != "/v1/records/service-runtimes/"+serviceID {
+	if got := testservices.ServiceRuntimeKey(serviceID); got != "/v1/records/service-runtimes/"+serviceID {
 		t.Fatalf("serviceRuntimeKey() = %q", got)
 	}
 }
@@ -175,13 +199,13 @@ func serviceRecordTestProjection(
 	t *testing.T,
 	environmentID string,
 	services ...core.Service,
-) EnvironmentComposeProjection {
+) testenvironmentprojection.EnvironmentComposeProjection {
 	t.Helper()
-	projection := EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, serviceRecordTestTime(), 2), RenderGeneration: 1,
 	}
 	for _, service := range services {
-		projection.DesiredServices = append(projection.DesiredServices, EnvironmentServiceProjection{
+		projection.DesiredServices = append(projection.DesiredServices, testservices.EnvironmentServiceProjection{
 			EnvironmentID: environmentID, Desired: service,
 		})
 	}

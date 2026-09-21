@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/agent"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/moby/moby/api/types/container"
@@ -88,7 +88,7 @@ func (*mixedRecoveryEngine) VolumeInspect(
 }
 func (*mixedRecoveryEngine) Close() error { return nil }
 
-func proveMixedObservationBoundary(t *testing.T, assignment agent.Assignment) *agentpb.ComposeArtifact {
+func proveMixedObservationBoundary(t *testing.T, assignment testtaskassignment.Assignment) *agentpb.ComposeArtifact {
 	t.Helper()
 	var stepID, selectedServiceID string
 	for _, member := range assignment.Plan.CandidateReleaseProcedure.Members {

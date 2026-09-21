@@ -144,8 +144,10 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 		return releaseGroupTaskChange{}, recordcodec.CorruptRecord()
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(stored.Values[1].Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetReleaseGroup || tombstone.TargetID != task.Target ||
-		tombstone.TargetRevision != stored.Values[0].ModRevision || tombstone.TaskID != task.ID ||
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetReleaseGroup ||
+		tombstone.TargetID != task.Target ||
+		tombstone.TargetRevision != stored.Values[0].ModRevision ||
+		tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
 		return releaseGroupTaskChange{}, errs.New(
 			errs.KindStateConflict,

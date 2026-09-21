@@ -8,10 +8,15 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	migratedagentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -67,12 +72,12 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 		service.NetworkMode = ""
 		service.User = "1000:1000"
 		project.Services["api"] = service
-	}, func(fixture *etcd.ExecutedArtifactFixture, resolver *controller.TaskPlanResolver,
-		_ etcd.ReleaseRenderInput, intent domain.Intent, _ *agentpb.ComposeArtifact) {
+	}, func(fixture *etcd.ExecutedArtifactFixture, resolver *testtaskplanning.TaskPlanResolver,
+		_ testreleaserender.ReleaseRenderInput, intent domain.Intent, _ *agentpb.ComposeArtifact) {
 		ctx := context.Background()
 		const entryValue = "manual-entry-private-artifact-test-value"
-		var materializer *controller.TaskMaterializationResolver
-		var entryRecord etcd.EntryRecord
+		var materializer *testtaskmaterialization.TaskMaterializationResolver
+		var entryRecord testentries.Record
 		var secretID string
 		if withEntry {
 			cipher := unexpectedManualJourneyCipher{t: t}
@@ -106,7 +111,7 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 			}
 			values, secrets, entry := fixture.PublishManualJourneyEntry(t, entryValue, ciphertext, secretReference)
 			entryRecord = entry
-			materializer, err = controller.NewTaskMaterializationResolver(
+			materializer, err = testtaskmaterialization.NewTaskMaterializationResolver(
 				fixture.Hierarchy,
 				values,
 				secrets,
@@ -118,7 +123,7 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 			}
 		}
 		scripts, task := fixture.CreateManualScript(t, intent.ServiceID)
-		sources, err := scripts.LoadExecutionSources(ctx, fixture.Ledger, task.Target)
+		sources, err := scripts.LoadExecutionSources(ctx, fixture.Ledger.Reader, task.Target)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,15 +132,15 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 			t.Fatal("source discovery substituted the serving Release")
 		}
 		resolveArtifacts := scripts.ResolveScriptAssignmentArtifacts
-		var prepared controller.ScriptRunnerPreparation
+		var prepared testtaskplanning.ScriptRunnerPreparation
 		if withEntry {
-			service, err := controller.NewScriptArtifactService(scripts, materializer)
+			service, err := testtaskplanning.NewScriptArtifactService(scripts, materializer)
 			if err != nil {
 				t.Fatal(err)
 			}
-			preparation, err := controller.NewScriptRunnerPreparationService(
+			preparation, err := testtaskplanning.NewScriptRunnerPreparationService(
 				service,
-				&etcd.LocalAgentRepository{},
+				&migratedagentregistration.Repository{},
 				retainedUnexpectedImageResolver{t: t},
 			)
 			if err != nil {
@@ -147,9 +152,9 @@ func testManualScriptServingReleaseJourney(t *testing.T, entryKind manualJourney
 			}
 			resolveArtifacts = service.ResolveScriptAssignmentArtifacts
 		}
-		plan, err := controller.BuildManualScriptPlan(ctx, controller.ManualScriptPlanInput{
+		plan, err := testtaskplanning.BuildManualScriptPlan(ctx, testtaskplanning.ManualScriptPlanInput{
 			TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID, StepID: task.Steps[0].ID,
-			ExecutionID: task.Params[etcd.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
+			ExecutionID: task.Params[testscriptexecutions.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
 			Preparation: prepared,
 		})
 		if err != nil {

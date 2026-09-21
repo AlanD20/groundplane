@@ -10,6 +10,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -25,7 +32,7 @@ func TestServiceRepositoryReadsAndPagesDesiredProjectionWithSidecar(t *testing.T
 	}
 	projection := serviceRecordTestProjection(t, environment.Record.ID, desired...)
 	seedServiceRepositoryTestDesiredProjection(t, store, projection)
-	apiRuntimeRevision := seedServiceRepositoryTestRuntime(t, store, ServiceRuntimeRecord{
+	apiRuntimeRevision := seedServiceRepositoryTestRuntime(t, store, testservices.ServiceRuntimeRecord{
 		EnvironmentID: environment.Record.ID, ServiceID: desired[0].ID,
 		Runtime: core.ServiceRuntime{ServiceID: desired[0].ID, RuntimeIntent: core.ServiceRuntimeIntentStopped},
 	})
@@ -33,17 +40,16 @@ func TestServiceRepositoryReadsAndPagesDesiredProjectionWithSidecar(t *testing.T
 	stored, err := repository.GetService(ctx, desired[0].ID)
 	if err != nil || stored.Record.Desired.Name != "api" ||
 		stored.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentStopped ||
-		stored.Record.runtimeRevision != apiRuntimeRevision {
+		testservices.ServiceRuntimeRevision(stored) != apiRuntimeRevision {
 		t.Fatalf("GetService() = %#v, %v", stored, err)
 	}
-	first, err := repository.ListServices(ctx, environment.Record.ID, PageRequest{Limit: 1})
+	first, err := repository.ListServices(ctx, environment.Record.ID, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil || len(first.Items) != 1 || first.NextCursor == "" || first.Items[0].Record.Desired.Name != "api" {
 		t.Fatalf("ListServices(first) = %#v, %v", first, err)
 	}
 	second, err := repository.ListServices(
 		ctx,
-		environment.Record.ID,
-		PageRequest{Limit: 1, Cursor: first.NextCursor},
+		environment.Record.ID, testkeyvalue.PageRequest{Limit: 1, Cursor: first.NextCursor},
 	)
 	if err != nil || len(second.Items) != 1 || second.NextCursor != "" || second.Revision != first.Revision ||
 		second.Items[0].Record.Desired.Name != "worker" ||
@@ -87,7 +93,7 @@ func TestServiceRepositoryHidesComponentGeneratedServicesFromOrdinaryReads(t *te
 	authoredAPI := serviceRepositoryTestDesired(830, "api")
 	generatedRouter := serviceRepositoryTestDesired(831, "caddy")
 	authoredWorker := serviceRepositoryTestDesired(832, "worker")
-	component, err := NewComponentRecord(core.Component{
+	component, err := testcomponents.NewRecord(core.Component{
 		ID:    ids.NewAt(ids.KindComponent, serviceRecordTestTime(), 833),
 		Owner: core.ComponentOwnerEnvironment, OwnerID: environment.Record.ID,
 		Kind: core.ComponentKindIngressCaddy, Enabled: true,
@@ -99,7 +105,7 @@ func TestServiceRepositoryHidesComponentGeneratedServicesFromOrdinaryReads(t *te
 	if err != nil {
 		t.Fatalf("NewComponentRecord() error = %v", err)
 	}
-	tunnel, err := NewComponentRecord(core.Component{
+	tunnel, err := testcomponents.NewRecord(core.Component{
 		ID:    ids.NewAt(ids.KindComponent, serviceRecordTestTime(), 835),
 		Owner: core.ComponentOwnerEnvironment, OwnerID: environment.Record.ID,
 		Kind: core.ComponentKindEdgeCloudflare,
@@ -108,16 +114,20 @@ func TestServiceRepositoryHidesComponentGeneratedServicesFromOrdinaryReads(t *te
 		t.Fatalf("NewComponentRecord(tunnel) error = %v", err)
 	}
 	projection := serviceRecordTestProjection(t, environment.Record.ID, authoredAPI, generatedRouter, authoredWorker)
-	projection.Components = []ComponentRecord{component, tunnel}
+	projection.Components = []testcomponents.Record{component, tunnel}
 	projection = withTestEnvironmentComposeArtifact(projection)
 	seedServiceRepositoryTestDesiredProjection(t, store, projection)
 
-	first, err := repository.ListServices(ctx, environment.Record.ID, PageRequest{Limit: 1})
+	first, err := repository.ListServices(ctx, environment.Record.ID, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil || len(first.Items) != 1 || first.Items[0].Record.Desired.ID == generatedRouter.ID ||
 		first.NextCursor == "" {
 		t.Fatalf("ListServices(first) = %#v, %v", first, err)
 	}
-	second, err := repository.ListServices(ctx, environment.Record.ID, PageRequest{Limit: 1, Cursor: first.NextCursor})
+	second, err := repository.ListServices(
+		ctx,
+		environment.Record.ID,
+		testkeyvalue.PageRequest{Limit: 1, Cursor: first.NextCursor},
+	)
 	listed := map[string]bool{first.Items[0].Record.Desired.ID: true}
 	if len(second.Items) == 1 {
 		listed[second.Items[0].Record.Desired.ID] = true
@@ -147,7 +157,7 @@ func TestServiceRepositoryHidesComponentGeneratedServicesFromOrdinaryReads(t *te
 
 func serviceRepositoryTestHierarchy(
 	t *testing.T,
-) (*ServiceRepository, *memoryHierarchyStore, Versioned[EnvironmentRecord], Versioned[ProjectRecord]) {
+) (*ServiceRepository, *memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], testkeyvalue.Versioned[testhierarchy.ProjectRecord]) {
 	t.Helper()
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
@@ -159,19 +169,19 @@ func serviceRepositoryTestHierarchy(
 	if err != nil {
 		t.Fatalf("newServiceRepository() error = %v", err)
 	}
-	tenant := TenantRecord{ID: hierarchyTestID(ids.KindTenant, 800), Slug: "acme", Name: "Acme"}
+	tenant := testhierarchy.TenantRecord{ID: hierarchyTestID(ids.KindTenant, 800), Slug: "acme", Name: "Acme"}
 	if _, err := hierarchy.CreateTenant(ctx, tenant); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	projectRecord := ProjectRecord{
+	projectRecord := testhierarchy.ProjectRecord{
 		ID: hierarchyTestID(ids.KindProject, 801), TenantID: tenant.ID,
-		Slug: "console", Name: "Console", Kind: ProjectKindTenant,
+		Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 	}
 	project, err := hierarchy.CreateProject(ctx, projectRecord)
 	if err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
-	environmentRecord, err := NewProvisioningEnvironment(
+	environmentRecord, err := testhierarchy.NewProvisioningEnvironment(
 		environmentpath.DefaultVolumeRoot,
 		projectRecord,
 		hierarchyTestID(ids.KindEnvironment, 802),
@@ -200,15 +210,15 @@ func serviceRepositoryTestDesired(offset int64, name string) core.Service {
 func seedServiceRepositoryTestRuntime(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	record ServiceRuntimeRecord,
+	record testservices.ServiceRuntimeRecord,
 ) int64 {
 	t.Helper()
-	value, err := encodeServiceRuntimeRecord(record)
+	value, err := testservices.EncodeServiceRuntimeRecord(record)
 	if err != nil {
 		t.Fatalf("encodeServiceRuntimeRecord() error = %v", err)
 	}
-	result, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: serviceRuntimeKey(record.ServiceID), Value: value,
+	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testservices.ServiceRuntimeKey(record.ServiceID), Value: value,
 	}})
 	clear(value)
 	if err != nil || !result.Succeeded {
@@ -220,32 +230,34 @@ func seedServiceRepositoryTestRuntime(
 func seedServiceRepositoryTestDesiredProjection(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	projection EnvironmentComposeProjection,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
 ) {
 	t.Helper()
 	createdAt := serviceRecordTestTime()
-	claim := EnvironmentBlueprintStageClaim{
+	claim := testblueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID:  strings.TrimPrefix(projection.RevisionID, "task_"),
 		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID, TaskID: projection.RevisionID,
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment, ScopeID: projection.EnvironmentID,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: projection.EnvironmentID,
 			Method: http.MethodPut, Route: "/environments/{id}/blueprint", Key: "service-repository-seed-0001",
 		},
 		Intent:     validEnvironmentBlueprintProtectedIntentForTest("service-repository-seed"),
-		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: projection.RenderGeneration,
-		ProjectionSchema: EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: projection.RenderGeneration,
+		ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
 	}
-	blueprint := EnvironmentBlueprintRevision{
+	blueprint := testblueprints.EnvironmentBlueprintRevision{
 		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
 		RootPath: "blueprint.yaml", ComposeSources: []string{"blueprint.yaml"},
-		Files:     []EnvironmentBlueprintFile{{Path: "blueprint.yaml", Content: []byte("services: {}\n")}},
+		Files: []testblueprints.EnvironmentBlueprintFile{
+			{Path: "blueprint.yaml", Content: []byte("services: {}\n")},
+		},
 		CreatedAt: createdAt,
 	}
-	digest, err := EnvironmentBlueprintDependencyDigest(projection)
+	digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		t.Fatalf("EnvironmentBlueprintDependencyDigest() error = %v", err)
 	}
-	streams, err := buildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
+	streams, err := testblueprints.BuildEnvironmentBlueprintStreams(testblueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim, Blueprint: &blueprint, Projection: projection, DependencyDigest: digest,
 	})
 	if err != nil {
@@ -253,48 +265,59 @@ func seedServiceRepositoryTestDesiredProjection(
 	}
 	defer clear(streams.Audit)
 	defer clear(streams.Projection)
-	rootValue, err := encodeEnvironmentBlueprintSeal(environmentBlueprintSealFromDescriptor(streams.Descriptor))
+	rootValue, err := testblueprints.EncodeEnvironmentBlueprintSeal(
+		testblueprints.EnvironmentBlueprintSealFromDescriptor(streams.Descriptor),
+	)
 	if err != nil {
 		t.Fatalf("encodeEnvironmentBlueprintSeal() error = %v", err)
 	}
 	defer clear(rootValue)
-	headValue, err := encodeTaskReference(projection.RevisionID)
+	headValue, err := testidempotency.EncodeTaskReference(projection.RevisionID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
 	defer clear(headValue)
-	mutations := []Mutation{
+	mutations := []testkeyvalue.Mutation{
 		{
-			Type:  MutationPut,
-			Key:   environmentBlueprintRootKey(projection.EnvironmentID, projection.RevisionID),
+			Type:  testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintRootKey(projection.EnvironmentID, projection.RevisionID),
 			Value: rootValue,
 		},
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(projection.EnvironmentID), Value: headValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintHeadKey(projection.EnvironmentID),
+			Value: headValue,
+		},
 	}
 	for index := uint32(0); index < streams.Descriptor.ProjectionChunks; index++ {
-		from := int(index) * EnvironmentBlueprintChunkBytes
-		to := from + EnvironmentBlueprintChunkBytes
+		from := int(index) * testblueprints.EnvironmentBlueprintChunkBytes
+		to := from + testblueprints.EnvironmentBlueprintChunkBytes
 		if to > len(streams.Projection) {
 			to = len(streams.Projection)
 		}
 		data := streams.Projection[from:to]
-		chunkValue, encodeErr := encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
-			Family: EnvironmentBlueprintChunkProjection, Sequence: index,
-			LogicalOffset: uint64(from), LogicalLength: uint32(len(data)),
-			Digest: sha256.Sum256(data), Data: data,
-		})
+		chunkValue, encodeErr := testblueprints.EncodeEnvironmentBlueprintChunk(
+			testblueprints.EnvironmentBlueprintChunk{
+				Family: testblueprints.EnvironmentBlueprintChunkProjection, Sequence: index,
+				LogicalOffset: uint64(from), LogicalLength: uint32(len(data)),
+				Digest: sha256.Sum256(data), Data: data,
+			},
+		)
 		if encodeErr != nil {
 			t.Fatalf("encodeEnvironmentBlueprintChunk() error = %v", encodeErr)
 		}
-		mutations = append(mutations, Mutation{
-			Type: MutationPut,
-			Key: environmentBlueprintChunkKeyFor(
-				projection.EnvironmentID, projection.RevisionID, EnvironmentBlueprintChunkProjection, index,
+		mutations = append(mutations, testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationPut,
+			Key: testblueprints.EnvironmentBlueprintChunkKeyFor(
+				projection.EnvironmentID,
+				projection.RevisionID,
+				testblueprints.EnvironmentBlueprintChunkProjection,
+				index,
 			),
 			Value: chunkValue,
 		})
 	}
-	defer clearMutationValues(mutations)
+	defer testkeyvalue.ClearMutationValues(mutations)
 	result, err := store.Transact(context.Background(), nil, mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed desired Service projection = %#v, %v", result, err)

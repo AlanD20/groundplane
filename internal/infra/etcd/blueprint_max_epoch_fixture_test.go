@@ -5,6 +5,9 @@ import (
 	"math"
 	"testing"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -13,29 +16,30 @@ import (
 func (fixture *ExecutedArtifactFixture) AtMaximumExecutionEpoch(t *testing.T, claim TaskAssignment) TaskAssignment {
 	t.Helper()
 	ctx := context.Background()
-	old, err := encodeTaskAssignment(claim.Assignment.Record)
+	old, err := testtaskassignments.EncodeTaskAssignment(claim.Assignment.Record)
 	if err != nil {
 		t.Fatal(err)
 	}
 	lifecycle, _, _, err := fixture.Tasks.assignmentLifecycleIndexAtRevision(ctx, claim.Assignment.Record,
-		&KeyValue{Value: old, ModRevision: claim.Assignment.Revision}, claim.Task.ReadRevision)
+		&testkeyvalue.KeyValue{Value: old, ModRevision: claim.Assignment.Revision}, claim.Task.ReadRevision)
 	if err != nil {
 		t.Fatal(err)
 	}
 	record := claim.Assignment.Record
 	record.ExecutionEpoch = math.MaxUint32
-	encoded, err := encodeTaskAssignment(record)
+	encoded, err := testtaskassignments.EncodeTaskAssignment(record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	taskBytes, err := encodeTaskRecord(claim.Task.Record)
+	taskBytes, err := EncodeTaskRecord(claim.Task.Record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutations := []Mutation{{Type: MutationPut, Key: taskKey(record.TaskID), Value: taskBytes}}
-	for _, key := range []string{taskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID),
-		taskAssignmentIndexKey(record.TaskID), lifecycle} {
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: encoded})
+	mutations := []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(record.TaskID), Value: taskBytes},
+	}
+	for _, key := range []string{testtaskjournal.TaskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID), testtaskjournal.TaskAssignmentIndexKey(record.TaskID), lifecycle} {
+		mutations = append(mutations, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: encoded})
 	}
 	if result, err := fixture.store.Transact(ctx, nil, mutations); err != nil || !result.Succeeded {
 		t.Fatalf("maximum epoch fixture: %v", err)

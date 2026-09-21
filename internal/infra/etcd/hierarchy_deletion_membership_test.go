@@ -7,6 +7,12 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testhierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	testhierarchydeletionfinalization "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
+	testhierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
+	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
 
 func TestBackingDeletionFreezesProjectSecrets(t *testing.T) {
@@ -29,37 +35,35 @@ func TestBackingDeletionFreezesProjectSecrets(t *testing.T) {
 	}
 	createdAt := time.Date(2026, 8, 29, 9, 0, 0, 0, time.UTC)
 	secretID := ids.NewAt(ids.KindSecret, createdAt, 962)
-	record, err := NewProjectSecretRecord(
+	record, err := testsecrets.NewProjectRecord(
 		secretID, project.Record.ID, "BACKING_PASSWORD", core.SecretKindEnvVar, "", createdAt,
 	)
 	if err != nil {
 		t.Fatalf("NewProjectSecretRecord() error = %v", err)
 	}
 	created, err := secrets.CreateSecret(
-		ctx, ProjectSecretOwner(project), record, testSecretEncryptedValue(secretID, "ciphertext"),
+		ctx, testsecrets.ProjectOwner(project), record, testSecretEncryptedValue(secretID, "ciphertext"),
 	)
 	if err != nil {
 		t.Fatalf("CreateSecret() error = %v", err)
 	}
-	journal, err := newHierarchyDeletionRepository(store)
-	if err != nil {
-		t.Fatalf("NewHierarchyDeletionRepository() error = %v", err)
+	tombstone := testhierarchydeletion.HierarchyDeletionTombstone{
+		OperationID:   ids.NewAt(ids.KindOperation, createdAt, 963),
+		OperationKind: testhierarchydeletion.HierarchyDeletionOperationBacking,
+		TargetKind:    testhierarchydeletion.HierarchyDeletionTargetBacking,
+		TargetID:      project.Record.ID, TargetRevision: project.Revision,
+		SnapshotRevision: created.ReadRevision, DeletionEpoch: 1,
 	}
-	nodes, err := journal.freezeProjectMembership(ctx, HierarchyDeletionOperation{
-		Tombstone: HierarchyDeletionTombstone{
-			OperationKind:    HierarchyDeletionOperationBacking,
-			SnapshotRevision: created.ReadRevision,
-		},
-	}, project.Record.ID, true)
+	frozen, err := testhierarchydeletionplanning.NewPlanner(store).FreezeCapturedMembership(ctx, tombstone)
 	if err != nil {
-		t.Fatalf("freezeProjectMembership() error = %v", err)
+		t.Fatalf("FreezeCapturedMembership() error = %v", err)
 	}
-	for _, node := range nodes {
-		if node.ActionKind == HierarchyDeletionProjectSecretRemove && node.TargetID == secretID {
+	for _, node := range frozen.Nodes {
+		if node.ActionKind == testhierarchydeletion.HierarchyDeletionProjectSecretRemove && node.TargetID == secretID {
 			return
 		}
 	}
-	t.Fatalf("backing credential Secret %s missing from frozen membership: %#v", secretID, nodes)
+	t.Fatalf("backing credential Secret %s missing from frozen membership: %#v", secretID, frozen.Nodes)
 }
 
 func TestEnvironmentDeletionFreezesAndFinalizesReleaseGroups(t *testing.T) {
@@ -67,31 +71,28 @@ func TestEnvironmentDeletionFreezesAndFinalizesReleaseGroups(t *testing.T) {
 	// Service removal and parent finalization can prove the Environment is empty.
 	ctx := context.Background()
 	fixture := newReleaseGroupPublisherFixture(t, 2)
-	journal, err := newHierarchyDeletionRepository(fixture.store)
-	if err != nil {
-		t.Fatalf("newHierarchyDeletionRepository() error = %v", err)
-	}
-	primary, err := fixture.store.Get(ctx, environmentKey(fixture.environment.Record.ID))
+	primary, err := fixture.store.Get(ctx, testhierarchy.EnvironmentKey(fixture.environment.Record.ID))
 	if err != nil || primary == nil || primary.Entry == nil {
 		t.Fatalf("Environment primary = %#v, %v", primary, err)
 	}
-	operation := HierarchyDeletionOperation{Tombstone: HierarchyDeletionTombstone{
-		OperationID:      ids.NewAt(ids.KindOperation, fixture.now, 970),
-		SnapshotRevision: fixture.store.revision,
-	}}
-	nodes, err := journal.freezeEnvironmentMembership(
-		ctx,
-		operation,
-		fixture.environment.Record.ID,
-		primary.Entry.ModRevision,
-		hierarchyDeletionBytesDigest(primary.Entry.Value),
-	)
-	if err != nil {
-		t.Fatalf("freezeEnvironmentMembership() error = %v", err)
+	operation := testhierarchydeletion.HierarchyDeletionOperation{
+		Tombstone: testhierarchydeletion.HierarchyDeletionTombstone{
+			OperationID:   ids.NewAt(ids.KindOperation, fixture.now, 970),
+			OperationKind: testhierarchydeletion.HierarchyDeletionOperationEnvironment,
+			TargetKind:    testhierarchydeletion.HierarchyDeletionTargetEnvironment,
+			TargetID:      fixture.environment.Record.ID, TargetRevision: primary.Entry.ModRevision,
+			SnapshotRevision: fixture.store.revision, DeletionEpoch: 1,
+		},
 	}
-	var groupNode *HierarchyDeletionMembershipNode
+	frozen, err := testhierarchydeletionplanning.NewPlanner(fixture.store).
+		FreezeCapturedMembership(ctx, operation.Tombstone)
+	if err != nil {
+		t.Fatalf("FreezeCapturedMembership() error = %v", err)
+	}
+	nodes := frozen.Nodes
+	var groupNode *testhierarchydeletionplanning.HierarchyDeletionMembershipNode
 	for index := range nodes {
-		if nodes[index].ActionKind == HierarchyDeletionReleaseGroupRemove &&
+		if nodes[index].ActionKind == testhierarchydeletion.HierarchyDeletionReleaseGroupRemove &&
 			nodes[index].TargetID == fixture.group.ID {
 			groupNode = &nodes[index]
 			break
@@ -101,32 +102,26 @@ func TestEnvironmentDeletionFreezesAndFinalizesReleaseGroups(t *testing.T) {
 		groupNode.ProcedureInput.ControllerFinalizer.Finalizer != "release-group.remove" {
 		t.Fatalf("Release Group deletion node = %#v", groupNode)
 	}
-	effects, err := journal.prepareHierarchyDeletionControllerEffects(ctx, operation, HierarchyDeletionAction{
-		ActionKind:     groupNode.ActionKind,
-		TargetKind:     groupNode.TargetKind,
-		TargetID:       groupNode.TargetID,
-		TargetRevision: groupNode.TargetRevision,
-	})
+	effects, err := testhierarchydeletionfinalization.NewPreparer(fixture.store).
+		Prepare(ctx, operation, testhierarchydeletion.HierarchyDeletionAction{
+			ActionKind:     groupNode.ActionKind,
+			TargetKind:     groupNode.TargetKind,
+			TargetID:       groupNode.TargetID,
+			TargetRevision: groupNode.TargetRevision,
+		})
 	if err != nil {
 		t.Fatalf("prepareHierarchyDeletionControllerEffects() error = %v", err)
 	}
-	transaction, err := fixture.store.Transact(ctx, effects.conditions, effects.mutations)
+	transaction, err := fixture.store.Transact(ctx, effects.Conditions(), effects.Mutations())
 	if err != nil || !transaction.Succeeded {
 		t.Fatalf("Release Group finalizer transaction = %#v, %v", transaction, err)
 	}
-	for _, key := range []string{
-		releaseGroupRecordKey(fixture.group.ID),
-		releaseGroupOwnerKey(fixture.group.EnvironmentID, fixture.group.ID),
-		releaseGroupNameKey(fixture.group.EnvironmentID, fixture.group.Name),
-	} {
+	for _, key := range []string{testreleasegroups.ReleaseGroupRecordKey(fixture.group.ID), testreleasegroups.ReleaseGroupOwnerKey(fixture.group.EnvironmentID, fixture.group.ID), testreleasegroups.ReleaseGroupNameKey(fixture.group.EnvironmentID, fixture.group.Name)} {
 		if value := fixture.store.valueAt(key, fixture.store.revision); value != nil {
 			t.Fatalf("Release Group finalizer retained %s", key)
 		}
 	}
-	if value := fixture.store.valueAt(
-		releaseGroupCollectionEpochKey(fixture.group.EnvironmentID),
-		fixture.store.revision,
-	); value == nil {
+	if value := fixture.store.valueAt(testreleasegroups.ReleaseGroupCollectionEpochKey(fixture.group.EnvironmentID), fixture.store.revision); value == nil {
 		t.Fatal("Release Group child finalizer removed the parent-owned collection epoch")
 	}
 }

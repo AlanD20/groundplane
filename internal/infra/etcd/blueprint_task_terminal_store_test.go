@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -15,12 +16,12 @@ import (
 func (store *memoryHierarchyStore) TransactBlueprintTaskTerminal(
 	ctx context.Context,
 	envelope BlueprintTaskTerminalTransaction,
-) (TransactionResult, error) {
+) (testkeyvalue.TransactionResult, error) {
 	conditions, mutations, err := envelope.Operations()
 	if err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer testkeyvalue.ClearMutationValues(mutations)
 	return store.Transact(ctx, conditions, mutations)
 }
 
@@ -34,11 +35,14 @@ func (store *memoryHierarchyStore) ValidateBlueprintTaskTerminal(
 // Rationale: the completion envelope has exact per-arm and physical-byte
 // ceilings without exposing a general larger-transaction escape hatch.
 func TestBlueprintTerminalStoreKeepsBoundedArmsAndOrdinaryLimit(t *testing.T) {
-	conditions := make([]Condition, 256)
-	mutations := make([]Mutation, 256)
+	conditions := make([]testkeyvalue.Condition, 256)
+	mutations := make([]testkeyvalue.Mutation, 256)
 	for index := range conditions {
-		conditions[index] = Condition{Key: fmt.Sprintf("/terminal/guard/%03d", index)}
-		mutations[index] = Mutation{Type: MutationDelete, Key: fmt.Sprintf("/terminal/value/%03d", index)}
+		conditions[index] = testkeyvalue.Condition{Key: fmt.Sprintf("/terminal/guard/%03d", index)}
+		mutations[index] = testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationDelete,
+			Key:  fmt.Sprintf("/terminal/value/%03d", index),
+		}
 	}
 	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
 		Header: &etcdserverpb.ResponseHeader{Revision: 33}, Succeeded: true,
@@ -61,17 +65,25 @@ func TestBlueprintTerminalStoreKeepsBoundedArmsAndOrdinaryLimit(t *testing.T) {
 			switch variation {
 			case "comparison":
 				candidate.conditions = append(
-					append([]Condition(nil), conditions...),
-					Condition{Key: "/terminal/extra"},
+					append(
+						[]testkeyvalue.Condition(nil),
+						conditions...),
+					testkeyvalue.Condition{Key: "/terminal/extra"},
 				)
 			case "mutation":
 				candidate.mutations = append(
-					append([]Mutation(nil), mutations...),
-					Mutation{Type: MutationDelete, Key: "/terminal/extra"},
+					append(
+						[]testkeyvalue.Mutation(nil),
+						mutations...),
+					testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: "/terminal/extra"},
 				)
 			case "bytes":
-				candidate.mutations = []Mutation{
-					{Type: MutationPut, Key: "/terminal/large", Value: make([]byte, maximumTransactionBytes)},
+				candidate.mutations = []testkeyvalue.Mutation{
+					{
+						Type:  testkeyvalue.MutationPut,
+						Key:   "/terminal/large",
+						Value: make([]byte, testkeyvalue.MaximumBytes),
+					},
 				}
 			case "empty":
 				candidate = BlueprintTaskTerminalTransaction{}

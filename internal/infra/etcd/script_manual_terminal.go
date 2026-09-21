@@ -65,7 +65,8 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		return change, false, err
 	}
 	preparedAbort := false
-	if root.Phase == scriptsourceevidence.ScriptOperationSourceActive && execution.State == scriptexecutions.ScriptExecutionNotStarted &&
+	if root.Phase == scriptsourceevidence.ScriptOperationSourceActive &&
+		execution.State == scriptexecutions.ScriptExecutionNotStarted &&
 		status == taskjournal.TaskStatusAborted &&
 		!result.ReconciliationRequired {
 		execution, err = abortAssignedManualScriptBeforeStart(execution, *terminalAt)
@@ -156,8 +157,10 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		etcdstore.ClearValues(transaction.FailureReads)
 		return scriptTerminalSourceRelease{}, true, nil
 	}
-	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
-		root.RetryDisposition != disposition || execution.ActiveReference ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing ||
+		root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
+		root.RetryDisposition != disposition ||
+		execution.ActiveReference ||
 		!execution.UpdatedAt.Equal(*terminalAt) {
 		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}

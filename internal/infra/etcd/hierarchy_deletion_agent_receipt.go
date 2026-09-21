@@ -78,9 +78,14 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 	defer etcdstore.ClearValues(evidence.Values)
 	var receipt hierarchydeletion.HierarchyDeletionTerminalAttemptReceipt
 	var progress hierarchydeletion.HierarchyDeletionChildProgress
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(evidence.Values[0].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &receipt) != nil ||
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		evidence.Values[0].Value,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		&receipt,
+	) != nil ||
 		hierarchydeletion.DecodeHierarchyDeletionRecord(evidence.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &progress) != nil ||
-		receipt.ParentOperationID != operation.Tombstone.OperationID || receipt.ActionOrdinal != action.Ordinal ||
+		receipt.ParentOperationID != operation.Tombstone.OperationID ||
+		receipt.ActionOrdinal != action.Ordinal ||
 		receipt.ChildOperationID != entry.ChildOperationID ||
 		receipt.AttemptID != entry.CurrentAttemptID ||
 		progress.ReceiptRevision != evidence.Values[0].ModRevision ||
@@ -135,9 +140,14 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 			return hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		var receipt hierarchydeletion.HierarchyDeletionTerminalAttemptReceipt
-		if hierarchydeletion.DecodeHierarchyDeletionRecord(receiptRead.Entry.Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &receipt) != nil ||
+		if hierarchydeletion.DecodeHierarchyDeletionRecord(
+			receiptRead.Entry.Value,
+			hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+			&receipt,
+		) != nil ||
 			receipt.ParentOperationID != operation.Tombstone.OperationID ||
-			receipt.ChildOperationID != entry.ChildOperationID || receipt.AttemptID != entry.CurrentAttemptID ||
+			receipt.ChildOperationID != entry.ChildOperationID ||
+			receipt.AttemptID != entry.CurrentAttemptID ||
 			receipt.TaskID != task.ID ||
 			receipt.Terminal != *entry.Terminal {
 			clear(receiptRead.Entry.Value)

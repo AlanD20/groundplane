@@ -170,8 +170,19 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	if companions.Values[4] != nil {
 		componentIntent, decodeErr := environmentchanges.DecodeComponentTaskIntent(companions.Values[4].Value)
-		if decodeErr != nil || componentplanning.ValidateComponentTaskOwner(componentplanning.TaskIdentity{ID: task.ID, Target: task.Target, Executor: task.Executor, Type: task.Type, CreatedAt: task.CreatedAt}, componentIntent) != nil ||
-			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil ||
+		if decodeErr != nil ||
+			componentplanning.ValidateComponentTaskOwner(
+				componentplanning.TaskIdentity{
+					ID:        task.ID,
+					Target:    task.Target,
+					Executor:  task.Executor,
+					Type:      task.Type,
+					CreatedAt: task.CreatedAt,
+				},
+				componentIntent,
+			) != nil ||
+			componentIntent.Status != task.Status ||
+			componentIntent.TerminalAt == nil ||
 			task.FinishedAt == nil ||
 			!componentIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
@@ -203,8 +214,13 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	if companions.Values[8] != nil {
 		attachIntent, decodeErr := attachments.DecodeBlueprintAttachTaskIntent(companions.Values[8].Value)
-		if decodeErr != nil || blueprintplanning.ValidateBlueprintAttachTaskOwner(blueprintplanning.TaskIdentity{ID: task.ID, Target: task.Target}, attachIntent) != nil ||
-			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil ||
+		if decodeErr != nil ||
+			blueprintplanning.ValidateBlueprintAttachTaskOwner(
+				blueprintplanning.TaskIdentity{ID: task.ID, Target: task.Target},
+				attachIntent,
+			) != nil ||
+			attachIntent.Status != task.Status ||
+			attachIntent.TerminalAt == nil ||
 			task.FinishedAt == nil ||
 			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()

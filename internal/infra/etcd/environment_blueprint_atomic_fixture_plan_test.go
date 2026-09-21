@@ -10,14 +10,17 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func environmentBlueprintAtomicFixturePlan(
 	t *testing.T,
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
-	manifest ReleaseStagedManifest,
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+	manifest testreleases.ReleaseStagedManifest,
 	procedure *agentpb.CandidateReleaseProcedure,
 ) *agentpb.ExecutionPlan {
 	t.Helper()
@@ -25,7 +28,7 @@ func environmentBlueprintAtomicFixturePlan(
 	canonicalYAML := []byte("services: {}\n")
 	yamlDigest := sha256.Sum256(canonicalYAML)
 	artifact := &agentpb.ComposeArtifact{
-		ArtifactId:    task.Params[TaskComposeArtifactParam],
+		ArtifactId:    task.Params[testtaskjournal.TaskComposeArtifactParam],
 		OwnerKind:     agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT,
 		OwnerId:       environmentID,
 		ProjectName:   "gp-" + strings.ToLower(environmentID),

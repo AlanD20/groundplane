@@ -12,8 +12,10 @@ import (
 )
 
 func unassignedReleaseAbort(task TaskRecord, status taskjournal.TaskStatus) bool {
-	return status == taskjournal.TaskStatusAborted && task.Status == taskjournal.TaskStatusAborted && task.StartedAt == nil &&
-		task.FinishedAt != nil && task.Executor == taskjournal.TaskExecutorAgent &&
+	return status == taskjournal.TaskStatusAborted && task.Status == taskjournal.TaskStatusAborted &&
+		task.StartedAt == nil &&
+		task.FinishedAt != nil &&
+		task.Executor == taskjournal.TaskExecutorAgent &&
 		(task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback) &&
 		task.Params[releaserender.TaskReleasePublicationParam] != ""
 }

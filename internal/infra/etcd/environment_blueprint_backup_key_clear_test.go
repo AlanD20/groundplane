@@ -8,6 +8,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 type environmentBlueprintKeyBufferCaptureStore struct {
@@ -18,8 +23,8 @@ type environmentBlueprintKeyBufferCaptureStore struct {
 
 func (store *environmentBlueprintKeyBufferCaptureStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	result, err := store.hierarchyStore.GetMany(ctx, request)
 	if err != nil || result == nil {
 		return result, err
@@ -40,15 +45,14 @@ func TestEnvironmentBlueprintBackupPreparationClearsRawExistingAgeKeyBuffers(t *
 		t.Fatal(err)
 	}
 	prepared, err := fixture.repository.PrepareBackupPolicyReplacement(
-		ctx,
-		BackupPolicyReplacementInput{
+		ctx, testbackuppolicy.BackupPolicyReplacementInput{
 			EnvironmentID: fixture.environment.Record.ID,
 			Enabled:       true,
 			Frequency:     "*-*-* 02:00:00",
 			Keep:          7,
 			Encryption:    "age",
 			ConnectorID:   fixture.connector.Record.Connector.ID,
-			Sources: []BackupPolicySourceSelection{{
+			Sources: []testbackuppolicy.BackupPolicySourceSelection{{
 				Kind:     core.BackupSourceConfig,
 				TargetID: fixture.environment.Record.ID,
 			}},
@@ -60,8 +64,7 @@ func TestEnvironmentBlueprintBackupPreparationClearsRawExistingAgeKeyBuffers(t *
 	defer prepared.Destroy()
 	prepared, err = fixture.repository.SupplyBackupPolicyInitialKey(
 		ctx,
-		prepared,
-		BackupPolicyInitialKeyMaterial{
+		prepared, testbackuppolicymutations.BackupPolicyInitialKeyMaterial{
 			Recipient:  identity.Recipient().String(),
 			Ciphertext: []byte("controller-sealed-existing-age-identity"),
 		},
@@ -86,7 +89,7 @@ func TestEnvironmentBlueprintBackupPreparationClearsRawExistingAgeKeyBuffers(t *
 
 	captured := &environmentBlueprintKeyBufferCaptureStore{
 		hierarchyStore: fixture.store,
-		key:            backupKeyValueKey(fixture.environment.Record.ID),
+		key:            testbackuppolicy.BackupKeyValueKey(fixture.environment.Record.ID),
 	}
 	repository, err := newBackupPolicyRepository(captured)
 	if err != nil {
@@ -94,13 +97,12 @@ func TestEnvironmentBlueprintBackupPreparationClearsRawExistingAgeKeyBuffers(t *
 	}
 	taskID := ids.NewAt(ids.KindTask, fixture.now, 7900)
 	retained, err := repository.PrepareEnvironmentBlueprintBackupPolicy(
-		ctx,
-		EnvironmentBlueprintBackupPolicyInput{
+		ctx, testblueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 			EnvironmentID: fixture.environment.Record.ID,
 			TaskID:        taskID,
 			ReadRevision:  fixture.store.revision,
 			Retain:        true,
-			Projection: EnvironmentComposeProjection{
+			Projection: testenvironmentprojection.EnvironmentComposeProjection{
 				EnvironmentID: fixture.environment.Record.ID,
 				RevisionID:    taskID,
 			},

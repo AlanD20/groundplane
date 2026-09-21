@@ -5,10 +5,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -19,20 +24,20 @@ import (
 func TestReleaseHookSourcesSeparateAuthoredInputsFromDerivedArtifact(t *testing.T) {
 	for _, test := range []struct {
 		name      string
-		edit      func(*ReleaseRenderInput)
+		edit      func(*testreleaserender.ReleaseRenderInput)
 		reseal    bool
 		wantError bool
 	}{
 		{name: "unchanged", reseal: true},
 		{name: "recaptured artifact", edit: recaptureHookTestArtifact, reseal: true},
 		{name: "unsealed artifact substitution", edit: recaptureHookTestArtifact, wantError: true},
-		{name: "changed authored input", edit: func(render *ReleaseRenderInput) {
+		{name: "changed authored input", edit: func(render *testreleaserender.ReleaseRenderInput) {
 			render.Projection.NormalizedCompose = append(render.Projection.NormalizedCompose, '\n')
 		}, reseal: true, wantError: true},
-		{name: "changed generation", edit: func(render *ReleaseRenderInput) {
+		{name: "changed generation", edit: func(render *testreleaserender.ReleaseRenderInput) {
 			render.Projection.RenderGeneration++
 		}, reseal: true, wantError: true},
-		{name: "invalid artifact digest", edit: func(render *ReleaseRenderInput) {
+		{name: "invalid artifact digest", edit: func(render *testreleaserender.ReleaseRenderInput) {
 			artifact := &agentpb.ComposeArtifact{}
 			if err := proto.Unmarshal(render.Projection.ComposeArtifact, artifact); err != nil {
 				panic(err)
@@ -50,7 +55,7 @@ func TestReleaseHookSourcesSeparateAuthoredInputsFromDerivedArtifact(t *testing.
 			store, sources, _, _, _ := manualScriptLifecycleFixture(t)
 			intent := sources.Release.Intent
 			rootArtifact := bytes.Clone(sources.DesiredProjection.Record.ComposeArtifact)
-			render := ReleaseRenderInput{
+			render := testreleaserender.ReleaseRenderInput{
 				ReleaseID: intent.ID, PlanID: ids.New(ids.KindPlan), ArtifactID: intent.RenderInputID,
 				ServiceID: intent.ServiceID, ServiceName: sources.Service.Record.Desired.Name,
 				CandidateWorkload: intent.CandidateWorkload,
@@ -59,11 +64,13 @@ func TestReleaseHookSourcesSeparateAuthoredInputsFromDerivedArtifact(t *testing.
 				TenantID: sources.Tenant.Record.ID, TenantSlug: sources.Tenant.Record.Slug,
 				ProjectID: sources.Project.Record.ID, ProjectSlug: sources.Project.Record.Slug,
 				EnvironmentID: sources.Environment.Record.ID, EnvironmentName: sources.Environment.Record.Name,
-				AuthorizedVolumeDir:    sources.Environment.Record.VolumeDir,
-				Projection:             cloneEnvironmentComposeProjection(sources.DesiredProjection.Record),
+				AuthorizedVolumeDir: sources.Environment.Record.VolumeDir,
+				Projection: testenvironmentprojection.CloneEnvironmentComposeProjection(
+					sources.DesiredProjection.Record,
+				),
 				ServiceDependencyPlans: sources.DesiredProjection.Record.ServiceDependencyPlans.Clone(),
 			}
-			original, err := EncodeReleaseRenderInput(render)
+			original, err := testreleaserender.EncodeReleaseRenderInput(render)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -86,23 +93,31 @@ func TestReleaseHookSourcesSeparateAuthoredInputsFromDerivedArtifact(t *testing.
 					t.Fatal(err)
 				}
 			}
-			intentBytes, err := encodeReleaseRecord("release-intent", intent)
+			intentBytes, err := testreleases.EncodeReleaseRecord("release-intent", intent)
 			if err != nil {
 				t.Fatal(err)
 			}
-			renderBytes, err := encodeReleaseRecord("release-render-input", json.RawMessage(raw))
+			renderBytes, err := testreleases.EncodeReleaseRecord("release-render-input", json.RawMessage(raw))
 			if err != nil {
 				t.Fatal(err)
 			}
-			seed, err := store.Transact(ctx, nil, []Mutation{
-				{Type: MutationPut, Key: releaseIntentStagingKey("", intent.ID), Value: intentBytes},
-				{Type: MutationPut, Key: releaseRenderInputStagingKey("", intent.ID), Value: renderBytes},
+			seed, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testreleases.ReleaseIntentStagingKey("", intent.ID),
+					Value: intentBytes,
+				},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testreleases.ReleaseRenderInputStagingKey("", intent.ID),
+					Value: renderBytes,
+				},
 			})
 			if err != nil || !seed.Succeeded {
 				t.Fatalf("stage hook sources: %v", err)
 			}
-			ledger := &ReleaseLedger{store: &releasePlanningTestStore{memoryHierarchyStore: store}}
-			loaded, err := (&ScriptRepository{store: store}).LoadReleaseHookExecutionSources(
+			ledger := releasequeries.NewReader(store)
+			loaded, err := (composeScriptRepository(store)).LoadReleaseHookExecutionSources(
 				ctx, ledger, sources.Script.Record.Desired.ID, intent.ID, seed.Revision,
 			)
 			if test.wantError {
@@ -128,7 +143,7 @@ func TestReleaseHookSourcesSeparateAuthoredInputsFromDerivedArtifact(t *testing.
 	}
 }
 
-func recaptureHookTestArtifact(render *ReleaseRenderInput) {
+func recaptureHookTestArtifact(render *testreleaserender.ReleaseRenderInput) {
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(render.Projection.ComposeArtifact, artifact); err != nil {
 		panic(err)

@@ -8,6 +8,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -36,10 +39,18 @@ func TestVolumeRemovalTerminalRejectsUnprovedDirectoryAbsence(t *testing.T) {
 		t.Fatalf("claim removal: %v/%v", found, err)
 	}
 	before := fixture.Revision()
-	_, err = tasks.AcknowledgeTask(ctx, agentID, 1, fixture.Task.ID, assignment.Assignment.Record.AssignmentID,
-		etcd.TaskStatusCompleted, etcd.TaskResultRecord{
-			Kind: etcd.TaskResultEnvironmentDirectory, Diagnostic: etcd.TaskResultDiagnosticNone,
-		}, fixture.Task.CreatedAt.Add(2*time.Second))
+	_, err = tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		1,
+		fixture.Task.ID,
+		assignment.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		testtaskjournal.TaskResultRecord{
+			Kind: testtaskjournal.TaskResultEnvironmentDirectory, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+		},
+		fixture.Task.CreatedAt.Add(2*time.Second),
+	)
 	if kind, _ := errs.KindOf(err); kind != errs.KindStateConflict || fixture.Revision() != before {
 		t.Fatalf(
 			"unproved directory absence terminalized removal: %v; revision delta %d",
@@ -113,9 +124,9 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 				t.Fatal(err)
 			}
 			terminalAt := runtime.CreatedAt.Add(5 * time.Second)
-			result := etcd.TaskResultRecord{
-				Kind:       etcd.TaskResultEnvironmentDirectory,
-				Diagnostic: etcd.TaskResultDiagnosticNone,
+			result := testtaskjournal.TaskResultRecord{
+				Kind:       testtaskjournal.TaskResultEnvironmentDirectory,
+				Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 			}
 			changedKey := ""
 			if strings.HasPrefix(mode, "held ") || strings.HasPrefix(mode, "late ") {
@@ -155,8 +166,16 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 			if mode == "lost response" {
 				fixture.LoseRemovalTerminalResponse()
 			}
-			terminal, err := tasks.AcknowledgeTask(ctx, agentID, 1, fixture.Task.ID, assignment.AssignmentID,
-				etcd.TaskStatusCompleted, result, terminalAt)
+			terminal, err := tasks.AcknowledgeTask(
+				ctx,
+				agentID,
+				1,
+				fixture.Task.ID,
+				assignment.AssignmentID,
+				testtaskjournal.TaskStatusCompleted,
+				result,
+				terminalAt,
+			)
 			if changedKey != "" {
 				writes := int64(0)
 				if strings.HasPrefix(mode, "late ") {
@@ -170,12 +189,12 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 						fixture.Revision()-beforeTerminal,
 					)
 				}
-				stored, err := fixture.Store.Get(ctx, etcd.CapabilityTaskKey(fixture.Task.ID))
+				stored, err := fixture.Store.Get(ctx, testtaskjournal.TaskStorageKey(fixture.Task.ID))
 				if err != nil || stored.Entry == nil {
 					t.Fatal("Task lost", err)
 				}
-				stillRunning, err := etcd.DecodeCapabilityTaskRecord(stored.Entry.Value)
-				if err != nil || stillRunning.Status != etcd.TaskStatusRunning {
+				stillRunning, err := etcd.DecodeTaskRecord(stored.Entry.Value)
+				if err != nil || stillRunning.Status != testtaskjournal.TaskStatusRunning {
 					t.Fatal("Task was terminalized", err)
 				}
 				return
@@ -184,8 +203,16 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 				if kind, _ := errs.KindOf(err); kind != errs.KindRequestFailed {
 					t.Fatalf("lost response: %v", err)
 				}
-				terminal, err = tasks.AcknowledgeTask(ctx, agentID, 1, fixture.Task.ID, assignment.AssignmentID,
-					etcd.TaskStatusCompleted, result, terminalAt)
+				terminal, err = tasks.AcknowledgeTask(
+					ctx,
+					agentID,
+					1,
+					fixture.Task.ID,
+					assignment.AssignmentID,
+					testtaskjournal.TaskStatusCompleted,
+					result,
+					terminalAt,
+				)
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -196,8 +223,7 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 			fixture.AssertRemovalTerminal(t, terminal.Revision, terminalAt)
 			fixture.AssertRemovalAncestry(t, beforeTerminal)
 			retained, err := fixture.Store.Range(
-				ctx,
-				etcd.RangeRequest{Prefix: removalrecord.Root(runtime.OperationID), Limit: 1},
+				ctx, testkeyvalue.RangeRequest{Prefix: removalrecord.Root(runtime.OperationID), Limit: 1},
 			)
 			if err != nil || retained == nil || len(retained.Values) != 0 {
 				t.Fatalf("finalized operation retained current records: %v", err)
@@ -209,7 +235,7 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 					t.Fatalf("successful removal retained %s: %v", key, err)
 				}
 			}
-			markerKey, err := etcd.CapabilityIdempotencyMarkerKey(fixture.Marker.Locator)
+			markerKey, err := testidempotency.IdempotencyMarkerKey(fixture.Marker.Locator)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -217,8 +243,8 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 			if err != nil || read.Entry == nil {
 				t.Fatal("terminal marker absent", err)
 			}
-			marker, err := etcd.DecodeCapabilityIdempotencyMarker(read.Entry.Value, fixture.Marker.Locator)
-			if err != nil || marker.State != etcd.IdempotencyMarkerCompleted ||
+			marker, err := testidempotency.DecodeIdempotencyMarker(read.Entry.Value, fixture.Marker.Locator)
+			if err != nil || marker.State != testidempotency.IdempotencyMarkerCompleted ||
 				read.Entry.ModRevision != terminal.Revision ||
 				!marker.TerminalAt.Equal(terminalAt) ||
 				!marker.RetainUntil.After(terminalAt) ||
@@ -226,8 +252,8 @@ func TestVolumeRemovalTerminalReleasesOwnershipAtomically(t *testing.T) {
 				t.Fatalf("terminal marker not atomic: %v", err)
 			}
 			before := fixture.Revision()
-			if _, err := tasks.AcknowledgeTask(ctx, agentID, 1, fixture.Task.ID, assignment.AssignmentID,
-				etcd.TaskStatusCompleted, result, terminalAt); err != nil || fixture.Revision() != before {
+			if _, err := tasks.AcknowledgeTask(ctx, agentID, 1, fixture.Task.ID, assignment.AssignmentID, testtaskjournal.TaskStatusCompleted, result, terminalAt); err != nil ||
+				fixture.Revision() != before {
 				t.Fatalf("terminal acknowledgement replay changed state: %v", err)
 			}
 			replayed, err := fixture.Publish(ctx)

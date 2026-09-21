@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 )
 
 func TestNewProvisioningEnvironmentDerivesStableTenantAndBackingPaths(t *testing.T) {
@@ -18,21 +19,21 @@ func TestNewProvisioningEnvironmentDerivesStableTenantAndBackingPaths(t *testing
 
 	for _, test := range []struct {
 		name    string
-		project ProjectRecord
+		project testhierarchy.ProjectRecord
 		want    string
 	}{
 		{
 			name: "tenant",
-			project: ProjectRecord{
+			project: testhierarchy.ProjectRecord{
 				ID: projectID, TenantID: tenantID, Slug: "renamable", Name: "Tenant project",
-				Kind: ProjectKindTenant,
+				Kind: testhierarchy.ProjectKindTenant,
 			},
 			want: environmentpath.DefaultVolumeRoot + "/" + tenantID + "/" + projectID + "/" + environmentID,
 		},
 		{
 			name: "backing",
-			project: ProjectRecord{
-				ID: projectID, Slug: "renamable", Name: "Backing project", Kind: ProjectKindBacking,
+			project: testhierarchy.ProjectRecord{
+				ID: projectID, Slug: "renamable", Name: "Backing project", Kind: testhierarchy.ProjectKindBacking,
 			},
 			want: environmentpath.DefaultVolumeRoot + "/platform/" + projectID + "/" + environmentID,
 		},
@@ -40,7 +41,7 @@ func TestNewProvisioningEnvironmentDerivesStableTenantAndBackingPaths(t *testing
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			record, err := NewProvisioningEnvironment(
+			record, err := testhierarchy.NewProvisioningEnvironment(
 				environmentpath.DefaultVolumeRoot,
 				test.project,
 				environmentID,
@@ -52,10 +53,11 @@ func TestNewProvisioningEnvironmentDerivesStableTenantAndBackingPaths(t *testing
 			if err != nil {
 				t.Fatalf("NewProvisioningEnvironment() error = %v", err)
 			}
-			if record.VolumeDir != test.want || record.ProvisioningState != EnvironmentProvisioningProvisioning {
+			if record.VolumeDir != test.want ||
+				record.ProvisioningState != testhierarchy.EnvironmentProvisioningProvisioning {
 				t.Fatalf("record = %#v, want volume %q in provisioning", record, test.want)
 			}
-			if err := ValidateEnvironmentVolumeDir(
+			if err := testhierarchy.ValidateEnvironmentVolumeDir(
 				environmentpath.DefaultVolumeRoot,
 				test.project,
 				record,
@@ -69,11 +71,11 @@ func TestNewProvisioningEnvironmentDerivesStableTenantAndBackingPaths(t *testing
 func TestEnvironmentRecordRejectsSlugOrMismatchedVolumePath(t *testing.T) {
 	t.Parallel()
 	createdAt := time.Date(2026, 8, 22, 13, 0, 0, 0, time.UTC)
-	record := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
+	record := testhierarchy.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID:                ids.NewAt(ids.KindEnvironment, createdAt, 5),
 		ProjectID:         ids.NewAt(ids.KindProject, createdAt, 6),
 		Name:              "Production",
-		ProvisioningState: EnvironmentProvisioningReady,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		CreateTaskID:      ids.NewAt(ids.KindTask, createdAt, 7),
 		CreatedAt:         createdAt,
 	}
@@ -83,7 +85,7 @@ func TestEnvironmentRecordRejectsSlugOrMismatchedVolumePath(t *testing.T) {
 		"relative/platform/" + record.ProjectID + "/" + record.ID,
 	} {
 		record.VolumeDir = volumeDir
-		if err := validateEnvironment(record); err == nil {
+		if err := testhierarchy.ValidateEnvironment(record); err == nil {
 			t.Fatalf("validateEnvironment() accepted %q", volumeDir)
 		}
 	}
@@ -94,27 +96,27 @@ func TestEnvironmentProvisioningTransitionsPreserveIdentity(t *testing.T) {
 	createdAt := time.Date(2026, 8, 22, 13, 0, 0, 0, time.UTC)
 	originalTask := ids.NewAt(ids.KindTask, createdAt, 8)
 	retryTask := ids.NewAt(ids.KindTask, createdAt, 9)
-	record := EnvironmentRecord{NetworkPool: "10.40.0.0/16",
+	record := testhierarchy.EnvironmentRecord{NetworkPool: "10.40.0.0/16",
 		ID: ids.NewAt(ids.KindEnvironment, createdAt, 10), VolumeDir: "/stable/path",
-		ProvisioningState: EnvironmentProvisioningProvisioning, CreateTaskID: originalTask,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningProvisioning, CreateTaskID: originalTask,
 	}
 
-	failed, err := CompleteEnvironmentProvisioning(record, originalTask, false)
-	if err != nil || failed.ProvisioningState != EnvironmentProvisioningFailed {
+	failed, err := testhierarchy.CompleteEnvironmentProvisioning(record, originalTask, false)
+	if err != nil || failed.ProvisioningState != testhierarchy.EnvironmentProvisioningFailed {
 		t.Fatalf("CompleteEnvironmentProvisioning(failed) = %#v, %v", failed, err)
 	}
-	retrying, err := RetryEnvironmentProvisioning(failed, retryTask)
+	retrying, err := testhierarchy.RetryEnvironmentProvisioning(failed, retryTask)
 	if err != nil {
 		t.Fatalf("RetryEnvironmentProvisioning() error = %v", err)
 	}
-	ready, err := CompleteEnvironmentProvisioning(retrying, retryTask, true)
-	if err != nil || ready.ProvisioningState != EnvironmentProvisioningReady {
+	ready, err := testhierarchy.CompleteEnvironmentProvisioning(retrying, retryTask, true)
+	if err != nil || ready.ProvisioningState != testhierarchy.EnvironmentProvisioningReady {
 		t.Fatalf("CompleteEnvironmentProvisioning(ready) = %#v, %v", ready, err)
 	}
 	if ready.ID != record.ID || ready.VolumeDir != record.VolumeDir {
 		t.Fatal("provisioning transitions changed stable identity")
 	}
-	if _, err := CompleteEnvironmentProvisioning(retrying, originalTask, true); err == nil {
+	if _, err := testhierarchy.CompleteEnvironmentProvisioning(retrying, originalTask, true); err == nil {
 		t.Fatal("stale create Task completed a retried Environment")
 	}
 }

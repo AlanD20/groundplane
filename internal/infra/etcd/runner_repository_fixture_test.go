@@ -8,12 +8,17 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrunners "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func assertRunnerAllocationRetained(
 	t *testing.T,
 	repository *RunnerRepository,
-	want RunnerRecord,
+	want testrunners.RunnerRecord,
 	allocation runnerallocation.RunnerHostAllocationRecord,
 ) {
 	t.Helper()
@@ -23,7 +28,7 @@ func assertRunnerAllocationRetained(
 		current.Record.Desired.OwnerID != want.Desired.OwnerID || current.Record.Desired.TenantID != want.Desired.TenantID {
 		t.Fatalf("retained Runner = %#v, %v", current, err)
 	}
-	if _, err := repository.readRunnerAllocationEvidence(
+	if _, err := repository.ReadRunnerAllocationEvidence(
 		context.Background(), current.Record, current.ReadRevision,
 	); err != nil {
 		t.Fatalf("readRunnerAllocationEvidence(retained) error = %v", err)
@@ -41,13 +46,13 @@ func newRunnerRepositoryFixture(
 	}
 	tenantID := ids.NewAt(ids.KindTenant, taskJournalTime(), 700)
 	projectID := ids.NewAt(ids.KindProject, taskJournalTime(), 701)
-	if _, err := hierarchy.CreateTenant(context.Background(), TenantRecord{
+	if _, err := hierarchy.CreateTenant(context.Background(), testhierarchy.TenantRecord{
 		ID: tenantID, Slug: "example", Name: "Example",
 	}); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	if _, err := hierarchy.CreateProject(context.Background(), ProjectRecord{
-		ID: projectID, TenantID: tenantID, Slug: "application", Name: "Application", Kind: ProjectKindTenant,
+	if _, err := hierarchy.CreateProject(context.Background(), testhierarchy.ProjectRecord{
+		ID: projectID, TenantID: tenantID, Slug: "application", Name: "Application", Kind: testhierarchy.ProjectKindTenant,
 	}); err != nil {
 		t.Fatalf("CreateProject() error = %v", err)
 	}
@@ -74,25 +79,29 @@ type runnerTransactionAuditStore struct {
 
 func (store *runnerTransactionAuditStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	result, err := store.memoryHierarchyStore.GetMany(ctx, request)
 	if err != nil || store.allocationRaceDone || store.allocationRaceKey == "" ||
 		!containsHierarchyKey(request.Keys, store.allocationRaceKey) {
 		return result, err
 	}
 	store.allocationRaceDone = true
-	_, err = store.memoryHierarchyStore.Transact(ctx, []Condition{{Key: store.allocationRaceKey}}, []Mutation{{
-		Type: MutationPut, Key: store.allocationRaceKey, Value: store.allocationRaceValue,
-	}})
+	_, err = store.memoryHierarchyStore.Transact(
+		ctx,
+		[]testkeyvalue.Condition{{Key: store.allocationRaceKey}},
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: store.allocationRaceKey, Value: store.allocationRaceValue,
+		}},
+	)
 	return result, err
 }
 
 func (store *runnerTransactionAuditStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	operations := len(conditions) + len(mutations)
 	if operations > store.maximumOperations {
 		store.maximumOperations = operations
@@ -100,22 +109,22 @@ func (store *runnerTransactionAuditStore) Transact(
 	if !store.terminalRaceDone && store.terminalRaceKey != "" &&
 		runnerMutationsTerminalize(mutations, store.terminalRunnerID) {
 		store.terminalRaceDone = true
-		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{
-			Type: MutationDelete, Key: store.terminalRaceKey,
+		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationDelete, Key: store.terminalRaceKey,
 		}}); err != nil {
-			return TransactionResult{}, err
+			return testkeyvalue.TransactionResult{}, err
 		}
 	}
 	return store.memoryHierarchyStore.Transact(ctx, conditions, mutations)
 }
 
-func runnerMutationsTerminalize(mutations []Mutation, runnerID string) bool {
+func runnerMutationsTerminalize(mutations []testkeyvalue.Mutation, runnerID string) bool {
 	for _, mutation := range mutations {
-		if mutation.Type != MutationPut || mutation.Key != runnerLifecycleKey(runnerID) {
+		if mutation.Type != testkeyvalue.MutationPut || mutation.Key != testrunners.RunnerLifecycleKey(runnerID) {
 			continue
 		}
-		record, err := decodeRunnerLifecycleRecord(mutation.Value)
-		if err == nil && record.ProvisioningState != RunnerProvisioningProvisioning {
+		record, err := testrunners.DecodeRunnerLifecycleRecord(mutation.Value)
+		if err == nil && record.ProvisioningState != testrunners.RunnerProvisioningProvisioning {
 			return true
 		}
 	}
@@ -124,17 +133,24 @@ func runnerMutationsTerminalize(mutations []Mutation, runnerID string) bool {
 
 func seedRunnerHostSlots(t *testing.T, store *memoryHierarchyStore, slots uint32) {
 	t.Helper()
-	mutations := make([]Mutation, 0, slots)
+	mutations := make([]testkeyvalue.Mutation, 0, slots)
 	for slot := uint32(0); slot < slots; slot++ {
-		value, err := encodeRunnerHostSlotRecord(RunnerHostSlotRecord{
+		value, err := testrunners.EncodeRunnerHostSlotRecord(testrunners.RunnerHostSlotRecord{
 			Slot: slot, RunnerID: ids.NewAt(ids.KindRunner, taskJournalTime(), int64(6000+slot)),
 		})
 		if err != nil {
 			t.Fatalf("encodeRunnerHostSlotRecord(%d) error = %v", slot, err)
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: runnerHostSlotKey(slot), Value: value})
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testrunners.RunnerHostSlotKey(slot),
+				Value: value,
+			},
+		)
 	}
-	defer clearMutationValues(mutations)
+	defer testkeyvalue.ClearMutationValues(mutations)
 	result, err := store.Transact(context.Background(), nil, mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed Runner host slots = %#v, %v", result, err)
@@ -169,12 +185,12 @@ const (
 
 func runnerTestDesired(
 	offset int,
-	ownerKind RunnerOwnerKind,
+	ownerKind testrunners.RunnerOwnerKind,
 	ownerID string,
 	tenantID string,
-) RunnerDesiredRecord {
+) testrunners.RunnerDesiredRecord {
 	runnerID := ids.NewAt(ids.KindRunner, taskJournalTime(), runnerDesiredEntropyBase+int64(offset))
-	return RunnerDesiredRecord{
+	return testrunners.RunnerDesiredRecord{
 		ID:        runnerID,
 		Slug:      "runner-" + strings.ToLower(strings.TrimPrefix(runnerID, "run_")),
 		OwnerKind: ownerKind, OwnerID: ownerID, TenantID: tenantID,
@@ -183,46 +199,54 @@ func runnerTestDesired(
 	}
 }
 
-func runnerTestGitHubURL(ownerKind RunnerOwnerKind) string {
-	if ownerKind == RunnerOwnerProject {
+func runnerTestGitHubURL(ownerKind testrunners.RunnerOwnerKind) string {
+	if ownerKind == testrunners.RunnerOwnerProject {
 		return "https://github.com/aland20/groundplane"
 	}
 	return "https://github.com/aland20"
 }
 
-func runnerTestTask(desired RunnerDesiredRecord, taskType TaskType, offset int, key string) TaskRecord {
+func runnerTestTask(
+	desired testrunners.RunnerDesiredRecord,
+	taskType testtaskjournal.TaskType,
+	offset int,
+	key string,
+) TaskRecord {
 	task := validTaskRecord(taskJournalTime())
-	owner := TaskOwner{WorkspaceType: TaskWorkspaceTenant, TenantID: desired.TenantID}
-	if desired.OwnerKind == RunnerOwnerProject {
+	owner := testtaskjournal.TaskOwner{WorkspaceType: testtaskjournal.TaskWorkspaceTenant, TenantID: desired.TenantID}
+	if desired.OwnerKind == testrunners.RunnerOwnerProject {
 		owner.ProjectID = desired.OwnerID
 	}
 	task.ID = ids.NewAt(ids.KindTask, taskJournalTime(), runnerTaskEntropyBase+int64(offset))
 	task.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), runnerOperationEntropyBase+int64(offset))
-	task.Executor = TaskExecutorController
+	task.Executor = testtaskjournal.TaskExecutorController
 	task.Owner = owner
-	task.Actor = TaskActorOperator
+	task.Actor = testtaskjournal.TaskActorOperator
 	task.Type = taskType
 	task.Target = desired.ID
 	task.IdempotencyKey = key
-	task.Params = map[string]string{TaskResourceKindParam: TaskResourceRunner}
-	if taskType == TaskCreate {
-		task.Params[RunnerRegistrationTokenPresentParam] = "true"
+	task.Params = map[string]string{testtaskjournal.TaskResourceKindParam: testrunners.TaskResourceRunner}
+	if taskType == testtaskjournal.TaskCreate {
+		task.Params[testrunners.RunnerRegistrationTokenPresentParam] = "true"
 	}
 	return task
 }
 
-func runnerTestMarker(task TaskRecord, desired RunnerDesiredRecord) IdempotencyMarker {
+func runnerTestMarker(task TaskRecord, desired testrunners.RunnerDesiredRecord) testidempotency.IdempotencyMarker {
 	marker := pendingTaskMarker(task)
-	marker.Locator.ScopeKind = IdempotencyScopeTenant
-	if desired.OwnerKind == RunnerOwnerProject {
-		marker.Locator.ScopeKind = IdempotencyScopeProject
+	marker.Locator.ScopeKind = testidempotency.IdempotencyScopeTenant
+	if desired.OwnerKind == testrunners.RunnerOwnerProject {
+		marker.Locator.ScopeKind = testidempotency.IdempotencyScopeProject
 	}
 	marker.Locator.ScopeID = desired.OwnerID
 	marker.Locator.Route = "/runners"
-	if task.Type == TaskRemove {
+	if task.Type == testtaskjournal.TaskRemove {
 		marker.Locator.Method = "DELETE"
 		marker.Locator.Route = "/runners/{id}"
-		target := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetRunner, ID: desired.ID}
+		target := testidempotency.IdempotencyReplayTarget{
+			Kind: testidempotency.IdempotencyReplayTargetRunner,
+			ID:   desired.ID,
+		}
 		marker.ReplayTarget = &target
 	} else if task.RetryOf != "" {
 		marker.Locator.Route = "/runners/{id}/retry"

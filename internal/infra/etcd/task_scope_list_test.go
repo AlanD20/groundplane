@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,13 +23,13 @@ func TestTaskRepositoryListsImmutableOwnerScopesAtFixedRevision(t *testing.T) {
 	projectID := ids.NewAt(ids.KindProject, at, 42)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 43)
 
-	platform := scopedTaskRecord(at, 51, PlatformTaskOwner())
-	tenant := scopedTaskRecord(at.Add(time.Second), 52, TaskOwner{
-		WorkspaceType: TaskWorkspaceTenant,
+	platform := scopedTaskRecord(at, 51, testtaskjournal.PlatformTaskOwner())
+	tenant := scopedTaskRecord(at.Add(time.Second), 52, testtaskjournal.TaskOwner{
+		WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
 		TenantID:      tenantID,
 	})
-	environment := scopedTaskRecord(at.Add(2*time.Second), 53, TaskOwner{
-		WorkspaceType: TaskWorkspaceTenant,
+	environment := scopedTaskRecord(at.Add(2*time.Second), 53, testtaskjournal.TaskOwner{
+		WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
 		TenantID:      tenantID,
 		ProjectID:     projectID,
 		EnvironmentID: environmentID,
@@ -71,21 +73,23 @@ func TestTaskRepositoryListsImmutableOwnerScopesAtFixedRevision(t *testing.T) {
 
 	first, err := repository.ListTasksByScope(
 		ctx,
-		TaskListScope{Kind: TaskListScopeTenantWorkspace, ID: tenantID},
-		PageRequest{Limit: 1},
+		TaskListScope{Kind: TaskListScopeTenantWorkspace, ID: tenantID}, testkeyvalue.PageRequest{Limit: 1},
 	)
 	if err != nil || len(first.Items) != 1 || first.Items[0].Record.ID != tenant.ID || first.NextCursor == "" {
 		t.Fatalf("tenant first page = %#v, %v", first, err)
 	}
-	late := scopedTaskRecord(at.Add(3*time.Second), 54, TaskOwner{
-		WorkspaceType: TaskWorkspaceTenant,
+	late := scopedTaskRecord(at.Add(3*time.Second), 54, testtaskjournal.TaskOwner{
+		WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
 		TenantID:      tenantID,
 	})
 	seedTaskRepositoryTask(t, store, late)
 	second, err := repository.ListTasksByScope(
 		ctx,
-		TaskListScope{Kind: TaskListScopeTenantWorkspace, ID: tenantID},
-		PageRequest{Limit: 1, Cursor: first.NextCursor},
+		TaskListScope{
+			Kind: TaskListScopeTenantWorkspace,
+			ID:   tenantID,
+		},
+		testkeyvalue.PageRequest{Limit: 1, Cursor: first.NextCursor},
 	)
 	if err != nil || len(second.Items) != 1 || second.Items[0].Record.ID != environment.ID ||
 		second.Revision != first.Revision || second.NextCursor != "" {
@@ -93,8 +97,7 @@ func TestTaskRepositoryListsImmutableOwnerScopesAtFixedRevision(t *testing.T) {
 	}
 	if _, err := repository.ListTasksByScope(
 		ctx,
-		TaskListScope{Kind: TaskListScopeEnvironment, ID: environmentID},
-		PageRequest{Limit: 1, Cursor: first.NextCursor},
+		TaskListScope{Kind: TaskListScopeEnvironment, ID: environmentID}, testkeyvalue.PageRequest{Limit: 1, Cursor: first.NextCursor},
 	); !errors.Is(err, errs.New(errs.KindMalformedRequest, "")) {
 		t.Fatalf("cross-scope cursor error = %v, want malformed request", err)
 	}
@@ -106,7 +109,7 @@ func TestTaskRepositoryScopedListRejectsInvalidScopesAndOwnerMismatch(t *testing
 	ctx := context.Background()
 	store := newMemoryTaskStore()
 	at := taskJournalTime()
-	task := scopedTaskRecord(at, 61, PlatformTaskOwner())
+	task := scopedTaskRecord(at, 61, testtaskjournal.PlatformTaskOwner())
 	seedTaskRepositoryTask(t, store, task)
 	repository, err := newTaskRepository(store)
 	if err != nil {
@@ -121,7 +124,7 @@ func TestTaskRepositoryScopedListRejectsInvalidScopesAndOwnerMismatch(t *testing
 		{Kind: TaskListScopeKind("unknown")},
 	}
 	for _, scope := range invalid {
-		if _, err := repository.ListTasksByScope(ctx, scope, PageRequest{}); !errors.Is(
+		if _, err := repository.ListTasksByScope(ctx, scope, testkeyvalue.PageRequest{}); !errors.Is(
 			err,
 			errs.New(errs.KindValidationFailed, ""),
 		) {
@@ -130,17 +133,16 @@ func TestTaskRepositoryScopedListRejectsInvalidScopesAndOwnerMismatch(t *testing
 	}
 
 	tenantID := ids.NewAt(ids.KindTenant, at, 62)
-	indexKey := taskWorkspaceTenantIndexKey(tenantID, task.ID)
-	result, err := store.Transact(ctx, []Condition{{Key: indexKey}}, []Mutation{{
-		Type: MutationPut, Key: indexKey, Value: []byte(task.ID),
+	indexKey := testtaskjournal.TaskWorkspaceTenantIndexKey(tenantID, task.ID)
+	result, err := store.Transact(ctx, []testkeyvalue.Condition{{Key: indexKey}}, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: indexKey, Value: []byte(task.ID),
 	}})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed mismatched owner index = %#v, %v", result, err)
 	}
 	if _, err := repository.ListTasksByScope(
 		ctx,
-		TaskListScope{Kind: TaskListScopeTenantWorkspace, ID: tenantID},
-		PageRequest{},
+		TaskListScope{Kind: TaskListScopeTenantWorkspace, ID: tenantID}, testkeyvalue.PageRequest{},
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("mismatched owner index error = %v, want internal", err)
 	}
@@ -148,8 +150,8 @@ func TestTaskRepositoryScopedListRejectsInvalidScopesAndOwnerMismatch(t *testing
 	companionStore := newMemoryTaskStore()
 	projectID := ids.NewAt(ids.KindProject, at, 63)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 64)
-	environmentTask := scopedTaskRecord(at.Add(time.Second), 65, TaskOwner{
-		WorkspaceType: TaskWorkspaceTenant,
+	environmentTask := scopedTaskRecord(at.Add(time.Second), 65, testtaskjournal.TaskOwner{
+		WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
 		TenantID:      tenantID,
 		ProjectID:     projectID,
 		EnvironmentID: environmentID,
@@ -159,8 +161,8 @@ func TestTaskRepositoryScopedListRejectsInvalidScopesAndOwnerMismatch(t *testing
 	if err != nil || len(companionKeys) != 2 {
 		t.Fatalf("Environment Task owner keys = %v, %v", companionKeys, err)
 	}
-	deleted, err := companionStore.Transact(ctx, nil, []Mutation{{
-		Type: MutationDelete, Key: companionKeys[0],
+	deleted, err := companionStore.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationDelete, Key: companionKeys[0],
 	}})
 	if err != nil || !deleted.Succeeded {
 		t.Fatalf("delete workspace companion index = %#v, %v", deleted, err)
@@ -171,8 +173,7 @@ func TestTaskRepositoryScopedListRejectsInvalidScopesAndOwnerMismatch(t *testing
 	}
 	if _, err := companionRepository.ListTasksByScope(
 		ctx,
-		TaskListScope{Kind: TaskListScopeEnvironment, ID: environmentID},
-		PageRequest{},
+		TaskListScope{Kind: TaskListScopeEnvironment, ID: environmentID}, testkeyvalue.PageRequest{},
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("missing companion owner index error = %v, want internal", err)
 	}
@@ -188,16 +189,20 @@ func TestTaskRepositoryScopedListsBatchDefaultAndMaximumPages(t *testing.T) {
 	tenantID := ids.NewAt(ids.KindTenant, at, 71)
 	projectID := ids.NewAt(ids.KindProject, at, 72)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 73)
-	environmentOwner := TaskOwner{
-		WorkspaceType: TaskWorkspaceTenant,
+	environmentOwner := testtaskjournal.TaskOwner{
+		WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
 		TenantID:      tenantID,
 		ProjectID:     projectID,
 		EnvironmentID: environmentID,
 	}
-	for index := range MaximumPageLimit {
+	for index := range testkeyvalue.MaximumPageLimit {
 		platformAt := at.Add(time.Duration(index) * time.Millisecond)
-		environmentAt := at.Add(time.Duration(MaximumPageLimit+index) * time.Millisecond)
-		seedTaskRepositoryTask(t, store, scopedTaskRecord(platformAt, int64(1000+index), PlatformTaskOwner()))
+		environmentAt := at.Add(time.Duration(testkeyvalue.MaximumPageLimit+index) * time.Millisecond)
+		seedTaskRepositoryTask(
+			t,
+			store,
+			scopedTaskRecord(platformAt, int64(1000+index), testtaskjournal.PlatformTaskOwner()),
+		)
 		seedTaskRepositoryTask(t, store, scopedTaskRecord(environmentAt, int64(2000+index), environmentOwner))
 	}
 	audited := &boundedGetManyTaskStore{memoryTaskStore: store}
@@ -208,10 +213,10 @@ func TestTaskRepositoryScopedListsBatchDefaultAndMaximumPages(t *testing.T) {
 
 	defaultEnvironment, err := repository.ListTasksByScope(
 		ctx,
-		TaskListScope{Kind: TaskListScopeEnvironment, ID: environmentID},
-		PageRequest{},
+		TaskListScope{Kind: TaskListScopeEnvironment, ID: environmentID}, testkeyvalue.PageRequest{},
 	)
-	if err != nil || len(defaultEnvironment.Items) != DefaultPageLimit || defaultEnvironment.NextCursor == "" {
+	if err != nil || len(defaultEnvironment.Items) != testkeyvalue.DefaultPageLimit ||
+		defaultEnvironment.NextCursor == "" {
 		t.Fatalf(
 			"default Environment page = %d items, cursor %q, %v",
 			len(defaultEnvironment.Items),
@@ -228,8 +233,12 @@ func TestTaskRepositoryScopedListsBatchDefaultAndMaximumPages(t *testing.T) {
 		{Kind: TaskListScopeEnvironment, ID: environmentID},
 	}
 	for _, scope := range scopes {
-		page, err := repository.ListTasksByScope(ctx, scope, PageRequest{Limit: MaximumPageLimit})
-		if err != nil || len(page.Items) != MaximumPageLimit {
+		page, err := repository.ListTasksByScope(
+			ctx,
+			scope,
+			testkeyvalue.PageRequest{Limit: testkeyvalue.MaximumPageLimit},
+		)
+		if err != nil || len(page.Items) != testkeyvalue.MaximumPageLimit {
 			t.Fatalf("maximum page for %#v = %d items, %v", scope, len(page.Items), err)
 		}
 		for index := 1; index < len(page.Items); index++ {
@@ -238,8 +247,8 @@ func TestTaskRepositoryScopedListsBatchDefaultAndMaximumPages(t *testing.T) {
 			}
 		}
 	}
-	if audited.maximumKeys != maximumTransactionOperations {
-		t.Fatalf("largest GetMany batch = %d, want %d", audited.maximumKeys, maximumTransactionOperations)
+	if audited.maximumKeys != testkeyvalue.MaximumOperations {
+		t.Fatalf("largest GetMany batch = %d, want %d", audited.maximumKeys, testkeyvalue.MaximumOperations)
 	}
 }
 
@@ -250,16 +259,16 @@ type boundedGetManyTaskStore struct {
 
 func (store *boundedGetManyTaskStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
-	if len(request.Keys) > maximumTransactionOperations {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
+	if len(request.Keys) > testkeyvalue.MaximumOperations {
 		return nil, errs.New(errs.KindInternal, "GetMany exceeded the operation limit")
 	}
 	store.maximumKeys = max(store.maximumKeys, len(request.Keys))
 	return store.memoryTaskStore.GetMany(ctx, request)
 }
 
-func scopedTaskRecord(at time.Time, seed int64, owner TaskOwner) TaskRecord {
+func scopedTaskRecord(at time.Time, seed int64, owner testtaskjournal.TaskOwner) TaskRecord {
 	record := validTaskRecord(at)
 	record.ID = ids.NewAt(ids.KindTask, at, seed)
 	record.OperationID = ids.NewAt(ids.KindOperation, at, seed+100)
@@ -274,7 +283,7 @@ func assertScopedTaskIDs(
 	want ...string,
 ) {
 	t.Helper()
-	page, err := repository.ListTasksByScope(context.Background(), scope, PageRequest{})
+	page, err := repository.ListTasksByScope(context.Background(), scope, testkeyvalue.PageRequest{})
 	if err != nil {
 		t.Fatalf("ListTasksByScope(%#v) error = %v", scope, err)
 	}

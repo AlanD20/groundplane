@@ -39,7 +39,8 @@ func validateRunnerCreateTask(desired runnerrecord.RunnerDesiredRecord, task Tas
 	if err != nil {
 		return err
 	}
-	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCreate || task.Target != desired.ID ||
+	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCreate ||
+		task.Target != desired.ID ||
 		task.Owner != owner ||
 		task.Status != taskjournal.TaskStatusPending ||
 		task.IdempotencyKey == "" ||

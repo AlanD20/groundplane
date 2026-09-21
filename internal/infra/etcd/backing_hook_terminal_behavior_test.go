@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	testtaskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,10 +16,10 @@ import (
 func TestBackingAfterStartTerminalRequiresResultAndPreservesFailure(t *testing.T) {
 	for _, test := range []struct {
 		name   string
-		status TaskStatus
+		status testtaskjournal.TaskStatus
 	}{
-		{name: "completion requires result", status: TaskStatusCompleted},
-		{name: "failed hook blocks operation", status: TaskStatusFailed},
+		{name: "completion requires result", status: testtaskjournal.TaskStatusCompleted},
+		{name: "failed hook blocks operation", status: testtaskjournal.TaskStatusFailed},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			now := time.Date(2026, 9, 20, 16, 0, 0, 0, time.UTC)
@@ -25,8 +27,8 @@ func TestBackingAfterStartTerminalRequiresResultAndPreservesFailure(t *testing.T
 			task := validTaskRecord(now)
 			serviceID := task.Target
 			task.Params = map[string]string{
-				TaskBackingServiceCreationParam:   serviceID,
-				TaskBackingServiceAfterStartParam: serviceID,
+				testtaskjournal.TaskBackingServiceCreationParam:         serviceID,
+				testtaskconfiguration.TaskBackingServiceAfterStartParam: serviceID,
 			}
 			tasks, err := newTaskRepository(store)
 			if err != nil {
@@ -42,26 +44,31 @@ func TestBackingAfterStartTerminalRequiresResultAndPreservesFailure(t *testing.T
 			assignment := claim.Assignment.Record
 			result := completedComposeTaskResult()
 			result.ExecutionEpoch = assignment.ExecutionEpoch
-			if test.status == TaskStatusFailed {
+			if test.status == testtaskjournal.TaskStatusFailed {
 				result.ExitCode = 1
 				terminal, acknowledgeErr := tasks.AcknowledgeTask(
-					t.Context(), taskEventTestAgentID, 1, task.ID, assignment.AssignmentID,
-					TaskStatusFailed, result, now.Add(time.Second),
+					t.Context(),
+					taskEventTestAgentID,
+					1,
+					task.ID,
+					assignment.AssignmentID,
+					testtaskjournal.TaskStatusFailed,
+					result,
+					now.Add(time.Second),
 				)
-				if acknowledgeErr != nil || terminal.Record.Status != TaskStatusFailed {
+				if acknowledgeErr != nil || terminal.Record.Status != testtaskjournal.TaskStatusFailed {
 					t.Fatalf("failed hook acknowledgement = %#v, %v", terminal, acknowledgeErr)
 				}
 				return
 			}
 
 			if _, acknowledgeErr := tasks.AcknowledgeTask(
-				t.Context(), taskEventTestAgentID, 1, task.ID, assignment.AssignmentID,
-				TaskStatusCompleted, result, now.Add(time.Second),
+				t.Context(), taskEventTestAgentID, 1, task.ID, assignment.AssignmentID, testtaskjournal.TaskStatusCompleted, result, now.Add(time.Second),
 			); !errors.Is(acknowledgeErr, errs.New(errs.KindStateConflict, "")) {
 				t.Fatalf("completion without RESULT error = %v", acknowledgeErr)
 			}
 			current, err := tasks.GetTask(t.Context(), task.ID)
-			if err != nil || current.Record.Status != TaskStatusRunning {
+			if err != nil || current.Record.Status != testtaskjournal.TaskStatusRunning {
 				t.Fatalf("rejected completion changed Task = %#v, %v", current, err)
 			}
 		})

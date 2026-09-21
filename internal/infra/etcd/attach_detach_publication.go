@@ -368,7 +368,8 @@ func validateAttachDetachScope(
 		scope.BackingService.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach detach scope records must be versioned")
 	}
-	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+	if scope.Tenant.Record.ID != scope.Project.Record.TenantID ||
+		scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		scope.Project.Record.TenantID == "" ||
 		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
 		record.EnvironmentID != scope.Environment.Record.ID {
@@ -433,11 +434,14 @@ func validateAttachDetachTask(
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
-	validOwnership := detaching.Status == core.AttachDetaching && detaching.Operation == attachrecord.AttachOperationDetach &&
+	validOwnership := detaching.Status == core.AttachDetaching &&
+		detaching.Operation == attachrecord.AttachOperationDetach &&
 		detaching.TaskID == task.ID &&
 		attachrecord.AttachImmutableEqual(current, detaching)
-	validTaskShape := task.Type == taskjournal.TaskDetach && task.Target == current.ID && task.Executor == taskjournal.TaskExecutorAgent &&
-		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 &&
+	validTaskShape := task.Type == taskjournal.TaskDetach && task.Target == current.ID &&
+		task.Executor == taskjournal.TaskExecutorAgent &&
+		task.Status == taskjournal.TaskStatusPending &&
+		len(task.Params) == 1 &&
 		len(task.Materializations) == 0 &&
 		task.Params[taskjournal.TaskMutationEnvironmentParam] == current.EnvironmentID
 	if !validOwnership || !validTaskShape {
@@ -445,8 +449,10 @@ func validateAttachDetachTask(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != current.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.ReplayTarget == nil ||
+		marker.Locator.ScopeID != current.EnvironmentID ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
+		marker.ReplayTarget == nil ||
 		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetAttach ||
 		marker.ReplayTarget.ID != current.ID {
 		return errs.New(errs.KindValidationFailed, "Attach detach marker does not match its Environment-scoped Task")

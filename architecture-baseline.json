@@ -5,271 +5,255 @@
     "test": 1000
   },
   "oversized_files": [
-    {"path": "console/src/features/connectors/environment-connector-manager.tsx", "lines": 715},
-    {"path": "console/src/features/environment/environment-page.tsx", "lines": 4005},
-    {"path": "console/src/lib/mock-data.ts", "lines": 1316},
-    {"path": "console/src/lib/store.tsx", "lines": 3251},
-    {"path": "internal/app/attach_mutations.go", "lines": 1178},
-    {"path": "internal/app/controller.go", "lines": 1223},
-    {"path": "internal/app/environment_blueprint.go", "lines": 1333},
-    {"path": "internal/app/service_mutations.go", "lines": 861},
-    {"path": "internal/common/backupconfig/archive.go", "lines": 944},
-    {"path": "internal/common/backupconfig/config.go", "lines": 671},
-    {"path": "internal/common/executionplan/plan.go", "lines": 1186},
-    {"path": "internal/common/postgres16protocol/confinement.go", "lines": 993},
-    {"path": "internal/common/runner/runner.go", "lines": 807},
-    {"path": "internal/controller/agentchannel/registry.go", "lines": 602},
-    {"path": "internal/controller/agentchannel/server.go", "lines": 1000},
-    {"path": "internal/controller/blueprintparser/namespace.go", "lines": 904},
-    {"path": "internal/controller/hierarchy/service.go", "lines": 764},
-    {"path": "internal/controller/idempotentintent/intent.go", "lines": 647},
-    {"path": "internal/controller/localagent/localagent.go", "lines": 967},
-    {"path": "internal/controller/localagent/localagent_test.go", "lines": 1236},
-    {"path": "internal/infra/backupstage/backupstage_linux.go", "lines": 2908},
-    {"path": "internal/infra/backupstage/backupstage_linux_root_test.go", "lines": 2593},
-    {"path": "internal/infra/docker/composehelper/composehelper.go", "lines": 644},
-    {"path": "internal/infra/entrymaterializer/materializer_linux.go", "lines": 1260},
-    {"path": "internal/infra/entrymaterializer/materializer_linux_test.go", "lines": 1264},
-    {"path": "internal/infra/etcd/attach_repository.go", "lines": 1521},
-    {"path": "internal/infra/etcd/attach_repository_test.go", "lines": 1203},
-    {"path": "internal/infra/etcd/backup_artifact_repository.go", "lines": 2813},
-    {"path": "internal/infra/etcd/backup_checkpoint.go", "lines": 666},
-    {"path": "internal/infra/etcd/backup_policy_preparation.go", "lines": 695},
-    {"path": "internal/infra/etcd/backup_policy_replacement.go", "lines": 799},
-    {"path": "internal/infra/etcd/backup_run_publication.go", "lines": 1348},
-    {"path": "internal/infra/etcd/backup_runtime_record.go", "lines": 1948},
-    {"path": "internal/infra/etcd/backup_runtime_record_test.go", "lines": 1025},
-    {"path": "internal/infra/etcd/backup_runtime_repository.go", "lines": 2058},
-    {"path": "internal/infra/etcd/backup_runtime_repository_test.go", "lines": 5337},
-    {"path": "internal/infra/etcd/backup_secret_resolution.go", "lines": 992},
-    {"path": "internal/infra/etcd/backup_terminal_receipt.go", "lines": 1019},
-    {"path": "internal/infra/etcd/backup_terminal_receipt_test.go", "lines": 1312},
-    {"path": "internal/infra/etcd/connector_deletion_test.go", "lines": 1713},
-    {"path": "internal/infra/etcd/connector_repository.go", "lines": 607},
-    {"path": "internal/infra/etcd/deletion_tombstone.go", "lines": 671},
-    {"path": "internal/infra/etcd/entry_repository.go", "lines": 699},
-    {"path": "internal/infra/etcd/environment_acknowledgement.go", "lines": 709},
-    {"path": "internal/infra/etcd/environment_blueprint.go", "lines": 1506},
-    {"path": "internal/infra/etcd/environment_deletion_intent.go", "lines": 695},
-    {"path": "internal/infra/etcd/environment_deletion_lock_test.go", "lines": 1375},
-    {"path": "internal/infra/etcd/hierarchy.go", "lines": 899},
-    {"path": "internal/infra/etcd/hierarchy_keys.go", "lines": 950},
-    {"path": "internal/infra/etcd/idempotency.go", "lines": 1509},
-    {"path": "internal/infra/etcd/local_agent.go", "lines": 1050},
-    {"path": "internal/infra/etcd/runner_repository.go", "lines": 1132},
-    {"path": "internal/infra/etcd/runner_repository_test.go", "lines": 1167},
-    {"path": "internal/infra/etcd/runner_task_lifecycle.go", "lines": 1059},
-    {"path": "internal/infra/etcd/store.go", "lines": 773},
-    {"path": "internal/infra/etcd/task_journal.go", "lines": 1157},
-    {"path": "internal/infra/etcd/task_lifecycle.go", "lines": 3124},
-    {"path": "internal/infra/etcd/task_pruning.go", "lines": 844},
-    {"path": "internal/infra/s3compatible/adapter.go", "lines": 782},
-    {"path": "internal/operationmanifest/manifest.go", "lines": 637},
-    {"path": "pkg/api/types.go", "lines": 836}
+    {
+      "path": "internal/controller/localagent/localagent_test.go",
+      "lines": 1236
+    },
+    {
+      "path": "internal/infra/backupstage/backupstage_linux_root_test.go",
+      "lines": 2593
+    },
+    {
+      "path": "internal/infra/entrymaterializer/materializer_linux_test.go",
+      "lines": 1264
+    },
+    {
+      "path": "internal/infra/etcd/attach_repository_test.go",
+      "lines": 1203
+    },
+    {
+      "path": "internal/infra/etcd/backup_runtime_repository_test.go",
+      "lines": 5337
+    },
+    {
+      "path": "internal/infra/etcd/backup_terminal_receipt_test.go",
+      "lines": 1312
+    },
+    {
+      "path": "internal/infra/etcd/connector_deletion_test.go",
+      "lines": 1713
+    },
+    {
+      "path": "internal/infra/etcd/environment_deletion_lock_test.go",
+      "lines": 1375
+    },
+    {
+      "path": "internal/infra/etcd/runner_repository_test.go",
+      "lines": 1167
+    },
+    {
+      "path": "internal/operationmanifest/manifest.go",
+      "lines": 637
+    }
   ],
   "frozen_totals": [
-    {"path": "internal/app", "lines": 16804},
-    {"path": "internal/infra/etcd", "lines": 60604}
+    {
+      "path": "internal/app",
+      "lines": 3641
+    },
+    {
+      "path": "internal/infra/etcd",
+      "lines": 62273
+    }
   ],
   "legacy_findings": [
-  {
-    "path": "internal/agent/adapter_runtime.go",
-    "rule": "layer-import",
-    "subject": "internal/adapters",
-    "reason": "Pre-Q0 dependency edge pending relocation to its owning layer."
-  },
-  {
-    "path": "internal/cli/apiclient/client.go",
-    "rule": "open-model-field",
-    "subject": "Request.Body",
-    "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
-  },
-  {
-    "path": "internal/cli/apiclient/service.go",
-    "rule": "json-roundtrip-conversion",
-    "subject": "generatedServiceBody",
-    "reason": "Pre-Q0 generated-client conversion pending an explicit field mapper."
-  },
-  {
-    "path": "internal/cli/root.go",
-    "rule": "local-concrete-recovery",
-    "subject": "App",
-    "reason": "Pre-Q0 dynamic boundary pending a typed accessor or concrete ownership."
-  },
-  {
-    "path": "internal/common/entrymaterialization/sha256.go",
-    "rule": "interface-constructor",
-    "subject": "NewHasher",
-    "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
-  },
-  {
-    "path": "internal/common/runner/runner.go",
-    "rule": "interface-constructor",
-    "subject": "New",
-    "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
-  },
-  {
-    "path": "internal/common/runner/runner.go",
-    "rule": "interface-constructor",
-    "subject": "NewBinary",
-    "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
-  },
-  {
-    "path": "internal/controller/agent_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/attach_rename_route.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/attach_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/blueprint_components.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/connector_request_schema.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/connector_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/entry_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/environment_blueprint_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/environment_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/http_lifecycle.go",
-    "rule": "local-concrete-recovery",
-    "subject": "httpLifecycle",
-    "reason": "Pre-Q0 dynamic boundary pending a typed accessor or concrete ownership."
-  },
-  {
-    "path": "internal/controller/project_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/route_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/script_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/secret_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/service_lifecycle_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/service_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/task_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/tenant_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/controller/zone_routes.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/infra/age/secret_limit_test.go",
-    "rule": "layer-import",
-    "subject": "pkg/api",
-    "reason": "Pre-Q0 dependency edge pending relocation to its owning layer."
-  },
-  {
-    "path": "internal/infra/docker/compose.go",
-    "rule": "interface-constructor",
-    "subject": "New",
-    "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
-  },
-  {
-    "path": "internal/infra/etcd/component_record.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/infra/etcd/component_task_intent.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/infra/etcd/component_task_lifecycle.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/infra/etcd/component_task_publication.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  },
-  {
-    "path": "internal/infra/etcd/environment_component_candidate.go",
-    "rule": "reflect-import",
-    "subject": "reflect",
-    "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
-  }
-]
-
+    {
+      "path": "internal/agent/backingadapter/runtime.go",
+      "rule": "layer-import",
+      "subject": "internal/adapters",
+      "reason": "Pre-Q0 dependency edge pending relocation to its owning layer."
+    },
+    {
+      "path": "internal/cli/apiclient/client.go",
+      "rule": "open-model-field",
+      "subject": "Request.Body",
+      "reason": "Pre-Q0 open model pending a closed per-kind configuration type."
+    },
+    {
+      "path": "internal/cli/apiclient/service.go",
+      "rule": "json-roundtrip-conversion",
+      "subject": "generatedServiceBody",
+      "reason": "Pre-Q0 generated-client conversion pending an explicit field mapper."
+    },
+    {
+      "path": "internal/cli/root.go",
+      "rule": "local-concrete-recovery",
+      "subject": "App",
+      "reason": "Pre-Q0 dynamic boundary pending a typed accessor or concrete ownership."
+    },
+    {
+      "path": "internal/common/entrymaterialization/sha256.go",
+      "rule": "interface-constructor",
+      "subject": "NewHasher",
+      "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
+    },
+    {
+      "path": "internal/common/runner/runner.go",
+      "rule": "interface-constructor",
+      "subject": "New",
+      "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
+    },
+    {
+      "path": "internal/common/runner/runner.go",
+      "rule": "interface-constructor",
+      "subject": "NewBinary",
+      "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
+    },
+    {
+      "path": "internal/controller/handlers/agent_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/attach_rename_route.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/attach_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/connector_request_schema.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/connector_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/entry_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/environment_blueprint_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/environment_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/http_lifecycle.go",
+      "rule": "local-concrete-recovery",
+      "subject": "httpLifecycle",
+      "reason": "Pre-Q0 dynamic boundary pending a typed accessor or concrete ownership."
+    },
+    {
+      "path": "internal/controller/handlers/project_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/route_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/script_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/secret_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/service_lifecycle_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/service_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/task_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/tenant_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/handlers/zone_routes.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/controller/taskplanning/blueprint_components.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/infra/age/secret_limit_test.go",
+      "rule": "layer-import",
+      "subject": "pkg/api",
+      "reason": "Pre-Q0 dependency edge pending relocation to its owning layer."
+    },
+    {
+      "path": "internal/infra/docker/compose.go",
+      "rule": "interface-constructor",
+      "subject": "New",
+      "reason": "Pre-Q0 producer-owned side-effect seam pending migration to a consumer-owned contract."
+    },
+    {
+      "path": "internal/infra/etcd/component_task_acknowledgement.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/infra/etcd/component_task_retry.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/infra/etcd/componentplanning/candidate_preparation.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/infra/etcd/components/record.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    },
+    {
+      "path": "internal/infra/etcd/environmentchanges/component_intent.go",
+      "rule": "reflect-import",
+      "subject": "reflect",
+      "reason": "Pre-Q0 reflection use pending replacement with explicit typed validation or comparison."
+    }
+  ]
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 )
 
 // Rationale: leave_active can serve a different image than the last successful
@@ -18,24 +19,27 @@ func TestResolveServingPreservesServingAuthorityAndCASRevisions(t *testing.T) {
 	installServingRelease(t, memory, environment.Record.ID, project.Record, serviceID, 2401)
 	store := &releaseLogMemoryStore{memoryHierarchyStore: memory}
 	ledger := testReleaseLogLedger(t, store)
-	entry, err := store.Get(ctx, releaseProjectionKey(serviceID))
+	entry, err := store.Get(ctx, testreleases.ReleaseProjectionKey(serviceID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	projection, err := decodeReleaseRecord[domain.ServiceProjection](entry.Entry.Value, "service-release-projection")
+	projection, err := testreleases.DecodeReleaseRecord[domain.ServiceProjection](
+		entry.Entry.Value,
+		"service-release-projection",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	projection.CurrentSuccessfulReleaseID = ids.NewAt(ids.KindDeployment, serviceRecordTestTime(), 2402)
-	value, err := encodeReleaseRecord("service-release-projection", projection)
+	value, err := testreleases.EncodeReleaseRecord("service-release-projection", projection)
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectionRevision, err := store.Put(ctx, releaseProjectionKey(serviceID), value)
+	projectionRevision, err := store.Put(ctx, testreleases.ReleaseProjectionKey(serviceID), value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	intentEntry, err := store.Get(ctx, releaseIntentStagingKey("", projection.ServingReleaseID))
+	intentEntry, err := store.Get(ctx, testreleases.ReleaseIntentStagingKey("", projection.ServingReleaseID))
 	if err != nil {
 		t.Fatal(err)
 	}

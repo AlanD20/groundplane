@@ -1,19 +1,34 @@
 package etcd
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
+	context "context"
+	sha256 "crypto/sha256"
+	hex "encoding/hex"
+	errors "errors"
+	executionplan "github.com/AlanD20/groundplane/internal/common/executionplan"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	core "github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testbackupconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
+	testbackupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	testenvironmentcoordination "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	proto "google.golang.org/protobuf/proto"
+	testing "testing"
+	time "time"
 )
 
 // Rationale: run transitions must remain fenced by the exact owned Environment
@@ -29,7 +44,7 @@ func TestBackupRuntimeRepositoryRunTransitionsUseOwnedFixedFence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateBackupRun() error = %v", err)
 	}
-	if created.Record.State != BackupRunQueued || created.Revision <= 0 {
+	if created.Record.State != testbackupruntime.BackupRunQueued || created.Revision <= 0 {
 		t.Fatalf("CreateBackupRun() = %#v", created)
 	}
 	read, err := repository.GetBackupRun(context.Background(), run.TaskID)
@@ -38,20 +53,19 @@ func TestBackupRuntimeRepositoryRunTransitionsUseOwnedFixedFence(t *testing.T) {
 	}
 	page, err := repository.ListBackupRunsByEnvironment(
 		context.Background(),
-		run.EnvironmentID,
-		BackupRuntimeListRequest{Limit: 1},
+		run.EnvironmentID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
 	)
 	if err != nil || len(page.Items) != 1 || page.Items[0].Record.TaskID != run.TaskID {
 		t.Fatalf("ListBackupRunsByEnvironment() = %#v, %v", page, err)
 	}
 	if _, found, err := repository.GetBackupSourceTargetExclusion(
-		context.Background(), BackupSourceTargetAttach, run.Sources[0].TargetID,
+		context.Background(), testbackupruntime.BackupSourceTargetAttach, run.Sources[0].TargetID,
 	); err != nil || !found {
 		t.Fatalf("GetBackupSourceTargetExclusion() = %v/%v", found, err)
 	}
 	epochAfterCreate := mustEnvironmentMutationEpochRevision(t, store, run.EnvironmentID)
 	next := run
-	next.State = BackupRunRunning
+	next.State = testbackupruntime.BackupRunRunning
 	next.UpdatedAt = run.UpdatedAt.Add(time.Second)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
 	transitioned, err := repository.TransitionBackupRun(
@@ -89,25 +103,25 @@ func TestBackupRuntimeRepositoryCheckpointTransitionIsAtomicAndReplayable(t *tes
 		t.Fatal(err)
 	}
 	ready := run
-	ready.State = BackupRunRunning
-	ready.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-	ready.Sources[0].State = BackupSourceAttemptReady
-	ready.Sources[0].Phase = BackupSourcePhaseStaging
+	ready.State = testbackupruntime.BackupRunRunning
+	ready.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	ready.Sources[0].State = testbackupruntime.BackupSourceAttemptReady
+	ready.Sources[0].Phase = testbackupruntime.BackupSourcePhaseStaging
 	ready.UpdatedAt = run.UpdatedAt.Add(time.Second)
 	created, err = repository.replaceBackupRunForTest(context.Background(), created, ready)
 	if err != nil {
 		t.Fatal(err)
 	}
 	staged := ready
-	staged.Sources = append([]BackupRunSourceAttemptRecord(nil), ready.Sources...)
-	staged.Sources[0].State = BackupSourceAttemptStaged
-	staged.Sources[0].Phase = BackupSourcePhaseUpload
+	staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), ready.Sources...)
+	staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
+	staged.Sources[0].Phase = testbackupruntime.BackupSourcePhaseUpload
 	staged.Sources[0].SizeBytes = 123
 	staged.Sources[0].SHA256 = testBackupDigest
 	staged.UpdatedAt = ready.UpdatedAt.Add(time.Second)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload = BackupCheckpointPayload{
-		Kind: BackupCheckpointArtifactPrepared, PointID: staged.Sources[0].RecoveryPointID,
+	checkpoint.Payload = testbackupruntime.BackupCheckpointPayload{
+		Kind: testbackupruntime.BackupCheckpointArtifactPrepared, PointID: staged.Sources[0].RecoveryPointID,
 		StoredSizeBytes: uint64(staged.Sources[0].SizeBytes), StoredSHA256: staged.Sources[0].SHA256,
 	}
 	transitioned, err := repository.CheckpointBackupRun(
@@ -123,8 +137,8 @@ func TestBackupRuntimeRepositoryCheckpointTransitionIsAtomicAndReplayable(t *tes
 		t.Fatalf("CheckpointBackupRun(replay) = %#v, %v", replayed, err)
 	}
 	headVerified := staged
-	headVerified.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	headVerified.Sources[0].Phase = BackupSourcePhaseHeadVerification
+	headVerified.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	headVerified.Sources[0].Phase = testbackupruntime.BackupSourcePhaseHeadVerification
 	headVerified.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	if _, err := repository.TransitionBackupRun(
 		context.Background(),
@@ -136,7 +150,7 @@ func TestBackupRuntimeRepositoryCheckpointTransitionIsAtomicAndReplayable(t *tes
 	}
 	uploadCompleted := checkpoint
 	uploadCompleted.Sequence++
-	uploadCompleted.Payload.Kind = BackupCheckpointUploadCompleted
+	uploadCompleted.Payload.Kind = testbackupruntime.BackupCheckpointUploadCompleted
 	headVersion, err := repository.CheckpointBackupRun(
 		context.Background(),
 		uploadCompleted,
@@ -148,14 +162,14 @@ func TestBackupRuntimeRepositoryCheckpointTransitionIsAtomicAndReplayable(t *tes
 	}
 	pointCommitReady := headVerified
 	pointCommitReady.Sources = append(
-		[]BackupRunSourceAttemptRecord(nil),
+		[]testbackupruntime.BackupRunSourceAttemptRecord(nil),
 		headVerified.Sources...,
 	)
-	pointCommitReady.Sources[0].Phase = BackupSourcePhasePointCommit
+	pointCommitReady.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	pointCommitReady.UpdatedAt = headVerified.UpdatedAt.Add(time.Second)
 	uploadVerified := uploadCompleted
 	uploadVerified.Sequence++
-	uploadVerified.Payload.Kind = BackupCheckpointUploadVerified
+	uploadVerified.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	if _, err := repository.CheckpointBackupRun(
 		context.Background(),
 		uploadVerified,
@@ -185,25 +199,25 @@ func TestBackupRuntimeRepositoryOrphanFollowsUploadCheckpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	ready := run
-	ready.State = BackupRunRunning
-	ready.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-	ready.Sources[0].State = BackupSourceAttemptReady
-	ready.Sources[0].Phase = BackupSourcePhaseStaging
+	ready.State = testbackupruntime.BackupRunRunning
+	ready.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	ready.Sources[0].State = testbackupruntime.BackupSourceAttemptReady
+	ready.Sources[0].Phase = testbackupruntime.BackupSourcePhaseStaging
 	ready.UpdatedAt = run.UpdatedAt.Add(time.Second)
 	readyVersion, err := repository.replaceBackupRunForTest(context.Background(), created, ready)
 	if err != nil {
 		t.Fatal(err)
 	}
 	staged := ready
-	staged.Sources = append([]BackupRunSourceAttemptRecord(nil), ready.Sources...)
-	staged.Sources[0].State = BackupSourceAttemptStaged
-	staged.Sources[0].Phase = BackupSourcePhaseUpload
+	staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), ready.Sources...)
+	staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
+	staged.Sources[0].Phase = testbackupruntime.BackupSourcePhaseUpload
 	staged.Sources[0].SizeBytes = 123
 	staged.Sources[0].SHA256 = testBackupDigest
 	staged.UpdatedAt = ready.UpdatedAt.Add(time.Second)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload = BackupCheckpointPayload{
-		Kind:            BackupCheckpointArtifactPrepared,
+	checkpoint.Payload = testbackupruntime.BackupCheckpointPayload{
+		Kind:            testbackupruntime.BackupCheckpointArtifactPrepared,
 		PointID:         staged.Sources[0].RecoveryPointID,
 		StoredSizeBytes: uint64(staged.Sources[0].SizeBytes),
 		StoredSHA256:    staged.Sources[0].SHA256,
@@ -215,14 +229,14 @@ func TestBackupRuntimeRepositoryOrphanFollowsUploadCheckpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	orphaned := staged
-	orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	orphaned.Sources[0].State = BackupSourceAttemptOrphaned
+	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, orphaned.Sources[0], orphaned.UpdatedAt)
-	orphan := BackupOrphanRecord{
+	orphan := testbackupruntime.BackupOrphanRecord{
 		Point:     point.BackupRecoveryPointSnapshot,
 		TaskID:    run.TaskID,
-		State:     BackupOrphanInspect,
+		State:     testbackupruntime.BackupOrphanInspect,
 		CreatedAt: orphaned.UpdatedAt,
 		UpdatedAt: orphaned.UpdatedAt,
 	}
@@ -238,12 +252,12 @@ func TestBackupRuntimeRepositoryOrphanFollowsUploadCheckpoints(t *testing.T) {
 		t.Fatalf("CreateBackupOrphan(Put uncertain) error = %v", err)
 	}
 	headVerified := orphaned
-	headVerified.Sources = append([]BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
-	headVerified.Sources[0].Phase = BackupSourcePhaseHeadVerification
+	headVerified.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
+	headVerified.Sources[0].Phase = testbackupruntime.BackupSourcePhaseHeadVerification
 	headVerified.UpdatedAt = orphaned.UpdatedAt.Add(time.Second)
 	uploadCompleted := checkpoint
 	uploadCompleted.Sequence++
-	uploadCompleted.Payload.Kind = BackupCheckpointUploadCompleted
+	uploadCompleted.Payload.Kind = testbackupruntime.BackupCheckpointUploadCompleted
 	headVersion, err := repository.CheckpointBackupRun(
 		context.Background(), uploadCompleted, orphanedVersion, headVerified,
 	)
@@ -251,16 +265,16 @@ func TestBackupRuntimeRepositoryOrphanFollowsUploadCheckpoints(t *testing.T) {
 		t.Fatalf("CheckpointBackupRun(upload completed) error = %v", err)
 	}
 	pointCommit := headVerified
-	pointCommit.Sources = append([]BackupRunSourceAttemptRecord(nil), headVerified.Sources...)
-	pointCommit.Sources[0].Phase = BackupSourcePhasePointCommit
+	pointCommit.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), headVerified.Sources...)
+	pointCommit.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	pointCommit.UpdatedAt = headVerified.UpdatedAt.Add(time.Second)
 	uploadVerified := uploadCompleted
 	uploadVerified.Sequence++
-	uploadVerified.Payload.Kind = BackupCheckpointUploadVerified
+	uploadVerified.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	pointVersion, err := repository.CheckpointBackupRun(
 		context.Background(), uploadVerified, headVersion, pointCommit,
 	)
-	if err != nil || pointVersion.Record.Sources[0].Phase != BackupSourcePhasePointCommit {
+	if err != nil || pointVersion.Record.Sources[0].Phase != testbackupruntime.BackupSourcePhasePointCommit {
 		t.Fatalf("CheckpointBackupRun(orphan verified) = %#v, %v", pointVersion, err)
 	}
 }
@@ -271,17 +285,17 @@ func TestBackupRuntimeRepositoryRejectsWrongLockAndStaleEpochWithoutWrites(t *te
 	t.Parallel()
 	for _, test := range []struct {
 		name string
-		run  func(*testing.T, *memoryHierarchyStore, BackupRunRecord)
+		run  func(*testing.T, *memoryHierarchyStore, testbackupruntime.BackupRunRecord)
 	}{
-		{name: "wrong lock", run: func(t *testing.T, store *memoryHierarchyStore, run BackupRunRecord) {
-			lock := BackupOperationLockRecord{
+		{name: "wrong lock", run: func(t *testing.T, store *memoryHierarchyStore, run testbackupruntime.BackupRunRecord) {
+			lock := testbackupruntime.BackupOperationLockRecord{
 				EnvironmentID: run.EnvironmentID, OperationID: testBackupOperationID,
-				TaskID: testBackupRetryTaskID, Kind: BackupOperationBackup,
+				TaskID: testBackupRetryTaskID, Kind: testbackupruntime.BackupOperationBackup,
 				CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
 			}
 			putBackupRuntimeLock(t, store, lock)
 		}},
-		{name: "stale epoch", run: func(_ *testing.T, _ *memoryHierarchyStore, _ BackupRunRecord) {
+		{name: "stale epoch", run: func(_ *testing.T, _ *memoryHierarchyStore, _ testbackupruntime.BackupRunRecord) {
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -310,7 +324,7 @@ func TestBackupRuntimeRepositoryRejectsWrongLockAndStaleEpochWithoutWrites(t *te
 			if test.name == "stale epoch" && !isKind(err, errs.KindStateConflict) {
 				t.Fatalf("CreateBackupRun(stale epoch) error = %v", err)
 			}
-			stored, getErr := store.Get(context.Background(), backupRunKey(run.TaskID))
+			stored, getErr := store.Get(context.Background(), testbackupruntime.BackupRunKey(run.TaskID))
 			if getErr != nil || stored.Entry != nil {
 				t.Fatalf("failed run primary = %#v/%v", stored, getErr)
 			}
@@ -324,11 +338,11 @@ func TestBackupRuntimeRepositoryRunPublicationRejectsChangedSourceEvidence(t *te
 	t.Parallel()
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
 	fixedRevision := backupRuntimeCurrentRevision(t, repository.store, run.EnvironmentID)
-	entry := mustOptionalKey(t, store, backupSourceKey(run.Sources[0].SourceID))
+	entry := mustOptionalKey(t, store, testbackuppolicy.BackupSourceKey(run.Sources[0].SourceID))
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: entry.Key, ModRevision: entry.ModRevision}},
-		[]Mutation{{Type: MutationPut, Key: entry.Key, Value: entry.Value}},
+		[]testkeyvalue.Condition{{Key: entry.Key, ModRevision: entry.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: entry.Key, Value: entry.Value}},
 	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("advance backup source = %#v, %v", result, err)
@@ -338,7 +352,7 @@ func TestBackupRuntimeRepositoryRunPublicationRejectsChangedSourceEvidence(t *te
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("CreateBackupRun(changed source) error = %v", err)
 	}
-	if entry := mustOptionalKey(t, store, backupRunKey(run.TaskID)); entry != nil {
+	if entry := mustOptionalKey(t, store, testbackupruntime.BackupRunKey(run.TaskID)); entry != nil {
 		t.Fatalf("run published with changed source = %#v", entry)
 	}
 }
@@ -349,14 +363,14 @@ func TestBackupRuntimeRepositoryPublishesPinnedConfigSnapshotAtomically(t *testi
 	t.Parallel()
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
 	source := &run.Sources[0]
-	source.Kind = BackupRuntimeSourceConfig
+	source.Kind = testbackupruntime.BackupRuntimeSourceConfig
 	source.TargetID = run.EnvironmentID
-	source.TargetRevision = mustOptionalKey(t, store, environmentKey(run.EnvironmentID)).ModRevision
-	source.Format = BackupRuntimeFormatConfig
-	source.Snapshot = BackupRunSourceSnapshot{Config: &BackupConfigSourceSnapshot{
+	source.TargetRevision = mustOptionalKey(t, store, testhierarchy.EnvironmentKey(run.EnvironmentID)).ModRevision
+	source.Format = testbackupruntime.BackupRuntimeFormatConfig
+	source.Snapshot = testbackupruntime.BackupRunSourceSnapshot{Config: &testbackupruntime.BackupConfigSourceSnapshot{
 		ConfigSnapshotID: run.TaskID,
 	}}
-	policyValue, err := encodeBackupPolicyRecord(BackupPolicyRecord{
+	policyValue, err := testbackuppolicy.EncodeBackupPolicyRecord(testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: []string{source.SourceID}, UpdatedAt: run.CreatedAt,
@@ -364,16 +378,16 @@ func TestBackupRuntimeRepositoryPublishesPinnedConfigSnapshotAtomically(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceValue, err := encodeBackupSourceRecord(backupRuntimeSourceRecord(
+	sourceValue, err := testbackuppolicy.EncodeBackupSourceRecord(backupRuntimeSourceRecord(
 		t, source.SourceID, run.EnvironmentID, "config", run.EnvironmentID, run.CreatedAt,
 	))
 	if err != nil {
 		clear(policyValue)
 		t.Fatal(err)
 	}
-	result, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: backupPolicyKey(run.EnvironmentID), Value: policyValue},
-		{Type: MutationPut, Key: backupSourceKey(source.SourceID), Value: sourceValue},
+	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupPolicyKey(run.EnvironmentID), Value: policyValue},
+		{Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupSourceKey(source.SourceID), Value: sourceValue},
 	})
 	clear(policyValue)
 	clear(sourceValue)
@@ -388,20 +402,16 @@ func TestBackupRuntimeRepositoryPublishesPinnedConfigSnapshotAtomically(t *testi
 	if err != nil {
 		t.Fatalf("CreateBackupRun(config) error = %v", err)
 	}
-	for _, key := range []string{
-		backupRunKey(run.TaskID), backupConfigSnapshotKey(run.TaskID),
-		backupConfigSnapshotTaskReferenceKey(run.TaskID, run.TaskID),
-		backupConfigSnapshotReferenceTaskKey(run.TaskID, run.TaskID),
-	} {
+	for _, key := range []string{testbackupruntime.BackupRunKey(run.TaskID), testbackupconfiguration.BackupConfigSnapshotKey(run.TaskID), testbackupconfiguration.BackupConfigSnapshotTaskReferenceKey(run.TaskID, run.TaskID), testbackupconfiguration.BackupConfigSnapshotReferenceTaskKey(run.TaskID, run.TaskID)} {
 		entry := mustOptionalKey(t, store, key)
 		if entry == nil || entry.ModRevision != created.Revision {
 			t.Fatalf("config publication companion %q = %#v", key, entry)
 		}
 	}
-	entry := mustOptionalKey(t, store, backupConfigSnapshotKey(run.TaskID))
-	snapshot, err := decodeBackupConfigSnapshotRecord(entry.Value)
+	entry := mustOptionalKey(t, store, testbackupconfiguration.BackupConfigSnapshotKey(run.TaskID))
+	snapshot, err := testbackupconfiguration.DecodeBackupConfigSnapshotRecord(entry.Value)
 	if err != nil || snapshot.ReadRevision != fixedRevision ||
-		snapshot.State != BackupConfigSnapshotBuilding {
+		snapshot.State != testbackupconfiguration.BackupConfigSnapshotBuilding {
 		t.Fatalf("config publication snapshot = %#v, %v", snapshot, err)
 	}
 }
@@ -420,10 +430,10 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 		t.Fatal(err)
 	}
 	running := run
-	running.State = BackupRunRunning
-	running.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-	running.Sources[0].State = BackupSourceAttemptStaged
-	running.Sources[0].Phase = BackupSourcePhasePointCommit
+	running.State = testbackupruntime.BackupRunRunning
+	running.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	running.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
+	running.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	running.Sources[0].SizeBytes = 123
 	running.Sources[0].SHA256 = testBackupDigest
 	running.UpdatedAt = run.UpdatedAt.Add(time.Second)
@@ -432,14 +442,14 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 		t.Fatal(err)
 	}
 	committed := running
-	committed.Sources = append([]BackupRunSourceAttemptRecord(nil), running.Sources...)
-	committed.Sources[0].State = BackupSourceAttemptPointCommitted
-	committed.Sources[0].Phase = BackupSourcePhaseRetention
+	committed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), running.Sources...)
+	committed.Sources[0].State = testbackupruntime.BackupSourceAttemptPointCommitted
+	committed.Sources[0].Phase = testbackupruntime.BackupSourcePhaseRetention
 	committed.UpdatedAt = running.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, running.Sources[0], committed.UpdatedAt)
-	sweep := BackupRetentionSweepRecord{
+	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, State: BackupRetentionPending,
+		Revision: run.PolicyRevision, State: testbackupruntime.BackupRetentionPending,
 		CreatedAt: committed.UpdatedAt, UpdatedAt: committed.UpdatedAt,
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(
@@ -447,7 +457,7 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 		repository.store.(*memoryHierarchyStore),
 		run,
 	)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	storedPoint, storedRun, err := repository.CommitBackupRecoveryPoint(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint), created, committed, 0, point, nil, sweep,
 	)
@@ -457,20 +467,20 @@ func TestBackupRuntimeRepositoryCommitsPointIndexesAndRetentionAtomically(t *tes
 	if storedPoint.Revision != storedRun.Revision {
 		t.Fatalf("point/run revisions = %d/%d", storedPoint.Revision, storedRun.Revision)
 	}
-	for _, list := range []func() (BackupRuntimePage[BackupRecoveryPointRecord], error){
-		func() (BackupRuntimePage[BackupRecoveryPointRecord], error) {
+	for _, list := range []func() (testbackupruntime.BackupRuntimePage[testbackupruntime.BackupRecoveryPointRecord], error){
+		func() (testbackupruntime.BackupRuntimePage[testbackupruntime.BackupRecoveryPointRecord], error) {
 			return repository.ListBackupRecoveryPointsByEnvironment(
-				context.Background(), run.EnvironmentID, BackupRuntimeListRequest{Limit: 1},
+				context.Background(), run.EnvironmentID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
 			)
 		},
-		func() (BackupRuntimePage[BackupRecoveryPointRecord], error) {
+		func() (testbackupruntime.BackupRuntimePage[testbackupruntime.BackupRecoveryPointRecord], error) {
 			return repository.ListBackupRecoveryPointsBySource(
-				context.Background(), point.SourceID, BackupRuntimeListRequest{Limit: 1},
+				context.Background(), point.SourceID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
 			)
 		},
-		func() (BackupRuntimePage[BackupRecoveryPointRecord], error) {
+		func() (testbackupruntime.BackupRuntimePage[testbackupruntime.BackupRecoveryPointRecord], error) {
 			return repository.ListBackupRecoveryPointsByConnector(
-				context.Background(), point.ConnectorID, BackupRuntimeListRequest{Limit: 1},
+				context.Background(), point.ConnectorID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
 			)
 		},
 	} {
@@ -498,7 +508,7 @@ func TestBackupRuntimeRepositoryPointCommitUnknownOutcomeValidatesAllCompanions(
 			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 			committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-			checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+			checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 			unknown := &backupRuntimeUnknownOutcomeStore{hierarchyStore: store, failNext: true}
 			unknownRepository, err := newBackupRuntimeRepository(unknown)
 			if err != nil {
@@ -517,17 +527,17 @@ func TestBackupRuntimeRepositoryPointCommitUnknownOutcomeValidatesAllCompanions(
 				t.Fatalf("CommitBackupRecoveryPoint(unknown) error = %v", err)
 			}
 			if tamperSweep {
-				entry := mustOptionalKey(t, store, backupRetentionKey(point.SourceID, point.ID))
+				entry := mustOptionalKey(t, store, testbackupruntime.BackupRetentionKey(point.SourceID, point.ID))
 				changed := sweep
 				changed.Keep++
-				value, encodeErr := encodeBackupRetentionSweepRecord(changed)
+				value, encodeErr := testbackupruntime.EncodeBackupRetentionSweepRecord(changed)
 				if encodeErr != nil {
 					t.Fatal(encodeErr)
 				}
 				result, transactErr := store.Transact(
 					context.Background(),
-					[]Condition{{Key: entry.Key, ModRevision: entry.ModRevision}},
-					[]Mutation{{Type: MutationPut, Key: entry.Key, Value: value}},
+					[]testkeyvalue.Condition{{Key: entry.Key, ModRevision: entry.ModRevision}},
+					[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: entry.Key, Value: value}},
 				)
 				clear(value)
 				if transactErr != nil || !result.Succeeded {
@@ -551,7 +561,7 @@ func TestBackupRuntimeRepositoryPointCommitUnknownOutcomeValidatesAllCompanions(
 				return
 			}
 			if err != nil || storedPoint.Revision != storedRun.Revision ||
-				storedRun.Record.Sources[0].State != BackupSourceAttemptPointCommitted {
+				storedRun.Record.Sources[0].State != testbackupruntime.BackupSourceAttemptPointCommitted {
 				t.Fatalf("CommitBackupRecoveryPoint(replay) = %#v/%#v/%v", storedPoint, storedRun, err)
 			}
 		})
@@ -567,7 +577,7 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	committed, newest, sweep := backupRuntimePointCommitRecords(run, staged)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	mismatchedSweep := sweep
 	mismatchedSweep.Keep--
 	if _, _, err := repository.CommitBackupRecoveryPoint(
@@ -596,18 +606,18 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 		older.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + older.SourceID + "/" + older.ID + "/artifact.bin"
 		older.CreatedAt = olderAt
 		older.VerifiedAt = olderAt.Add(time.Millisecond)
-		value, encodeErr := encodeBackupRecoveryPointRecord(older)
+		value, encodeErr := testbackupruntime.EncodeBackupRecoveryPointRecord(older)
 		if encodeErr != nil {
 			t.Fatal(encodeErr)
 		}
-		environmentIndex, _ := backupRecoveryPointEnvironmentIndexKey(older.EnvironmentID, older.ID)
-		sourceIndex, _ := backupRecoveryPointSourceIndexKey(older.SourceID, older.ID)
-		connectorIndex, _ := backupRecoveryPointConnectorIndexKey(older.ConnectorID, older.ID)
-		result, transactErr := store.Transact(context.Background(), nil, []Mutation{
-			{Type: MutationPut, Key: backupRecoveryPointKey(older.ID), Value: value},
-			{Type: MutationPut, Key: environmentIndex, Value: []byte(older.ID)},
-			{Type: MutationPut, Key: sourceIndex, Value: []byte(older.ID)},
-			{Type: MutationPut, Key: connectorIndex, Value: []byte(older.ID)},
+		environmentIndex, _ := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(older.EnvironmentID, older.ID)
+		sourceIndex, _ := testbackupruntime.BackupRecoveryPointSourceIndexKey(older.SourceID, older.ID)
+		connectorIndex, _ := testbackupruntime.BackupRecoveryPointConnectorIndexKey(older.ConnectorID, older.ID)
+		result, transactErr := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRecoveryPointKey(older.ID), Value: value},
+			{Type: testkeyvalue.MutationPut, Key: environmentIndex, Value: []byte(older.ID)},
+			{Type: testkeyvalue.MutationPut, Key: sourceIndex, Value: []byte(older.ID)},
+			{Type: testkeyvalue.MutationPut, Key: connectorIndex, Value: []byte(older.ID)},
 		})
 		clear(value)
 		if transactErr != nil || !result.Succeeded {
@@ -622,11 +632,11 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 	}
 	prematureCleanup := committedRun.Record
 	prematureCleanup.Sources = append(
-		[]BackupRunSourceAttemptRecord(nil),
+		[]testbackupruntime.BackupRunSourceAttemptRecord(nil),
 		committedRun.Record.Sources...,
 	)
-	prematureCleanup.Sources[0].State = BackupSourceAttemptCleanupPending
-	prematureCleanup.Sources[0].Phase = BackupSourcePhaseCleanup
+	prematureCleanup.Sources[0].State = testbackupruntime.BackupSourceAttemptCleanupPending
+	prematureCleanup.Sources[0].Phase = testbackupruntime.BackupSourcePhaseCleanup
 	prematureCleanup.UpdatedAt = currentSweep.Record.UpdatedAt.Add(time.Second)
 	if _, err := repository.advanceBackupRunAfterRetention(
 		context.Background(), committedRun, prematureCleanup, 0, currentSweep,
@@ -636,7 +646,7 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 	firstPage, prunes, err := repository.AdvanceBackupRetentionSweep(
 		context.Background(), committedRun, currentSweep, sweep.UpdatedAt.Add(time.Second),
 	)
-	if err != nil || firstPage.Record.State != BackupRetentionScanning || len(prunes) != 8 ||
+	if err != nil || firstPage.Record.State != testbackupruntime.BackupRetentionScanning || len(prunes) != 8 ||
 		firstPage.Record.SelectionRevision <= 0 {
 		t.Fatalf("AdvanceBackupRetentionSweep(first page) = %#v/%#v/%v", firstPage, prunes, err)
 	}
@@ -651,19 +661,19 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 	advanced, secondPagePrunes, err := repository.AdvanceBackupRetentionSweep(
 		context.Background(), committedRun, firstPage, sweep.UpdatedAt.Add(2*time.Second),
 	)
-	if err != nil || advanced.Record.State != BackupRetentionCompleted ||
+	if err != nil || advanced.Record.State != testbackupruntime.BackupRetentionCompleted ||
 		advanced.Record.SelectionRevision != firstPage.Record.SelectionRevision ||
 		len(secondPagePrunes) != 2 {
 		t.Fatalf("AdvanceBackupRetentionSweep(second page) = %#v/%#v/%v", advanced, secondPagePrunes, err)
 	}
 	prunes = append(prunes, secondPagePrunes...)
-	if mustOptionalKey(t, store, backupRecoveryPointPruneKey(hostile.ID)) != nil {
+	if mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(hostile.ID)) != nil {
 		t.Fatal("interpage point mutation entered the pinned retention selection")
 	}
 	cleanup := committedRun.Record
-	cleanup.Sources = append([]BackupRunSourceAttemptRecord(nil), committedRun.Record.Sources...)
-	cleanup.Sources[0].State = BackupSourceAttemptCleanupPending
-	cleanup.Sources[0].Phase = BackupSourcePhaseCleanup
+	cleanup.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), committedRun.Record.Sources...)
+	cleanup.Sources[0].State = testbackupruntime.BackupSourceAttemptCleanupPending
+	cleanup.Sources[0].Phase = testbackupruntime.BackupSourcePhaseCleanup
 	cleanup.UpdatedAt = advanced.Record.UpdatedAt.Add(time.Second)
 	if _, err := repository.TransitionBackupRun(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint), committedRun, cleanup,
@@ -673,14 +683,14 @@ func TestBackupRuntimeRepositoryRetentionSweepCreatesPendingPrunesNewestFirst(t 
 	advancedRun, err := repository.advanceBackupRunAfterRetention(
 		context.Background(), committedRun, cleanup, 0, advanced,
 	)
-	if err != nil || advancedRun.Record.Sources[0].State != BackupSourceAttemptCleanupPending {
+	if err != nil || advancedRun.Record.Sources[0].State != testbackupruntime.BackupSourceAttemptCleanupPending {
 		t.Fatalf("advanceBackupRunAfterRetention() = %#v, %v", advancedRun, err)
 	}
 	if _, err := repository.GetBackupRecoveryPoint(context.Background(), newest.ID); err != nil {
 		t.Fatalf("newest retained point error = %v", err)
 	}
 	for _, prune := range prunes {
-		if prune.Record.State != BackupPrunePending || prune.Record.OperationID == "" {
+		if prune.Record.State != testbackupruntime.BackupPrunePending || prune.Record.OperationID == "" {
 			t.Fatalf("pending prune = %#v", prune)
 		}
 		if _, err := repository.GetBackupRecoveryPoint(
@@ -699,7 +709,7 @@ func TestBackupRuntimeRepositoryRetentionSweepAtPublicMaximumPrunesRemainingPoin
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	_, committedRun, err := repository.CommitBackupRecoveryPoint(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion,
 		committed, 0, point, nil, sweep,
@@ -713,12 +723,12 @@ func TestBackupRuntimeRepositoryRetentionSweepAtPublicMaximumPrunesRemainingPoin
 	if err != nil || !found {
 		t.Fatalf("GetBackupRetentionSweep() = %#v/%v/%v", currentSweep, found, err)
 	}
-	maximumKeep := MaximumBackupPolicyKeep
+	maximumKeep := testbackuppolicy.MaximumBackupPolicyKeep
 	changedRun := committedRun.Record
 	changedRun.RetentionKeep = maximumKeep
 	changedSweep := currentSweep.Record
 	changedSweep.Keep = maximumKeep
-	changedSweep.State = BackupRetentionScanning
+	changedSweep.State = testbackupruntime.BackupRetentionScanning
 	for offset := int64(1); offset <= 2; offset++ {
 		older := point
 		olderAt := point.CreatedAt.Add(-time.Duration(offset) * time.Second)
@@ -729,14 +739,14 @@ func TestBackupRuntimeRepositoryRetentionSweepAtPublicMaximumPrunesRemainingPoin
 		older.VerifiedAt = olderAt.Add(time.Millisecond)
 		seedBackupRuntimePointAuthority(t, store, older)
 	}
-	selection, err := repository.readCurrentKeys(
-		context.Background(), []string{backupRecoveryPointKey(point.ID)},
+	selection, err := repository.ReadCurrentKeys(
+		context.Background(), []string{testbackupruntime.BackupRecoveryPointKey(point.ID)},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	changedSweep.SelectionRevision = selection.ReadRevision
-	clearKeyValues(selection.Values)
+	testkeyvalue.ClearValues(selection.Values)
 	changedSweep.Cursor = ids.NewAt(
 		ids.KindRecoveryPoint,
 		point.CreatedAt.Add(time.Second),
@@ -749,36 +759,40 @@ func TestBackupRuntimeRepositoryRetentionSweepAtPublicMaximumPrunesRemainingPoin
 		602,
 	)
 	changedSweep.UpdatedAt = currentSweep.Record.UpdatedAt.Add(time.Second)
-	runValue, err := encodeBackupRunRecord(changedRun)
+	runValue, err := testbackupruntime.EncodeBackupRunRecord(changedRun)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(runValue)
-	sweepValue, err := encodeBackupRetentionSweepRecord(changedSweep)
+	sweepValue, err := testbackupruntime.EncodeBackupRetentionSweepRecord(changedSweep)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(sweepValue)
-	changed, err := store.Transact(context.Background(), []Condition{
-		{Key: backupRunKey(run.TaskID), ModRevision: committedRun.Revision},
-		{Key: backupRetentionKey(point.SourceID, point.ID), ModRevision: currentSweep.Revision},
-	}, []Mutation{
-		{Type: MutationPut, Key: backupRunKey(run.TaskID), Value: runValue},
-		{Type: MutationPut, Key: backupRetentionKey(point.SourceID, point.ID), Value: sweepValue},
+	changed, err := store.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testbackupruntime.BackupRunKey(run.TaskID), ModRevision: committedRun.Revision},
+		{Key: testbackupruntime.BackupRetentionKey(point.SourceID, point.ID), ModRevision: currentSweep.Revision},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRunKey(run.TaskID), Value: runValue},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testbackupruntime.BackupRetentionKey(point.SourceID, point.ID),
+			Value: sweepValue,
+		},
 	})
 	if err != nil || !changed.Succeeded {
 		t.Fatalf("seed maximum retention progress = %#v, %v", changed, err)
 	}
-	committedRun = Versioned[BackupRunRecord]{
+	committedRun = testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{
 		Record: changedRun, Revision: changed.Revision, ReadRevision: changed.Revision,
 	}
-	currentSweep = Versioned[BackupRetentionSweepRecord]{
+	currentSweep = testkeyvalue.Versioned[testbackupruntime.BackupRetentionSweepRecord]{
 		Record: changedSweep, Revision: changed.Revision, ReadRevision: changed.Revision,
 	}
 	advanced, prunes, err := repository.AdvanceBackupRetentionSweep(
 		context.Background(), committedRun, currentSweep, changedSweep.UpdatedAt.Add(time.Second),
 	)
-	if err != nil || advanced.Record.State != BackupRetentionCompleted || len(prunes) != 3 ||
+	if err != nil || advanced.Record.State != testbackupruntime.BackupRetentionCompleted || len(prunes) != 3 ||
 		advanced.Record.RetainedCount != maximumKeep {
 		t.Fatalf("AdvanceBackupRetentionSweep(int64 Keep) = %#v/%#v/%v", advanced, prunes, err)
 	}
@@ -787,15 +801,15 @@ func TestBackupRuntimeRepositoryRetentionSweepAtPublicMaximumPrunesRemainingPoin
 // Rationale: Connector deletion fences must retain the complete stable point identity in their key suffix.
 func TestBackupRecoveryPointConnectorIndexUsesRawStablePointIdentity(t *testing.T) {
 	t.Parallel()
-	first, err := backupRecoveryPointConnectorIndexKey(testBackupConnectorID, testBackupPointID)
+	first, err := testbackupruntime.BackupRecoveryPointConnectorIndexKey(testBackupConnectorID, testBackupPointID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := backupRecoveryPointConnectorIndexKey(testBackupConnectorID, testBackupPointIDTwo)
+	second, err := testbackupruntime.BackupRecoveryPointConnectorIndexKey(testBackupConnectorID, testBackupPointIDTwo)
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefix := backupRecoveryPointConnectorPrefix + testBackupConnectorID + "/"
+	prefix := testbackupruntime.BackupRecoveryPointConnectorPrefix + testBackupConnectorID + "/"
 	if first != prefix+testBackupPointID || second != prefix+testBackupPointIDTwo {
 		t.Fatalf("Connector point keys first=%q second=%q", first, second)
 	}
@@ -809,7 +823,7 @@ func TestBackupRuntimeRepositoryRejectsCrossRunRetentionAuthority(t *testing.T) 
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	committed, newest, sweep := backupRuntimePointCommitRecords(run, staged)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	_, committedRun, err := repository.CommitBackupRecoveryPoint(
 		context.Background(),
 		backupAssignmentFromCheckpoint(checkpoint),
@@ -871,21 +885,25 @@ func TestBackupRuntimeRepositoryRejectsCrossRunRetentionAuthority(t *testing.T) 
 	otherPoint.VerifiedAt = otherAt.Add(time.Millisecond)
 	otherPoint.ObjectKey = run.ConnectorPrefix + otherPoint.EnvironmentID + "/" +
 		otherPoint.SourceID + "/" + otherPoint.ID + "/artifact.bin"
-	otherValue, err := encodeBackupRecoveryPointRecord(otherPoint)
+	otherValue, err := testbackupruntime.EncodeBackupRecoveryPointRecord(otherPoint)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(otherValue)
-	otherSourceIndex, err := backupRecoveryPointSourceIndexKey(
+	otherSourceIndex, err := testbackupruntime.BackupRecoveryPointSourceIndexKey(
 		otherPoint.SourceID,
 		otherPoint.ID,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	seeded, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: backupRecoveryPointKey(otherPoint.ID), Value: otherValue},
-		{Type: MutationPut, Key: otherSourceIndex, Value: []byte(otherPoint.ID)},
+	seeded, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testbackupruntime.BackupRecoveryPointKey(otherPoint.ID),
+			Value: otherValue,
+		},
+		{Type: testkeyvalue.MutationPut, Key: otherSourceIndex, Value: []byte(otherPoint.ID)},
 	})
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed cross-Environment point = %#v, %v", seeded, err)
@@ -901,10 +919,10 @@ func TestBackupRuntimeRepositoryRejectsCrossRunRetentionAuthority(t *testing.T) 
 	storedSweep := mustOptionalKey(
 		t,
 		store,
-		backupRetentionKey(currentSweep.Record.SourceID, currentSweep.Record.TriggerRecoveryPointID),
+		testbackupruntime.BackupRetentionKey(currentSweep.Record.SourceID, currentSweep.Record.TriggerRecoveryPointID),
 	)
 	if storedSweep == nil || storedSweep.ModRevision != currentSweep.Revision ||
-		mustOptionalKey(t, store, backupRecoveryPointPruneKey(otherPoint.ID)) != nil {
+		mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(otherPoint.ID)) != nil {
 		t.Fatalf("cross-Environment retention wrote state: sweep=%#v", storedSweep)
 	}
 }
@@ -916,17 +934,17 @@ func TestBackupRuntimeRepositoryTransitionsAndDeletesOrphanCompanionsAtomically(
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	orphaned := staged
-	orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	orphaned.Sources[0].State = BackupSourceAttemptOrphaned
-	orphaned.Sources[0].Phase = BackupSourcePhasePointCommit
+	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
+	orphaned.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: BackupOrphanInspect,
+	orphan := testbackupruntime.BackupOrphanRecord{
+		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
 		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	orphanedVersion, err := repository.CreateBackupOrphan(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion, orphaned, 0, orphan,
 	)
@@ -938,13 +956,13 @@ func TestBackupRuntimeRepositoryTransitionsAndDeletesOrphanCompanionsAtomically(
 		t.Fatalf("GetBackupOrphan() = %#v/%v/%v", storedOrphan, found, err)
 	}
 	page, err := repository.ListBackupOrphansByEnvironment(
-		context.Background(), run.EnvironmentID, BackupRuntimeListRequest{Limit: 1},
+		context.Background(), run.EnvironmentID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
 	)
 	if err != nil || len(page.Items) != 1 || page.Items[0].Record.Point.ID != point.ID {
 		t.Fatalf("ListBackupOrphansByEnvironment() = %#v, %v", page, err)
 	}
 	deleting := orphan
-	deleting.State = BackupOrphanDelete
+	deleting.State = testbackupruntime.BackupOrphanDelete
 	deleting.UpdatedAt = orphan.UpdatedAt.Add(time.Second)
 	malformedRun := orphanedVersion
 	malformedRun.Record.UpdatedAt = malformedRun.Record.UpdatedAt.Add(time.Nanosecond)
@@ -980,15 +998,15 @@ func TestBackupRuntimeRepositoryTransitionsAndDeletesOrphanCompanionsAtomically(
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("TransitionBackupOrphan(alternate valid caller) error = %v", err)
 	}
-	connectorIndex, err := backupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := testbackupruntime.BackupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	environmentIndex, err := backupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	environmentIndex, err := testbackupruntime.BackupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{backupOrphanKey(point.ID), connectorIndex, environmentIndex} {
+	for _, key := range []string{testbackupruntime.BackupOrphanKey(point.ID), connectorIndex, environmentIndex} {
 		entry := mustOptionalKey(t, store, key)
 		if entry == nil || entry.ModRevision != transitioned.Revision {
 			t.Fatalf(
@@ -1000,10 +1018,10 @@ func TestBackupRuntimeRepositoryTransitionsAndDeletesOrphanCompanionsAtomically(
 		}
 	}
 	failed := orphaned
-	failed.Sources = append([]BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
-	failed.State = BackupRunFailed
-	failed.Sources[0].State = BackupSourceAttemptFailed
-	failed.Sources[0].FailureCode = BackupFailurePointCommit
+	failed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
+	failed.State = testbackupruntime.BackupRunFailed
+	failed.Sources[0].State = testbackupruntime.BackupSourceAttemptFailed
+	failed.Sources[0].FailureCode = testbackupruntime.BackupFailurePointCommit
 	failed.UpdatedAt = deleting.UpdatedAt.Add(time.Second)
 	plan, err := repository.prepareBackupOrphanAbsentTerminal(
 		context.Background(), backupRemoteAbsentCheckpoint(checkpoint, 1, point.ID),
@@ -1014,20 +1032,20 @@ func TestBackupRuntimeRepositoryTransitionsAndDeletesOrphanCompanionsAtomically(
 	}
 	marker := "/v1/test/backup-orphan-absent-terminal/" + run.TaskID
 	conditions, mutations, err := plan.composeTransaction(
-		[]Condition{{Key: marker}},
-		[]Mutation{{Type: MutationPut, Key: marker, Value: []byte(run.TaskID)}},
+		[]testkeyvalue.Condition{{Key: marker}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: marker, Value: []byte(run.TaskID)}},
 	)
 	if err != nil {
 		plan.clear()
 		t.Fatal(err)
 	}
-	result, err := repository.transact(context.Background(), conditions, mutations)
-	clearBackupRuntimeMutations(mutations)
+	result, err := repository.TransactRuntime(context.Background(), conditions, mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	plan.clear()
 	if err != nil || !result.Succeeded {
 		t.Fatalf("terminalize absent orphan = %#v, %v", result, err)
 	}
-	for _, key := range []string{backupOrphanKey(point.ID), connectorIndex, environmentIndex} {
+	for _, key := range []string{testbackupruntime.BackupOrphanKey(point.ID), connectorIndex, environmentIndex} {
 		if entry := mustOptionalKey(t, store, key); entry != nil {
 			t.Fatalf("deleted orphan companion %q = %#v", key, entry)
 		}
@@ -1040,46 +1058,48 @@ func TestBackupRuntimeRepositoryRejectsCorruptOrphanConnectorIndex(t *testing.T)
 	t.Parallel()
 	tests := []struct {
 		name   string
-		mutate func(*testing.T, *memoryHierarchyStore, BackupOrphanRecord, string) []Mutation
+		mutate func(*testing.T, *memoryHierarchyStore, testbackupruntime.BackupOrphanRecord, string) []testkeyvalue.Mutation
 	}{
 		{
 			name: "missing",
-			mutate: func(_ *testing.T, _ *memoryHierarchyStore, _ BackupOrphanRecord, key string) []Mutation {
-				return []Mutation{{Type: MutationDelete, Key: key}}
+			mutate: func(_ *testing.T, _ *memoryHierarchyStore, _ testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
+				return []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}}
 			},
 		},
 		{
 			name: "malformed",
-			mutate: func(_ *testing.T, _ *memoryHierarchyStore, _ BackupOrphanRecord, key string) []Mutation {
-				return []Mutation{{Type: MutationPut, Key: key, Value: []byte("not-a-point-id")}}
+			mutate: func(_ *testing.T, _ *memoryHierarchyStore, _ testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
+				return []testkeyvalue.Mutation{
+					{Type: testkeyvalue.MutationPut, Key: key, Value: []byte("not-a-point-id")},
+				}
 			},
 		},
 		{
 			name: "mismatched",
-			mutate: func(_ *testing.T, _ *memoryHierarchyStore, orphan BackupOrphanRecord, key string) []Mutation {
+			mutate: func(_ *testing.T, _ *memoryHierarchyStore, orphan testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
 				other := ids.NewAt(ids.KindRecoveryPoint, orphan.CreatedAt.Add(time.Second), 611)
-				return []Mutation{{Type: MutationPut, Key: key, Value: []byte(other)}}
+				return []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: []byte(other)}}
 			},
 		},
 		{
 			name: "misbucketed",
-			mutate: func(t *testing.T, _ *memoryHierarchyStore, orphan BackupOrphanRecord, key string) []Mutation {
+			mutate: func(t *testing.T, _ *memoryHierarchyStore, orphan testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
 				otherConnector := ids.NewAt(ids.KindConnector, orphan.CreatedAt.Add(time.Second), 612)
-				wrongKey, err := backupOrphanConnectorIndexKey(otherConnector, orphan.Point.ID)
+				wrongKey, err := testbackupruntime.BackupOrphanConnectorIndexKey(otherConnector, orphan.Point.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
-				return []Mutation{
-					{Type: MutationDelete, Key: key},
-					{Type: MutationPut, Key: wrongKey, Value: []byte(orphan.Point.ID)},
+				return []testkeyvalue.Mutation{
+					{Type: testkeyvalue.MutationDelete, Key: key},
+					{Type: testkeyvalue.MutationPut, Key: wrongKey, Value: []byte(orphan.Point.ID)},
 				}
 			},
 		},
 		{
 			name: "identical byte replay",
-			mutate: func(t *testing.T, store *memoryHierarchyStore, _ BackupOrphanRecord, key string) []Mutation {
+			mutate: func(t *testing.T, store *memoryHierarchyStore, _ testbackupruntime.BackupOrphanRecord, key string) []testkeyvalue.Mutation {
 				entry := mustOptionalKey(t, store, key)
-				return []Mutation{{Type: MutationPut, Key: key, Value: entry.Value}}
+				return []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: entry.Value}}
 			},
 		},
 	}
@@ -1087,7 +1107,7 @@ func TestBackupRuntimeRepositoryRejectsCorruptOrphanConnectorIndex(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			repository, store, orphan := createBackupRuntimeOrphanForReadTest(t)
-			connectorIndex, err := backupOrphanConnectorIndexKey(
+			connectorIndex, err := testbackupruntime.BackupOrphanConnectorIndexKey(
 				orphan.Point.ConnectorID,
 				orphan.Point.ID,
 			)
@@ -1097,7 +1117,7 @@ func TestBackupRuntimeRepositoryRejectsCorruptOrphanConnectorIndex(t *testing.T)
 			entry := mustOptionalKey(t, store, connectorIndex)
 			changed, err := store.Transact(
 				context.Background(),
-				[]Condition{{Key: connectorIndex, ModRevision: entry.ModRevision}},
+				[]testkeyvalue.Condition{{Key: connectorIndex, ModRevision: entry.ModRevision}},
 				test.mutate(t, store, orphan, connectorIndex),
 			)
 			if err != nil || !changed.Succeeded {
@@ -1110,8 +1130,7 @@ func TestBackupRuntimeRepositoryRejectsCorruptOrphanConnectorIndex(t *testing.T)
 			}
 			if _, err := repository.ListBackupOrphansByEnvironment(
 				context.Background(),
-				orphan.Point.EnvironmentID,
-				BackupRuntimeListRequest{Limit: 1},
+				orphan.Point.EnvironmentID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
 			); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Fatalf("ListBackupOrphansByEnvironment() error = %v", err)
 			}
@@ -1126,17 +1145,17 @@ func TestBackupRuntimeRepositoryRejectsOrphanCompanionLoss(t *testing.T) {
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	orphaned := staged
-	orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	orphaned.Sources[0].State = BackupSourceAttemptOrphaned
-	orphaned.Sources[0].Phase = BackupSourcePhasePointCommit
+	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
+	orphaned.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: BackupOrphanInspect,
+	orphan := testbackupruntime.BackupOrphanRecord{
+		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
 		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	orphanedVersion, err := repository.CreateBackupOrphan(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion, orphaned, 0, orphan,
 	)
@@ -1147,20 +1166,20 @@ func TestBackupRuntimeRepositoryRejectsOrphanCompanionLoss(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("GetBackupOrphan() = %#v/%v/%v", stored, found, err)
 	}
-	connectorIndex, err := backupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := testbackupruntime.BackupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: connectorIndex, ModRevision: stored.Revision}},
-		[]Mutation{{Type: MutationDelete, Key: connectorIndex}},
+		[]testkeyvalue.Condition{{Key: connectorIndex, ModRevision: stored.Revision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: connectorIndex}},
 	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("delete orphan companion = %#v, %v", result, err)
 	}
 	next := orphan
-	next.State = BackupOrphanDelete
+	next.State = testbackupruntime.BackupOrphanDelete
 	next.UpdatedAt = orphan.UpdatedAt.Add(time.Second)
 	if _, err := repository.TransitionBackupOrphan(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint),
@@ -1177,17 +1196,17 @@ func TestBackupRuntimeRepositoryCommitsOrphanAsRecoveryPointAtomically(t *testin
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	orphaned := staged
-	orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	orphaned.Sources[0].State = BackupSourceAttemptOrphaned
-	orphaned.Sources[0].Phase = BackupSourcePhasePointCommit
+	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
+	orphaned.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: BackupOrphanInspect,
+	orphan := testbackupruntime.BackupOrphanRecord{
+		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
 		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	orphanedVersion, err := repository.CreateBackupOrphan(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion, orphaned, 0, orphan,
 	)
@@ -1205,19 +1224,19 @@ func TestBackupRuntimeRepositoryCommitsOrphanAsRecoveryPointAtomically(t *testin
 		614,
 	)
 	committed := orphaned
-	committed.Sources = append([]BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
-	committed.Sources[0].State = BackupSourceAttemptPointCommitted
-	committed.Sources[0].Phase = BackupSourcePhaseRetention
+	committed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
+	committed.Sources[0].State = testbackupruntime.BackupSourceAttemptPointCommitted
+	committed.Sources[0].Phase = testbackupruntime.BackupSourcePhaseRetention
 	committed.UpdatedAt = orphaned.UpdatedAt.Add(time.Second)
 	point.VerifiedAt = committed.UpdatedAt
-	sweep := BackupRetentionSweepRecord{
+	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, State: BackupRetentionPending,
+		Revision: run.PolicyRevision, State: testbackupruntime.BackupRetentionPending,
 		CreatedAt: committed.UpdatedAt, UpdatedAt: committed.UpdatedAt,
 	}
 	checkpoint.Sequence = 2
-	checkpoint.Payload = BackupCheckpointPayload{
-		Kind: BackupCheckpointUploadVerified, PointID: point.ID,
+	checkpoint.Payload = testbackupruntime.BackupCheckpointPayload{
+		Kind: testbackupruntime.BackupCheckpointUploadVerified, PointID: point.ID,
 		StoredSizeBytes: uint64(point.SizeBytes), StoredSHA256: point.SHA256,
 	}
 	if _, _, err := repository.CommitBackupRecoveryPoint(
@@ -1241,23 +1260,22 @@ func TestBackupRuntimeRepositoryCommitsOrphanAsRecoveryPointAtomically(t *testin
 	if err != nil {
 		t.Fatalf("CommitBackupRecoveryPoint(orphan) error = %v", err)
 	}
-	connectorIndex, err := backupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := testbackupruntime.BackupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	environmentIndex, err := backupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	environmentIndex, err := testbackupruntime.BackupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{backupOrphanKey(point.ID), connectorIndex, environmentIndex} {
+	for _, key := range []string{testbackupruntime.BackupOrphanKey(point.ID), connectorIndex, environmentIndex} {
 		if entry := mustOptionalKey(t, store, key); entry != nil {
 			t.Fatalf("committed orphan authority %q = %#v", key, entry)
 		}
 	}
 	if entry := mustOptionalKey(
 		t,
-		store,
-		backupRecoveryPointKey(point.ID),
+		store, testbackupruntime.BackupRecoveryPointKey(point.ID),
 	); entry == nil ||
 		entry.ModRevision != storedPoint.Revision {
 		t.Fatalf("committed point primary = %#v", entry)
@@ -1272,7 +1290,7 @@ func TestBackupRuntimeRepositoryRejectsRewrittenRecoveryPointIndex(t *testing.T)
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	storedPoint, _, err := repository.CommitBackupRecoveryPoint(
 		context.Background(),
 		backupAssignmentFromCheckpoint(checkpoint),
@@ -1286,15 +1304,15 @@ func TestBackupRuntimeRepositoryRejectsRewrittenRecoveryPointIndex(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	entry := mustOptionalKey(t, store, connectorIndex)
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: connectorIndex, ModRevision: storedPoint.Revision}},
-		[]Mutation{{Type: MutationPut, Key: connectorIndex, Value: entry.Value}},
+		[]testkeyvalue.Condition{{Key: connectorIndex, ModRevision: storedPoint.Revision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: connectorIndex, Value: entry.Value}},
 	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("rewrite point index = %#v, %v", result, err)
@@ -1314,15 +1332,15 @@ func TestBackupRuntimeRepositoryPointCommitRejectsConnectorRevisionRace(t *testi
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	racing := &entryVolumeEpochRaceStore{hierarchyStore: store}
 	racing.beforeTransact = func() {
-		key := connectorRecordKey(run.ConnectorID)
+		key := testconnectors.RecordKey(run.ConnectorID)
 		entry := mustOptionalKey(t, store, key)
 		result, mutateErr := store.Transact(
 			context.Background(),
-			[]Condition{{Key: key, ModRevision: entry.ModRevision}},
-			[]Mutation{{Type: MutationPut, Key: key, Value: entry.Value}},
+			[]testkeyvalue.Condition{{Key: key, ModRevision: entry.ModRevision}},
+			[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: entry.Value}},
 		)
 		if mutateErr != nil || !result.Succeeded {
 			t.Fatalf("advance connector revision = %#v, %v", result, mutateErr)
@@ -1344,7 +1362,7 @@ func TestBackupRuntimeRepositoryPointCommitRejectsConnectorRevisionRace(t *testi
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("CommitBackupRecoveryPoint(connector race) error = %v", err)
 	}
-	if entry := mustOptionalKey(t, store, backupRecoveryPointKey(point.ID)); entry != nil {
+	if entry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointKey(point.ID)); entry != nil {
 		t.Fatalf("racing point primary = %#v", entry)
 	}
 }
@@ -1356,7 +1374,7 @@ func TestBackupRuntimeRepositoryRejectsMismatchedChangedSourceOrdinal(t *testing
 	repository, _, run := newBackupRuntimeRepositoryFixture(t)
 	run.Sources = append(
 		run.Sources,
-		testBackupLaterSource(run.CreatedAt, 1, BackupSourceAttemptPending),
+		testBackupLaterSource(run.CreatedAt, 1, testbackupruntime.BackupSourceAttemptPending),
 	)
 	run.Sources[1].Snapshot.Postgres.ConsumerEnvironmentID = run.EnvironmentID
 	run.Sources[1].ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + run.Sources[1].SourceID + "/" +
@@ -1371,14 +1389,14 @@ func TestBackupRuntimeRepositoryRejectsMismatchedChangedSourceOrdinal(t *testing
 		t.Fatal(err)
 	}
 	current := run
-	current.State = BackupRunRunning
-	current.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-	current.Sources[0].State = BackupSourceAttemptSucceeded
-	current.Sources[0].Phase = BackupSourcePhaseCleanup
+	current.State = testbackupruntime.BackupRunRunning
+	current.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	current.Sources[0].State = testbackupruntime.BackupSourceAttemptSucceeded
+	current.Sources[0].Phase = testbackupruntime.BackupSourcePhaseCleanup
 	current.Sources[0].SizeBytes = 123
 	current.Sources[0].SHA256 = testBackupDigest
-	current.Sources[1].State = BackupSourceAttemptStaged
-	current.Sources[1].Phase = BackupSourcePhaseUpload
+	current.Sources[1].State = testbackupruntime.BackupSourceAttemptStaged
+	current.Sources[1].Phase = testbackupruntime.BackupSourcePhaseUpload
 	current.Sources[1].SizeBytes = 123
 	current.Sources[1].SHA256 = testBackupDigest
 	current.UpdatedAt = run.UpdatedAt.Add(time.Second)
@@ -1387,51 +1405,47 @@ func TestBackupRuntimeRepositoryRejectsMismatchedChangedSourceOrdinal(t *testing
 		t.Fatal(err)
 	}
 	next := current
-	next.Sources = append([]BackupRunSourceAttemptRecord(nil), current.Sources...)
-	next.Sources[1].State = BackupSourceAttemptPointCommitted
-	next.Sources[1].Phase = BackupSourcePhaseRetention
+	next.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), current.Sources...)
+	next.Sources[1].State = testbackupruntime.BackupSourceAttemptPointCommitted
+	next.Sources[1].Phase = testbackupruntime.BackupSourcePhaseRetention
 	next.UpdatedAt = current.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, current.Sources[0], next.UpdatedAt)
-	sweep := BackupRetentionSweepRecord{
+	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, State: BackupRetentionPending,
+		Revision: run.PolicyRevision, State: testbackupruntime.BackupRetentionPending,
 		CreatedAt: next.UpdatedAt, UpdatedAt: next.UpdatedAt,
 	}
 	if _, _, err := repository.CommitBackupRecoveryPoint(
-		context.Background(), BackupAssignmentInput{}, created, next, 0, point, nil, sweep,
+		context.Background(), testbackupruntime.BackupAssignmentInput{}, created, next, 0, point, nil, sweep,
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("CommitBackupRecoveryPoint(mismatched ordinal) error = %v", err)
 	}
 	orphaned := current
-	orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), current.Sources...)
-	orphaned.Sources[1].State = BackupSourceAttemptOrphaned
-	orphaned.Sources[1].Phase = BackupSourcePhasePointCommit
+	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), current.Sources...)
+	orphaned.Sources[1].State = testbackupruntime.BackupSourceAttemptOrphaned
+	orphaned.Sources[1].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	orphaned.UpdatedAt = current.UpdatedAt.Add(time.Second)
-	orphan := BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: BackupOrphanInspect,
+	orphan := testbackupruntime.BackupOrphanRecord{
+		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
 		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
 	}
 	if _, err := repository.CreateBackupOrphan(
-		context.Background(), BackupAssignmentInput{}, created, orphaned, 0, orphan,
+		context.Background(), testbackupruntime.BackupAssignmentInput{}, created, orphaned, 0, orphan,
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("CreateBackupOrphan(mismatched ordinal) error = %v", err)
 	}
 	failed := orphaned
-	failed.State = BackupRunFailed
-	failed.Sources = append([]BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
-	failed.Sources[1].State = BackupSourceAttemptFailed
-	failed.Sources[1].FailureCode = BackupFailurePointCommit
+	failed.State = testbackupruntime.BackupRunFailed
+	failed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
+	failed.Sources[1].State = testbackupruntime.BackupSourceAttemptFailed
+	failed.Sources[1].FailureCode = testbackupruntime.BackupFailurePointCommit
 	failed.UpdatedAt = orphaned.UpdatedAt.Add(time.Second)
-	orphan.State = BackupOrphanDelete
+	orphan.State = testbackupruntime.BackupOrphanDelete
 	if _, err := repository.prepareBackupOrphanAbsentTerminal(
-		context.Background(),
-		BackupCheckpointInput{},
-		Versioned[BackupRunRecord]{
+		context.Background(), testbackupruntime.BackupCheckpointInput{}, testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{
 			Record: orphaned, Revision: created.Revision, ReadRevision: created.ReadRevision,
-		},
-		failed,
-		0,
-		Versioned[BackupOrphanRecord]{Record: orphan, Revision: 1, ReadRevision: 1},
+		}, failed,
+		0, testkeyvalue.Versioned[testbackupruntime.BackupOrphanRecord]{Record: orphan, Revision: 1, ReadRevision: 1},
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("prepareBackupOrphanAbsentTerminal(mismatched ordinal) error = %v", err)
 	}
@@ -1462,7 +1476,7 @@ func TestBackupRuntimeRepositoryCreateRunUnknownOutcomeReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(unknown)
+	idempotency, err := NewIdempotencyRepository(unknown)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1471,40 +1485,38 @@ func TestBackupRuntimeRepositoryCreateRunUnknownOutcomeReplay(t *testing.T) {
 	); !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {
 		t.Fatalf("Apply(unknown outcome) error = %v", err)
 	}
-	policyKey := backupPolicyKey(run.EnvironmentID)
+	policyKey := testbackuppolicy.BackupPolicyKey(run.EnvironmentID)
 	policyEntry := mustOptionalKey(t, store, policyKey)
-	policy, err := decodeBackupPolicyRecord(policyEntry.Value)
+	policy, err := testbackuppolicy.DecodeBackupPolicyRecord(policyEntry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	policy.Keep++
-	policyValue, err := encodeBackupPolicyRecord(policy)
+	policyValue, err := testbackuppolicy.EncodeBackupPolicyRecord(policy)
 	if err != nil {
 		t.Fatal(err)
 	}
 	policyChanged, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: policyKey, ModRevision: policyEntry.ModRevision}},
-		[]Mutation{{Type: MutationPut, Key: policyKey, Value: policyValue}},
+		[]testkeyvalue.Condition{{Key: policyKey, ModRevision: policyEntry.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: policyKey, Value: policyValue}},
 	)
 	clear(policyValue)
 	if err != nil || !policyChanged.Succeeded {
 		t.Fatalf("change current policy Keep = %#v, %v", policyChanged, err)
 	}
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatal(err)
 	}
 	markerEntry := mustOptionalKey(t, store, markerKey)
-	for _, key := range []string{
-		taskKey(run.TaskID), backupRunKey(run.TaskID), environmentOperationLockKey(run.EnvironmentID),
-	} {
+	for _, key := range []string{testtaskjournal.TaskStorageKey(run.TaskID), testbackupruntime.BackupRunKey(run.TaskID), testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)} {
 		entry := mustOptionalKey(t, store, key)
 		if entry == nil || markerEntry == nil || entry.ModRevision != markerEntry.ModRevision {
 			t.Fatalf("unknown-outcome authority %q = %#v, marker = %#v", key, entry, markerEntry)
 		}
 	}
-	reader, err := newIdempotencyRepository(store)
+	reader, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1536,19 +1548,21 @@ func TestBackupRuntimeRepositoryCreateRunUnknownOutcomeReplay(t *testing.T) {
 func TestBackupRuntimeRepositoryConfigReplayRequiresExactCompanions(t *testing.T) {
 	checks := []struct {
 		name   string
-		key    func(BackupRunRecord) string
+		key    func(testbackupruntime.BackupRunRecord) string
 		remove bool
 	}{
 		{
 			name: "missing immutable reference",
-			key: func(run BackupRunRecord) string {
-				return backupConfigSnapshotTaskReferenceKey(run.TaskID, run.TaskID)
+			key: func(run testbackupruntime.BackupRunRecord) string {
+				return testbackupconfiguration.BackupConfigSnapshotTaskReferenceKey(run.TaskID, run.TaskID)
 			},
 			remove: true,
 		},
 		{
 			name: "rewritten cursor",
-			key:  func(run BackupRunRecord) string { return backupConfigSnapshotKey(run.TaskID) },
+			key: func(run testbackupruntime.BackupRunRecord) string {
+				return testbackupconfiguration.BackupConfigSnapshotKey(run.TaskID)
+			},
 		},
 	}
 	for _, check := range checks {
@@ -1579,7 +1593,7 @@ func TestBackupRuntimeRepositoryConfigReplayRequiresExactCompanions(t *testing.T
 				t.Fatal(err)
 			}
 			unknown := &backupRuntimeUnknownOutcomeStore{hierarchyStore: store, failNext: true}
-			unknownIdempotency, err := newIdempotencyRepository(unknown)
+			unknownIdempotency, err := NewIdempotencyRepository(unknown)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1590,19 +1604,19 @@ func TestBackupRuntimeRepositoryConfigReplayRequiresExactCompanions(t *testing.T
 			}
 			key := check.key(run)
 			entry := mustOptionalKey(t, store, key)
-			mutation := Mutation{Type: MutationPut, Key: key, Value: entry.Value}
+			mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: entry.Value}
 			if check.remove {
-				mutation = Mutation{Type: MutationDelete, Key: key}
+				mutation = testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: key}
 			}
 			changed, err := store.Transact(
 				context.Background(),
-				[]Condition{{Key: key, ModRevision: entry.ModRevision}},
-				[]Mutation{mutation},
+				[]testkeyvalue.Condition{{Key: key, ModRevision: entry.ModRevision}},
+				[]testkeyvalue.Mutation{mutation},
 			)
 			if err != nil || !changed.Succeeded {
 				t.Fatalf("change Config companion = %#v, %v", changed, err)
 			}
-			idempotency, err := newIdempotencyRepository(store)
+			idempotency, err := NewIdempotencyRepository(store)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1627,15 +1641,15 @@ func TestBackupRuntimeRepositoryCreateRunReplayRejectsChangedMembershipRevision(
 	); err != nil {
 		t.Fatalf("createBackupRunForTest() error = %v", err)
 	}
-	membership, err := backupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
+	membership, err := testbackupruntime.BackupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	entry := mustOptionalKey(t, store, membership)
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: membership, ModRevision: entry.ModRevision}},
-		[]Mutation{{Type: MutationPut, Key: membership, Value: entry.Value}},
+		[]testkeyvalue.Condition{{Key: membership, ModRevision: entry.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: membership, Value: entry.Value}},
 	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("rewrite run membership = %#v, %v", result, err)
@@ -1654,205 +1668,13 @@ func TestBackupRuntimeRepositoryRejectsCursorWithoutRevision(t *testing.T) {
 	repository, _, run := newBackupRuntimeRepositoryFixture(t)
 	_, err := repository.ListBackupRunsByEnvironment(
 		context.Background(),
-		run.EnvironmentID,
-		BackupRuntimeListRequest{
+		run.EnvironmentID, testbackupruntime.BackupRuntimeListRequest{
 			Limit:          1,
-			StartExclusive: backupRunEnvironmentPrefix + run.EnvironmentID + "/" + run.TaskID,
+			StartExclusive: testbackupruntime.BackupRunEnvironmentPrefix + run.EnvironmentID + "/" + run.TaskID,
 		},
 	)
 	if !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("ListBackupRunsByEnvironment(cursor without revision) error = %v", err)
-	}
-}
-
-// Rationale: internal Connector-fence enumeration must preserve raw identity order and the caller's fixed revision.
-func TestBackupRuntimeRepositoryPaginatesConnectorPointsAtFixedRevision(t *testing.T) {
-	t.Parallel()
-	repository, store, run := newBackupRuntimeBareFixture(t)
-	source := run.Sources[0]
-	source.State = BackupSourceAttemptStaged
-	source.Phase = BackupSourcePhaseUpload
-	source.SizeBytes = 123
-	source.SHA256 = testBackupDigest
-	older := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
-	newer := older
-	newer.CreatedAt = older.CreatedAt.Add(time.Second)
-	newer.ID = ids.NewAt(ids.KindRecoveryPoint, newer.CreatedAt, 902)
-	newer.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + newer.SourceID + "/" + newer.ID + "/artifact.bin"
-	newer.VerifiedAt = older.VerifiedAt.Add(time.Second)
-	olderValue, err := encodeBackupRecoveryPointRecord(older)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(olderValue)
-	newerValue, err := encodeBackupRecoveryPointRecord(newer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clear(newerValue)
-	olderIndex, err := backupRecoveryPointConnectorIndexKey(older.ConnectorID, older.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	newerIndex, err := backupRecoveryPointConnectorIndexKey(newer.ConnectorID, newer.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	olderEnvironmentIndex, _ := backupRecoveryPointEnvironmentIndexKey(older.EnvironmentID, older.ID)
-	olderSourceIndex, _ := backupRecoveryPointSourceIndexKey(older.SourceID, older.ID)
-	newerEnvironmentIndex, _ := backupRecoveryPointEnvironmentIndexKey(newer.EnvironmentID, newer.ID)
-	newerSourceIndex, _ := backupRecoveryPointSourceIndexKey(newer.SourceID, newer.ID)
-	seeded, err := store.Transact(
-		context.Background(),
-		[]Condition{
-			{Key: backupRecoveryPointKey(older.ID)}, {Key: olderIndex}, {Key: olderEnvironmentIndex},
-			{Key: olderSourceIndex}, {Key: backupRecoveryPointKey(newer.ID)}, {Key: newerIndex},
-			{Key: newerEnvironmentIndex}, {Key: newerSourceIndex},
-		},
-		[]Mutation{
-			{Type: MutationPut, Key: backupRecoveryPointKey(older.ID), Value: olderValue},
-			{Type: MutationPut, Key: olderIndex, Value: []byte(older.ID)},
-			{Type: MutationPut, Key: olderEnvironmentIndex, Value: []byte(older.ID)},
-			{Type: MutationPut, Key: olderSourceIndex, Value: []byte(older.ID)},
-			{Type: MutationPut, Key: backupRecoveryPointKey(newer.ID), Value: newerValue},
-			{Type: MutationPut, Key: newerIndex, Value: []byte(newer.ID)},
-			{Type: MutationPut, Key: newerEnvironmentIndex, Value: []byte(newer.ID)},
-			{Type: MutationPut, Key: newerSourceIndex, Value: []byte(newer.ID)},
-		},
-	)
-	if err != nil || !seeded.Succeeded {
-		t.Fatalf("seed connector points = %#v, %v", seeded, err)
-	}
-	first, err := repository.ListBackupRecoveryPointsByConnector(
-		context.Background(), run.ConnectorID, BackupRuntimeListRequest{Limit: 1},
-	)
-	if err != nil || len(first.Items) != 1 || first.Items[0].Record.ID != older.ID ||
-		first.Next == "" {
-		t.Fatalf("first connector point page = %#v, %v", first, err)
-	}
-	rewritten, err := store.Transact(
-		context.Background(),
-		[]Condition{{Key: backupRecoveryPointKey(newer.ID), ModRevision: seeded.Revision}},
-		[]Mutation{{Type: MutationPut, Key: backupRecoveryPointKey(newer.ID), Value: newerValue}},
-	)
-	if err != nil || !rewritten.Succeeded {
-		t.Fatalf("rewrite newer point = %#v, %v", rewritten, err)
-	}
-	second, err := repository.ListBackupRecoveryPointsByConnector(
-		context.Background(),
-		run.ConnectorID,
-		BackupRuntimeListRequest{
-			Limit: 1, StartExclusive: first.Next, Revision: first.Revision,
-		},
-	)
-	if err != nil || len(second.Items) != 1 || second.Items[0].Record.ID != newer.ID ||
-		second.Items[0].Revision != seeded.Revision || second.Revision != first.Revision {
-		t.Fatalf("second connector point page = %#v, %v", second, err)
-	}
-}
-
-// Rationale: the public 96-item point page validates complete authority at one
-// fixed revision without any GetMany call crossing the operation ceiling.
-func TestBackupRuntimeRepositoryListsNinetySixPointsAtFixedRevision(t *testing.T) {
-	t.Parallel()
-	_, store, run := newBackupRuntimeBareFixture(t)
-	for index := range maximumBackupRuntimeListLimit {
-		createdAt := run.CreatedAt.Add(time.Duration(index+1) * time.Millisecond)
-		source := run.Sources[0]
-		source.RecoveryPointID = ids.NewAt(ids.KindRecoveryPoint, createdAt, int64(950+index))
-		source.RecoveryPointCreatedAt = createdAt
-		source.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + source.SourceID + "/" +
-			source.RecoveryPointID + "/artifact.bin"
-		source.SizeBytes = 123
-		source.SHA256 = testBackupDigest
-		point := backupRuntimeTestPoint(run, source, createdAt.Add(time.Millisecond))
-		value, err := encodeBackupRecoveryPointRecord(point)
-		if err != nil {
-			t.Fatal(err)
-		}
-		clear(value)
-		seedBackupRuntimePointAuthority(t, store, point)
-	}
-	audited := &backupRuntimeAuthorityAuditStore{hierarchyStore: store}
-	repository, err := newBackupRuntimeRepository(audited)
-	if err != nil {
-		t.Fatal(err)
-	}
-	page, err := repository.ListBackupRecoveryPointsByEnvironment(
-		context.Background(), run.EnvironmentID,
-		BackupRuntimeListRequest{Limit: maximumBackupRuntimeListLimit},
-	)
-	if err != nil || len(page.Items) != maximumBackupRuntimeListLimit ||
-		audited.maximumKeys > maximumTransactionOperations {
-		t.Fatalf("ListBackupRecoveryPointsByEnvironment(96) = %#v, max keys %d, %v",
-			page, audited.maximumKeys, err)
-	}
-	for _, revision := range audited.revisions {
-		if revision != page.Revision {
-			t.Fatalf("fixed GetMany revisions = %v, page revision %d", audited.revisions, page.Revision)
-		}
-	}
-}
-
-// Rationale: a continuation cursor and every fixed-revision authority chunk
-// are durable evidence; malformed shapes fail closed instead of widening reads.
-func TestBackupRuntimeRepositoryRejectsMalformedPointCursorAndChunk(t *testing.T) {
-	t.Parallel()
-	repository, store, run := newBackupRuntimeBareFixture(t)
-	if _, err := repository.ListBackupRecoveryPointsByEnvironment(
-		context.Background(), run.EnvironmentID, BackupRuntimeListRequest{
-			Limit: 1, Revision: 1,
-			StartExclusive: backupRecoveryPointEnvironmentPrefix + run.EnvironmentID + "/bad/cursor",
-		},
-	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
-		t.Fatalf("malformed point cursor error = %v", err)
-	}
-	source := run.Sources[0]
-	source.SizeBytes = 123
-	source.SHA256 = testBackupDigest
-	point := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
-	seedBackupRuntimePointAuthority(t, store, point)
-	malformed := &backupRuntimeAuthorityAuditStore{hierarchyStore: store, truncateNextChunk: true}
-	malformedRepository, err := newBackupRuntimeRepository(malformed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := malformedRepository.ListBackupRecoveryPointsByEnvironment(
-		context.Background(), run.EnvironmentID, BackupRuntimeListRequest{Limit: 1},
-	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("malformed fixed-revision chunk error = %v", err)
-	}
-}
-
-// Rationale: transaction preflight accepts the exact byte boundary; exceeding
-// a locked internal composition ceiling is an implementation defect, not bad input.
-func TestBackupRuntimeRepositoryTransactionBounds(t *testing.T) {
-	t.Parallel()
-	conditions := make([]Condition, maximumTransactionOperations)
-	if err := validateBackupRuntimeTransactionBounds(conditions, nil); err != nil {
-		t.Fatalf("exact operation boundary error = %v", err)
-	}
-	conditions = make([]Condition, maximumTransactionOperations+1)
-	if err := validateBackupRuntimeTransactionBounds(conditions, nil); !errors.Is(
-		err,
-		errs.New(errs.KindInternal, ""),
-	) {
-		t.Fatalf("operation overflow error = %v", err)
-	}
-	key := "/v1/runtime/boundary"
-	value := make([]byte, maximumBackupRuntimeTransactionBytes-len(key)-64)
-	if err := validateBackupRuntimeTransactionBounds(
-		nil,
-		[]Mutation{{Type: MutationPut, Key: key, Value: value}},
-	); err != nil {
-		t.Fatalf("exact byte boundary error = %v", err)
-	}
-	value = append(value, 0)
-	if err := validateBackupRuntimeTransactionBounds(
-		nil,
-		[]Mutation{{Type: MutationPut, Key: key, Value: value}},
-	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("byte overflow error = %v", err)
 	}
 }
 
@@ -1861,17 +1683,17 @@ func TestBackupRuntimeRepositoryTransactionBounds(t *testing.T) {
 func TestBackupRuntimeRepositoryPreparesTwelveSourcePublicationWithinBounds(t *testing.T) {
 	t.Parallel()
 	repository, _, run := newBackupRuntimeBareFixture(t)
-	for ordinal := uint32(1); ordinal < MaximumBackupPolicySources; ordinal++ {
-		source := testBackupLaterSource(run.CreatedAt, ordinal, BackupSourceAttemptPending)
+	for ordinal := uint32(1); ordinal < testbackuppolicy.MaximumBackupPolicySources; ordinal++ {
+		source := testBackupLaterSource(run.CreatedAt, ordinal, testbackupruntime.BackupSourceAttemptPending)
 		source.Snapshot.Postgres.ConsumerEnvironmentID = run.EnvironmentID
 		source.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + source.SourceID + "/" +
 			source.RecoveryPointID + "/artifact.bin"
 		run.Sources = append(run.Sources, source)
 	}
 	extendBackupRuntimePublicationSources(t, repository.store, &run)
-	lock := BackupOperationLockRecord{
+	lock := testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: run.EnvironmentID, OperationID: run.OperationID, TaskID: run.TaskID,
-		Kind: BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
+		Kind: testbackupruntime.BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
 	}
 	plan, err := repository.prepareBackupRunPublication(
 		context.Background(),
@@ -1883,15 +1705,14 @@ func TestBackupRuntimeRepositoryPreparesTwelveSourcePublicationWithinBounds(t *t
 		t.Fatalf("prepareBackupRunPublication(12 sources) error = %v", err)
 	}
 	defer plan.clear()
-	if len(plan.conditions)+len(plan.mutations) > maximumTransactionOperations {
+	if len(plan.conditions)+len(plan.mutations) > testkeyvalue.MaximumOperations {
 		t.Fatalf(
 			"12-source publication operations = %d, want <= %d",
-			len(plan.conditions)+len(plan.mutations),
-			maximumTransactionOperations,
+			len(plan.conditions)+len(plan.mutations), testkeyvalue.MaximumOperations,
 		)
 	}
 	exclusions, err := backupRunExclusionRecords(run, run.CreatedAt)
-	if err != nil || len(exclusions) != MaximumBackupPolicySources {
+	if err != nil || len(exclusions) != testbackuppolicy.MaximumBackupPolicySources {
 		t.Fatalf("12-source exclusions = %d, %v", len(exclusions), err)
 	}
 }
@@ -1901,7 +1722,7 @@ func TestBackupRuntimeRepositoryPreparesTwelveSourcePublicationWithinBounds(t *t
 func TestBackupRuntimeRepositoryRejectsMixedExclusionRelease(t *testing.T) {
 	t.Parallel()
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
-	second := testBackupLaterSource(run.CreatedAt, 1, BackupSourceAttemptPending)
+	second := testBackupLaterSource(run.CreatedAt, 1, testbackupruntime.BackupSourceAttemptPending)
 	second.Snapshot.Postgres.ConsumerEnvironmentID = run.EnvironmentID
 	second.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + second.SourceID + "/" +
 		second.RecoveryPointID + "/artifact.bin"
@@ -1916,15 +1737,15 @@ func TestBackupRuntimeRepositoryRejectsMixedExclusionRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	failed := run
-	failed.State = BackupRunFailed
-	failed.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-	failed.Sources[0].State = BackupSourceAttemptFailed
-	failed.Sources[0].FailureCode = BackupFailureCapture
-	failed.Sources[1].State = BackupSourceAttemptUnstarted
-	failed.Sources[1].Phase = BackupSourcePhaseCapture
+	failed.State = testbackupruntime.BackupRunFailed
+	failed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	failed.Sources[0].State = testbackupruntime.BackupSourceAttemptFailed
+	failed.Sources[0].FailureCode = testbackupruntime.BackupFailureCapture
+	failed.Sources[1].State = testbackupruntime.BackupSourceAttemptUnstarted
+	failed.Sources[1].Phase = testbackupruntime.BackupSourcePhaseCapture
 	failed.UpdatedAt = run.UpdatedAt.Add(time.Second)
-	firstKey, err := backupSourceTargetExclusionKey(
-		BackupSourceTargetAttach,
+	firstKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+		testbackupruntime.BackupSourceTargetAttach,
 		run.Sources[0].TargetID,
 	)
 	if err != nil {
@@ -1933,8 +1754,8 @@ func TestBackupRuntimeRepositoryRejectsMixedExclusionRelease(t *testing.T) {
 	entry := mustOptionalKey(t, store, firstKey)
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: firstKey, ModRevision: entry.ModRevision}},
-		[]Mutation{{Type: MutationDelete, Key: firstKey}},
+		[]testkeyvalue.Condition{{Key: firstKey, ModRevision: entry.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: firstKey}},
 	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("delete one exclusion = %#v, %v", result, err)
@@ -1944,7 +1765,10 @@ func TestBackupRuntimeRepositoryRejectsMixedExclusionRelease(t *testing.T) {
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("prepareBackupRunTerminal(mixed) error = %v", err)
 	}
-	secondKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, second.TargetID)
+	secondKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+		testbackupruntime.BackupSourceTargetAttach,
+		second.TargetID,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1967,10 +1791,10 @@ func TestBackupRuntimeRepositoryComposesTerminalRunAndAuthorityRelease(t *testin
 		t.Fatal(err)
 	}
 	failed := run
-	failed.State = BackupRunFailed
-	failed.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-	failed.Sources[0].State = BackupSourceAttemptFailed
-	failed.Sources[0].FailureCode = BackupFailureCapture
+	failed.State = testbackupruntime.BackupRunFailed
+	failed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	failed.Sources[0].State = testbackupruntime.BackupSourceAttemptFailed
+	failed.Sources[0].FailureCode = testbackupruntime.BackupFailureCapture
 	failed.UpdatedAt = run.UpdatedAt.Add(time.Second)
 	plan, err := repository.prepareBackupRunTerminal(context.Background(), created, failed)
 	if err != nil {
@@ -1979,29 +1803,30 @@ func TestBackupRuntimeRepositoryComposesTerminalRunAndAuthorityRelease(t *testin
 	defer plan.clear()
 	marker := "/v1/test/backup-terminal-tasks/" + run.TaskID
 	conditions, mutations, err := plan.composeTransaction(
-		[]Condition{{Key: marker}},
-		[]Mutation{{Type: MutationPut, Key: marker, Value: []byte(run.TaskID)}},
+		[]testkeyvalue.Condition{{Key: marker}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: marker, Value: []byte(run.TaskID)}},
 	)
 	if err != nil {
 		t.Fatalf("compose terminal backup run = %v", err)
 	}
-	result, err := repository.transact(context.Background(), conditions, mutations)
-	clearBackupRuntimeMutations(mutations)
+	result, err := repository.TransactRuntime(context.Background(), conditions, mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("terminal backup transaction = %#v, %v", result, err)
 	}
-	exclusionKey, err := backupSourceTargetExclusionKey(
-		BackupSourceTargetAttach, run.Sources[0].TargetID,
+	exclusionKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+		testbackupruntime.BackupSourceTargetAttach,
+		run.Sources[0].TargetID,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{exclusionKey, environmentOperationLockKey(run.EnvironmentID)} {
+	for _, key := range []string{exclusionKey, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)} {
 		if entry := mustOptionalKey(t, store, key); entry != nil {
 			t.Fatalf("terminal authority %q = %#v", key, entry)
 		}
 	}
-	for _, key := range []string{backupRunKey(run.TaskID), marker, environmentMutationEpochKey(run.EnvironmentID)} {
+	for _, key := range []string{testbackupruntime.BackupRunKey(run.TaskID), marker, testhierarchy.EnvironmentMutationEpochKey(run.EnvironmentID)} {
 		entry := mustOptionalKey(t, store, key)
 		if entry == nil || entry.ModRevision != result.Revision {
 			t.Fatalf("terminal companion %q = %#v, want revision %d", key, entry, result.Revision)
@@ -2023,10 +1848,10 @@ func TestBackupRuntimeRepositoryRequiresCleanupCheckpointBeforeSuccess(t *testin
 		t.Fatal(err)
 	}
 	cleanupPending := run
-	cleanupPending.State = BackupRunRunning
-	cleanupPending.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-	cleanupPending.Sources[0].State = BackupSourceAttemptCleanupPending
-	cleanupPending.Sources[0].Phase = BackupSourcePhaseCleanup
+	cleanupPending.State = testbackupruntime.BackupRunRunning
+	cleanupPending.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	cleanupPending.Sources[0].State = testbackupruntime.BackupSourceAttemptCleanupPending
+	cleanupPending.Sources[0].Phase = testbackupruntime.BackupSourcePhaseCleanup
 	cleanupPending.Sources[0].SizeBytes = 123
 	cleanupPending.Sources[0].SHA256 = testBackupDigest
 	cleanupPending.UpdatedAt = run.UpdatedAt.Add(time.Second)
@@ -2037,12 +1862,12 @@ func TestBackupRuntimeRepositoryRequiresCleanupCheckpointBeforeSuccess(t *testin
 		t.Fatal(err)
 	}
 	completed := cleanupPending
-	completed.State = BackupRunCompleted
+	completed.State = testbackupruntime.BackupRunCompleted
 	completed.Sources = append(
-		[]BackupRunSourceAttemptRecord(nil),
+		[]testbackupruntime.BackupRunSourceAttemptRecord(nil),
 		cleanupPending.Sources...,
 	)
-	completed.Sources[0].State = BackupSourceAttemptSucceeded
+	completed.Sources[0].State = testbackupruntime.BackupSourceAttemptSucceeded
 	completed.UpdatedAt = cleanupPending.UpdatedAt.Add(time.Second)
 	if _, err := repository.prepareBackupRunTerminal(
 		context.Background(), cleanupVersion, completed,
@@ -2050,16 +1875,16 @@ func TestBackupRuntimeRepositoryRequiresCleanupCheckpointBeforeSuccess(t *testin
 		t.Fatalf("prepareBackupRunTerminal(uncheckpointed cleanup) error = %v", err)
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload = BackupCheckpointPayload{
-		Kind:    BackupCheckpointSourceCleanupCompleted,
+	checkpoint.Payload = testbackupruntime.BackupCheckpointPayload{
+		Kind:    testbackupruntime.BackupCheckpointSourceCleanupCompleted,
 		PointID: cleanupPending.Sources[0].RecoveryPointID,
 	}
 	succeeded := cleanupPending
 	succeeded.Sources = append(
-		[]BackupRunSourceAttemptRecord(nil),
+		[]testbackupruntime.BackupRunSourceAttemptRecord(nil),
 		cleanupPending.Sources...,
 	)
-	succeeded.Sources[0].State = BackupSourceAttemptSucceeded
+	succeeded.Sources[0].State = testbackupruntime.BackupSourceAttemptSucceeded
 	succeeded.UpdatedAt = cleanupPending.UpdatedAt.Add(time.Second)
 	succeededVersion, err := repository.CheckpointBackupRun(
 		context.Background(), checkpoint, cleanupVersion, succeeded,
@@ -2068,7 +1893,7 @@ func TestBackupRuntimeRepositoryRequiresCleanupCheckpointBeforeSuccess(t *testin
 		t.Fatalf("CheckpointBackupRun(cleanup) error = %v", err)
 	}
 	completed = succeeded
-	completed.State = BackupRunCompleted
+	completed.State = testbackupruntime.BackupRunCompleted
 	completed.UpdatedAt = succeeded.UpdatedAt.Add(time.Second)
 	plan, err := repository.prepareBackupRunTerminal(
 		context.Background(), succeededVersion, completed,
@@ -2085,21 +1910,21 @@ func TestBackupRuntimeRepositoryTerminalizesUploadIntentWithOrphan(t *testing.T)
 	t.Parallel()
 	for _, test := range []struct {
 		name    string
-		state   BackupRunState
-		failure BackupFailureCode
-		phase   BackupSourceAttemptPhase
+		state   testbackupruntime.BackupRunState
+		failure testbackupruntime.BackupFailureCode
+		phase   testbackupruntime.BackupSourceAttemptPhase
 	}{
 		{
-			name: "failed upload", state: BackupRunFailed, failure: BackupFailureUpload,
-			phase: BackupSourcePhaseUpload,
+			name: "failed upload", state: testbackupruntime.BackupRunFailed, failure: testbackupruntime.BackupFailureUpload,
+			phase: testbackupruntime.BackupSourcePhaseUpload,
 		},
 		{
-			name: "aborted head verification", state: BackupRunAborted, failure: BackupFailureAborted,
-			phase: BackupSourcePhaseHeadVerification,
+			name: "aborted head verification", state: testbackupruntime.BackupRunAborted, failure: testbackupruntime.BackupFailureAborted,
+			phase: testbackupruntime.BackupSourcePhaseHeadVerification,
 		},
 		{
-			name: "timed out point commit", state: BackupRunTimedOut, failure: BackupFailureTimedOut,
-			phase: BackupSourcePhasePointCommit,
+			name: "timed out point commit", state: testbackupruntime.BackupRunTimedOut, failure: testbackupruntime.BackupFailureTimedOut,
+			phase: testbackupruntime.BackupSourcePhasePointCommit,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -2113,9 +1938,9 @@ func TestBackupRuntimeRepositoryTerminalizesUploadIntentWithOrphan(t *testing.T)
 				t.Fatal(err)
 			}
 			staged := run
-			staged.State = BackupRunRunning
-			staged.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-			staged.Sources[0].State = BackupSourceAttemptStaged
+			staged.State = testbackupruntime.BackupRunRunning
+			staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+			staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
 			staged.Sources[0].Phase = test.phase
 			staged.Sources[0].SizeBytes = 123
 			staged.Sources[0].SHA256 = testBackupDigest
@@ -2129,10 +1954,10 @@ func TestBackupRuntimeRepositoryTerminalizesUploadIntentWithOrphan(t *testing.T)
 			withoutOrphan := staged
 			withoutOrphan.State = test.state
 			withoutOrphan.Sources = append(
-				[]BackupRunSourceAttemptRecord(nil),
+				[]testbackupruntime.BackupRunSourceAttemptRecord(nil),
 				staged.Sources...,
 			)
-			withoutOrphan.Sources[0].State = BackupSourceAttemptFailed
+			withoutOrphan.Sources[0].State = testbackupruntime.BackupSourceAttemptFailed
 			withoutOrphan.Sources[0].FailureCode = test.failure
 			withoutOrphan.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 			if _, err := repository.prepareBackupRunTerminal(
@@ -2142,27 +1967,27 @@ func TestBackupRuntimeRepositoryTerminalizesUploadIntentWithOrphan(t *testing.T)
 			}
 			terminal := withoutOrphan
 			terminal.Sources = append(
-				[]BackupRunSourceAttemptRecord(nil),
+				[]testbackupruntime.BackupRunSourceAttemptRecord(nil),
 				withoutOrphan.Sources...,
 			)
-			terminal.Sources[0].State = BackupSourceAttemptOrphaned
+			terminal.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 			for _, mutate := range []struct {
 				name string
-				run  func(*BackupRunSourceAttemptRecord)
+				run  func(*testbackupruntime.BackupRunSourceAttemptRecord)
 			}{
-				{name: "empty", run: func(source *BackupRunSourceAttemptRecord) {
+				{name: "empty", run: func(source *testbackupruntime.BackupRunSourceAttemptRecord) {
 					source.SizeBytes = 0
 					source.SHA256 = ""
 				}},
-				{name: "malformed", run: func(source *BackupRunSourceAttemptRecord) {
+				{name: "malformed", run: func(source *testbackupruntime.BackupRunSourceAttemptRecord) {
 					source.SHA256 = "not-a-sha256"
 				}},
-				{name: "substituted", run: func(source *BackupRunSourceAttemptRecord) {
+				{name: "substituted", run: func(source *testbackupruntime.BackupRunSourceAttemptRecord) {
 					source.SizeBytes++
 				}},
 			} {
 				changed := terminal
-				changed.Sources = append([]BackupRunSourceAttemptRecord(nil), terminal.Sources...)
+				changed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), terminal.Sources...)
 				mutate.run(&changed.Sources[0])
 				if _, err := repository.prepareBackupRunTerminal(
 					context.Background(), stagedVersion, changed,
@@ -2178,37 +2003,35 @@ func TestBackupRuntimeRepositoryTerminalizesUploadIntentWithOrphan(t *testing.T)
 			}
 			marker := "/v1/test/backup-upload-terminal/" + run.TaskID
 			conditions, mutations, err := plan.composeTransaction(
-				[]Condition{{Key: marker}},
-				[]Mutation{{Type: MutationPut, Key: marker, Value: []byte(run.TaskID)}},
+				[]testkeyvalue.Condition{{Key: marker}},
+				[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: marker, Value: []byte(run.TaskID)}},
 			)
 			if err != nil {
 				plan.clear()
 				t.Fatal(err)
 			}
-			result, err := repository.transact(context.Background(), conditions, mutations)
-			clearBackupRuntimeMutations(mutations)
+			result, err := repository.TransactRuntime(context.Background(), conditions, mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			plan.clear()
 			if err != nil || !result.Succeeded {
 				t.Fatalf("terminalize upload intent = %#v, %v", result, err)
 			}
 			pointID := staged.Sources[0].RecoveryPointID
-			connectorIndex, err := backupOrphanConnectorIndexKey(run.ConnectorID, pointID)
+			connectorIndex, err := testbackupruntime.BackupOrphanConnectorIndexKey(run.ConnectorID, pointID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			environmentIndex, err := backupOrphanEnvironmentIndexKey(run.EnvironmentID, pointID)
+			environmentIndex, err := testbackupruntime.BackupOrphanEnvironmentIndexKey(run.EnvironmentID, pointID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, key := range []string{
-				backupOrphanKey(pointID), connectorIndex, environmentIndex, marker,
-			} {
+			for _, key := range []string{testbackupruntime.BackupOrphanKey(pointID), connectorIndex, environmentIndex, marker} {
 				entry := mustOptionalKey(t, store, key)
 				if entry == nil || entry.ModRevision != result.Revision {
 					t.Fatalf("terminal orphan companion %q = %#v", key, entry)
 				}
 			}
-			if mustOptionalKey(t, store, environmentOperationLockKey(run.EnvironmentID)) != nil {
+			if mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)) != nil {
 				t.Fatal("terminal upload intent retained its Environment lock")
 			}
 		})
@@ -2222,23 +2045,23 @@ func TestBackupRuntimeRepositoryTerminalRetainsExactExistingOrphan(t *testing.T)
 	t.Parallel()
 	for _, test := range []struct {
 		name        string
-		state       BackupRunState
-		failureCode BackupFailureCode
+		state       testbackupruntime.BackupRunState
+		failureCode testbackupruntime.BackupFailureCode
 	}{
-		{name: "failed", state: BackupRunFailed, failureCode: BackupFailurePointCommit},
-		{name: "aborted", state: BackupRunAborted, failureCode: BackupFailureAborted},
-		{name: "timed out", state: BackupRunTimedOut, failureCode: BackupFailureTimedOut},
+		{name: "failed", state: testbackupruntime.BackupRunFailed, failureCode: testbackupruntime.BackupFailurePointCommit},
+		{name: "aborted", state: testbackupruntime.BackupRunAborted, failureCode: testbackupruntime.BackupFailureAborted},
+		{name: "timed out", state: testbackupruntime.BackupRunTimedOut, failureCode: testbackupruntime.BackupFailureTimedOut},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repository, store, run := newBackupRuntimeRepositoryFixture(t)
 			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 			orphaned := staged
-			orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-			orphaned.Sources[0].State = BackupSourceAttemptOrphaned
+			orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+			orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 			orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 			point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-			orphan := BackupOrphanRecord{
-				Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: BackupOrphanInspect,
+			orphan := testbackupruntime.BackupOrphanRecord{
+				Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
 				CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
 			}
 			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
@@ -2259,7 +2082,7 @@ func TestBackupRuntimeRepositoryTerminalRetainsExactExistingOrphan(t *testing.T)
 			}
 			terminal := orphaned
 			terminal.State = test.state
-			terminal.Sources = append([]BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
+			terminal.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
 			terminal.Sources[0].FailureCode = test.failureCode
 			terminal.UpdatedAt = orphaned.UpdatedAt.Add(time.Second)
 			plan, err := repository.prepareBackupRunTerminal(
@@ -2270,32 +2093,32 @@ func TestBackupRuntimeRepositoryTerminalRetainsExactExistingOrphan(t *testing.T)
 			}
 			marker := "/v1/test/backup-retained-orphan-terminal/" + test.name + "/" + run.TaskID
 			conditions, mutations, err := plan.composeTransaction(
-				[]Condition{{Key: marker}},
-				[]Mutation{{Type: MutationPut, Key: marker, Value: []byte(run.TaskID)}},
+				[]testkeyvalue.Condition{{Key: marker}},
+				[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: marker, Value: []byte(run.TaskID)}},
 			)
 			if err != nil {
 				plan.clear()
 				t.Fatal(err)
 			}
-			result, err := repository.transact(context.Background(), conditions, mutations)
-			clearBackupRuntimeMutations(mutations)
+			result, err := repository.TransactRuntime(context.Background(), conditions, mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			plan.clear()
 			if err != nil || !result.Succeeded {
 				t.Fatalf("terminalize retained orphan = %#v, %v", result, err)
 			}
-			connectorIndex, _ := backupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
-			environmentIndex, _ := backupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
-			for _, key := range []string{backupOrphanKey(point.ID), connectorIndex, environmentIndex} {
+			connectorIndex, _ := testbackupruntime.BackupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
+			environmentIndex, _ := testbackupruntime.BackupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
+			for _, key := range []string{testbackupruntime.BackupOrphanKey(point.ID), connectorIndex, environmentIndex} {
 				entry := mustOptionalKey(t, store, key)
 				if entry == nil || entry.ModRevision != storedOrphan.Revision || entry.Version != 1 {
 					t.Fatalf("retained orphan companion %q = %#v", key, entry)
 				}
 			}
-			if mustOptionalKey(t, store, environmentOperationLockKey(run.EnvironmentID)) != nil {
+			if mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)) != nil {
 				t.Fatal("retained orphan terminal kept its Environment lock")
 			}
 			deleting := storedOrphan.Record
-			deleting.State = BackupOrphanDelete
+			deleting.State = testbackupruntime.BackupOrphanDelete
 			deleting.UpdatedAt = deleting.UpdatedAt.Add(time.Second)
 			transitioned, err := repository.TransitionReconciledBackupOrphan(
 				context.Background(), storedOrphan, deleting,
@@ -2319,12 +2142,12 @@ func TestBackupRuntimeRepositoryAdoptsOrphanAfterOriginTaskPruned(t *testing.T) 
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	orphaned := staged
-	orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	orphaned.Sources[0].State = BackupSourceAttemptOrphaned
+	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: BackupOrphanInspect,
+	orphan := testbackupruntime.BackupOrphanRecord{
+		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
 		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
@@ -2339,21 +2162,21 @@ func TestBackupRuntimeRepositoryAdoptsOrphanAfterOriginTaskPruned(t *testing.T) 
 	if err != nil || !found {
 		t.Fatalf("GetBackupOrphan() = %#v/%v/%v", storedOrphan, found, err)
 	}
-	pruned, err := store.Transact(context.Background(), []Condition{
-		{Key: backupRunKey(run.TaskID), ModRevision: orphanedVersion.Revision},
-	}, []Mutation{
-		{Type: MutationDelete, Key: backupRunKey(run.TaskID)},
-		{Type: MutationDelete, Key: taskKey(run.TaskID)},
+	pruned, err := store.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testbackupruntime.BackupRunKey(run.TaskID), ModRevision: orphanedVersion.Revision},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationDelete, Key: testbackupruntime.BackupRunKey(run.TaskID)},
+		{Type: testkeyvalue.MutationDelete, Key: testtaskjournal.TaskStorageKey(run.TaskID)},
 	})
 	if err != nil || !pruned.Succeeded {
 		t.Fatalf("prune originating Task/run = %#v, %v", pruned, err)
 	}
 	point.VerifiedAt = storedOrphan.Record.UpdatedAt.Add(time.Second)
-	sweep := BackupRetentionSweepRecord{
+	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID,
 		Keep:     storedOrphan.Record.Reconciliation.RetentionKeep,
 		Revision: storedOrphan.Record.Reconciliation.PolicyRevision,
-		State:    BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
+		State:    testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 	}
 	adopted, err := repository.AdoptReconciledBackupOrphan(
 		context.Background(), storedOrphan, point, sweep,
@@ -2361,7 +2184,7 @@ func TestBackupRuntimeRepositoryAdoptsOrphanAfterOriginTaskPruned(t *testing.T) 
 	if err != nil {
 		t.Fatalf("AdoptReconciledBackupOrphan(pruned Task) error = %v", err)
 	}
-	if adopted.Record != point || mustOptionalKey(t, store, backupOrphanKey(point.ID)) != nil {
+	if adopted.Record != point || mustOptionalKey(t, store, testbackupruntime.BackupOrphanKey(point.ID)) != nil {
 		t.Fatalf("adopted orphan = %#v", adopted)
 	}
 	storedSweep, found, err := repository.GetBackupRetentionSweep(
@@ -2380,12 +2203,12 @@ func TestBackupRuntimeRepositoryRejectsRewrittenRetainedOrphanCompanion(t *testi
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	orphaned := staged
-	orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	orphaned.Sources[0].State = BackupSourceAttemptOrphaned
+	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: BackupOrphanInspect,
+	orphan := testbackupruntime.BackupOrphanRecord{
+		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
 		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
@@ -2400,27 +2223,27 @@ func TestBackupRuntimeRepositoryRejectsRewrittenRetainedOrphanCompanion(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	environmentIndex, _ := backupOrphanEnvironmentIndexKey(run.EnvironmentID, point.ID)
+	environmentIndex, _ := testbackupruntime.BackupOrphanEnvironmentIndexKey(run.EnvironmentID, point.ID)
 	entry := mustOptionalKey(t, store, environmentIndex)
 	rewritten, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: environmentIndex, ModRevision: entry.ModRevision}},
-		[]Mutation{{Type: MutationPut, Key: environmentIndex, Value: entry.Value}},
+		[]testkeyvalue.Condition{{Key: environmentIndex, ModRevision: entry.ModRevision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: environmentIndex, Value: entry.Value}},
 	)
 	if err != nil || !rewritten.Succeeded {
 		t.Fatalf("rewrite orphan companion = %#v, %v", rewritten, err)
 	}
 	terminal := orphaned
-	terminal.State = BackupRunFailed
-	terminal.Sources = append([]BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
-	terminal.Sources[0].FailureCode = BackupFailurePointCommit
+	terminal.State = testbackupruntime.BackupRunFailed
+	terminal.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), orphaned.Sources...)
+	terminal.Sources[0].FailureCode = testbackupruntime.BackupFailurePointCommit
 	terminal.UpdatedAt = orphaned.UpdatedAt.Add(time.Second)
 	if _, err := repository.prepareBackupRunTerminal(
 		context.Background(), orphanedVersion, terminal,
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("prepareBackupRunTerminal(rewritten orphan) error = %v", err)
 	}
-	if mustOptionalKey(t, store, environmentOperationLockKey(run.EnvironmentID)) == nil {
+	if mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)) == nil {
 		t.Fatal("rewritten orphan companion released the Environment lock")
 	}
 }
@@ -2431,9 +2254,9 @@ func TestBackupRuntimeRepositoryRejectsRewrittenRetainedOrphanCompanion(t *testi
 func TestBackupRuntimeRepositoryPreparesComposableRunPublication(t *testing.T) {
 	t.Parallel()
 	repository, store, run := newBackupRuntimeBareFixture(t)
-	lock := BackupOperationLockRecord{
+	lock := testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: run.EnvironmentID, OperationID: run.OperationID, TaskID: run.TaskID,
-		Kind: BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
+		Kind: testbackupruntime.BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
 	}
 	plan, err := repository.prepareBackupRunPublication(
 		context.Background(),
@@ -2447,24 +2270,22 @@ func TestBackupRuntimeRepositoryPreparesComposableRunPublication(t *testing.T) {
 	defer plan.clear()
 	taskMarker := "/v1/test/backup-publication-tasks/" + run.TaskID
 	conditions, mutations, err := plan.composeTransaction(
-		[]Condition{{Key: taskMarker}},
-		[]Mutation{{Type: MutationPut, Key: taskMarker, Value: []byte(run.TaskID)}},
+		[]testkeyvalue.Condition{{Key: taskMarker}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: taskMarker, Value: []byte(run.TaskID)}},
 	)
 	if err != nil {
 		t.Fatalf("compose backup publication = %v", err)
 	}
-	result, err := repository.transact(context.Background(), conditions, mutations)
-	clearBackupRuntimeMutations(mutations)
+	result, err := repository.TransactRuntime(context.Background(), conditions, mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("composed backup publication = %#v, %v", result, err)
 	}
-	membership, err := backupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
+	membership, err := testbackupruntime.BackupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{
-		backupRunKey(run.TaskID), membership, environmentOperationLockKey(run.EnvironmentID), taskMarker,
-	} {
+	for _, key := range []string{testbackupruntime.BackupRunKey(run.TaskID), membership, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID), taskMarker} {
 		entry := mustOptionalKey(t, store, key)
 		if entry == nil || entry.ModRevision != result.Revision {
 			t.Fatalf("composed publication key %q = %#v", key, entry)
@@ -2497,7 +2318,7 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 		t.Fatalf("taskIdempotencyPlan(generic Backup Params) error = %v", err)
 	}
 	fabricatedRun := run
-	fabricatedRun.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
+	fabricatedRun.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
 	fabricatedRun.Sources[0].SourceRevision++
 	fabricated := backupRuntimeSealedRunPlan(t, fabricatedRun, task.PlanID)
 	fabricatedTask := task
@@ -2511,7 +2332,7 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2541,70 +2362,68 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 		agentID,
 		1,
 		run.TaskID,
-		claim.Assignment.Record.AssignmentID,
-		TaskStatusFailed,
-		failedResult,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failedResult,
 		run.CreatedAt.Add(2*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(Backup failure) error = %v", err)
 	}
 	committedRevision := terminal.Revision
-	for _, key := range []string{taskKey(run.TaskID), backupRunKey(run.TaskID)} {
+	for _, key := range []string{testtaskjournal.TaskStorageKey(run.TaskID), testbackupruntime.BackupRunKey(run.TaskID)} {
 		entry := mustOptionalKey(t, store, key)
 		if entry == nil || entry.ModRevision != committedRevision {
 			t.Fatalf("terminal authority %q = %#v", key, entry)
 		}
 	}
 	failedRun, err := repository.GetBackupRun(context.Background(), run.TaskID)
-	if err != nil || failedRun.Record.State != BackupRunFailed ||
-		failedRun.Record.Sources[0].State != BackupSourceAttemptFailed ||
-		failedRun.Record.Sources[0].FailureCode != BackupFailureCapture {
+	if err != nil || failedRun.Record.State != testbackupruntime.BackupRunFailed ||
+		failedRun.Record.Sources[0].State != testbackupruntime.BackupSourceAttemptFailed ||
+		failedRun.Record.Sources[0].FailureCode != testbackupruntime.BackupFailureCapture {
 		t.Fatalf("terminal Backup run = %#v, %v", failedRun, err)
 	}
-	if mustOptionalKey(t, store, environmentOperationLockKey(run.EnvironmentID)) != nil {
+	if mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)) != nil {
 		t.Fatal("terminal Backup Task retained its Environment lock")
 	}
 	replay, err := tasks.AcknowledgeTask(
 		context.Background(), agentID, 1, run.TaskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusFailed, failedResult,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failedResult,
 		run.CreatedAt.Add(3*time.Second),
 	)
 	if err != nil || replay.Revision != terminal.Revision {
 		t.Fatalf("AcknowledgeTask(Backup replay) = %#v, %v", replay, err)
 	}
 	newerAt := run.CreatedAt.Add(4 * time.Second)
-	putBackupRuntimeLock(t, store, BackupOperationLockRecord{
+	putBackupRuntimeLock(t, store, testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: run.EnvironmentID,
 		OperationID:   ids.NewAt(ids.KindOperation, newerAt, 1991),
 		TaskID:        ids.NewAt(ids.KindTask, newerAt, 1992),
-		Kind:          BackupOperationRestore,
+		Kind:          testbackupruntime.BackupOperationRestore,
 		CreatedAt:     newerAt,
 		UpdatedAt:     newerAt,
 	})
 	replay, err = tasks.AcknowledgeTask(
 		context.Background(), agentID, 1, run.TaskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusFailed, failedResult,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failedResult,
 		newerAt.Add(time.Second),
 	)
 	if err != nil || replay.Revision != terminal.Revision {
 		t.Fatalf("AcknowledgeTask(Backup replay after successor lock) = %#v, %v", replay, err)
 	}
-	membership, err := backupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
+	membership, err := testbackupruntime.BackupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tornMembership, err := store.Transact(
 		context.Background(),
 		nil,
-		[]Mutation{{Type: MutationDelete, Key: membership}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: membership}},
 	)
 	if err != nil || !tornMembership.Succeeded {
 		t.Fatalf("remove Backup run membership = %#v, %v", tornMembership, err)
 	}
 	if _, err := tasks.AcknowledgeTask(
 		context.Background(), agentID, 1, run.TaskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusFailed, failedResult,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failedResult,
 		newerAt.Add(2*time.Second),
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcknowledgeTask(Backup replay with torn membership) error = %v", err)
@@ -2612,10 +2431,10 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 	incompleteCascade, err := store.Transact(
 		context.Background(),
 		nil,
-		[]Mutation{
-			{Type: MutationDelete, Key: environmentKey(run.EnvironmentID)},
-			{Type: MutationDelete, Key: environmentOperationLockKey(run.EnvironmentID)},
-			{Type: MutationDelete, Key: backupRunKey(run.TaskID)},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationDelete, Key: testhierarchy.EnvironmentKey(run.EnvironmentID)},
+			{Type: testkeyvalue.MutationDelete, Key: testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)},
+			{Type: testkeyvalue.MutationDelete, Key: testbackupruntime.BackupRunKey(run.TaskID)},
 		},
 	)
 	if err != nil || !incompleteCascade.Succeeded {
@@ -2623,7 +2442,7 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 	}
 	if _, err := tasks.AcknowledgeTask(
 		context.Background(), agentID, 1, run.TaskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusFailed, failedResult,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failedResult,
 		newerAt.Add(3*time.Second),
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcknowledgeTask(Backup replay with retained epoch) error = %v", err)
@@ -2631,14 +2450,16 @@ func TestBackupRuntimeRepositoryComposesRealAssignedTaskTerminal(t *testing.T) {
 	cascade, err := store.Transact(
 		context.Background(),
 		nil,
-		[]Mutation{{Type: MutationDelete, Key: environmentMutationEpochKey(run.EnvironmentID)}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationDelete, Key: testhierarchy.EnvironmentMutationEpochKey(run.EnvironmentID)},
+		},
 	)
 	if err != nil || !cascade.Succeeded {
 		t.Fatalf("complete Environment owner cascade = %#v, %v", cascade, err)
 	}
 	replay, err = tasks.AcknowledgeTask(
 		context.Background(), agentID, 1, run.TaskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusFailed, failedResult,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failedResult,
 		newerAt.Add(4*time.Second),
 	)
 	if err != nil || replay.Revision != terminal.Revision {
@@ -2663,7 +2484,7 @@ func TestBackupRuntimeRepositoryRoutesCompletedAcknowledgement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2675,7 +2496,7 @@ func TestBackupRuntimeRepositoryRoutesCompletedAcknowledgement(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(
-		context.Background(), run.TaskID, TaskStatusCompleted, run.CreatedAt.Add(time.Second),
+		context.Background(), run.TaskID, testtaskjournal.TaskStatusCompleted, run.CreatedAt.Add(time.Second),
 	); !isKind(err, errs.KindStateConflict) {
 		t.Fatalf("AcknowledgeControllerTask(Backup) error = %v", err)
 	}
@@ -2691,36 +2512,44 @@ func TestBackupRuntimeRepositoryRoutesCompletedAcknowledgement(t *testing.T) {
 		t.Fatal(err)
 	}
 	running := current.Record
-	running.State = BackupRunRunning
-	running.Sources = append([]BackupRunSourceAttemptRecord(nil), current.Record.Sources...)
-	running.Sources[0].State = BackupSourceAttemptSucceeded
-	running.Sources[0].Phase = BackupSourcePhaseCleanup
+	running.State = testbackupruntime.BackupRunRunning
+	running.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), current.Record.Sources...)
+	running.Sources[0].State = testbackupruntime.BackupSourceAttemptSucceeded
+	running.Sources[0].Phase = testbackupruntime.BackupSourcePhaseCleanup
 	running.Sources[0].SizeBytes = 123
 	running.Sources[0].SHA256 = testBackupDigest
 	running.UpdatedAt = run.CreatedAt.Add(2 * time.Second)
-	value, err := encodeBackupRunRecord(running)
+	value, err := testbackupruntime.EncodeBackupRunRecord(running)
 	if err != nil {
 		t.Fatal(err)
 	}
 	replaced, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: backupRunKey(run.TaskID), ModRevision: current.Revision}},
-		[]Mutation{{Type: MutationPut, Key: backupRunKey(run.TaskID), Value: value}},
+		[]testkeyvalue.Condition{{Key: testbackupruntime.BackupRunKey(run.TaskID), ModRevision: current.Revision}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRunKey(run.TaskID), Value: value},
+		},
 	)
 	clear(value)
 	if err != nil || !replaced.Succeeded {
 		t.Fatalf("seed completed source state = %#v, %v", replaced, err)
 	}
 	terminal, err := tasks.AcknowledgeTask(
-		context.Background(), agentID, 1, run.TaskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusCompleted,
-		completedComposeTaskResult(), run.CreatedAt.Add(3*time.Second),
+		context.Background(),
+		agentID,
+		1,
+		run.TaskID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		completedComposeTaskResult(),
+		run.CreatedAt.Add(3*time.Second),
 	)
-	if err != nil || terminal.Record.Status != TaskStatusCompleted {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("AcknowledgeTask(Backup completed) = %#v, %v", terminal, err)
 	}
 	completed, err := repository.GetBackupRun(context.Background(), run.TaskID)
-	if err != nil || completed.Record.State != BackupRunCompleted || completed.Revision != terminal.Revision {
+	if err != nil || completed.Record.State != testbackupruntime.BackupRunCompleted ||
+		completed.Revision != terminal.Revision {
 		t.Fatalf("completed Backup run = %#v, %v", completed, err)
 	}
 }
@@ -2730,28 +2559,28 @@ func TestBackupRuntimeRepositoryRoutesCompletedAcknowledgement(t *testing.T) {
 func TestBackupTaskTerminalBindingRejectsRewrittenDomainIdentity(t *testing.T) {
 	_, store, run := newBackupRuntimeBareFixture(t)
 	task, _, _, _ := backupRuntimePublicationTask(t, store, run)
-	if err := validateBackupRunTaskBinding(task, run); err != nil {
+	if err := ValidateBackupRunTaskBinding(task, run); err != nil {
 		t.Fatalf("validateBackupRunTaskBinding(valid) error = %v", err)
 	}
 	rewrittenRun := run
 	rewrittenRun.OperationID = ids.NewAt(ids.KindOperation, run.CreatedAt, 1994)
-	if err := validateBackupRunTaskBinding(task, rewrittenRun); !errors.Is(
+	if err := ValidateBackupRunTaskBinding(task, rewrittenRun); !errors.Is(
 		err, errs.New(errs.KindInternal, ""),
 	) {
 		t.Fatalf("validateBackupRunTaskBinding(rewritten) error = %v", err)
 	}
 	pruneTask := task
-	pruneTask.Type = TaskBackupPrune
-	dispatch := BackupRecoveryPointPruneDispatchRecord{
+	pruneTask.Type = testtaskjournal.TaskBackupPrune
+	dispatch := testbackupruntime.BackupRecoveryPointPruneDispatchRecord{
 		TaskID: task.ID, OperationID: task.OperationID,
 		EnvironmentID: run.EnvironmentID, CreatedAt: task.CreatedAt,
 		RecoveryPointIDs: []string{run.Sources[0].RecoveryPointID},
 	}
-	if err := validateBackupPruneTaskBinding(pruneTask, dispatch); err != nil {
+	if err := ValidateBackupPruneTaskBinding(pruneTask, dispatch); err != nil {
 		t.Fatalf("validateBackupPruneTaskBinding(valid) error = %v", err)
 	}
 	dispatch.EnvironmentID = ids.NewAt(ids.KindEnvironment, run.CreatedAt, 1995)
-	if err := validateBackupPruneTaskBinding(pruneTask, dispatch); !errors.Is(
+	if err := ValidateBackupPruneTaskBinding(pruneTask, dispatch); !errors.Is(
 		err, errs.New(errs.KindInternal, ""),
 	) {
 		t.Fatalf("validateBackupPruneTaskBinding(rewritten) error = %v", err)
@@ -2764,27 +2593,27 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 	for _, test := range []struct {
 		name            string
 		pending         bool
-		status          TaskStatus
-		runState        BackupRunState
-		failure         BackupFailureCode
+		status          testtaskjournal.TaskStatus
+		runState        testbackupruntime.BackupRunState
+		failure         testbackupruntime.BackupFailureCode
 		useTimeout      bool
 		useAgentTimeout bool
 	}{
 		{
-			name: "pending abort", pending: true, status: TaskStatusAborted,
-			runState: BackupRunAborted, failure: BackupFailureAborted,
+			name: "pending abort", pending: true, status: testtaskjournal.TaskStatusAborted,
+			runState: testbackupruntime.BackupRunAborted, failure: testbackupruntime.BackupFailureAborted,
 		},
 		{
-			name: "running abort", status: TaskStatusAborted,
-			runState: BackupRunAborted, failure: BackupFailureAborted,
+			name: "running abort", status: testtaskjournal.TaskStatusAborted,
+			runState: testbackupruntime.BackupRunAborted, failure: testbackupruntime.BackupFailureAborted,
 		},
 		{
-			name: "running timeout", status: TaskStatusTimedOut,
-			runState: BackupRunTimedOut, failure: BackupFailureTimedOut, useTimeout: true,
+			name: "running timeout", status: testtaskjournal.TaskStatusTimedOut,
+			runState: testbackupruntime.BackupRunTimedOut, failure: testbackupruntime.BackupFailureTimedOut, useTimeout: true,
 		},
 		{
-			name: "stale Agent timeout", status: TaskStatusTimedOut,
-			runState: BackupRunTimedOut, failure: BackupFailureTimedOut, useAgentTimeout: true,
+			name: "stale Agent timeout", status: testtaskjournal.TaskStatusTimedOut,
+			runState: testbackupruntime.BackupRunTimedOut, failure: testbackupruntime.BackupFailureTimedOut, useAgentTimeout: true,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -2802,7 +2631,7 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 			if err != nil {
 				t.Fatal(err)
 			}
-			idempotency, err := newIdempotencyRepository(store)
+			idempotency, err := NewIdempotencyRepository(store)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2819,7 +2648,7 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 				t.Fatal(err)
 			}
 
-			var terminal Versioned[TaskRecord]
+			var terminal testkeyvalue.Versioned[TaskRecord]
 			var assignmentID string
 			agentID := ids.NewAt(ids.KindAgent, run.CreatedAt, 1990)
 			if test.pending {
@@ -2854,12 +2683,10 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 				} else {
 					terminal, err = tasks.AcknowledgeTask(
 						context.Background(), agentID, 1, run.TaskID, assignmentID,
-						test.status,
-						TaskResultRecord{
-							Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+						test.status, testtaskjournal.TaskResultRecord{
+							Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 							ReconciliationRequired: true, ExecutionEpoch: 1,
-						},
-						run.CreatedAt.Add(2*time.Second),
+						}, run.CreatedAt.Add(2*time.Second),
 					)
 				}
 			}
@@ -2868,12 +2695,12 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 			}
 			storedRun, err := repository.GetBackupRun(context.Background(), run.TaskID)
 			if err != nil || storedRun.Record.State != test.runState ||
-				storedRun.Record.Sources[0].State != BackupSourceAttemptFailed ||
+				storedRun.Record.Sources[0].State != testbackupruntime.BackupSourceAttemptFailed ||
 				storedRun.Record.Sources[0].FailureCode != test.failure ||
 				storedRun.Revision != terminal.Revision {
 				t.Fatalf("terminal Backup run = %#v, %v", storedRun, err)
 			}
-			if mustOptionalKey(t, store, environmentOperationLockKey(run.EnvironmentID)) != nil {
+			if mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)) != nil {
 				t.Fatal("terminal Backup retained its Environment lock")
 			}
 			if test.pending {
@@ -2884,8 +2711,8 @@ func TestBackupRuntimeRepositoryRoutesAbortAndTimeoutThroughDomainTerminal(t *te
 					t.Fatalf("AbortPendingTask(replay) = %#v, %v", replay, replayErr)
 				}
 			} else {
-				result := TaskResultRecord{
-					Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+				result := testtaskjournal.TaskResultRecord{
+					Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 					ReconciliationRequired: true, ExecutionEpoch: 1,
 				}
 				replay, replayErr := tasks.AcknowledgeTask(
@@ -2917,7 +2744,7 @@ func TestTaskRepositoryTimeoutCollectorContinuesAfterBackupTerminal(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2960,7 +2787,7 @@ func TestTaskRepositoryTimeoutCollectorContinuesAfterBackupTerminal(t *testing.T
 	}
 	for _, taskID := range []string{run.TaskID, ordinary.ID} {
 		terminal, getErr := tasks.GetTask(context.Background(), taskID)
-		if getErr != nil || terminal.Record.Status != TaskStatusTimedOut {
+		if getErr != nil || terminal.Record.Status != testtaskjournal.TaskStatusTimedOut {
 			t.Fatalf("timed-out Task %s = %#v, %v", taskID, terminal, getErr)
 		}
 	}
@@ -2983,7 +2810,7 @@ func TestTaskRepositoryAgentTimeoutContinuesAfterBackupTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3018,7 +2845,7 @@ func TestTaskRepositoryAgentTimeoutContinuesAfterBackupTerminal(t *testing.T) {
 	}
 	for _, taskID := range []string{run.TaskID, ordinary.ID} {
 		terminal, getErr := tasks.GetTask(context.Background(), taskID)
-		if getErr != nil || terminal.Record.Status != TaskStatusTimedOut {
+		if getErr != nil || terminal.Record.Status != testtaskjournal.TaskStatusTimedOut {
 			t.Fatalf("timed-out Task %s = %#v, %v", taskID, terminal, getErr)
 		}
 	}
@@ -3030,17 +2857,17 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 	for _, test := range []struct {
 		name       string
 		pending    bool
-		status     TaskStatus
+		status     testtaskjournal.TaskStatus
 		useTimeout bool
 	}{
-		{name: "pending abort", pending: true, status: TaskStatusAborted},
-		{name: "running abort", status: TaskStatusAborted},
-		{name: "running timeout", status: TaskStatusTimedOut, useTimeout: true},
+		{name: "pending abort", pending: true, status: testtaskjournal.TaskStatusAborted},
+		{name: "running abort", status: testtaskjournal.TaskStatusAborted},
+		{name: "running timeout", status: testtaskjournal.TaskStatusTimedOut, useTimeout: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repository, store, tasks, dispatch, pointID := publishBackupPruneLifecycleTask(t)
 			agentID := ids.NewAt(ids.KindAgent, dispatch.CreatedAt, 3990)
-			var terminal Versioned[TaskRecord]
+			var terminal testkeyvalue.Versioned[TaskRecord]
 			var assignmentID string
 			var err error
 			if test.pending {
@@ -3066,28 +2893,30 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 				} else {
 					terminal, err = tasks.AcknowledgeTask(
 						context.Background(), agentID, 1, dispatch.TaskID, assignmentID,
-						test.status,
-						TaskResultRecord{
-							Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+						test.status, testtaskjournal.TaskResultRecord{
+							Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 							ReconciliationRequired: true, ExecutionEpoch: 1,
-						},
-						dispatch.CreatedAt.Add(2*time.Second),
+						}, dispatch.CreatedAt.Add(2*time.Second),
 					)
 				}
 			}
 			if err != nil || terminal.Record.Status != test.status {
 				t.Fatalf("terminal prune Task = %#v, %v", terminal, err)
 			}
-			if mustOptionalKey(t, store, backupRecoveryPointPruneDispatchKey(dispatch.TaskID)) != nil ||
-				mustOptionalKey(t, store, environmentOperationLockKey(dispatch.EnvironmentID)) != nil {
+			if mustOptionalKey(
+				t,
+				store,
+				testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID),
+			) != nil ||
+				mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(dispatch.EnvironmentID)) != nil {
 				t.Fatal("terminal prune retained dispatch or Environment lock")
 			}
-			entry := mustOptionalKey(t, store, backupRecoveryPointPruneKey(pointID))
+			entry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(pointID))
 			if entry == nil {
 				t.Fatal("terminal prune lost its surviving tombstone")
 			}
-			prune, decodeErr := decodeBackupRecoveryPointPruneRecord(entry.Value)
-			if decodeErr != nil || prune.State != BackupPrunePending || prune.TaskID != "" ||
+			prune, decodeErr := testbackupruntime.DecodeBackupRecoveryPointPruneRecord(entry.Value)
+			if decodeErr != nil || prune.State != testbackupruntime.BackupPrunePending || prune.TaskID != "" ||
 				prune.OperationID != dispatch.OperationID || entry.ModRevision != terminal.Revision {
 				t.Fatalf("terminal prune survivor = %#v/%#v/%v", entry, prune, decodeErr)
 			}
@@ -3099,8 +2928,8 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 					t.Fatalf("AbortPendingTask(prune replay) = %#v, %v", replay, replayErr)
 				}
 			} else {
-				result := TaskResultRecord{
-					Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+				result := testtaskjournal.TaskResultRecord{
+					Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 					ReconciliationRequired: true, ExecutionEpoch: 1,
 				}
 				replay, replayErr := tasks.AcknowledgeTask(
@@ -3114,9 +2943,9 @@ func TestBackupRuntimeRepositoryRoutesPruneAbortAndTimeoutThroughDomainTerminal(
 					torn, deleteErr := store.Transact(
 						context.Background(),
 						nil,
-						[]Mutation{{
-							Type: MutationDelete,
-							Key:  environmentMutationEpochKey(dispatch.EnvironmentID),
+						[]testkeyvalue.Mutation{{
+							Type: testkeyvalue.MutationDelete,
+							Key:  testhierarchy.EnvironmentMutationEpochKey(dispatch.EnvironmentID),
 						}},
 					)
 					if deleteErr != nil || !torn.Succeeded {
@@ -3140,81 +2969,84 @@ func publishBackupPruneLifecycleTask(
 ) (
 	*BackupRuntimeRepository,
 	*memoryHierarchyStore,
-	*TaskRepository,
-	BackupRecoveryPointPruneDispatchRecord,
+	*TaskRepository, testbackupruntime.BackupRecoveryPointPruneDispatchRecord,
+
 	string,
 ) {
 	t.Helper()
 	repository, store, run := newBackupRuntimeBareFixture(t)
 	source := run.Sources[0]
-	source.State = BackupSourceAttemptStaged
-	source.Phase = BackupSourcePhaseUpload
+	source.State = testbackupruntime.BackupSourceAttemptStaged
+	source.Phase = testbackupruntime.BackupSourcePhaseUpload
 	source.SizeBytes = 123
 	source.SHA256 = testBackupDigest
 	point := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
-	pointValue, err := encodeBackupRecoveryPointRecord(point)
+	pointValue, err := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(pointValue)
-	environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	environmentIndex, err := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceIndex, err := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+	sourceIndex, err := testbackupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	operationID := ids.NewAt(ids.KindOperation, run.CreatedAt.Add(time.Second), 3991)
 	keys := []string{
-		backupRecoveryPointKey(point.ID), environmentIndex, sourceIndex, connectorIndex,
-		backupRecoveryPointPruneKey(point.ID),
+		testbackupruntime.BackupRecoveryPointKey(point.ID),
+		environmentIndex,
+		sourceIndex,
+		connectorIndex,
+		testbackupruntime.BackupRecoveryPointPruneKey(point.ID),
 	}
-	seeded, err := store.Transact(context.Background(), []Condition{
+	seeded, err := store.Transact(context.Background(), []testkeyvalue.Condition{
 		{Key: keys[0]}, {Key: keys[1]}, {Key: keys[2]}, {Key: keys[3]}, {Key: keys[4]},
-	}, []Mutation{
-		{Type: MutationPut, Key: keys[0], Value: pointValue},
-		{Type: MutationPut, Key: keys[1], Value: []byte(point.ID)},
-		{Type: MutationPut, Key: keys[2], Value: []byte(point.ID)},
-		{Type: MutationPut, Key: keys[3], Value: []byte(point.ID)},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: keys[0], Value: pointValue},
+		{Type: testkeyvalue.MutationPut, Key: keys[1], Value: []byte(point.ID)},
+		{Type: testkeyvalue.MutationPut, Key: keys[2], Value: []byte(point.ID)},
+		{Type: testkeyvalue.MutationPut, Key: keys[3], Value: []byte(point.ID)},
 	})
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed prune point = %#v, %v", seeded, err)
 	}
-	prune := BackupRecoveryPointPruneRecord{
+	prune := testbackupruntime.BackupRecoveryPointPruneRecord{
 		Point: point.BackupRecoveryPointSnapshot, PointRevision: seeded.Revision,
-		OperationID: operationID, State: BackupPrunePending,
+		OperationID: operationID, State: testbackupruntime.BackupPrunePending,
 		CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 	}
-	pruneValue, err := encodeBackupRecoveryPointPruneRecord(prune)
+	pruneValue, err := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(prune)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(pruneValue)
 	pruneSeeded, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: keys[0], ModRevision: seeded.Revision}, {Key: keys[4]}},
-		[]Mutation{{Type: MutationPut, Key: keys[4], Value: pruneValue}},
+		[]testkeyvalue.Condition{{Key: keys[0], ModRevision: seeded.Revision}, {Key: keys[4]}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: keys[4], Value: pruneValue}},
 	)
 	if err != nil || !pruneSeeded.Succeeded {
 		t.Fatalf("seed prune authority = %#v, %v", pruneSeeded, err)
 	}
-	pending := []Versioned[BackupRecoveryPointPruneRecord]{{
+	pending := []testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{{
 		Record: prune, Revision: pruneSeeded.Revision, ReadRevision: pruneSeeded.Revision,
 	}}
 	createdAt := run.CreatedAt.Add(2 * time.Second)
-	dispatch := BackupRecoveryPointPruneDispatchRecord{
+	dispatch := testbackupruntime.BackupRecoveryPointPruneDispatchRecord{
 		TaskID: ids.NewAt(ids.KindTask, createdAt, 3992), OperationID: operationID,
 		EnvironmentID: run.EnvironmentID, RecoveryPointIDs: []string{point.ID}, CreatedAt: createdAt,
 	}
 	plan, err := repository.prepareBackupPrunePublication(
-		context.Background(), pending, dispatch, BackupOperationLockRecord{
+		context.Background(), pending, dispatch, testbackupruntime.BackupOperationLockRecord{
 			EnvironmentID: dispatch.EnvironmentID, OperationID: dispatch.OperationID,
-			TaskID: dispatch.TaskID, Kind: BackupOperationPrune,
+			TaskID: dispatch.TaskID, Kind: testbackupruntime.BackupOperationPrune,
 			CreatedAt: createdAt, UpdatedAt: createdAt,
 		},
 	)
@@ -3229,7 +3061,7 @@ func publishBackupPruneLifecycleTask(
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3255,55 +3087,55 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	t.Parallel()
 	repository, store, run := newBackupRuntimeBareFixture(t)
 	source := run.Sources[0]
-	source.State = BackupSourceAttemptStaged
-	source.Phase = BackupSourcePhaseUpload
+	source.State = testbackupruntime.BackupSourceAttemptStaged
+	source.Phase = testbackupruntime.BackupSourcePhaseUpload
 	source.SizeBytes = 123
 	source.SHA256 = testBackupDigest
 	verifiedAt := run.CreatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, source, verifiedAt)
-	pointValue, err := encodeBackupRecoveryPointRecord(point)
+	pointValue, err := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(pointValue)
-	environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	environmentIndex, err := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceIndex, err := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+	sourceIndex, err := testbackupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pointCommit, err := store.Transact(context.Background(), []Condition{
-		{Key: backupRecoveryPointKey(point.ID)}, {Key: environmentIndex},
+	pointCommit, err := store.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testbackupruntime.BackupRecoveryPointKey(point.ID)}, {Key: environmentIndex},
 		{Key: sourceIndex}, {Key: connectorIndex},
-	}, []Mutation{
-		{Type: MutationPut, Key: backupRecoveryPointKey(point.ID), Value: pointValue},
-		{Type: MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
-		{Type: MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
-		{Type: MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRecoveryPointKey(point.ID), Value: pointValue},
+		{Type: testkeyvalue.MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
+		{Type: testkeyvalue.MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
+		{Type: testkeyvalue.MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
 	})
 	if err != nil || !pointCommit.Succeeded {
 		t.Fatalf("seed point = %#v, %v", pointCommit, err)
 	}
-	pendingSweep := BackupRetentionSweepRecord{
+	pendingSweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, State: BackupRetentionPending,
+		Revision: run.PolicyRevision, State: testbackupruntime.BackupRetentionPending,
 		CreatedAt: verifiedAt, UpdatedAt: verifiedAt,
 	}
-	pendingSweepValue, err := encodeBackupRetentionSweepRecord(pendingSweep)
+	pendingSweepValue, err := testbackupruntime.EncodeBackupRetentionSweepRecord(pendingSweep)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sweepCreated, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: backupRetentionKey(point.SourceID, point.ID)}},
-		[]Mutation{{
-			Type: MutationPut, Key: backupRetentionKey(point.SourceID, point.ID), Value: pendingSweepValue,
+		[]testkeyvalue.Condition{{Key: testbackupruntime.BackupRetentionKey(point.SourceID, point.ID)}},
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRetentionKey(point.SourceID, point.ID), Value: pendingSweepValue,
 		}},
 	)
 	clear(pendingSweepValue)
@@ -3311,60 +3143,64 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 		t.Fatalf("seed pending retention sweep = %#v, %v", sweepCreated, err)
 	}
 	completedSweep := pendingSweep
-	completedSweep.State = BackupRetentionCompleted
+	completedSweep.State = testbackupruntime.BackupRetentionCompleted
 	completedSweep.SelectionRevision = pointCommit.Revision
 	completedSweep.PruneOperationID = run.OperationID
 	completedSweep.UpdatedAt = verifiedAt.Add(time.Second)
-	completedSweepValue, err := encodeBackupRetentionSweepRecord(completedSweep)
+	completedSweepValue, err := testbackupruntime.EncodeBackupRetentionSweepRecord(completedSweep)
 	if err != nil {
 		t.Fatal(err)
 	}
 	sweepCompleted, err := store.Transact(
 		context.Background(),
-		[]Condition{{
-			Key: backupRetentionKey(point.SourceID, point.ID), ModRevision: sweepCreated.Revision,
+		[]testkeyvalue.Condition{{
+			Key: testbackupruntime.BackupRetentionKey(point.SourceID, point.ID), ModRevision: sweepCreated.Revision,
 		}},
-		[]Mutation{{
-			Type: MutationPut, Key: backupRetentionKey(point.SourceID, point.ID), Value: completedSweepValue,
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRetentionKey(point.SourceID, point.ID), Value: completedSweepValue,
 		}},
 	)
 	clear(completedSweepValue)
 	if err != nil || !sweepCompleted.Succeeded {
 		t.Fatalf("complete retention sweep = %#v, %v", sweepCompleted, err)
 	}
-	prune := BackupRecoveryPointPruneRecord{
+	prune := testbackupruntime.BackupRecoveryPointPruneRecord{
 		Point: point.BackupRecoveryPointSnapshot, PointRevision: pointCommit.Revision,
 		OperationID: run.OperationID,
-		State:       BackupPrunePending, CreatedAt: verifiedAt.Add(time.Second),
+		State:       testbackupruntime.BackupPrunePending, CreatedAt: verifiedAt.Add(time.Second),
 		UpdatedAt: verifiedAt.Add(time.Second),
 	}
-	pruneValue, err := encodeBackupRecoveryPointPruneRecord(prune)
+	pruneValue, err := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(prune)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(pruneValue)
 	pruneCreate, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: backupRecoveryPointPruneKey(point.ID)}},
-		[]Mutation{
-			{Type: MutationPut, Key: backupRecoveryPointPruneKey(point.ID), Value: pruneValue},
+		[]testkeyvalue.Condition{{Key: testbackupruntime.BackupRecoveryPointPruneKey(point.ID)}},
+		[]testkeyvalue.Mutation{
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testbackupruntime.BackupRecoveryPointPruneKey(point.ID),
+				Value: pruneValue,
+			},
 		},
 	)
 	if err != nil || !pruneCreate.Succeeded {
 		t.Fatalf("seed prune = %#v, %v", pruneCreate, err)
 	}
-	dispatch := BackupRecoveryPointPruneDispatchRecord{
+	dispatch := testbackupruntime.BackupRecoveryPointPruneDispatchRecord{
 		TaskID: run.TaskID, OperationID: run.OperationID, EnvironmentID: run.EnvironmentID,
 		RecoveryPointIDs: []string{point.ID},
 		CreatedAt:        prune.UpdatedAt.Add(time.Second),
 	}
-	lock := BackupOperationLockRecord{
+	lock := testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: run.EnvironmentID, OperationID: run.OperationID, TaskID: run.TaskID,
-		Kind: BackupOperationPrune, CreatedAt: dispatch.CreatedAt, UpdatedAt: dispatch.CreatedAt,
+		Kind: testbackupruntime.BackupOperationPrune, CreatedAt: dispatch.CreatedAt, UpdatedAt: dispatch.CreatedAt,
 	}
 	publication, err := repository.prepareBackupPrunePublication(
 		context.Background(),
-		[]Versioned[BackupRecoveryPointPruneRecord]{
+		[]testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{
 			{Record: prune, Revision: pruneCreate.Revision, ReadRevision: pruneCreate.Revision},
 		},
 		dispatch,
@@ -3375,31 +3211,33 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	}
 	publicationMarker := "/v1/test/backup-prune-tasks/" + dispatch.TaskID
 	conditions, mutations, err := publication.composeTransaction(
-		[]Condition{{Key: publicationMarker}},
-		[]Mutation{{Type: MutationPut, Key: publicationMarker, Value: []byte(dispatch.TaskID)}},
+		[]testkeyvalue.Condition{{Key: publicationMarker}},
+		[]testkeyvalue.Mutation{
+			{Type: testkeyvalue.MutationPut, Key: publicationMarker, Value: []byte(dispatch.TaskID)},
+		},
 	)
 	if err != nil {
 		t.Fatalf("compose prune publication = %v", err)
 	}
-	published, err := repository.transact(context.Background(), conditions, mutations)
-	clearBackupRuntimeMutations(mutations)
+	published, err := repository.TransactRuntime(context.Background(), conditions, mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	publication.clear()
 	if err != nil || !published.Succeeded {
 		t.Fatalf("publish prune = %#v, %v", published, err)
 	}
-	assignedEntry := mustOptionalKey(t, store, backupRecoveryPointPruneKey(point.ID))
-	assigned, err := decodeBackupRecoveryPointPruneRecord(assignedEntry.Value)
-	if err != nil || assigned.State != BackupPruneAssigned {
+	assignedEntry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(point.ID))
+	assigned, err := testbackupruntime.DecodeBackupRecoveryPointPruneRecord(assignedEntry.Value)
+	if err != nil || assigned.State != testbackupruntime.BackupPruneAssigned {
 		t.Fatalf("assigned prune = %#v, %v", assigned, err)
 	}
-	dispatchVersion := Versioned[BackupRecoveryPointPruneDispatchRecord]{
+	dispatchVersion := testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneDispatchRecord]{
 		Record: dispatch, Revision: published.Revision, ReadRevision: published.Revision,
 	}
-	assignedVersion := Versioned[BackupRecoveryPointPruneRecord]{
+	assignedVersion := testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{
 		Record: assigned, Revision: assignedEntry.ModRevision, ReadRevision: published.Revision,
 	}
 	verified := assigned
-	verified.State = BackupPruneVerifiedAbsent
+	verified.State = testbackupruntime.BackupPruneVerifiedAbsent
 	verified.UpdatedAt = assigned.UpdatedAt.Add(time.Second)
 	checkpointInput, _ := seedBackupPruneCheckpointAssignment(
 		t, store, run, dispatch.RecoveryPointIDs,
@@ -3411,10 +3249,7 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	if err != nil {
 		t.Fatalf("MarkBackupRecoveryPointPruneVerifiedAbsent() error = %v", err)
 	}
-	for _, key := range []string{
-		backupRecoveryPointKey(point.ID), environmentIndex, sourceIndex, connectorIndex,
-		backupRetentionKey(point.SourceID, point.ID),
-	} {
+	for _, key := range []string{testbackupruntime.BackupRecoveryPointKey(point.ID), environmentIndex, sourceIndex, connectorIndex, testbackupruntime.BackupRetentionKey(point.SourceID, point.ID)} {
 		if entry := mustOptionalKey(t, store, key); entry != nil {
 			t.Fatalf("verified-absent point authority %q = %#v", key, entry)
 		}
@@ -3422,30 +3257,26 @@ func TestBackupRuntimeRepositoryPruneVerifiedAbsentFailureFinalization(t *testin
 	completion, err := repository.prepareBackupPruneFailure(
 		context.Background(),
 		dispatchVersion,
-		[]Versioned[BackupRecoveryPointPruneRecord]{checkpoint},
+		[]testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{checkpoint},
 		checkpoint.Record.UpdatedAt.Add(time.Second),
 	)
 	if err != nil {
 		t.Fatalf("prepareBackupPruneFailure() error = %v", err)
 	}
 	conditions, mutations, err = completion.composeTransaction(
-		[]Condition{{Key: publicationMarker, ModRevision: published.Revision}},
-		[]Mutation{{Type: MutationDelete, Key: publicationMarker}},
+		[]testkeyvalue.Condition{{Key: publicationMarker, ModRevision: published.Revision}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: publicationMarker}},
 	)
 	if err != nil {
 		t.Fatalf("compose prune completion = %v", err)
 	}
-	completed, err := repository.transact(context.Background(), conditions, mutations)
-	clearBackupRuntimeMutations(mutations)
+	completed, err := repository.TransactRuntime(context.Background(), conditions, mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	completion.clear()
 	if err != nil || !completed.Succeeded {
 		t.Fatalf("complete prune = %#v, %v", completed, err)
 	}
-	for _, key := range []string{
-		backupRecoveryPointPruneKey(point.ID),
-		backupRecoveryPointPruneDispatchKey(dispatch.TaskID),
-		environmentOperationLockKey(run.EnvironmentID), publicationMarker,
-	} {
+	for _, key := range []string{testbackupruntime.BackupRecoveryPointPruneKey(point.ID), testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID), testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID), publicationMarker} {
 		if entry := mustOptionalKey(t, store, key); entry != nil {
 			t.Fatalf("completed prune authority %q = %#v", key, entry)
 		}
@@ -3462,15 +3293,15 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	secondaryConnector := testConnectorRecord(
 		t, run.EnvironmentID, run.CreatedAt, 2101, "archive-store",
 	)
-	secondaryConnectorValue, err := encodeConnectorRecord(secondaryConnector)
+	secondaryConnectorValue, err := testconnectors.EncodeRecord(secondaryConnector)
 	if err != nil {
 		t.Fatal(err)
 	}
 	secondaryConnectorCreated, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: connectorRecordKey(secondaryConnector.Connector.ID)}},
-		[]Mutation{{
-			Type: MutationPut, Key: connectorRecordKey(secondaryConnector.Connector.ID),
+		[]testkeyvalue.Condition{{Key: testconnectors.RecordKey(secondaryConnector.Connector.ID)}},
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testconnectors.RecordKey(secondaryConnector.Connector.ID),
 			Value: secondaryConnectorValue,
 		}},
 	)
@@ -3478,9 +3309,12 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	if err != nil || !secondaryConnectorCreated.Succeeded {
 		t.Fatalf("seed secondary prune Connector = %#v, %v", secondaryConnectorCreated, err)
 	}
-	pending := make([]Versioned[BackupRecoveryPointPruneRecord], maximumBackupPruneBatch)
-	pointIDs := make([]string, maximumBackupPruneBatch)
-	mutations := make([]Mutation, 0, maximumBackupPruneBatch*4)
+	pending := make(
+		[]testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord],
+		testbackupruntime.MaximumBackupPruneBatch,
+	)
+	pointIDs := make([]string, testbackupruntime.MaximumBackupPruneBatch)
+	mutations := make([]testkeyvalue.Mutation, 0, testbackupruntime.MaximumBackupPruneBatch*4)
 	for index := range pending {
 		allocatedAt := run.CreatedAt.Add(time.Duration(index) * time.Millisecond)
 		source := run.Sources[0]
@@ -3488,8 +3322,8 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 		source.RecoveryPointCreatedAt = allocatedAt
 		source.ObjectKey = run.ConnectorPrefix + run.EnvironmentID + "/" + source.SourceID + "/" +
 			source.RecoveryPointID + "/artifact.bin"
-		source.State = BackupSourceAttemptStaged
-		source.Phase = BackupSourcePhasePointCommit
+		source.State = testbackupruntime.BackupSourceAttemptStaged
+		source.Phase = testbackupruntime.BackupSourcePhasePointCommit
 		source.SizeBytes = 123
 		source.SHA256 = testBackupDigest
 		pointRun := run
@@ -3500,63 +3334,69 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 				source.RecoveryPointID + "/artifact.bin"
 		}
 		point := backupRuntimeTestPoint(pointRun, source, allocatedAt.Add(time.Second))
-		record := BackupRecoveryPointPruneRecord{
+		record := testbackupruntime.BackupRecoveryPointPruneRecord{
 			Point:       point.BackupRecoveryPointSnapshot,
 			OperationID: operationID,
-			State:       BackupPrunePending,
+			State:       testbackupruntime.BackupPrunePending,
 			CreatedAt:   allocatedAt.Add(2 * time.Second),
 			UpdatedAt:   allocatedAt.Add(2 * time.Second),
 		}
 		pointIDs[index] = point.ID
-		pending[index] = Versioned[BackupRecoveryPointPruneRecord]{Record: record}
-		pointValue, err := encodeBackupRecoveryPointRecord(point)
+		pending[index] = testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{Record: record}
+		pointValue, err := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
 		if err != nil {
-			clearBackupRuntimeMutations(mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			t.Fatal(err)
 		}
-		environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
-		if err != nil {
-			clear(pointValue)
-			clearBackupRuntimeMutations(mutations)
-			t.Fatal(err)
-		}
-		sourceIndex, err := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+		environmentIndex, err := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 		if err != nil {
 			clear(pointValue)
-			clearBackupRuntimeMutations(mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			t.Fatal(err)
 		}
-		connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+		sourceIndex, err := testbackupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 		if err != nil {
 			clear(pointValue)
-			clearBackupRuntimeMutations(mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			t.Fatal(err)
 		}
-		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: backupRecoveryPointKey(point.ID), Value: pointValue},
-			Mutation{Type: MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
-			Mutation{Type: MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
-			Mutation{Type: MutationPut, Key: connectorIndex, Value: []byte(point.ID)})
+		connectorIndex, err := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+		if err != nil {
+			clear(pointValue)
+			testkeyvalue.ClearMutationValues(mutations)
+			t.Fatal(err)
+		}
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testbackupruntime.BackupRecoveryPointKey(point.ID),
+				Value: pointValue,
+			},
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
+		)
 	}
 	pointSeeded, err := store.Transact(context.Background(), nil, mutations)
-	clearBackupRuntimeMutations(mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	if err != nil || !pointSeeded.Succeeded {
 		t.Fatalf("seed eleven prune points = %#v, %v", pointSeeded, err)
 	}
-	mutations = make([]Mutation, 0, maximumBackupPruneBatch)
+	mutations = make([]testkeyvalue.Mutation, 0, testbackupruntime.MaximumBackupPruneBatch)
 	for index := range pending {
 		pending[index].Record.PointRevision = pointSeeded.Revision
-		value, encodeErr := encodeBackupRecoveryPointPruneRecord(pending[index].Record)
+		value, encodeErr := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(pending[index].Record)
 		if encodeErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			t.Fatal(encodeErr)
 		}
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: backupRecoveryPointPruneKey(pointIDs[index]), Value: value,
+		mutations = append(mutations, testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRecoveryPointPruneKey(pointIDs[index]), Value: value,
 		})
 	}
 	pruneSeeded, err := store.Transact(context.Background(), nil, mutations)
-	clearBackupRuntimeMutations(mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	if err != nil || !pruneSeeded.Succeeded {
 		t.Fatalf("seed eleven prune authorities = %#v, %v", pruneSeeded, err)
 	}
@@ -3564,18 +3404,18 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 		pending[index].Revision = pruneSeeded.Revision
 		pending[index].ReadRevision = pruneSeeded.Revision
 	}
-	dispatch := BackupRecoveryPointPruneDispatchRecord{
+	dispatch := testbackupruntime.BackupRecoveryPointPruneDispatchRecord{
 		TaskID:           run.TaskID,
 		OperationID:      operationID,
 		EnvironmentID:    run.EnvironmentID,
 		RecoveryPointIDs: pointIDs,
 		CreatedAt:        run.CreatedAt.Add(3 * time.Second),
 	}
-	lock := BackupOperationLockRecord{
+	lock := testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: run.EnvironmentID,
 		OperationID:   operationID,
 		TaskID:        run.TaskID,
-		Kind:          BackupOperationPrune,
+		Kind:          testbackupruntime.BackupOperationPrune,
 		CreatedAt:     dispatch.CreatedAt,
 		UpdatedAt:     dispatch.CreatedAt,
 	}
@@ -3613,7 +3453,7 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3644,7 +3484,7 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	if err != nil || !found || claim.Task.Record.ID != dispatch.TaskID {
 		t.Fatalf("ClaimNextTask() = %#v/%v/%v", claim, found, err)
 	}
-	assigned := make([]Versioned[BackupRecoveryPointPruneRecord], len(pointIDs))
+	assigned := make([]testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord], len(pointIDs))
 	failedResult := completedComposeTaskResult()
 	failedResult.ExitCode = 1
 	failedTask, err := tasks.AcknowledgeTask(
@@ -3652,17 +3492,15 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 		agentID,
 		1,
 		dispatch.TaskID,
-		claim.Assignment.Record.AssignmentID,
-		TaskStatusFailed,
-		failedResult,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failedResult,
 		dispatch.CreatedAt.Add(2*time.Second),
 	)
-	if err != nil || failedTask.Record.Status != TaskStatusFailed {
+	if err != nil || failedTask.Record.Status != testtaskjournal.TaskStatusFailed {
 		t.Fatalf("AcknowledgeTask(prune failure) = %#v, %v", failedTask, err)
 	}
 	replay, err := tasks.AcknowledgeTask(
 		context.Background(), agentID, 1, dispatch.TaskID,
-		claim.Assignment.Record.AssignmentID, TaskStatusFailed, failedResult,
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusFailed, failedResult,
 		dispatch.CreatedAt.Add(3*time.Second),
 	)
 	if err != nil || replay.Revision != failedTask.Revision {
@@ -3670,23 +3508,22 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	}
 	if dispatchEntry := mustOptionalKey(
 		t,
-		store,
-		backupRecoveryPointPruneDispatchKey(dispatch.TaskID),
+		store, testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID),
 	); dispatchEntry != nil {
 		t.Fatalf("failed prune dispatch = %#v", dispatchEntry)
 	}
-	if lockEntry := mustOptionalKey(t, store, environmentOperationLockKey(dispatch.EnvironmentID)); lockEntry != nil {
+	if lockEntry := mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(dispatch.EnvironmentID)); lockEntry != nil {
 		t.Fatalf("failed prune lock = %#v", lockEntry)
 	}
-	pending = make([]Versioned[BackupRecoveryPointPruneRecord], len(pointIDs))
+	pending = make([]testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord], len(pointIDs))
 	for index, pointID := range pointIDs {
-		entry := mustOptionalKey(t, store, backupRecoveryPointPruneKey(pointID))
-		record, decodeErr := decodeBackupRecoveryPointPruneRecord(entry.Value)
-		if decodeErr != nil || record.State != BackupPrunePending || record.TaskID != "" ||
+		entry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(pointID))
+		record, decodeErr := testbackupruntime.DecodeBackupRecoveryPointPruneRecord(entry.Value)
+		if decodeErr != nil || record.State != testbackupruntime.BackupPrunePending || record.TaskID != "" ||
 			record.OperationID != dispatch.OperationID {
 			t.Fatalf("failed prune pending authority = %#v, %v", record, decodeErr)
 		}
-		pending[index] = Versioned[BackupRecoveryPointPruneRecord]{
+		pending[index] = testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{
 			Record: record, Revision: entry.ModRevision, ReadRevision: failedTask.Revision,
 		}
 	}
@@ -3699,17 +3536,17 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	nextDispatch.CreatedAt = dispatch.CreatedAt.Add(4 * time.Second)
 	transferredAt := dispatch.CreatedAt.Add(4 * time.Second)
 	retryPublication, err := repository.prepareBackupPrunePublication(
-		context.Background(), pending, nextDispatch, BackupOperationLockRecord{
+		context.Background(), pending, nextDispatch, testbackupruntime.BackupOperationLockRecord{
 			EnvironmentID: nextDispatch.EnvironmentID, OperationID: nextDispatch.OperationID,
-			TaskID: nextDispatch.TaskID, Kind: BackupOperationPrune,
+			TaskID: nextDispatch.TaskID, Kind: testbackupruntime.BackupOperationPrune,
 			CreatedAt: transferredAt, UpdatedAt: transferredAt,
 		},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	retryTask, err := cloneRetryTask(
-		sourceTask.Record, nextDispatch.TaskID, TaskActorSystem, transferredAt,
+	retryTask, err := CloneRetryTask(
+		sourceTask.Record, nextDispatch.TaskID, testtaskjournal.TaskActorSystem, transferredAt,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -3717,9 +3554,12 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	retryTask.PlanID = ids.NewAt(ids.KindPlan, transferredAt, 2450)
 	retrySealed := backupRuntimeSealedPrunePlan(t, store, nextDispatch, pending, retryTask.PlanID)
 	retryTask.PlanHash = hex.EncodeToString(retrySealed.PlanHash)
-	retryTask.Steps = make([]TaskStepRecord, len(retrySealed.Steps))
+	retryTask.Steps = make([]testtaskjournal.TaskStepRecord, len(retrySealed.Steps))
 	for index, step := range retrySealed.Steps {
-		retryTask.Steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: step.StepId}
+		retryTask.Steps[index] = testtaskjournal.TaskStepRecord{
+			Kind: testtaskjournal.TaskStepOperation,
+			ID:   step.StepId,
+		}
 	}
 	retryMarker := pendingTaskMarker(retryTask)
 	retryMarker.Locator.ScopeID = dispatch.EnvironmentID
@@ -3732,7 +3572,7 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
 		t.Fatalf("taskRetryIdempotencyPlan(stale fixed read) error = %v", err)
 	}
-	if retryEntry := mustOptionalKey(t, store, taskKey(nextDispatch.TaskID)); retryEntry != nil {
+	if retryEntry := mustOptionalKey(t, store, testtaskjournal.TaskStorageKey(nextDispatch.TaskID)); retryEntry != nil {
 		t.Fatalf("rejected stale prune retry Task = %#v", retryEntry)
 	}
 	retryPlan, err := retryPublication.taskRetryIdempotencyPlan(
@@ -3755,14 +3595,15 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 			err,
 		)
 	}
-	transferredRevision := mustOptionalKey(t, store, taskKey(nextDispatch.TaskID)).ModRevision
+	transferredRevision := mustOptionalKey(t, store, testtaskjournal.TaskStorageKey(nextDispatch.TaskID)).ModRevision
 	for index, pointID := range pointIDs {
-		entry := mustOptionalKey(t, store, backupRecoveryPointPruneKey(pointID))
-		record, decodeErr := decodeBackupRecoveryPointPruneRecord(entry.Value)
-		if decodeErr != nil || record.State != BackupPruneAssigned || record.TaskID != nextDispatch.TaskID {
+		entry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointPruneKey(pointID))
+		record, decodeErr := testbackupruntime.DecodeBackupRecoveryPointPruneRecord(entry.Value)
+		if decodeErr != nil || record.State != testbackupruntime.BackupPruneAssigned ||
+			record.TaskID != nextDispatch.TaskID {
 			t.Fatalf("retry assigned prune = %#v, %v", record, decodeErr)
 		}
-		assigned[index] = Versioned[BackupRecoveryPointPruneRecord]{
+		assigned[index] = testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{
 			Record: record, Revision: entry.ModRevision, ReadRevision: transferredRevision,
 		}
 	}
@@ -3772,38 +3613,41 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	if err != nil || !found || claim.Task.Record.ID != nextDispatch.TaskID {
 		t.Fatalf("ClaimNextTask(retry) = %#v/%v/%v", claim, found, err)
 	}
-	verifiedMutations := make([]Mutation, 0, len(assigned))
-	verifiedConditions := make([]Condition, 0, len(assigned))
+	verifiedMutations := make([]testkeyvalue.Mutation, 0, len(assigned))
+	verifiedConditions := make([]testkeyvalue.Condition, 0, len(assigned))
 	for index := range assigned {
 		record := assigned[index].Record
-		record.State = BackupPruneVerifiedAbsent
+		record.State = testbackupruntime.BackupPruneVerifiedAbsent
 		record.UpdatedAt = dispatch.CreatedAt.Add(6 * time.Second)
-		value, encodeErr := encodeBackupRecoveryPointPruneRecord(record)
+		value, encodeErr := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(record)
 		if encodeErr != nil {
-			clearBackupRuntimeMutations(verifiedMutations)
+			testkeyvalue.ClearMutationValues(verifiedMutations)
 			t.Fatal(encodeErr)
 		}
-		verifiedConditions = append(verifiedConditions, Condition{
-			Key:         backupRecoveryPointPruneKey(record.Point.ID),
+		verifiedConditions = append(verifiedConditions, testkeyvalue.Condition{
+			Key:         testbackupruntime.BackupRecoveryPointPruneKey(record.Point.ID),
 			ModRevision: assigned[index].Revision,
 		})
-		verifiedMutations = append(verifiedMutations, Mutation{
-			Type: MutationPut, Key: backupRecoveryPointPruneKey(record.Point.ID), Value: value,
+		verifiedMutations = append(verifiedMutations, testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRecoveryPointPruneKey(record.Point.ID), Value: value,
 		})
 		authorityKeys, keyErr := backupPruneAuthorityKeys(record.Point)
 		if keyErr != nil {
-			clearBackupRuntimeMutations(verifiedMutations)
+			testkeyvalue.ClearMutationValues(verifiedMutations)
 			t.Fatal(keyErr)
 		}
 		for _, key := range authorityKeys[1:] {
-			verifiedMutations = append(verifiedMutations, Mutation{Type: MutationDelete, Key: key})
+			verifiedMutations = append(
+				verifiedMutations,
+				testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: key},
+			)
 		}
 		assigned[index].Record = record
 	}
 	verified, err := store.Transact(
 		context.Background(), verifiedConditions, verifiedMutations,
 	)
-	clearBackupRuntimeMutations(verifiedMutations)
+	testkeyvalue.ClearMutationValues(verifiedMutations)
 	if err != nil || !verified.Succeeded {
 		t.Fatalf("verify eleven prunes = %#v, %v", verified, err)
 	}
@@ -3816,19 +3660,17 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 		agentID,
 		1,
 		nextDispatch.TaskID,
-		claim.Assignment.Record.AssignmentID,
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		claim.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		dispatch.CreatedAt.Add(7*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(prune completion) error = %v", err)
 	}
-	terminalTask := mustOptionalKey(t, store, taskKey(nextDispatch.TaskID))
+	terminalTask := mustOptionalKey(t, store, testtaskjournal.TaskStorageKey(nextDispatch.TaskID))
 	if terminalTask == nil || terminalTask.ModRevision != completedTask.Revision {
 		t.Fatalf("terminal prune Task = %#v", terminalTask)
 	}
-	if lockEntry := mustOptionalKey(t, store, environmentOperationLockKey(run.EnvironmentID)); lockEntry != nil {
+	if lockEntry := mustOptionalKey(t, store, testhierarchy.EnvironmentOperationLockKey(run.EnvironmentID)); lockEntry != nil {
 		t.Fatalf("completed eleven-point prune lock = %#v", lockEntry)
 	}
 	sourceTask, err = tasks.GetTask(context.Background(), dispatch.TaskID)
@@ -3845,15 +3687,15 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 			break
 		}
 	}
-	staleDispatchValue, err := encodeBackupRecoveryPointPruneDispatchRecord(dispatch)
+	staleDispatchValue, err := testbackupruntime.EncodeBackupRecoveryPointPruneDispatchRecord(dispatch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	staleDispatch, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: backupRecoveryPointPruneDispatchKey(dispatch.TaskID)}},
-		[]Mutation{{
-			Type: MutationPut, Key: backupRecoveryPointPruneDispatchKey(dispatch.TaskID),
+		[]testkeyvalue.Condition{{Key: testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID)}},
+		[]testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID),
 			Value: staleDispatchValue,
 		}},
 	)
@@ -3868,11 +3710,16 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	}
 	removedDispatch, err := store.Transact(
 		context.Background(),
-		[]Condition{{
-			Key:         backupRecoveryPointPruneDispatchKey(dispatch.TaskID),
+		[]testkeyvalue.Condition{{
+			Key:         testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID),
 			ModRevision: staleDispatch.Revision,
 		}},
-		[]Mutation{{Type: MutationDelete, Key: backupRecoveryPointPruneDispatchKey(dispatch.TaskID)}},
+		[]testkeyvalue.Mutation{
+			{
+				Type: testkeyvalue.MutationDelete,
+				Key:  testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID),
+			},
+		},
 	)
 	if err != nil || !removedDispatch.Succeeded {
 		t.Fatalf("remove stale terminal prune dispatch = %#v, %v", removedDispatch, err)
@@ -3882,7 +3729,7 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 	); pruneErr != nil || count != 1 {
 		t.Fatalf("PruneExpiredTasks(prune source) = %d, %v", count, pruneErr)
 	}
-	if sourceEntry := mustOptionalKey(t, store, taskKey(dispatch.TaskID)); sourceEntry != nil {
+	if sourceEntry := mustOptionalKey(t, store, testtaskjournal.TaskStorageKey(dispatch.TaskID)); sourceEntry != nil {
 		t.Fatalf("retained source prune Task = %#v", sourceEntry)
 	}
 }
@@ -3890,22 +3737,22 @@ func TestBackupRuntimeRepositoryComposesElevenPointPruneTaskBoundaries(t *testin
 func backupRuntimePrunePublicationTask(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	dispatch BackupRecoveryPointPruneDispatchRecord,
-	pending []Versioned[BackupRecoveryPointPruneRecord],
-	publicationConditions []Condition,
-) (TaskRecord, *agentpb.ExecutionPlan, IdempotencyMarker, TaskInitiation) {
+	dispatch testbackupruntime.BackupRecoveryPointPruneDispatchRecord,
+	pending []testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord],
+	publicationConditions []testkeyvalue.Condition,
+) (TaskRecord, *agentpb.ExecutionPlan, testidempotency.IdempotencyMarker, TaskInitiation) {
 	t.Helper()
-	environmentEntry := mustOptionalKey(t, store, environmentKey(dispatch.EnvironmentID))
-	environment, err := decodeEnvironment(environmentEntry.Value)
+	environmentEntry := mustOptionalKey(t, store, testhierarchy.EnvironmentKey(dispatch.EnvironmentID))
+	environment, err := testhierarchy.DecodeEnvironment(environmentEntry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectEntry := mustOptionalKey(t, store, projectKey(environment.ProjectID))
-	project, err := decodeProject(projectEntry.Value)
+	projectEntry := mustOptionalKey(t, store, testhierarchy.ProjectKey(environment.ProjectID))
+	project, err := testhierarchy.DecodeProject(projectEntry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := EnvironmentTaskOwner(project, environment)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3913,9 +3760,9 @@ func backupRuntimePrunePublicationTask(
 	task.ID = dispatch.TaskID
 	task.OperationID = dispatch.OperationID
 	task.Owner = owner
-	task.Actor = TaskActorSystem
-	task.Executor = TaskExecutorAgent
-	task.Type = TaskBackupPrune
+	task.Actor = testtaskjournal.TaskActorSystem
+	task.Executor = testtaskjournal.TaskExecutorAgent
+	task.Type = testtaskjournal.TaskBackupPrune
 	task.Target = dispatch.EnvironmentID
 	task.IdempotencyKey = "backup-prune-runtime-0001"
 	sealed := backupRuntimeSealedPrunePlan(t, store, dispatch, pending, task.PlanID)
@@ -3924,15 +3771,15 @@ func backupRuntimePrunePublicationTask(
 	task.Params = nil
 	task.Materializations = nil
 	task.TimeoutSeconds = backupTaskTimeoutSeconds
-	task.Steps = make([]TaskStepRecord, len(sealed.Steps))
+	task.Steps = make([]testtaskjournal.TaskStepRecord, len(sealed.Steps))
 	for index, step := range sealed.Steps {
-		task.Steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: step.StepId}
+		task.Steps[index] = testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: step.StepId}
 	}
 	marker := pendingTaskMarker(task)
 	marker.Locator.ScopeID = dispatch.EnvironmentID
 	marker.Locator.Route = "/internal/backup-prunes"
 	marker.Locator.Key = task.IdempotencyKey
-	var initiationFence Condition
+	var initiationFence testkeyvalue.Condition
 	for _, condition := range publicationConditions {
 		if condition.ModRevision > 0 {
 			initiationFence = condition
@@ -3942,7 +3789,7 @@ func backupRuntimePrunePublicationTask(
 	if initiationFence.Key == "" {
 		t.Fatal("prune Task publication has no durable initiation fence")
 	}
-	initiation, err := newTaskInitiation(owner, TaskActorSystem, initiationFence)
+	initiation, err := newTaskInitiation(owner, testtaskjournal.TaskActorSystem, initiationFence)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3952,8 +3799,8 @@ func backupRuntimePrunePublicationTask(
 func backupRuntimeSealedPrunePlan(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	dispatch BackupRecoveryPointPruneDispatchRecord,
-	pending []Versioned[BackupRecoveryPointPruneRecord],
+	dispatch testbackupruntime.BackupRecoveryPointPruneDispatchRecord,
+	pending []testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord],
 	planID string,
 ) *agentpb.ExecutionPlan {
 	t.Helper()
@@ -3966,11 +3813,11 @@ func backupRuntimeSealedPrunePlan(
 	}
 	for index, version := range pending {
 		point := version.Record.Point
-		pointEntry := mustOptionalKey(t, store, backupRecoveryPointKey(point.ID))
-		sourceEntry := mustOptionalKey(t, store, backupSourceKey(point.SourceID))
-		environmentEntry := mustOptionalKey(t, store, environmentKey(point.EnvironmentID))
-		connectorEntry := mustOptionalKey(t, store, connectorRecordKey(point.ConnectorID))
-		connector, err := decodeConnectorRecord(connectorEntry.Value)
+		pointEntry := mustOptionalKey(t, store, testbackupruntime.BackupRecoveryPointKey(point.ID))
+		sourceEntry := mustOptionalKey(t, store, testbackuppolicy.BackupSourceKey(point.SourceID))
+		environmentEntry := mustOptionalKey(t, store, testhierarchy.EnvironmentKey(point.EnvironmentID))
+		connectorEntry := mustOptionalKey(t, store, testconnectors.RecordKey(point.ConnectorID))
+		connector, err := testconnectors.DecodeRecord(connectorEntry.Value)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3990,7 +3837,7 @@ func backupRuntimeSealedPrunePlan(
 				ConnectorRevision: uint64(connectorEntry.ModRevision),
 				ConnectorEndpoint: connector.Connector.Endpoint, ConnectorBucket: connector.Connector.Bucket,
 				ConnectorPrefix: connector.Connector.Prefix, ConnectorRegion: connector.Connector.Region,
-				ConnectorAddressing: backupPlanAddressing(connector.Connector.PathStyle),
+				ConnectorAddressing: backupFixtureAddressing(connector.Connector.PathStyle),
 				ProtectedObjectKey:  point.ObjectKey, StoredSizeBytes: uint64(point.SizeBytes),
 				StoredSha256: digest,
 			}},
@@ -4024,14 +3871,14 @@ func TestBackupRuntimeRepositoryRejectsInvalidArtifactIDsBeforeRead(t *testing.T
 
 func newBackupRuntimeRepositoryFixture(
 	t *testing.T,
-) (*BackupRuntimeRepository, *memoryHierarchyStore, BackupRunRecord) {
+) (*BackupRuntimeRepository, *memoryHierarchyStore, testbackupruntime.BackupRunRecord) {
 	t.Helper()
 	return newBackupRuntimeBareFixture(t)
 }
 
 func newBackupRuntimeBareFixture(
 	t *testing.T,
-) (*BackupRuntimeRepository, *memoryHierarchyStore, BackupRunRecord) {
+) (*BackupRuntimeRepository, *memoryHierarchyStore, testbackupruntime.BackupRunRecord) {
 	t.Helper()
 	_, store, environment, project, _ := routeRepositoryTestHierarchy(t)
 	connectorRepository, err := newConnectorRepository(store)
@@ -4040,7 +3887,7 @@ func newBackupRuntimeBareFixture(
 	}
 	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC)
 	connector := testConnectorRecord(t, environment.Record.ID, now, 900, "backup-store")
-	credentials, err := NewConnectorEncryptedCredentials(
+	credentials, err := testconnectors.NewEncryptedCredentials(
 		connector.Connector.ID,
 		[]byte("sealed-credentials"),
 	)
@@ -4059,11 +3906,11 @@ func newBackupRuntimeBareFixture(
 	}
 	run := testBackupRun(now, now, newTestBackupRecipient(t))
 	run.EnvironmentID = environment.Record.ID
-	run.State = BackupRunQueued
-	run.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
+	run.State = testbackupruntime.BackupRunQueued
+	run.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
 	run.Sources[0].Snapshot.Postgres.ConsumerEnvironmentID = environment.Record.ID
-	run.Sources[0].State = BackupSourceAttemptPending
-	run.Sources[0].Phase = BackupSourcePhaseCapture
+	run.Sources[0].State = testbackupruntime.BackupSourceAttemptPending
+	run.Sources[0].Phase = testbackupruntime.BackupSourcePhaseCapture
 	run.ConnectorID = createdConnector.Record.Connector.ID
 	run.ConnectorEndpoint = createdConnector.Record.Connector.Endpoint
 	run.ConnectorBucket = createdConnector.Record.Connector.Bucket
@@ -4084,16 +3931,16 @@ func newBackupRuntimeBareFixture(
 func seedBackupRuntimePublicationEvidence(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	run *BackupRunRecord,
+	run *testbackupruntime.BackupRunRecord,
 ) {
 	t.Helper()
 	source := &run.Sources[0]
 	snapshot := source.Snapshot.Postgres
-	backingProject := ProjectRecord{
+	backingProject := testhierarchy.ProjectRecord{
 		ID: snapshot.BackingProjectID, Slug: "postgres", Name: "Postgres",
-		Kind: ProjectKindBacking,
+		Kind: testhierarchy.ProjectKindBacking,
 	}
-	backingEnvironment, err := NewProvisioningEnvironment(
+	backingEnvironment, err := testhierarchy.NewProvisioningEnvironment(
 		"/srv/groundplane",
 		backingProject,
 		snapshot.BackingEnvironmentID,
@@ -4108,19 +3955,23 @@ func seedBackupRuntimePublicationEvidence(
 	backingServiceID := snapshot.BackingServiceID
 	backingNetworkID := newBackupRuntimeID(ids.KindNetwork, run.CreatedAt, 911)
 	backingServiceRevisionID := newBackupRuntimeID(ids.KindTask, run.CreatedAt, 914)
-	backingServiceProjection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
-		EnvironmentID:    backingEnvironment.ID,
-		RevisionID:       backingServiceRevisionID,
-		RenderGeneration: 1,
-		DesiredServices: []EnvironmentServiceProjection{{
+	backingServiceProjection := withTestEnvironmentComposeArtifact(
+		testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID:    backingEnvironment.ID,
-			BackingNetworkID: backingNetworkID,
-			Desired: core.Service{
-				ID: backingServiceID, Name: "postgres", Image: "postgres:16-alpine", Adapter: "postgres:16",
-			},
-		}},
-	})
-	backingServiceProjectionValue, err := encodeEnvironmentComposeProjection(backingServiceProjection)
+			RevisionID:       backingServiceRevisionID,
+			RenderGeneration: 1,
+			DesiredServices: []testservices.EnvironmentServiceProjection{{
+				EnvironmentID:    backingEnvironment.ID,
+				BackingNetworkID: backingNetworkID,
+				Desired: core.Service{
+					ID: backingServiceID, Name: "postgres", Image: "postgres:16-alpine", Adapter: "postgres:16",
+				},
+			}},
+		},
+	)
+	backingServiceProjectionValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(
+		backingServiceProjection,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4128,9 +3979,9 @@ func seedBackupRuntimePublicationEvidence(
 	backingServiceProjectionDigest := sha256.Sum256(backingServiceProjectionValue)
 	backingServiceAudit := []byte("backup-runtime-backing-service-audit")
 	backingServiceAuditDigest := sha256.Sum256(backingServiceAudit)
-	backingServiceSeal := EnvironmentBlueprintSeal{
+	backingServiceSeal := testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: backingEnvironment.ID, RevisionID: backingServiceRevisionID,
-		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: 1,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: 1,
 		AuditChunks: 1, AuditBytes: uint64(len(backingServiceAudit)), AuditSHA256: backingServiceAuditDigest,
 		ProjectionChunks: 1, ProjectionBytes: uint64(len(backingServiceProjectionValue)),
 		ProjectionSHA256: backingServiceProjectionDigest,
@@ -4145,7 +3996,7 @@ func seedBackupRuntimePublicationEvidence(
 		),
 		DependencyDigest: backingServiceProjectionDigest,
 	}
-	attach, err := NewPendingAttachRecord(
+	attach, err := testattachments.NewPendingAttachRecord(
 		source.TargetID,
 		run.EnvironmentID,
 		"database",
@@ -4156,21 +4007,21 @@ func seedBackupRuntimePublicationEvidence(
 		newBackupRuntimeID(ids.KindService, run.CreatedAt, 912),
 		source.TargetID,
 		nil,
-		[]AttachFactSetMetadata{{Facts: []AttachFactDefinition{{Key: "pg16_URL", Secret: true}}}},
+		[]testattachments.FactSetMetadata{{Facts: []testattachments.FactDefinition{{Key: "pg16_URL", Secret: true}}}},
 		newBackupRuntimeID(ids.KindTask, run.CreatedAt, 913),
 		run.CreatedAt,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	attach, err = MarkAttachProvisioning(attach, attach.TaskID)
+	attach, err = testattachments.MarkAttachProvisioning(attach, attach.TaskID)
 	if err == nil {
-		attach, err = CompleteAttachProvisioning(attach, attach.TaskID, true)
+		attach, err = testattachments.CompleteAttachProvisioning(attach, attach.TaskID, true)
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	facts, err := NewAttachEncryptedFacts(
+	facts, err := testattachments.NewAttachEncryptedFacts(
 		attach.ID,
 		1,
 		"age-x25519",
@@ -4181,18 +4032,18 @@ func seedBackupRuntimePublicationEvidence(
 		t.Fatal(err)
 	}
 	defer clear(facts.Ciphertext)
-	policy := BackupPolicyRecord{
+	policy := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: []string{source.SourceID}, UpdatedAt: run.CreatedAt,
 	}
-	digest, err := backupPolicyScheduleDigest(policy)
+	digest, err := testenvironmentcoordination.PolicyScheduleDigest(policy)
 	if err != nil {
 		t.Fatal(err)
 	}
-	coordination := EnvironmentCoordinationRecord{
+	coordination := testenvironmentcoordination.EnvironmentCoordinationRecord{
 		EnvironmentID: run.EnvironmentID, ScheduleClockFloor: run.CreatedAt,
-		CurrentBackupScheduleState: &CurrentBackupScheduleState{
+		CurrentBackupScheduleState: &testenvironmentcoordination.CurrentBackupScheduleState{
 			PolicyDigest: digest, Frequency: policy.Frequency, EnabledAt: run.CreatedAt,
 			LastEvaluatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
 		},
@@ -4200,11 +4051,11 @@ func seedBackupRuntimePublicationEvidence(
 	storedSource := backupRuntimeSourceRecord(
 		t, source.SourceID, run.EnvironmentID, "attach", source.TargetID, run.CreatedAt,
 	)
-	keyRecord := BackupKeyRecord{
+	keyRecord := testbackuppolicy.BackupKeyRecord{
 		EnvironmentID: run.EnvironmentID, Recipient: run.Recipient, KeyEra: run.KeyEra,
 		CreatedAt: run.CreatedAt, RotatedAt: run.CreatedAt,
 	}
-	keyValue := BackupKeyEncryptedValue{
+	keyValue := testbackuppolicy.BackupKeyEncryptedValue{
 		EnvironmentID: run.EnvironmentID, KeyEra: run.KeyEra,
 		Ciphertext: []byte("wrapped-age-identity"),
 	}
@@ -4212,66 +4063,83 @@ func seedBackupRuntimePublicationEvidence(
 		key    string
 		encode func() ([]byte, error)
 	}{
-		{backupPolicyKey(run.EnvironmentID), func() ([]byte, error) { return encodeBackupPolicyRecord(policy) }},
-		{environmentCoordinationKey(run.EnvironmentID), func() ([]byte, error) {
-			return encodeEnvironmentCoordinationRecord(coordination)
+		{
+			testbackuppolicy.BackupPolicyKey(run.EnvironmentID),
+			func() ([]byte, error) { return testbackuppolicy.EncodeBackupPolicyRecord(policy) },
+		},
+		{testenvironmentcoordination.Key(run.EnvironmentID), func() ([]byte, error) {
+			return testenvironmentcoordination.Encode(coordination)
 		}},
-		{backupSourceKey(source.SourceID), func() ([]byte, error) { return encodeBackupSourceRecord(storedSource) }},
-		{attachKey(attach.ID), func() ([]byte, error) { return encodeAttachRecord(attach) }},
-		{attachFactsKey(attach.ID), func() ([]byte, error) { return encodeAttachEncryptedFacts(facts) }},
-		{projectKey(backingProject.ID), func() ([]byte, error) { return encodeProject(backingProject) }},
 		{
-			environmentKey(backingEnvironment.ID),
-			func() ([]byte, error) { return encodeEnvironment(backingEnvironment) },
+			testbackuppolicy.BackupSourceKey(source.SourceID),
+			func() ([]byte, error) { return testbackuppolicy.EncodeBackupSourceRecord(storedSource) },
 		},
 		{
-			environmentBlueprintHeadKey(backingEnvironment.ID),
-			func() ([]byte, error) { return encodeTaskReference(backingServiceRevisionID) },
+			testattachments.AttachKey(attach.ID),
+			func() ([]byte, error) { return testattachments.EncodeAttachRecord(attach) },
 		},
 		{
-			environmentBlueprintRootKey(backingEnvironment.ID, backingServiceRevisionID),
-			func() ([]byte, error) { return encodeEnvironmentBlueprintSeal(backingServiceSeal) },
+			testattachments.AttachFactsKey(attach.ID),
+			func() ([]byte, error) { return testattachments.EncodeAttachEncryptedFacts(facts) },
 		},
 		{
-			environmentBlueprintChunkKeyFor(
-				backingEnvironment.ID, backingServiceRevisionID, EnvironmentBlueprintChunkProjection, 0,
-			),
-			func() ([]byte, error) {
-				return encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
-					Family: EnvironmentBlueprintChunkProjection, LogicalLength: uint32(len(backingServiceProjectionValue)),
-					Digest: backingServiceProjectionDigest, Data: backingServiceProjectionValue,
-				})
-			},
+			testhierarchy.ProjectKey(backingProject.ID),
+			func() ([]byte, error) { return testhierarchy.EncodeProject(backingProject) },
 		},
 		{
-			serviceRuntimeKey(backingServiceID),
-			func() ([]byte, error) {
-				return encodeServiceRuntimeRecord(ServiceRuntimeRecord{
-					EnvironmentID: backingEnvironment.ID, ServiceID: backingServiceID,
-					BackingNetworkID: backingNetworkID,
-					Runtime: core.ServiceRuntime{
-						ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
-					},
-				})
-			},
+			testhierarchy.EnvironmentKey(backingEnvironment.ID),
+			func() ([]byte, error) { return testhierarchy.EncodeEnvironment(backingEnvironment) },
 		},
-		{backupKeyKey(run.EnvironmentID), func() ([]byte, error) { return encodeBackupKeyRecord(keyRecord) }},
 		{
-			backupKeyValueKey(run.EnvironmentID),
-			func() ([]byte, error) { return encodeBackupKeyEncryptedValue(keyValue) },
+			testblueprints.EnvironmentBlueprintHeadKey(backingEnvironment.ID),
+			func() ([]byte, error) { return testidempotency.EncodeTaskReference(backingServiceRevisionID) },
+		},
+		{
+			testblueprints.EnvironmentBlueprintRootKey(backingEnvironment.ID, backingServiceRevisionID),
+			func() ([]byte, error) { return testblueprints.EncodeEnvironmentBlueprintSeal(backingServiceSeal) },
+		},
+		{testblueprints.EnvironmentBlueprintChunkKeyFor(
+			backingEnvironment.ID, backingServiceRevisionID, testblueprints.EnvironmentBlueprintChunkProjection, 0,
+		), func() ([]byte, error) {
+			return testblueprints.EncodeEnvironmentBlueprintChunk(testblueprints.EnvironmentBlueprintChunk{
+				Family: testblueprints.EnvironmentBlueprintChunkProjection, LogicalLength: uint32(len(backingServiceProjectionValue)),
+				Digest: backingServiceProjectionDigest, Data: backingServiceProjectionValue,
+			})
+		},
+		},
+		{testservices.ServiceRuntimeKey(backingServiceID), func() ([]byte, error) {
+			return testservices.EncodeServiceRuntimeRecord(testservices.ServiceRuntimeRecord{
+				EnvironmentID: backingEnvironment.ID, ServiceID: backingServiceID,
+				BackingNetworkID: backingNetworkID,
+				Runtime: core.ServiceRuntime{
+					ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
+				},
+			})
+		},
+		},
+		{
+			testbackuppolicy.BackupKeyKey(run.EnvironmentID),
+			func() ([]byte, error) { return testbackuppolicy.EncodeBackupKeyRecord(keyRecord) },
+		},
+		{
+			testbackuppolicy.BackupKeyValueKey(run.EnvironmentID),
+			func() ([]byte, error) { return testbackuppolicy.EncodeBackupKeyEncryptedValue(keyValue) },
 		},
 	}
-	mutations := make([]Mutation, 0, len(encoders))
+	mutations := make([]testkeyvalue.Mutation, 0, len(encoders))
 	for _, item := range encoders {
 		value, encodeErr := item.encode()
 		if encodeErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			t.Fatal(encodeErr)
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: item.key, Value: value})
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: item.key, Value: value},
+		)
 	}
 	result, err := store.Transact(context.Background(), nil, mutations)
-	clearBackupRuntimeMutations(mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed backup publication evidence = %#v, %v", result, err)
 	}
@@ -4290,42 +4158,42 @@ func seedBackupRuntimePublicationEvidence(
 func extendBackupRuntimePublicationSources(
 	t *testing.T,
 	store hierarchyStore,
-	run *BackupRunRecord,
+	run *testbackupruntime.BackupRunRecord,
 ) {
 	t.Helper()
-	baseAttachRead, err := store.Get(context.Background(), attachKey(run.Sources[0].TargetID))
+	baseAttachRead, err := store.Get(context.Background(), testattachments.AttachKey(run.Sources[0].TargetID))
 	if err != nil || baseAttachRead == nil || baseAttachRead.Entry == nil {
 		t.Fatalf("read base backup Attach = %#v, %v", baseAttachRead, err)
 	}
-	baseAttach, err := decodeAttachRecord(baseAttachRead.Entry.Value)
+	baseAttach, err := testattachments.DecodeAttachRecord(baseAttachRead.Entry.Value)
 	clear(baseAttachRead.Entry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseFactsRead, err := store.Get(context.Background(), attachFactsKey(run.Sources[0].TargetID))
+	baseFactsRead, err := store.Get(context.Background(), testattachments.AttachFactsKey(run.Sources[0].TargetID))
 	if err != nil || baseFactsRead == nil || baseFactsRead.Entry == nil {
 		t.Fatalf("read base backup Attach facts = %#v, %v", baseFactsRead, err)
 	}
-	baseFacts, err := decodeAttachEncryptedFacts(baseFactsRead.Entry.Value)
+	baseFacts, err := testattachments.DecodeAttachEncryptedFacts(baseFactsRead.Entry.Value)
 	clear(baseFactsRead.Entry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(baseFacts.Ciphertext)
 	sourceIDs := make([]string, len(run.Sources))
-	mutations := make([]Mutation, 0, len(run.Sources)*3)
+	mutations := make([]testkeyvalue.Mutation, 0, len(run.Sources)*3)
 	for index := range run.Sources {
 		source := &run.Sources[index]
 		sourceIDs[index] = source.SourceID
-		value, err := encodeBackupSourceRecord(backupRuntimeSourceRecord(
+		value, err := testbackuppolicy.EncodeBackupSourceRecord(backupRuntimeSourceRecord(
 			t, source.SourceID, run.EnvironmentID, "attach", source.TargetID, run.CreatedAt,
 		))
 		if err != nil {
-			clearBackupRuntimeMutations(mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			t.Fatal(err)
 		}
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: backupSourceKey(source.SourceID), Value: value,
+		mutations = append(mutations, testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupSourceKey(source.SourceID), Value: value,
 		})
 		if index > 0 {
 			attach := baseAttach
@@ -4333,37 +4201,46 @@ func extendBackupRuntimePublicationSources(
 			attach.TaskID = newBackupRuntimeID(ids.KindTask, run.CreatedAt, int64(920+index))
 			facts := baseFacts
 			facts.AttachID = source.TargetID
-			attachValue, encodeErr := encodeAttachRecord(attach)
+			attachValue, encodeErr := testattachments.EncodeAttachRecord(attach)
 			if encodeErr != nil {
-				clearBackupRuntimeMutations(mutations)
+				testkeyvalue.ClearMutationValues(mutations)
 				t.Fatal(encodeErr)
 			}
-			factsValue, encodeErr := encodeAttachEncryptedFacts(facts)
+			factsValue, encodeErr := testattachments.EncodeAttachEncryptedFacts(facts)
 			if encodeErr != nil {
 				clear(attachValue)
-				clearBackupRuntimeMutations(mutations)
+				testkeyvalue.ClearMutationValues(mutations)
 				t.Fatal(encodeErr)
 			}
-			mutations = append(mutations,
-				Mutation{Type: MutationPut, Key: attachKey(source.TargetID), Value: attachValue},
-				Mutation{Type: MutationPut, Key: attachFactsKey(source.TargetID), Value: factsValue},
+			mutations = append(
+				mutations,
+				testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testattachments.AttachKey(source.TargetID),
+					Value: attachValue,
+				},
+				testkeyvalue.Mutation{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testattachments.AttachFactsKey(source.TargetID),
+					Value: factsValue,
+				},
 			)
 		}
 	}
-	policyValue, err := encodeBackupPolicyRecord(BackupPolicyRecord{
+	policyValue, err := testbackuppolicy.EncodeBackupPolicyRecord(testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: sourceIDs, UpdatedAt: run.CreatedAt,
 	})
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		testkeyvalue.ClearMutationValues(mutations)
 		t.Fatal(err)
 	}
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: backupPolicyKey(run.EnvironmentID), Value: policyValue,
+	mutations = append(mutations, testkeyvalue.Mutation{
+		Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupPolicyKey(run.EnvironmentID), Value: policyValue,
 	})
 	result, err := store.Transact(context.Background(), nil, mutations)
-	clearBackupRuntimeMutations(mutations)
+	testkeyvalue.ClearMutationValues(mutations)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("extend backup publication sources = %#v, %v", result, err)
 	}
@@ -4390,25 +4267,25 @@ func backupRuntimeCurrentRevision(
 	environmentID string,
 ) int64 {
 	t.Helper()
-	result, err := store.Get(context.Background(), environmentMutationEpochKey(environmentID))
+	result, err := store.Get(context.Background(), testhierarchy.EnvironmentMutationEpochKey(environmentID))
 	if err != nil || result == nil || result.ReadRevision <= 0 {
 		t.Fatalf("read backup publication revision = %#v, %v", result, err)
 	}
 	return result.ReadRevision
 }
 
-func backupRuntimeOperationLock(run BackupRunRecord) BackupOperationLockRecord {
-	return BackupOperationLockRecord{
+func backupRuntimeOperationLock(run testbackupruntime.BackupRunRecord) testbackupruntime.BackupOperationLockRecord {
+	return testbackupruntime.BackupOperationLockRecord{
 		EnvironmentID: run.EnvironmentID, OperationID: run.OperationID, TaskID: run.TaskID,
-		Kind: BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
+		Kind: testbackupruntime.BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
 	}
 }
 
 func (repository *BackupRuntimeRepository) createBackupRunForTest(
 	ctx context.Context,
-	run BackupRunRecord,
+	run testbackupruntime.BackupRunRecord,
 	fixedRevision int64,
-) (Versioned[BackupRunRecord], error) {
+) (testkeyvalue.Versioned[testbackupruntime.BackupRunRecord], error) {
 	plan, err := repository.prepareBackupRunPublication(
 		ctx,
 		run,
@@ -4416,25 +4293,25 @@ func (repository *BackupRuntimeRepository) createBackupRunForTest(
 		fixedRevision,
 	)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, err
 	}
 	defer plan.clear()
 	conditions, mutations, err := plan.composeTransaction(nil, nil)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, err
 	}
-	defer clearBackupRuntimeMutations(mutations)
-	result, err := repository.transact(ctx, conditions, mutations)
+	defer testkeyvalue.ClearMutationValues(mutations)
+	result, err := repository.TransactRuntime(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup run publication changed",
 		)
 	}
-	return Versioned[BackupRunRecord]{
+	return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{
 		Record: run, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -4442,20 +4319,20 @@ func (repository *BackupRuntimeRepository) createBackupRunForTest(
 func backupRuntimePublicationTask(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	run BackupRunRecord,
-) (TaskRecord, *agentpb.ExecutionPlan, IdempotencyMarker, TaskInitiation) {
+	run testbackupruntime.BackupRunRecord,
+) (TaskRecord, *agentpb.ExecutionPlan, testidempotency.IdempotencyMarker, TaskInitiation) {
 	t.Helper()
-	environmentEntry := mustOptionalKey(t, store, environmentKey(run.EnvironmentID))
-	environment, err := decodeEnvironment(environmentEntry.Value)
+	environmentEntry := mustOptionalKey(t, store, testhierarchy.EnvironmentKey(run.EnvironmentID))
+	environment, err := testhierarchy.DecodeEnvironment(environmentEntry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectEntry := mustOptionalKey(t, store, projectKey(environment.ProjectID))
-	project, err := decodeProject(projectEntry.Value)
+	projectEntry := mustOptionalKey(t, store, testhierarchy.ProjectKey(environment.ProjectID))
+	project, err := testhierarchy.DecodeProject(projectEntry.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := EnvironmentTaskOwner(project, environment)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4463,9 +4340,9 @@ func backupRuntimePublicationTask(
 	task.ID = run.TaskID
 	task.OperationID = run.OperationID
 	task.Owner = owner
-	task.Actor = TaskActorOperator
-	task.Executor = TaskExecutorAgent
-	task.Type = TaskBackup
+	task.Actor = testtaskjournal.TaskActorOperator
+	task.Executor = testtaskjournal.TaskExecutorAgent
+	task.Type = testtaskjournal.TaskBackup
 	task.Target = run.EnvironmentID
 	task.IdempotencyKey = "backup-runtime-0001"
 	sealed := backupRuntimeSealedRunPlan(t, run, task.PlanID)
@@ -4474,15 +4351,15 @@ func backupRuntimePublicationTask(
 	task.Params = nil
 	task.Materializations = nil
 	task.TimeoutSeconds = backupTaskTimeoutSeconds
-	task.Steps = make([]TaskStepRecord, len(sealed.Steps))
+	task.Steps = make([]testtaskjournal.TaskStepRecord, len(sealed.Steps))
 	for index, step := range sealed.Steps {
-		task.Steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: step.StepId}
+		task.Steps[index] = testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: step.StepId}
 	}
 	marker := pendingTaskMarker(task)
 	marker.Locator.ScopeID = run.EnvironmentID
 	marker.Locator.Route = "/environments/{environment}/backups"
 	marker.Locator.Key = task.IdempotencyKey
-	initiation, err := newTaskInitiation(owner, TaskActorOperator)
+	initiation, err := newTaskInitiation(owner, testtaskjournal.TaskActorOperator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4492,18 +4369,18 @@ func backupRuntimePublicationTask(
 func configureBackupRuntimeConfigRun(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	run *BackupRunRecord,
+	run *testbackupruntime.BackupRunRecord,
 ) int64 {
 	t.Helper()
 	source := &run.Sources[0]
-	source.Kind = BackupRuntimeSourceConfig
+	source.Kind = testbackupruntime.BackupRuntimeSourceConfig
 	source.TargetID = run.EnvironmentID
-	source.TargetRevision = mustOptionalKey(t, store, environmentKey(run.EnvironmentID)).ModRevision
-	source.Format = BackupRuntimeFormatConfig
-	source.Snapshot = BackupRunSourceSnapshot{Config: &BackupConfigSourceSnapshot{
+	source.TargetRevision = mustOptionalKey(t, store, testhierarchy.EnvironmentKey(run.EnvironmentID)).ModRevision
+	source.Format = testbackupruntime.BackupRuntimeFormatConfig
+	source.Snapshot = testbackupruntime.BackupRunSourceSnapshot{Config: &testbackupruntime.BackupConfigSourceSnapshot{
 		ConfigSnapshotID: run.TaskID,
 	}}
-	policyValue, err := encodeBackupPolicyRecord(BackupPolicyRecord{
+	policyValue, err := testbackuppolicy.EncodeBackupPolicyRecord(testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: run.EnvironmentID, Enabled: true, Frequency: "*-*-* 02:00:00", Keep: 3,
 		Encryption: string(run.Encryption), ConnectorID: run.ConnectorID,
 		SourceIDs: []string{source.SourceID}, UpdatedAt: run.CreatedAt,
@@ -4511,16 +4388,16 @@ func configureBackupRuntimeConfigRun(
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceValue, err := encodeBackupSourceRecord(backupRuntimeSourceRecord(
+	sourceValue, err := testbackuppolicy.EncodeBackupSourceRecord(backupRuntimeSourceRecord(
 		t, source.SourceID, run.EnvironmentID, "config", run.EnvironmentID, run.CreatedAt,
 	))
 	if err != nil {
 		clear(policyValue)
 		t.Fatal(err)
 	}
-	result, err := store.Transact(context.Background(), nil, []Mutation{
-		{Type: MutationPut, Key: backupPolicyKey(run.EnvironmentID), Value: policyValue},
-		{Type: MutationPut, Key: backupSourceKey(source.SourceID), Value: sourceValue},
+	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupPolicyKey(run.EnvironmentID), Value: policyValue},
+		{Type: testkeyvalue.MutationPut, Key: testbackuppolicy.BackupSourceKey(source.SourceID), Value: sourceValue},
 	})
 	clear(policyValue)
 	clear(sourceValue)
@@ -4536,7 +4413,7 @@ func configureBackupRuntimeConfigRun(
 
 func backupRuntimeSealedRunPlan(
 	t *testing.T,
-	run BackupRunRecord,
+	run testbackupruntime.BackupRunRecord,
 	planID string,
 ) *agentpb.ExecutionPlan {
 	t.Helper()
@@ -4553,30 +4430,37 @@ func backupRuntimeSealedRunPlan(
 			TargetId: source.TargetID, TargetRevision: uint64(source.TargetRevision),
 			PointId:     source.RecoveryPointID,
 			ConnectorId: run.ConnectorID, ConnectorRevision: uint64(run.ConnectorRevision),
-			SourceFormat: backupPlanSourceFormat(source.Format),
-			Encryption:   backupPlanEncryption(run.Encryption),
-			KeyEra:       uint64(run.KeyEra), AgeRecipient: run.Recipient,
+			SourceFormat: map[testbackupruntime.BackupRuntimeFormat]agentpb.BackupSourceFormat{
+				testbackupruntime.BackupRuntimeFormatPostgres: agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1,
+				testbackupruntime.BackupRuntimeFormatConfig:   agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1,
+				testbackupruntime.BackupRuntimeFormatVolume:   agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1,
+			}[source.Format],
+			Encryption: map[testbackupruntime.BackupRuntimeEncryption]agentpb.BackupEncryption{
+				testbackupruntime.BackupRuntimeEncryptionNone: agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE,
+				testbackupruntime.BackupRuntimeEncryptionAge:  agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE,
+			}[run.Encryption],
+			KeyEra: uint64(run.KeyEra), AgeRecipient: run.Recipient,
 			Upload: &agentpb.BackupUploadAuthority{
 				ConnectorEndpoint: run.ConnectorEndpoint, ConnectorBucket: run.ConnectorBucket,
 				ConnectorPrefix: run.ConnectorPrefix, ConnectorRegion: run.ConnectorRegion,
-				ConnectorAddressing: backupPlanAddressing(run.ConnectorPathStyle),
+				ConnectorAddressing: backupFixtureAddressing(run.ConnectorPathStyle),
 				ProtectedObjectKey:  source.ObjectKey,
 				ImmutableCreate:     true, PutAfterArtifactPreparedAck: true, HeadAfterUploadCompletedAck: true,
 			},
 		}
 		switch source.Kind {
-		case BackupRuntimeSourceAttach:
+		case testbackupruntime.BackupRuntimeSourceAttach:
 			snapshot := source.Snapshot.Postgres
 			capture.Source = &agentpb.BackupSourceCapture_Attach{Attach: &agentpb.BackupAttachSource{
 				BackingServiceId:       snapshot.BackingServiceID,
 				BackingServiceRevision: uint64(snapshot.BackingServiceRevision),
 				Database:               snapshot.Database, Role: snapshot.Role,
 			}}
-		case BackupRuntimeSourceConfig:
+		case testbackupruntime.BackupRuntimeSourceConfig:
 			capture.Source = &agentpb.BackupSourceCapture_Config{Config: &agentpb.BackupConfigSource{
 				SnapshotRevision: uint64(source.Snapshot.Config.ReadRevision),
 			}}
-		case BackupRuntimeSourceVolume:
+		case testbackupruntime.BackupRuntimeSourceVolume:
 			artifactSHA256, err := hex.DecodeString(source.Snapshot.Volume.ArtifactDigest)
 			if err != nil {
 				t.Fatal(err)
@@ -4585,8 +4469,12 @@ func backupRuntimeSealedRunPlan(
 			for serviceIndex, service := range source.Snapshot.Volume.Services {
 				services[serviceIndex] = &agentpb.BackupVolumeService{
 					ServiceId: service.ServiceID, ServiceRevision: uint64(service.ServiceRevision),
-					PriorIntent: backupPlanServiceIntent(service.PriorIntent),
-					ComposeKey:  service.ComposeKey, MountPaths: append([]string(nil), service.MountPaths...),
+					PriorIntent: map[testbackupruntime.BackupServiceRuntimeIntent]agentpb.BackupServiceRuntimeIntent{
+						testbackupruntime.BackupServiceIntentRunning: agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING,
+						testbackupruntime.BackupServiceIntentStopped: agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_STOPPED,
+						testbackupruntime.BackupServiceIntentAbsent:  agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_ABSENT,
+					}[service.PriorIntent],
+					ComposeKey: service.ComposeKey, MountPaths: append([]string(nil), service.MountPaths...),
 				}
 			}
 			volume := source.Snapshot.Volume
@@ -4613,8 +4501,8 @@ func backupRuntimeSealedRunPlan(
 func prepareBackupRuntimeStagedRun(
 	t *testing.T,
 	repository *BackupRuntimeRepository,
-	run BackupRunRecord,
-) (Versioned[BackupRunRecord], BackupRunRecord) {
+	run testbackupruntime.BackupRunRecord,
+) (testkeyvalue.Versioned[testbackupruntime.BackupRunRecord], testbackupruntime.BackupRunRecord) {
 	t.Helper()
 	created, err := repository.createBackupRunForTest(
 		context.Background(),
@@ -4625,10 +4513,10 @@ func prepareBackupRuntimeStagedRun(
 		t.Fatal(err)
 	}
 	staged := run
-	staged.State = BackupRunRunning
-	staged.Sources = append([]BackupRunSourceAttemptRecord(nil), run.Sources...)
-	staged.Sources[0].State = BackupSourceAttemptStaged
-	staged.Sources[0].Phase = BackupSourcePhasePointCommit
+	staged.State = testbackupruntime.BackupRunRunning
+	staged.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), run.Sources...)
+	staged.Sources[0].State = testbackupruntime.BackupSourceAttemptStaged
+	staged.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	staged.Sources[0].SizeBytes = 123
 	staged.Sources[0].SHA256 = testBackupDigest
 	staged.UpdatedAt = run.UpdatedAt.Add(time.Second)
@@ -4640,18 +4528,18 @@ func prepareBackupRuntimeStagedRun(
 }
 
 func backupRuntimePointCommitRecords(
-	run BackupRunRecord,
-	staged BackupRunRecord,
-) (BackupRunRecord, BackupRecoveryPointRecord, BackupRetentionSweepRecord) {
+	run testbackupruntime.BackupRunRecord,
+	staged testbackupruntime.BackupRunRecord,
+) (testbackupruntime.BackupRunRecord, testbackupruntime.BackupRecoveryPointRecord, testbackupruntime.BackupRetentionSweepRecord) {
 	committed := staged
-	committed.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	committed.Sources[0].State = BackupSourceAttemptPointCommitted
-	committed.Sources[0].Phase = BackupSourcePhaseRetention
+	committed.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	committed.Sources[0].State = testbackupruntime.BackupSourceAttemptPointCommitted
+	committed.Sources[0].Phase = testbackupruntime.BackupSourcePhaseRetention
 	committed.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], committed.UpdatedAt)
-	sweep := BackupRetentionSweepRecord{
+	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID, Keep: 3,
-		Revision: run.PolicyRevision, State: BackupRetentionPending,
+		Revision: run.PolicyRevision, State: testbackupruntime.BackupRetentionPending,
 		CreatedAt: committed.UpdatedAt, UpdatedAt: committed.UpdatedAt,
 	}
 	return committed, point, sweep
@@ -4663,21 +4551,21 @@ func TestBackupRuntimeRepositoryPointPagesRejectIncompleteAuthority(t *testing.T
 	t.Parallel()
 	tests := []struct {
 		name   string
-		key    func(BackupRecoveryPointRecord) string
+		key    func(testbackupruntime.BackupRecoveryPointRecord) string
 		delete bool
 	}{
 		{
 			name: "missing Connector membership",
-			key: func(point BackupRecoveryPointRecord) string {
-				key, _ := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+			key: func(point testbackupruntime.BackupRecoveryPointRecord) string {
+				key, _ := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 				return key
 			},
 			delete: true,
 		},
 		{
 			name: "rewritten Environment membership",
-			key: func(point BackupRecoveryPointRecord) string {
-				key, _ := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+			key: func(point testbackupruntime.BackupRecoveryPointRecord) string {
+				key, _ := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 				return key
 			},
 		},
@@ -4688,7 +4576,7 @@ func TestBackupRuntimeRepositoryPointPagesRejectIncompleteAuthority(t *testing.T
 			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 			committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-			checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+			checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 			if _, _, err := repository.CommitBackupRecoveryPoint(
 				context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion,
 				committed, 0, point, nil, sweep,
@@ -4697,20 +4585,20 @@ func TestBackupRuntimeRepositoryPointPagesRejectIncompleteAuthority(t *testing.T
 			}
 			key := test.key(point)
 			entry := mustOptionalKey(t, store, key)
-			mutation := Mutation{Type: MutationPut, Key: key, Value: entry.Value}
+			mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: entry.Value}
 			if test.delete {
-				mutation = Mutation{Type: MutationDelete, Key: key}
+				mutation = testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: key}
 			}
 			changed, err := store.Transact(
 				context.Background(),
-				[]Condition{{Key: key, ModRevision: entry.ModRevision}},
-				[]Mutation{mutation},
+				[]testkeyvalue.Condition{{Key: key, ModRevision: entry.ModRevision}},
+				[]testkeyvalue.Mutation{mutation},
 			)
 			if err != nil || !changed.Succeeded {
 				t.Fatalf("tamper point companion = %#v, %v", changed, err)
 			}
 			if _, err := repository.ListBackupRecoveryPointsBySource(
-				context.Background(), point.SourceID, BackupRuntimeListRequest{Limit: 1},
+				context.Background(), point.SourceID, testbackupruntime.BackupRuntimeListRequest{Limit: 1},
 			); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Fatalf("ListBackupRecoveryPointsBySource(corrupt authority) error = %v", err)
 			}
@@ -4724,20 +4612,20 @@ func TestBackupRuntimeRepositoryRetentionRejectsMalformedPointAuthority(t *testi
 	t.Parallel()
 	tests := []struct {
 		name   string
-		key    func(BackupRecoveryPointRecord) string
+		key    func(testbackupruntime.BackupRecoveryPointRecord) string
 		delete bool
 	}{
 		{
 			name: "rewritten source index",
-			key: func(point BackupRecoveryPointRecord) string {
-				key, _ := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+			key: func(point testbackupruntime.BackupRecoveryPointRecord) string {
+				key, _ := testbackupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 				return key
 			},
 		},
 		{
 			name: "missing Environment index",
-			key: func(point BackupRecoveryPointRecord) string {
-				key, _ := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+			key: func(point testbackupruntime.BackupRecoveryPointRecord) string {
+				key, _ := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 				return key
 			},
 			delete: true,
@@ -4749,7 +4637,7 @@ func TestBackupRuntimeRepositoryRetentionRejectsMalformedPointAuthority(t *testi
 			stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 			committed, point, sweep := backupRuntimePointCommitRecords(run, staged)
 			checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-			checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+			checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 			_, committedRun, err := repository.CommitBackupRecoveryPoint(
 				context.Background(), backupAssignmentFromCheckpoint(checkpoint), stagedVersion,
 				committed, 0, point, nil, sweep,
@@ -4765,14 +4653,14 @@ func TestBackupRuntimeRepositoryRetentionRejectsMalformedPointAuthority(t *testi
 			}
 			key := test.key(point)
 			entry := mustOptionalKey(t, store, key)
-			mutation := Mutation{Type: MutationPut, Key: key, Value: entry.Value}
+			mutation := testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: key, Value: entry.Value}
 			if test.delete {
-				mutation = Mutation{Type: MutationDelete, Key: key}
+				mutation = testkeyvalue.Mutation{Type: testkeyvalue.MutationDelete, Key: key}
 			}
 			changed, err := store.Transact(
 				context.Background(),
-				[]Condition{{Key: key, ModRevision: entry.ModRevision}},
-				[]Mutation{mutation},
+				[]testkeyvalue.Condition{{Key: key, ModRevision: entry.ModRevision}},
+				[]testkeyvalue.Mutation{mutation},
 			)
 			if err != nil || !changed.Succeeded {
 				t.Fatalf("tamper retention point authority = %#v, %v", changed, err)
@@ -4795,33 +4683,46 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	source.SizeBytes = 123
 	source.SHA256 = testBackupDigest
 	point := backupRuntimeTestPoint(run, source, run.CreatedAt.Add(time.Second))
-	prune := BackupRecoveryPointPruneRecord{
+	prune := testbackupruntime.BackupRecoveryPointPruneRecord{
 		Point: point.BackupRecoveryPointSnapshot, PointRevision: 71, OperationID: run.OperationID,
-		State: BackupPrunePending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
+		State: testbackupruntime.BackupPrunePending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 	}
-	pruneValue, err := encodeBackupRecoveryPointPruneRecord(prune)
+	pruneValue, err := testbackupruntime.EncodeBackupRecoveryPointPruneRecord(prune)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(pruneValue)
-	pointValue, err := encodeBackupRecoveryPointRecord(point)
+	pointValue, err := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(pointValue)
-	environmentIndex, _ := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
-	sourceIndex, _ := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
-	connectorIndex, _ := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	environmentIndex, _ := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	sourceIndex, _ := testbackupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+	connectorIndex, _ := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 	pointRevision := int64(71)
 	pruneRevision := int64(72)
-	values := []*KeyValue{
-		{Key: backupRecoveryPointPruneKey(point.ID), Value: pruneValue, ModRevision: pruneRevision, Version: 1},
-		{Key: backupRecoveryPointKey(point.ID), Value: pointValue, ModRevision: pointRevision, Version: 1},
+	values := []*testkeyvalue.KeyValue{
+		{
+			Key:         testbackupruntime.BackupRecoveryPointPruneKey(point.ID),
+			Value:       pruneValue,
+			ModRevision: pruneRevision,
+			Version:     1,
+		},
+		{
+			Key:         testbackupruntime.BackupRecoveryPointKey(point.ID),
+			Value:       pointValue,
+			ModRevision: pointRevision,
+			Version:     1,
+		},
 		{Key: environmentIndex, Value: []byte(point.ID), ModRevision: pointRevision, Version: 1},
 		{Key: sourceIndex, Value: []byte(point.ID), ModRevision: pointRevision, Version: 1},
 		{Key: connectorIndex, Value: []byte(point.ID), ModRevision: pointRevision, Version: 1},
 	}
-	expectedPrune := Versioned[BackupRecoveryPointPruneRecord]{Record: prune, Revision: pruneRevision}
+	expectedPrune := testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneRecord]{
+		Record:   prune,
+		Revision: pruneRevision,
+	}
 	stalePrune := expectedPrune
 	stalePrune.Revision++
 	if err := validatePendingBackupPruneAuthority(values, stalePrune); !errors.Is(
@@ -4830,7 +4731,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	) {
 		t.Fatalf("publication prune revision drift error = %v", err)
 	}
-	corruptPrune := append([]*KeyValue(nil), values...)
+	corruptPrune := append([]*testkeyvalue.KeyValue(nil), values...)
 	corruptPrunePrimary := *values[0]
 	corruptPrunePrimary.Value = []byte(`{"invalid":`)
 	corruptPrune[0] = &corruptPrunePrimary
@@ -4840,7 +4741,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	) {
 		t.Fatalf("publication same-revision corruption error = %v", err)
 	}
-	missingCompanion := append([]*KeyValue(nil), values...)
+	missingCompanion := append([]*testkeyvalue.KeyValue(nil), values...)
 	missingCompanion[4] = nil
 	if err := validatePendingBackupPruneAuthority(missingCompanion, expectedPrune); !errors.Is(
 		err,
@@ -4848,7 +4749,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	) {
 		t.Fatalf("publication split point authority error = %v", err)
 	}
-	rewrittenPoint := append([]*KeyValue(nil), values...)
+	rewrittenPoint := append([]*testkeyvalue.KeyValue(nil), values...)
 	rewrittenPointPrimary := *values[1]
 	rewrittenPointPrimary.Version = 2
 	rewrittenPoint[1] = &rewrittenPointPrimary
@@ -4858,7 +4759,7 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	) {
 		t.Fatalf("publication rewritten point primary error = %v", err)
 	}
-	rewrittenIndex := append([]*KeyValue(nil), values...)
+	rewrittenIndex := append([]*testkeyvalue.KeyValue(nil), values...)
 	rewrittenSourceIndex := *values[3]
 	rewrittenSourceIndex.Version = 2
 	rewrittenIndex[3] = &rewrittenSourceIndex
@@ -4868,21 +4769,21 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 	) {
 		t.Fatalf("publication rewritten point membership error = %v", err)
 	}
-	dispatch := BackupRecoveryPointPruneDispatchRecord{
+	dispatch := testbackupruntime.BackupRecoveryPointPruneDispatchRecord{
 		TaskID: run.TaskID, OperationID: run.OperationID, EnvironmentID: run.EnvironmentID,
 		RecoveryPointIDs: []string{point.ID}, CreatedAt: point.VerifiedAt.Add(time.Second),
 	}
-	dispatchValue, err := encodeBackupRecoveryPointPruneDispatchRecord(dispatch)
+	dispatchValue, err := testbackupruntime.EncodeBackupRecoveryPointPruneDispatchRecord(dispatch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(dispatchValue)
 	dispatchRevision := int64(81)
-	dispatchEntry := &KeyValue{
-		Key: backupRecoveryPointPruneDispatchKey(dispatch.TaskID), Value: dispatchValue,
+	dispatchEntry := &testkeyvalue.KeyValue{
+		Key: testbackupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID), Value: dispatchValue,
 		ModRevision: dispatchRevision, Version: 1,
 	}
-	expectedDispatch := Versioned[BackupRecoveryPointPruneDispatchRecord]{
+	expectedDispatch := testkeyvalue.Versioned[testbackupruntime.BackupRecoveryPointPruneDispatchRecord]{
 		Record: dispatch, Revision: dispatchRevision,
 	}
 	for _, path := range []string{"checkpoint", "failure", "completion"} {
@@ -4914,24 +4815,24 @@ func TestBackupRuntimeRepositoryClassifiesPruneCASAndCorruption(t *testing.T) {
 func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	t.Parallel()
 	_, store, run := newBackupRuntimeRepositoryFixture(t)
-	environmentValue := mustOptionalKey(t, store, environmentKey(run.EnvironmentID))
+	environmentValue := mustOptionalKey(t, store, testhierarchy.EnvironmentKey(run.EnvironmentID))
 	if environmentValue == nil {
 		t.Fatal("missing Environment publication fixture")
 	}
-	environment, err := decodeEnvironment(environmentValue.Value)
+	environment, err := testhierarchy.DecodeEnvironment(environmentValue.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	revisionID := ids.NewAt(ids.KindTask, run.CreatedAt, 8101)
-	headValue, err := encodeTaskReference(revisionID)
+	headValue, err := testidempotency.EncodeTaskReference(revisionID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(headValue)
 	digest := sha256.Sum256([]byte("normalized Volume projection"))
-	sealValue, err := encodeEnvironmentBlueprintSeal(EnvironmentBlueprintSeal{
+	sealValue, err := testblueprints.EncodeEnvironmentBlueprintSeal(testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: environment.ID, RevisionID: revisionID,
-		SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: 1,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: 1,
 		AuditChunks: 1, AuditBytes: 1, AuditSHA256: digest,
 		ProjectionChunks: 1, ProjectionBytes: 1, ProjectionSHA256: digest,
 		ProjectionResources: 1, DependencyDigest: digest,
@@ -4940,19 +4841,31 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer clear(sealValue)
-	source := BackupRunSourceAttemptRecord{TargetID: testBackupVolumeID, TargetRevision: 71}
+	source := testbackupruntime.BackupRunSourceAttemptRecord{TargetID: testBackupVolumeID, TargetRevision: 71}
 	rootRevision := int64(72)
-	projectionSnapshot := BackupVolumeSourceSnapshot{
+	projectionSnapshot := testbackupruntime.BackupVolumeSourceSnapshot{
 		EnvironmentID: environment.ID, EnvironmentRevision: environmentValue.ModRevision,
 		VolumeID: source.TargetID, DesiredRevisionID: revisionID, ProjectionRoot: rootRevision,
 		DependencyDigest: hex.EncodeToString(digest[:]), RenderGeneration: 1,
 		ComposeVolumeKey: "data", DockerVolumeName: "gp_vol_" + source.TargetID,
 		AuthorizedVolumeDir: environment.VolumeDir,
 	}
-	projectionEvidence := []*KeyValue{
-		{Key: environmentKey(environment.ID), Value: environmentValue.Value, ModRevision: environmentValue.ModRevision},
-		{Key: environmentBlueprintHeadKey(environment.ID), Value: headValue, ModRevision: source.TargetRevision},
-		{Key: environmentBlueprintRootKey(environment.ID, revisionID), Value: sealValue, ModRevision: rootRevision},
+	projectionEvidence := []*testkeyvalue.KeyValue{
+		{
+			Key:         testhierarchy.EnvironmentKey(environment.ID),
+			Value:       environmentValue.Value,
+			ModRevision: environmentValue.ModRevision,
+		},
+		{
+			Key:         testblueprints.EnvironmentBlueprintHeadKey(environment.ID),
+			Value:       headValue,
+			ModRevision: source.TargetRevision,
+		},
+		{
+			Key:         testblueprints.EnvironmentBlueprintRootKey(environment.ID, revisionID),
+			Value:       sealValue,
+			ModRevision: rootRevision,
+		},
 	}
 	for _, test := range []struct {
 		name   string
@@ -4963,30 +4876,30 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 		{name: "projection root", offset: 2},
 	} {
 		t.Run(test.name+" decode corruption", func(t *testing.T) {
-			values := append([]*KeyValue(nil), projectionEvidence...)
+			values := append([]*testkeyvalue.KeyValue(nil), projectionEvidence...)
 			corruptValue := *values[test.offset]
 			corruptValue.Value = []byte(`{"invalid":`)
 			values[test.offset] = &corruptValue
-			if err := validateBackupVolumePublicationEvidence(
+			if err := testbackupplanning.ValidateBackupVolumePublicationEvidence(
 				values, source, projectionSnapshot,
 			); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 				t.Fatalf("pinned %s decode corruption error = %v", test.name, err)
 			}
 		})
 	}
-	wrongProjectionRevision := append([]*KeyValue(nil), projectionEvidence...)
+	wrongProjectionRevision := append([]*testkeyvalue.KeyValue(nil), projectionEvidence...)
 	wrongProjection := *projectionEvidence[2]
 	wrongProjection.ModRevision++
 	wrongProjection.Value = []byte(`{"invalid":`)
 	wrongProjectionRevision[2] = &wrongProjection
-	if err := validateBackupVolumePublicationEvidence(
+	if err := testbackupplanning.ValidateBackupVolumePublicationEvidence(
 		wrongProjectionRevision, source, projectionSnapshot,
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("projection revision drift error = %v", err)
 	}
 	driftedEnvironmentSnapshot := projectionSnapshot
 	driftedEnvironmentSnapshot.AuthorizedVolumeDir += "/changed"
-	if err := validateBackupVolumePublicationEvidence(
+	if err := testbackupplanning.ValidateBackupVolumePublicationEvidence(
 		projectionEvidence, source, driftedEnvironmentSnapshot,
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("Environment semantic drift error = %v", err)
@@ -4995,36 +4908,36 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	if postgres == nil {
 		t.Fatal("missing Service publication fixture")
 	}
-	runtimeValue := mustOptionalKey(t, store, serviceRuntimeKey(postgres.BackingServiceID))
+	runtimeValue := mustOptionalKey(t, store, testservices.ServiceRuntimeKey(postgres.BackingServiceID))
 	if runtimeValue == nil {
 		t.Fatal("missing Service runtime sidecar fixture")
 	}
-	runtime, err := decodeServiceRuntimeRecord(runtimeValue.Value)
+	runtime, err := testservices.DecodeServiceRuntimeRecord(runtimeValue.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	serviceSnapshot := projectionSnapshot
-	serviceSnapshot.Services = []BackupVolumeServiceSnapshot{{
+	serviceSnapshot.Services = []testbackupruntime.BackupVolumeServiceSnapshot{{
 		ServiceID: runtime.ServiceID, ServiceRevision: runtimeValue.ModRevision,
 		ComposeKey: "database", MountPaths: []string{"/data"},
-		PriorIntent: BackupServiceRuntimeIntent(runtime.Runtime.RuntimeIntent),
+		PriorIntent: testbackupruntime.BackupServiceRuntimeIntent(runtime.Runtime.RuntimeIntent),
 	}}
-	corruptRuntime := append([]*KeyValue(nil), projectionEvidence...)
+	corruptRuntime := append([]*testkeyvalue.KeyValue(nil), projectionEvidence...)
 	corruptRuntime = append(
 		corruptRuntime,
-		&KeyValue{
-			Key:         serviceRuntimeKey(runtime.ServiceID),
+		&testkeyvalue.KeyValue{
+			Key:         testservices.ServiceRuntimeKey(runtime.ServiceID),
 			Value:       []byte(`{"invalid":`),
 			ModRevision: runtimeValue.ModRevision,
 		},
 	)
-	if err := validateBackupVolumePublicationEvidence(
+	if err := testbackupplanning.ValidateBackupVolumePublicationEvidence(
 		corruptRuntime, source, serviceSnapshot,
 	); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("pinned Service runtime sidecar decode corruption error = %v", err)
 	}
 	corruptRuntime[3].ModRevision++
-	if err := validateBackupVolumePublicationEvidence(
+	if err := testbackupplanning.ValidateBackupVolumePublicationEvidence(
 		corruptRuntime, source, serviceSnapshot,
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("Service runtime sidecar revision drift error = %v", err)
@@ -5050,52 +4963,71 @@ func TestBackupRuntimeRepositoryClassifiesReconciledOrphanAdoptionRaces(t *testi
 			if err != nil || !found {
 				t.Fatalf("GetBackupOrphan() = %#v/%v/%v", current, found, err)
 			}
-			point := BackupRecoveryPointRecord{
+			point := testbackupruntime.BackupRecoveryPointRecord{
 				BackupRecoveryPointSnapshot: current.Record.Point,
 				VerifiedAt:                  current.Record.UpdatedAt.Add(time.Second),
 			}
-			sweep := BackupRetentionSweepRecord{
+			sweep := testbackupruntime.BackupRetentionSweepRecord{
 				SourceID: point.SourceID, TriggerRecoveryPointID: point.ID,
 				Keep:     current.Record.Reconciliation.RetentionKeep,
 				Revision: current.Record.Reconciliation.PolicyRevision,
-				State:    BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
+				State:    testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 			}
-			orphanConnectorIndex, _ := backupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
-			orphanEnvironmentIndex, _ := backupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
-			environmentIndex, _ := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
-			sourceIndex, _ := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
-			connectorIndex, _ := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
-			mutations := []Mutation{
-				{Type: MutationDelete, Key: backupOrphanKey(point.ID)},
-				{Type: MutationDelete, Key: orphanConnectorIndex},
-				{Type: MutationDelete, Key: orphanEnvironmentIndex},
+			orphanConnectorIndex, _ := testbackupruntime.BackupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
+			orphanEnvironmentIndex, _ := testbackupruntime.BackupOrphanEnvironmentIndexKey(
+				point.EnvironmentID,
+				point.ID,
+			)
+			environmentIndex, _ := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(
+				point.EnvironmentID,
+				point.ID,
+			)
+			sourceIndex, _ := testbackupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+			connectorIndex, _ := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+			mutations := []testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationDelete, Key: testbackupruntime.BackupOrphanKey(point.ID)},
+				{Type: testkeyvalue.MutationDelete, Key: orphanConnectorIndex},
+				{Type: testkeyvalue.MutationDelete, Key: orphanEnvironmentIndex},
 			}
-			pointValue, encodeErr := encodeBackupRecoveryPointRecord(point)
+			pointValue, encodeErr := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
 			if encodeErr != nil {
 				t.Fatal(encodeErr)
 			}
 			defer clear(pointValue)
 			if test.publication == "partial" {
-				mutations = append(mutations, Mutation{
-					Type: MutationPut, Key: backupRecoveryPointKey(point.ID), Value: pointValue,
+				mutations = append(mutations, testkeyvalue.Mutation{
+					Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRecoveryPointKey(point.ID), Value: pointValue,
 				})
 			}
 			if test.publication == "malformed" {
-				sweepValue, encodeErr := encodeBackupRetentionSweepRecord(sweep)
+				sweepValue, encodeErr := testbackupruntime.EncodeBackupRetentionSweepRecord(sweep)
 				if encodeErr != nil {
 					t.Fatal(encodeErr)
 				}
 				defer clear(sweepValue)
-				mutations = append(mutations,
-					Mutation{Type: MutationPut, Key: backupRecoveryPointKey(point.ID), Value: []byte(`{"invalid":`)},
-					Mutation{Type: MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
-					Mutation{Type: MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
-					Mutation{Type: MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
-					Mutation{Type: MutationPut, Key: backupRetentionKey(point.SourceID, point.ID), Value: sweepValue},
+				mutations = append(
+					mutations,
+					testkeyvalue.Mutation{
+						Type:  testkeyvalue.MutationPut,
+						Key:   testbackupruntime.BackupRecoveryPointKey(point.ID),
+						Value: []byte(`{"invalid":`),
+					},
+					testkeyvalue.Mutation{
+						Type:  testkeyvalue.MutationPut,
+						Key:   environmentIndex,
+						Value: []byte(point.ID),
+					},
+					testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
+					testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
+					testkeyvalue.Mutation{
+						Type:  testkeyvalue.MutationPut,
+						Key:   testbackupruntime.BackupRetentionKey(point.SourceID, point.ID),
+						Value: sweepValue,
+					},
 				)
 			}
 			changed, err := store.Transact(context.Background(), nil, mutations)
-			clearBackupRuntimeMutations(mutations)
+			testkeyvalue.ClearMutationValues(mutations)
 			if err != nil || !changed.Succeeded {
 				t.Fatalf("race orphan adoption = %#v, %v", changed, err)
 			}
@@ -5117,15 +5049,15 @@ func TestBackupRuntimeRepositoryRejectsAlternateValidReconciledOrphanAdoptionRep
 	if err != nil || !found {
 		t.Fatalf("GetBackupOrphan() = %#v/%v/%v", current, found, err)
 	}
-	point := BackupRecoveryPointRecord{
+	point := testbackupruntime.BackupRecoveryPointRecord{
 		BackupRecoveryPointSnapshot: current.Record.Point,
 		VerifiedAt:                  current.Record.UpdatedAt.Add(time.Second),
 	}
-	sweep := BackupRetentionSweepRecord{
+	sweep := testbackupruntime.BackupRetentionSweepRecord{
 		SourceID: point.SourceID, TriggerRecoveryPointID: point.ID,
 		Keep:     current.Record.Reconciliation.RetentionKeep,
 		Revision: current.Record.Reconciliation.PolicyRevision,
-		State:    BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
+		State:    testbackupruntime.BackupRetentionPending, CreatedAt: point.VerifiedAt, UpdatedAt: point.VerifiedAt,
 	}
 	if _, err := repository.AdoptReconciledBackupOrphan(
 		context.Background(), current, point, sweep,
@@ -5145,13 +5077,13 @@ func TestBackupRuntimeRepositoryRejectsAlternateValidReconciledOrphanAdoptionRep
 }
 
 func backupRemoteAbsentCheckpoint(
-	input BackupCheckpointInput,
+	input testbackupruntime.BackupCheckpointInput,
 	sequence uint64,
 	pointID string,
-) BackupCheckpointInput {
+) testbackupruntime.BackupCheckpointInput {
 	input.Sequence = sequence
-	input.Payload = BackupCheckpointPayload{
-		Kind: BackupCheckpointRemoteObjectAbsent, PointID: pointID,
+	input.Payload = testbackupruntime.BackupCheckpointPayload{
+		Kind: testbackupruntime.BackupCheckpointRemoteObjectAbsent, PointID: pointID,
 	}
 	return input
 }
@@ -5159,34 +5091,34 @@ func backupRemoteAbsentCheckpoint(
 func seedBackupRuntimePointAuthority(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	point BackupRecoveryPointRecord,
+	point testbackupruntime.BackupRecoveryPointRecord,
 ) int64 {
 	t.Helper()
-	value, err := encodeBackupRecoveryPointRecord(point)
+	value, err := testbackupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(value)
-	environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	environmentIndex, err := testbackupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourceIndex, err := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+	sourceIndex, err := testbackupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := testbackupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := store.Transact(context.Background(), []Condition{
-		{Key: backupRecoveryPointKey(point.ID)}, {Key: environmentIndex},
+	result, err := store.Transact(context.Background(), []testkeyvalue.Condition{
+		{Key: testbackupruntime.BackupRecoveryPointKey(point.ID)}, {Key: environmentIndex},
 		{Key: sourceIndex}, {Key: connectorIndex},
-	}, []Mutation{
-		{Type: MutationPut, Key: backupRecoveryPointKey(point.ID), Value: value},
-		{Type: MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
-		{Type: MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
-		{Type: MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
+	}, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRecoveryPointKey(point.ID), Value: value},
+		{Type: testkeyvalue.MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
+		{Type: testkeyvalue.MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
+		{Type: testkeyvalue.MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("seed Recovery Point authority = %#v, %v", result, err)
@@ -5203,8 +5135,8 @@ type backupRuntimeAuthorityAuditStore struct {
 
 func (store *backupRuntimeAuthorityAuditStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	if len(request.Keys) > store.maximumKeys {
 		store.maximumKeys = len(request.Keys)
 	}
@@ -5226,13 +5158,13 @@ type backupRuntimeUnknownOutcomeStore struct {
 
 func (store *backupRuntimeUnknownOutcomeStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	result, err := store.hierarchyStore.Transact(ctx, conditions, mutations)
 	if err == nil && result.Succeeded && store.failNext {
 		store.failNext = false
-		return TransactionResult{}, errs.New(
+		return testkeyvalue.TransactionResult{}, errs.New(
 			errs.KindStorageUnavailable,
 			"unknown backup runtime outcome",
 		)
@@ -5251,9 +5183,9 @@ func backupRuntimeSourceRecord(
 	kind string,
 	targetID string,
 	createdAt time.Time,
-) BackupSourceRecord {
+) testbackuppolicy.BackupSourceRecord {
 	t.Helper()
-	value, err := encodeEnvelope("backup-source", map[string]any{
+	value, err := testrecordcodec.Encode("backup-source", map[string]any{
 		"id": sourceID, "environment_id": environmentID, "kind": kind,
 		"target_id": targetID, "created_at": createdAt,
 	})
@@ -5261,7 +5193,7 @@ func backupRuntimeSourceRecord(
 		t.Fatal(err)
 	}
 	defer clear(value)
-	record, err := decodeBackupSourceRecord(value)
+	record, err := testbackuppolicy.DecodeBackupSourceRecord(value)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -5271,19 +5203,23 @@ func backupRuntimeSourceRecord(
 func putBackupRuntimeLock(
 	t *testing.T,
 	store *memoryHierarchyStore,
-	lock BackupOperationLockRecord,
+	lock testbackupruntime.BackupOperationLockRecord,
 ) {
 	t.Helper()
-	value, err := encodeBackupOperationLockRecord(lock)
+	value, err := testbackupruntime.EncodeBackupOperationLockRecord(lock)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(value)
 	result, err := store.Transact(
 		context.Background(),
-		[]Condition{{Key: environmentOperationLockKey(lock.EnvironmentID)}},
-		[]Mutation{
-			{Type: MutationPut, Key: environmentOperationLockKey(lock.EnvironmentID), Value: value},
+		[]testkeyvalue.Condition{{Key: testhierarchy.EnvironmentOperationLockKey(lock.EnvironmentID)}},
+		[]testkeyvalue.Mutation{
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testhierarchy.EnvironmentOperationLockKey(lock.EnvironmentID),
+				Value: value,
+			},
 		},
 	)
 	if err != nil || !result.Succeeded {
@@ -5292,12 +5228,12 @@ func putBackupRuntimeLock(
 }
 
 func backupRuntimeTestPoint(
-	run BackupRunRecord,
-	source BackupRunSourceAttemptRecord,
+	run testbackupruntime.BackupRunRecord,
+	source testbackupruntime.BackupRunSourceAttemptRecord,
 	verifiedAt time.Time,
-) BackupRecoveryPointRecord {
-	return BackupRecoveryPointRecord{
-		BackupRecoveryPointSnapshot: BackupRecoveryPointSnapshot{
+) testbackupruntime.BackupRecoveryPointRecord {
+	return testbackupruntime.BackupRecoveryPointRecord{
+		BackupRecoveryPointSnapshot: testbackupruntime.BackupRecoveryPointSnapshot{
 			ID: source.RecoveryPointID, EnvironmentID: run.EnvironmentID,
 			SourceID: source.SourceID, SourceKind: source.Kind, TargetID: source.TargetID,
 			ConnectorID: run.ConnectorID, ConnectorPrefix: run.ConnectorPrefix,
@@ -5312,22 +5248,22 @@ func backupRuntimeTestPoint(
 
 func createBackupRuntimeOrphanForReadTest(
 	t *testing.T,
-) (*BackupRuntimeRepository, *memoryHierarchyStore, BackupOrphanRecord) {
+) (*BackupRuntimeRepository, *memoryHierarchyStore, testbackupruntime.BackupOrphanRecord) {
 	t.Helper()
 	repository, store, run := newBackupRuntimeRepositoryFixture(t)
 	stagedVersion, staged := prepareBackupRuntimeStagedRun(t, repository, run)
 	orphaned := staged
-	orphaned.Sources = append([]BackupRunSourceAttemptRecord(nil), staged.Sources...)
-	orphaned.Sources[0].State = BackupSourceAttemptOrphaned
-	orphaned.Sources[0].Phase = BackupSourcePhasePointCommit
+	orphaned.Sources = append([]testbackupruntime.BackupRunSourceAttemptRecord(nil), staged.Sources...)
+	orphaned.Sources[0].State = testbackupruntime.BackupSourceAttemptOrphaned
+	orphaned.Sources[0].Phase = testbackupruntime.BackupSourcePhasePointCommit
 	orphaned.UpdatedAt = staged.UpdatedAt.Add(time.Second)
 	point := backupRuntimeTestPoint(run, staged.Sources[0], orphaned.UpdatedAt)
-	orphan := BackupOrphanRecord{
-		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: BackupOrphanInspect,
+	orphan := testbackupruntime.BackupOrphanRecord{
+		Point: point.BackupRecoveryPointSnapshot, TaskID: run.TaskID, State: testbackupruntime.BackupOrphanInspect,
 		CreatedAt: orphaned.UpdatedAt, UpdatedAt: orphaned.UpdatedAt,
 	}
 	checkpoint, _ := seedBackupCheckpointAssignment(t, store, run)
-	checkpoint.Payload.Kind = BackupCheckpointUploadVerified
+	checkpoint.Payload.Kind = testbackupruntime.BackupCheckpointUploadVerified
 	if _, err := repository.CreateBackupOrphan(
 		context.Background(), backupAssignmentFromCheckpoint(checkpoint),
 		stagedVersion, orphaned, 0, orphan,
@@ -5339,39 +5275,43 @@ func createBackupRuntimeOrphanForReadTest(
 
 func (repository *BackupRuntimeRepository) replaceBackupRunForTest(
 	ctx context.Context,
-	current Versioned[BackupRunRecord],
-	next BackupRunRecord,
-) (Versioned[BackupRunRecord], error) {
-	value, err := encodeBackupRunRecord(next)
+	current testkeyvalue.Versioned[testbackupruntime.BackupRunRecord],
+	next testbackupruntime.BackupRunRecord,
+) (testkeyvalue.Versioned[testbackupruntime.BackupRunRecord], error) {
+	value, err := testbackupruntime.EncodeBackupRunRecord(next)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, err
 	}
 	defer clear(value)
-	anchor, err := repository.readCurrentKeys(ctx, []string{backupRunKey(current.Record.TaskID)})
+	anchor, err := repository.ReadCurrentKeys(ctx, []string{testbackupruntime.BackupRunKey(current.Record.TaskID)})
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, err
 	}
-	defer clearKeyValues(anchor.Values)
-	evidence, err := repository.loadOwnedEvidence(ctx, current.Record, anchor.ReadRevision)
+	defer testkeyvalue.ClearValues(anchor.Values)
+	fence, err := environmentfence.LoadOwned(ctx, repository.store, current.Record.EnvironmentID,
+		anchor.ReadRevision, environmentfence.Owner{
+			Kind:        testbackupruntime.BackupOperationBackup,
+			OperationID: current.Record.OperationID, TaskID: current.Record.TaskID,
+		})
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, err
 	}
-	conditions := []Condition{
-		{Key: backupRunKey(current.Record.TaskID), ModRevision: current.Revision},
+	conditions := []testkeyvalue.Condition{
+		{Key: testbackupruntime.BackupRunKey(current.Record.TaskID), ModRevision: current.Revision},
 	}
-	conditions = append(conditions, evidence.fence.transactionConditions()...)
-	epoch, err := evidence.fence.epochRewriteMutation()
+	conditions = append(conditions, fence.TransactionConditions()...)
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, err
 	}
 	defer clear(epoch.Value)
-	result, err := repository.transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: backupRunKey(next.TaskID), Value: value}, epoch,
+	result, err := repository.TransactRuntime(ctx, conditions, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: testbackupruntime.BackupRunKey(next.TaskID), Value: value}, epoch,
 	})
 	if err != nil || !result.Succeeded {
-		return Versioned[BackupRunRecord]{}, err
+		return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{}, err
 	}
-	return Versioned[BackupRunRecord]{
+	return testkeyvalue.Versioned[testbackupruntime.BackupRunRecord]{
 		Record:       next,
 		Revision:     result.Revision,
 		ReadRevision: result.Revision,

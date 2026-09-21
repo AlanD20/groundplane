@@ -10,29 +10,40 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/runtimeconfiguration"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	runtimeconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
+
+	// Rationale: SVC-15/JOURNEY-02 Route create/edit publication must persist the
+	// exact configuration authority on the Task that owns its generated file.
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// Rationale: SVC-15/JOURNEY-02 Route create/edit publication must persist the
-// exact configuration authority on the Task that owns its generated file.
 func TestRouteMutationFileWriterPublishesConfigurationAuthority(t *testing.T) {
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
-	selected, found, err := currentEnvironmentProjectionAtRevision(ctx, store, environment.Record.ID, 0)
+	selected, found, err := testblueprints.ReadProjectionAtRevision(ctx, store, environment.Record.ID, 0)
 	if err != nil || !found {
 		t.Fatalf("currentEnvironmentProjectionAtRevision() = %#v/%v/%v", selected, found, err)
 	}
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1400, "/config/*")
 	createdAt := serviceRecordTestTime().Add(8 * time.Hour)
 	task := routeConfigurationWriterTask(t, project, environment, record, selected, createdAt)
-	intent, err := NewRouteMutationIntent(
+	intent, err := testenvironmentchanges.NewRouteMutationIntent(
 		task.ID, task.OperationID, environment.Record.ID, record, nil, &selected, createdAt,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidate, err := ApplyEnvironmentRoute(selected.Record, record)
+	candidate, err := testenvironmentprojection.ApplyEnvironmentRoute(selected.Record, record)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +68,7 @@ func TestRouteRemovalFileWriterPublishesConfigurationAuthority(t *testing.T) {
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1410, "/remove/*")
 	projection := routeDeletionTestProjection(
-		t, store, environment, project, target, Versioned[RouteRecord]{Record: record},
+		t, store, environment, project, target, testkeyvalue.Versioned[testroutes.Record]{Record: record},
 	)
 	current, err := repository.GetRoute(ctx, record.Desired.ID)
 	if err != nil {
@@ -65,15 +76,16 @@ func TestRouteRemovalFileWriterPublishesConfigurationAuthority(t *testing.T) {
 	}
 	task, marker, tombstone, intent := routeDeletionTestRecords(t, project, environment, current, projection)
 	intent.Provider = routeRepositoryTestProviderPin(target.Record.Desired.ID)
-	task.Executor = TaskExecutorAgent
+	task.Executor = testtaskjournal.TaskExecutorAgent
 	task.TimeoutSeconds = 120
 	task.Params = map[string]string{
-		TaskRouteEnvironmentParam: environment.Record.ID, TaskMaterializationEnvironmentParam: environment.Record.ID,
-		EnvironmentDesiredRevisionParam: intent.CandidateProjection.RevisionID,
-		TaskComposeArtifactParam:        ids.New(ids.KindConfig),
+		testtaskjournal.TaskRouteEnvironmentParam:           environment.Record.ID,
+		testtaskjournal.TaskMaterializationEnvironmentParam: environment.Record.ID,
+		testblueprints.EnvironmentDesiredRevisionParam:      intent.CandidateProjection.RevisionID,
+		testtaskjournal.TaskComposeArtifactParam:            ids.New(ids.KindConfig),
 	}
 	attachComponentConfiguration(t, &task, environment.Record.ID, intent.CandidateProjection.RevisionID)
-	tombstone.Phase = DeletionPhaseHostEffects
+	tombstone.Phase = testdeletions.DeletionPhaseHostEffects
 	result, err := repository.BeginRouteDeletionWithTask(
 		ctx, environment, project, target, current, &projection, tombstone, intent, task, marker,
 	)
@@ -91,15 +103,19 @@ func TestConfigurationWriterRejectsMissingAndStaleHead(t *testing.T) {
 	t.Run("missing", func(t *testing.T) {
 		store := newMemoryHierarchyStore()
 		task := nonSecretConfigurationTaskFixture()
-		projectionValue, err := encodeEnvironmentComposeProjection(withTestEnvironmentComposeArtifact(
-			EnvironmentComposeProjection{EnvironmentID: task.Owner.EnvironmentID,
-				RevisionID: ids.New(ids.KindTask), RenderGeneration: 1},
-		))
+		projectionValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(
+			withTestEnvironmentComposeArtifact(
+				testenvironmentprojection.EnvironmentComposeProjection{EnvironmentID: task.Owner.EnvironmentID,
+					RevisionID: ids.New(ids.KindTask), RenderGeneration: 1},
+			),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		seed, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut,
-			Key: environmentComposeProjectionKey(task.Owner.EnvironmentID), Value: projectionValue}})
+		seed, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut,
+			Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(
+				task.Owner.EnvironmentID,
+			), Value: projectionValue}})
 		clear(projectionValue)
 		if err != nil {
 			t.Fatal(err)
@@ -114,7 +130,7 @@ func TestConfigurationWriterRejectsMissingAndStaleHead(t *testing.T) {
 		store := newMemoryHierarchyStore()
 		task := nonSecretConfigurationTaskFixture()
 		headValue := stageTestRuntimeConfiguration(t, store, task.Owner.EnvironmentID, 1)
-		seed, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut,
+		seed, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut,
 			Key: runtimeConfigurationHeadKey(task.Owner.EnvironmentID), Value: headValue}})
 		clear(headValue)
 		if err != nil {
@@ -125,13 +141,13 @@ func TestConfigurationWriterRejectsMissingAndStaleHead(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer publication.clear()
-		conditions, mutations, classify, err := publication.bind(nil, []Mutation{{
-			Type: MutationPut, Key: taskKey(task.ID), Value: []byte("Task"),
-		}}, func(int64, []*KeyValue) error { return nil })
+		conditions, mutations, classify, err := publication.bind(nil, []testkeyvalue.Mutation{{
+			Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: []byte("Task"),
+		}}, func(int64, []*testkeyvalue.KeyValue) error { return nil })
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut,
+		if _, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut,
 			Key: runtimeConfigurationHeadKey(task.Owner.EnvironmentID), Value: []byte(`{"changed":true}`)}}); err != nil {
 			t.Fatal(err)
 		}
@@ -146,21 +162,23 @@ func TestConfigurationWriterRejectsMissingAndStaleHead(t *testing.T) {
 
 func routeConfigurationWriterTask(
 	t *testing.T,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
-	record RouteRecord,
-	projection Versioned[EnvironmentComposeProjection],
+	project testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	record testroutes.Record,
+	projection testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection],
 	createdAt time.Time,
 ) TaskRecord {
 	t.Helper()
 	task := validTaskRecord(createdAt)
 	task.ID, task.OperationID, task.PlanID = ids.New(ids.KindTask), ids.New(ids.KindOperation), ids.New(ids.KindPlan)
 	task.Owner = mustEnvironmentTaskOwner(t, project.Record, environment.Record)
-	task.Executor, task.Type, task.Target = TaskExecutorAgent, TaskCreate, record.Desired.ID
+	task.Executor, task.Type, task.Target = testtaskjournal.TaskExecutorAgent, testtaskjournal.TaskCreate, record.Desired.ID
 	task.Params = map[string]string{
-		TaskResourceKindParam: TaskResourceRoute, TaskRouteEnvironmentParam: environment.Record.ID,
-		TaskMaterializationEnvironmentParam: environment.Record.ID,
-		EnvironmentDesiredRevisionParam:     task.ID, TaskComposeArtifactParam: ids.New(ids.KindConfig),
+		testtaskjournal.TaskResourceKindParam:               testtaskjournal.TaskResourceRoute,
+		testtaskjournal.TaskRouteEnvironmentParam:           environment.Record.ID,
+		testtaskjournal.TaskMaterializationEnvironmentParam: environment.Record.ID,
+		testblueprints.EnvironmentDesiredRevisionParam:      task.ID,
+		testtaskjournal.TaskComposeArtifactParam:            ids.New(ids.KindConfig),
 	}
 	task.TimeoutSeconds = 120
 	task.RenderGeneration = int32(projection.Record.RenderGeneration + 1)
@@ -173,12 +191,12 @@ func attachComponentConfiguration(t *testing.T, task *TaskRecord, environmentID,
 	t.Helper()
 	content := []byte("exact generated route file\n")
 	digest := sha256.Sum256(content)
-	task.Materializations = []TaskMaterializationRecord{{
+	task.Materializations = []testtaskmaterialization.Record{{
 		StepID: task.Steps[0].ID, MaterializationID: ids.New(ids.KindConfig), EnvironmentID: environmentID,
-		Destination: "components/router/config", OutputKind: TaskMaterializationOutputPlainFile, Mode: 0o444,
+		Destination: "components/router/config", OutputKind: testtaskmaterialization.OutputPlainFile, Mode: 0o444,
 		Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
-		Source: TaskMaterializationSource{Kind: TaskMaterializationSourceComponentFile,
-			ComponentFile: &TaskComponentFileValueReference{
+		Source: testtaskmaterialization.Source{Kind: testtaskmaterialization.SourceComponentFile,
+			ComponentFile: &testtaskmaterialization.ComponentFileValueReference{
 				RevisionID: revisionID, ComponentID: ids.New(ids.KindComponent), Path: "components/router/config",
 			}},
 	}}
@@ -186,12 +204,12 @@ func attachComponentConfiguration(t *testing.T, task *TaskRecord, environmentID,
 
 func attachRemovalConfiguration(task *TaskRecord, environmentID string) {
 	digest := sha256.Sum256(nil)
-	task.Materializations = []TaskMaterializationRecord{{
+	task.Materializations = []testtaskmaterialization.Record{{
 		StepID: task.Steps[0].ID, MaterializationID: ids.New(ids.KindConfig), EnvironmentID: environmentID,
-		Destination: "config/removed-entry", OutputKind: TaskMaterializationOutputRemovePlainFile, Mode: 0o444,
+		Destination: "config/removed-entry", OutputKind: testtaskmaterialization.OutputRemovePlainFile, Mode: 0o444,
 		SHA256: hex.EncodeToString(
 			digest[:],
-		), Source: TaskMaterializationSource{Kind: TaskMaterializationSourceRemoval},
+		), Source: testtaskmaterialization.Source{Kind: testtaskmaterialization.SourceRemoval},
 	}}
 }
 
@@ -203,13 +221,18 @@ func nonSecretConfigurationTaskFixture() TaskRecord {
 
 func routeMutationAcceptanceMarker(
 	t *testing.T, task TaskRecord, environmentID, method, route string,
-) IdempotencyMarker {
+) testidempotency.IdempotencyMarker {
 	t.Helper()
-	marker, err := NewCompletedDirectIdempotencyMarker(
-		IdempotencyLocator{ScopeKind: IdempotencyScopeEnvironment, ScopeID: environmentID,
-			Method: method, Route: route, Key: task.IdempotencyKey},
+	marker, err := testidempotency.NewCompletedDirectIdempotencyMarker(
+		testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment,
+			ScopeID:   environmentID,
+			Method:    method,
+			Route:     route,
+			Key:       task.IdempotencyKey,
+		},
 		testDirectMarker().Intent,
-		IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json",
+		testidempotency.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json",
 			Body: []byte(`{"route":{"id":"` + task.Target + `"},"task_id":"` + task.ID + `"}`)},
 		task.CreatedAt,
 	)
@@ -223,13 +246,13 @@ func stageTestRuntimeConfiguration(
 	t *testing.T, store *memoryHierarchyStore, environmentID string, generation uint64,
 ) []byte {
 	t.Helper()
-	repository, err := runtimeconfiguration.NewRepository(runtimeConfigurationStore{store: store})
+	repository, err := runtimeconfiguration.New(store)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reference, err := repository.Stage(context.Background(), runtimeconfiguration.Snapshot{
 		ID: ids.New(ids.KindConfig), EnvironmentID: environmentID, Generation: generation,
-		Files: []TaskMaterializationRecord{},
+		Files: []testtaskmaterialization.Record{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -246,8 +269,8 @@ func seedTestRuntimeConfigurationHead(
 ) int64 {
 	t.Helper()
 	value := stageTestRuntimeConfiguration(t, store, environmentID, generation)
-	result, err := store.Transact(context.Background(), nil, []Mutation{{
-		Type: MutationPut, Key: runtimeConfigurationHeadKey(environmentID), Value: value,
+	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: runtimeConfigurationHeadKey(environmentID), Value: value,
 	}})
 	clear(value)
 	if err != nil || !result.Succeeded {
@@ -258,11 +281,11 @@ func seedTestRuntimeConfigurationHead(
 
 func assertPublishedTaskConfiguration(t *testing.T, store *memoryHierarchyStore, taskID string) TaskRecord {
 	t.Helper()
-	read, err := store.Get(context.Background(), taskKey(taskID))
+	read, err := store.Get(context.Background(), testtaskjournal.TaskStorageKey(taskID))
 	if err != nil || read.Entry == nil {
 		t.Fatalf("Get(Task) = %#v/%v", read, err)
 	}
-	task, err := decodeTaskRecord(read.Entry.Value)
+	task, err := DecodeTaskRecord(read.Entry.Value)
 	if err != nil || task.Configuration == nil {
 		t.Fatalf("published Task configuration = %#v/%v", task.Configuration, err)
 	}

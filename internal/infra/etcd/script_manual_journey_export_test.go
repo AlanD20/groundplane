@@ -8,6 +8,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testenvironmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -36,7 +43,7 @@ func (fixture *ExecutedArtifactFixture) CreateManualScript(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fixture.store.valueAt(serviceRuntimeKey(serviceID), fixture.store.revision) != nil {
+	if fixture.store.valueAt(testservices.ServiceRuntimeKey(serviceID), fixture.store.revision) != nil {
 		t.Fatal("manual source journey must exercise a Service without an optional runtime sidecar")
 	}
 	scripts, err := newScriptRepository(fixture.store)
@@ -44,7 +51,7 @@ func (fixture *ExecutedArtifactFixture) CreateManualScript(
 		t.Fatal(err)
 	}
 	at := fixture.Environment.Record.CreatedAt.Add(time.Hour)
-	record, err := NewScriptRecord(fixture.Environment.Record.ID, serviceID, core.Script{
+	record, err := testscripts.NewRecord(fixture.Environment.Record.ID, serviceID, core.Script{
 		ID: ids.NewAt(ids.KindScript, at, 1), Slug: "manual-source-journey", ServiceName: service.Record.Desired.Name,
 		When: core.ScriptManual, Body: "exit 0",
 	})
@@ -56,9 +63,12 @@ func (fixture *ExecutedArtifactFixture) CreateManualScript(
 	}
 	task := validTaskRecord(at)
 	task.Owner = mustEnvironmentTaskOwner(t, fixture.Project.Record, fixture.Environment.Record)
-	task.Actor, task.Executor, task.Type, task.Target = TaskActorOperator, TaskExecutorAgent, TaskScript, record.Desired.ID
-	task.Params = map[string]string{ScriptExecutionIDParam: ids.NewULID(), ScriptGenerationParam: "1"}
-	task.Steps = []TaskStepRecord{{Kind: TaskStepOperation, ID: ids.New(ids.KindStep)}}
+	task.Actor, task.Executor, task.Type, task.Target = testtaskjournal.TaskActorOperator, testtaskjournal.TaskExecutorAgent, testtaskjournal.TaskScript, record.Desired.ID
+	task.Params = map[string]string{
+		testscriptexecutions.ScriptExecutionIDParam: ids.NewULID(),
+		testscriptexecutions.ScriptGenerationParam:  "1",
+	}
+	task.Steps = []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	task.TimeoutSeconds = executionplan.ScriptExecutionTimeoutSeconds
 	return scripts, task
 }
@@ -66,7 +76,7 @@ func (fixture *ExecutedArtifactFixture) CreateManualScript(
 func (fixture *ExecutedArtifactFixture) PublishManualScript(
 	t *testing.T,
 	scripts *ScriptRepository,
-	sources ScriptExecutionSources,
+	sources testscriptsourcequeries.ScriptExecutionSources,
 	task TaskRecord,
 	plan *agentpb.ExecutionPlan,
 ) {
@@ -96,7 +106,7 @@ func (fixture *ExecutedArtifactFixture) RetryTimedOutManualScript(
 		t.Fatalf("generated manual timeout = %d, %v", count, err)
 	}
 	terminal, err := fixture.Tasks.GetTask(ctx, assignment.Task.Record.ID)
-	if err != nil || terminal.Record.Status != TaskStatusTimedOut {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusTimedOut {
 		t.Fatalf("generated manual timeout state = %v", err)
 	}
 	for _, check := range afterTimeout {
@@ -104,8 +114,13 @@ func (fixture *ExecutedArtifactFixture) RetryTimedOutManualScript(
 	}
 	retryAt := deadline.Add(time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 121)
-	result, err := fixture.Tasks.RetryTask(ctx, terminal.Record.ID, retryID, TaskActorOperator,
-		pendingRetryMarker(terminal.Record, retryID, retryAt, "manual-source-journey-retry"))
+	result, err := fixture.Tasks.RetryTask(
+		ctx,
+		terminal.Record.ID,
+		retryID,
+		testtaskjournal.TaskActorOperator,
+		pendingRetryMarker(terminal.Record, retryID, retryAt, "manual-source-journey-retry"),
+	)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("generated manual retry = %v", err)
 	}
@@ -141,7 +156,12 @@ func (fixture *ExecutedArtifactFixture) RemoveCompletedManualScript(
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := findServiceAtRevision(ctx, fixture.store, script.Record.ServiceID, script.ReadRevision)
+	service, err := testenvironmentqueries.FindServiceAtRevision(
+		ctx,
+		fixture.store,
+		script.Record.ServiceID,
+		script.ReadRevision,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +189,7 @@ func (fixture *ExecutedArtifactFixture) RemoveCompletedManualScript(
 	if err != nil || !found || claim.Task.Record.ID != task.ID {
 		t.Fatalf("Script removal claim = %t, %v", found, err)
 	}
-	if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusCompleted, task.CreatedAt.Add(2*time.Second)); err != nil {
+	if _, err := fixture.Tasks.AcknowledgeControllerTask(ctx, task.ID, testtaskjournal.TaskStatusCompleted, task.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := scripts.GetScript(ctx, scriptID); !isKind(err, errs.KindScriptNotFound) {
@@ -182,28 +202,31 @@ func (fixture *ExecutedArtifactFixture) CompleteManualScript(
 ) {
 	t.Helper()
 	ctx := context.Background()
-	execution, err := scripts.GetScriptExecution(ctx, assignment.Task.Record.Params[ScriptExecutionIDParam])
+	execution, err := scripts.GetScriptExecution(
+		ctx,
+		assignment.Task.Record.Params[testscriptexecutions.ScriptExecutionIDParam],
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	manualScriptCleanupCheckpoints(t, scripts, assignment, execution.Record, TaskStatusCompleted)
+	manualScriptCleanupCheckpoints(t, scripts, assignment, execution.Record, testtaskjournal.TaskStatusCompleted)
 	terminal, err := fixture.Tasks.AcknowledgeTask(
 		ctx,
 		assignment.Assignment.Record.AgentID,
 		1,
 		assignment.Task.Record.ID,
-		assignment.Assignment.Record.AssignmentID,
-		TaskStatusCompleted,
-		manualScriptTerminalResult(
-			assignment,
-			TaskStatusCompleted,
+		assignment.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted, manualScriptTerminalResult(
+			assignment, testtaskjournal.TaskStatusCompleted,
 		),
 		assignment.Task.Record.CreatedAt.Add(20*time.Second),
 	)
-	if err != nil || terminal.Record.Status != TaskStatusCompleted {
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("manual terminal = %v", err)
 	}
-	if fixture.store.valueAt(scriptSourceRootKey(assignment.Task.Record.OperationID), fixture.store.revision) != nil {
+	if fixture.store.valueAt(
+		testscriptsourceevidence.ScriptSourceRootKey(assignment.Task.Record.OperationID),
+		fixture.store.revision,
+	) != nil {
 		t.Fatal("completed generated manual plan retained source root")
 	}
 }

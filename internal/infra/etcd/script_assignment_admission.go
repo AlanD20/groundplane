@@ -166,8 +166,10 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 			executionRead.Entry.Value,
 			"script-execution",
 		)
-		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.ID ||
-			execution.OperationID != task.OperationID || execution.StepID != steps[metadata.ScriptExecutionId] ||
+		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+			execution.CurrentTaskID != task.ID ||
+			execution.OperationID != task.OperationID ||
+			execution.StepID != steps[metadata.ScriptExecutionId] ||
 			execution.PlanHash != task.PlanHash ||
 			!execution.ActiveReference {
 			return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")

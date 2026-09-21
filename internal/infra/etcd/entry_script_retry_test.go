@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -28,16 +31,21 @@ func TestEntryDeletionRetryCannotReacquireAfterScriptPreparation(t *testing.T) {
 	if _, found, err := tasks.ClaimNextControllerTask(ctx, task.CreatedAt.Add(time.Second)); err != nil || !found {
 		t.Fatalf("initial claim = %t, %v", found, err)
 	}
-	failed, err := tasks.AcknowledgeControllerTask(ctx, task.ID, TaskStatusFailed, task.CreatedAt.Add(2*time.Second))
+	failed, err := tasks.AcknowledgeControllerTask(
+		ctx,
+		task.ID,
+		testtaskjournal.TaskStatusFailed,
+		task.CreatedAt.Add(2*time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	member := entryScriptTestMember(t, store, current.Record, generationIDs[0])
-	authority, err := newScriptSourceReferenceAuthority(store)
+	authority, err := testscriptsourcepublication.NewAuthority(store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	members := []ScriptSourcePreparationMember{member}
+	members := []testscriptsourceevidence.ScriptSourcePreparationMember{member}
 	if _, err := authority.Prepare(ctx, member.Reference.OperationID, members); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +53,7 @@ func TestEntryDeletionRetryCannotReacquireAfterScriptPreparation(t *testing.T) {
 	retryID := ids.New(ids.KindTask)
 	retryMarker := pendingRetryMarker(failed.Record, retryID, retryAt, "entry-script-protected-retry")
 	before := store.revision
-	if _, err := tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker); !isKind(
+	if _, err := tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker); !isKind(
 		err,
 		errs.KindResourceInUse,
 	) ||
@@ -55,14 +63,14 @@ func TestEntryDeletionRetryCannotReacquireAfterScriptPreparation(t *testing.T) {
 	if err := authority.Abandon(ctx, member.Reference.OperationID, members); err != nil {
 		t.Fatal(err)
 	}
-	result, err = tasks.RetryTask(ctx, task.ID, retryID, TaskActorOperator, retryMarker)
+	result, err = tasks.RetryTask(ctx, task.ID, retryID, testtaskjournal.TaskActorOperator, retryMarker)
 	if err != nil || result.kind != idempotencyTransactionApplied {
 		t.Fatalf("Entry retry remained blocked after release: %v / %v", err, result.conflict)
 	}
 	if _, found, err := tasks.ClaimNextControllerTask(ctx, retryAt.Add(time.Second)); err != nil || !found {
 		t.Fatalf("retry claim = %t, %v", found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, TaskStatusCompleted, retryAt.Add(2*time.Second)); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, retryID, testtaskjournal.TaskStatusCompleted, retryAt.Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := entries.GetEntry(ctx, current.Record.Entry.ID); !isKind(err, errs.KindEntryNotFound) {

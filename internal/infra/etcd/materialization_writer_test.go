@@ -9,6 +9,11 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -65,7 +70,7 @@ func TestTaskRepositorySerializesMaterializationWithoutBlockingUnrelatedTasks(t 
 	if err != nil || !found || firstClaim.Task.Record.ID != first.ID {
 		t.Fatalf("first ClaimNextTask() = %#v, %v, %v", firstClaim, found, err)
 	}
-	assertTaskLifecycleValue(t, store, taskMaterializationWriterKey(environmentID), true)
+	assertTaskLifecycleValue(t, store, testtaskjournal.TaskMaterializationWriterKey(environmentID), true)
 	recovered, err := repository.ListAgentAssignments(ctx, agentID, 4, 4)
 	if err != nil || len(recovered) != 1 || recovered[0].Task.Record.ID != first.ID {
 		t.Fatalf("ListAgentAssignments() = %#v, %v", recovered, err)
@@ -77,26 +82,24 @@ func TestTaskRepositorySerializesMaterializationWithoutBlockingUnrelatedTasks(t 
 	}
 	if _, err := repository.AcknowledgeTask(
 		ctx, agentID, 4, unrelated.ID, taskAssignmentIDForTest(t, repository,
-			unrelated.ID),
-		TaskStatusCompleted, completedComposeTaskResult(), at.Add(5*time.Second)); err != nil {
+			unrelated.ID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(), at.Add(5*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeTask(unrelated) error = %v", err)
 	}
 	if _, err := repository.AcknowledgeTask(
 		ctx, agentID, 4, first.ID, taskAssignmentIDForTest(t, repository,
-			first.ID),
-		TaskStatusCompleted, completedComposeTaskResult(), at.Add(6*time.Second)); err != nil {
+			first.ID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(), at.Add(6*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeTask(first) error = %v", err)
 	}
-	assertTaskLifecycleValue(t, store, taskMaterializationWriterKey(environmentID), false)
-	applied := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+	assertTaskLifecycleValue(t, store, testtaskjournal.TaskMaterializationWriterKey(environmentID), false)
+	applied := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: first.ID, RenderGeneration: 1,
 	})
-	appliedValue, err := encodeEnvironmentComposeProjection(applied)
+	appliedValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(applied)
 	if err != nil {
 		t.Fatal(err)
 	}
-	appliedTransaction, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: appliedValue,
+	appliedTransaction, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environmentID), Value: appliedValue,
 	}})
 	if err != nil || !appliedTransaction.Succeeded {
 		t.Fatalf("seed first applied projection = %#v, %v", appliedTransaction, err)
@@ -106,7 +109,7 @@ func TestTaskRepositorySerializesMaterializationWithoutBlockingUnrelatedTasks(t 
 	if err != nil || !found || secondClaim.Task.Record.ID != second.ID {
 		t.Fatalf("second ClaimNextTask() = %#v, %v, %v", secondClaim, found, err)
 	}
-	assertTaskLifecycleValue(t, store, taskMaterializationWriterKey(environmentID), true)
+	assertTaskLifecycleValue(t, store, testtaskjournal.TaskMaterializationWriterKey(environmentID), true)
 }
 
 func TestTaskMaterializationWriterSealsExactAppliedPredecessor(t *testing.T) {
@@ -121,22 +124,22 @@ func TestTaskMaterializationWriterSealsExactAppliedPredecessor(t *testing.T) {
 	at := taskJournalTime().Add(48 * time.Hour)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 730)
 	predecessorTaskID := ids.NewAt(ids.KindTask, at, 731)
-	projection := withTestEnvironmentComposeArtifact(EnvironmentComposeProjection{
+	projection := withTestEnvironmentComposeArtifact(testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: predecessorTaskID, RenderGeneration: 1,
 	})
-	value, err := encodeEnvironmentComposeProjection(projection)
+	value, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		t.Fatal(err)
 	}
-	seeded, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: value,
+	seeded, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environmentID), Value: value,
 	}})
 	if err != nil || !seeded.Succeeded {
 		t.Fatalf("seed applied predecessor = %#v, %v", seeded, err)
 	}
 	task := materializationLifecycleTask(at.Add(time.Second), environmentID, 3)
-	task.Params[TaskReleasePublicationParam] = ids.NewULID()
-	task.Params[EnvironmentDesiredRevisionParam] = task.ID
+	task.Params[testreleaserender.TaskReleasePublicationParam] = ids.NewULID()
+	task.Params[testblueprints.EnvironmentDesiredRevisionParam] = task.ID
 	writer, conditions, err := repository.prepareTaskMaterializationWriter(ctx, task, environmentID, seeded.Revision)
 	if err != nil {
 		t.Fatalf("prepareTaskMaterializationWriter() error = %v", err)
@@ -156,8 +159,8 @@ func TestTaskMaterializationWriterSealsExactAppliedPredecessor(t *testing.T) {
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("bad generation error = %v", err)
 	}
-	rewritten, err := store.Transact(ctx, nil, []Mutation{{
-		Type: MutationPut, Key: environmentComposeProjectionKey(environmentID), Value: value,
+	rewritten, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testenvironmentprojection.EnvironmentComposeProjectionStorageKey(environmentID), Value: value,
 	}})
 	if err != nil || !rewritten.Succeeded {
 		t.Fatalf("rewrite applied predecessor = %#v, %v", rewritten, err)
@@ -166,8 +169,8 @@ func TestTaskMaterializationWriterSealsExactAppliedPredecessor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	claim, err := store.Transact(ctx, conditions, []Mutation{{
-		Type: MutationPut, Key: taskMaterializationWriterKey(environmentID), Value: encoded,
+	claim, err := store.Transact(ctx, conditions, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskMaterializationWriterKey(environmentID), Value: encoded,
 	}})
 	if err != nil || claim.Succeeded {
 		t.Fatalf("stale applied predecessor claim = %#v, %v", claim, err)
@@ -186,8 +189,8 @@ func TestTaskMaterializationWriterAllowsBlueprintAppliedAbsenceAfterEarlierFailu
 	at := taskJournalTime().Add(72 * time.Hour)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 740)
 	task := materializationLifecycleTask(at, environmentID, 2)
-	task.Params[TaskReleasePublicationParam] = ids.NewULID()
-	task.Params[EnvironmentDesiredRevisionParam] = task.ID
+	task.Params[testreleaserender.TaskReleasePublicationParam] = ids.NewULID()
+	task.Params[testblueprints.EnvironmentDesiredRevisionParam] = task.ID
 	writer, conditions, err := repository.prepareTaskMaterializationWriter(ctx, task, environmentID, 0)
 	if err != nil || len(conditions) != 1 || conditions[0].ModRevision != 0 ||
 		writer.BlueprintAppliedPredecessor == nil || writer.BlueprintAppliedPredecessor.Present {
@@ -232,9 +235,9 @@ func TestTaskRepositoryScansPastAFullPageOfBlockedMaterializations(t *testing.T)
 
 func materializationLifecycleTask(at time.Time, environmentID string, generation int32) TaskRecord {
 	task := validTaskRecord(at)
-	task.Type = TaskUpdate
+	task.Type = testtaskjournal.TaskUpdate
 	task.Target = environmentID
 	task.RenderGeneration = generation
-	task.Params[TaskMaterializationEnvironmentParam] = environmentID
+	task.Params[testtaskjournal.TaskMaterializationEnvironmentParam] = environmentID
 	return task
 }

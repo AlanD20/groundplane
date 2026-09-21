@@ -374,14 +374,14 @@ func (repository *Repository) PreparePublication(
 		return nil, nil, err
 	}
 	return []etcdstore.Condition{
-			{Key: keys[1], ModRevision: read.Values[1].ModRevision},
-			{Key: dueKey},
-			{Key: retentionKey},
-		}, []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: dueKey, Value: dueValue},
-			{Type: etcdstore.MutationPut, Key: retentionKey, Value: []byte(dueKey)},
-			{Type: etcdstore.MutationPut, Key: keys[1], Value: coordValue},
-		}, nil
+		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
+		{Key: dueKey},
+		{Key: retentionKey},
+	}, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: dueKey, Value: dueValue},
+		{Type: etcdstore.MutationPut, Key: retentionKey, Value: []byte(dueKey)},
+		{Type: etcdstore.MutationPut, Key: keys[1], Value: coordValue},
+	}, nil
 }
 
 func (repository *Repository) HasExactPublishedOutcome(

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,14 +17,14 @@ func TestTransactionBudgetFitsInclusiveOrdinaryLimits(t *testing.T) {
 
 	cases := []struct {
 		name   string
-		budget TransactionBudget
+		budget testkeyvalue.TransactionBudget
 		want   bool
 	}{
-		{name: "exact limits", budget: TransactionBudget{Operations: 96, Bytes: 1 << 20}, want: true},
-		{name: "too many operations", budget: TransactionBudget{Operations: 97, Bytes: 1 << 20}},
-		{name: "too many bytes", budget: TransactionBudget{Operations: 96, Bytes: (1 << 20) + 1}},
-		{name: "negative operations", budget: TransactionBudget{Operations: -1}},
-		{name: "negative bytes", budget: TransactionBudget{Bytes: -1}},
+		{name: "exact limits", budget: testkeyvalue.TransactionBudget{Operations: 96, Bytes: 1 << 20}, want: true},
+		{name: "too many operations", budget: testkeyvalue.TransactionBudget{Operations: 97, Bytes: 1 << 20}},
+		{name: "too many bytes", budget: testkeyvalue.TransactionBudget{Operations: 96, Bytes: (1 << 20) + 1}},
+		{name: "negative operations", budget: testkeyvalue.TransactionBudget{Operations: -1}},
+		{name: "negative bytes", budget: testkeyvalue.TransactionBudget{Bytes: -1}},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -45,25 +46,25 @@ func TestStoreMeasureTransactionCountsWithoutExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newStore() error = %v", err)
 	}
-	conditions := make([]Condition, maximumTransactionOperations-1)
+	conditions := make([]testkeyvalue.Condition, testkeyvalue.MaximumOperations-1)
 	for index := range conditions {
-		conditions[index] = Condition{Key: fmt.Sprintf("/conditions/%02d", index)}
+		conditions[index] = testkeyvalue.Condition{Key: fmt.Sprintf("/conditions/%02d", index)}
 	}
-	mutations := []Mutation{{Type: MutationDelete, Key: "/records/one"}}
+	mutations := []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: "/records/one"}}
 
 	budget, err := store.MeasureTransaction(context.Background(), conditions, mutations)
 	if err != nil {
 		t.Fatalf("MeasureTransaction(96 operations) error = %v", err)
 	}
-	if budget.Operations != maximumTransactionOperations || !budget.Fits() {
+	if budget.Operations != testkeyvalue.MaximumOperations || !budget.Fits() {
 		t.Fatalf("MeasureTransaction(96 operations) = %+v, want fitting", budget)
 	}
-	conditions = append(conditions, Condition{Key: "/conditions/overflow"})
+	conditions = append(conditions, testkeyvalue.Condition{Key: "/conditions/overflow"})
 	budget, err = store.MeasureTransaction(context.Background(), conditions, mutations)
 	if err != nil {
 		t.Fatalf("MeasureTransaction(97 operations) error = %v", err)
 	}
-	if budget.Operations != maximumTransactionOperations+1 || budget.Fits() {
+	if budget.Operations != testkeyvalue.MaximumOperations+1 || budget.Fits() {
 		t.Fatalf("MeasureTransaction(97 operations) = %+v, want non-fitting", budget)
 	}
 	if backend.transaction != nil {
@@ -76,46 +77,60 @@ func TestStoreMeasureTransactionCountsWithoutExecution(t *testing.T) {
 func TestMeasureTransactionBudgetUsesPhysicalSerializedBytes(t *testing.T) {
 	t.Parallel()
 
-	mutation := Mutation{Type: MutationPut, Key: "/records/large", Value: make([]byte, maximumTransactionBytes)}
+	mutation := testkeyvalue.Mutation{
+		Type:  testkeyvalue.MutationPut,
+		Key:   "/records/large",
+		Value: make([]byte, testkeyvalue.MaximumBytes),
+	}
 	budget, err := MeasureTransactionBudget(
 		context.Background(),
 		"/groundplane/",
 		nil,
-		[]Mutation{mutation},
+		[]testkeyvalue.Mutation{mutation},
 	)
 	if err != nil {
 		t.Fatalf("MeasureTransactionBudget(initial) error = %v", err)
 	}
-	excess := budget.Bytes - maximumTransactionBytes
+	excess := budget.Bytes - testkeyvalue.MaximumBytes
 	if excess <= 0 || excess >= len(mutation.Value) {
 		t.Fatalf("initial serialized excess = %d for budget %+v", excess, budget)
 	}
 	mutation.Value = mutation.Value[:len(mutation.Value)-excess]
-	budget, err = MeasureTransactionBudget(context.Background(), "/groundplane/", nil, []Mutation{mutation})
+	budget, err = MeasureTransactionBudget(
+		context.Background(),
+		"/groundplane/",
+		nil,
+		[]testkeyvalue.Mutation{mutation},
+	)
 	if err != nil {
 		t.Fatalf("MeasureTransactionBudget(exact) error = %v", err)
 	}
-	if budget.Bytes != maximumTransactionBytes || !budget.Fits() {
-		t.Fatalf("exact serialized budget = %+v, want %d fitting bytes", budget, maximumTransactionBytes)
+	if budget.Bytes != testkeyvalue.MaximumBytes || !budget.Fits() {
+		t.Fatalf("exact serialized budget = %+v, want %d fitting bytes", budget, testkeyvalue.MaximumBytes)
 	}
 	mutation.Value = append(mutation.Value, 0)
-	budget, err = MeasureTransactionBudget(context.Background(), "/groundplane/", nil, []Mutation{mutation})
+	budget, err = MeasureTransactionBudget(
+		context.Background(),
+		"/groundplane/",
+		nil,
+		[]testkeyvalue.Mutation{mutation},
+	)
 	if err != nil {
 		t.Fatalf("MeasureTransactionBudget(oversize) error = %v", err)
 	}
-	if budget.Bytes != maximumTransactionBytes+1 || budget.Fits() {
-		t.Fatalf("oversized serialized budget = %+v, want %d non-fitting bytes", budget, maximumTransactionBytes+1)
+	if budget.Bytes != testkeyvalue.MaximumBytes+1 || budget.Fits() {
+		t.Fatalf("oversized serialized budget = %+v, want %d non-fitting bytes", budget, testkeyvalue.MaximumBytes+1)
 	}
 
-	largePrefix := "/" + strings.Repeat("p", maximumTransactionBytes) + "/"
-	budget, err = MeasureTransactionBudget(context.Background(), largePrefix, nil, []Mutation{{
-		Type: MutationDelete,
+	largePrefix := "/" + strings.Repeat("p", testkeyvalue.MaximumBytes) + "/"
+	budget, err = MeasureTransactionBudget(context.Background(), largePrefix, nil, []testkeyvalue.Mutation{{
+		Type: testkeyvalue.MutationDelete,
 		Key:  "/records/one",
 	}})
 	if err != nil {
 		t.Fatalf("MeasureTransactionBudget(large prefix) error = %v", err)
 	}
-	if budget.Bytes <= maximumTransactionBytes || budget.Fits() {
+	if budget.Bytes <= testkeyvalue.MaximumBytes || budget.Fits() {
 		t.Fatalf("large-prefix serialized budget = %+v, want non-fitting", budget)
 	}
 }
@@ -131,61 +146,61 @@ func TestMeasureTransactionBudgetRejectsMalformedInputs(t *testing.T) {
 		name       string
 		ctx        context.Context
 		keyPrefix  string
-		conditions []Condition
-		mutations  []Mutation
+		conditions []testkeyvalue.Condition
+		mutations  []testkeyvalue.Mutation
 	}{
 		{
 			name:      "nil context",
 			keyPrefix: "/groundplane/",
-			mutations: []Mutation{{Type: MutationDelete, Key: "/record"}},
+			mutations: []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: "/record"}},
 		},
 		{
 			name:      "canceled context",
 			ctx:       canceled,
 			keyPrefix: "/groundplane/",
-			mutations: []Mutation{{Type: MutationDelete, Key: "/record"}},
+			mutations: []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: "/record"}},
 		},
 		{
 			name:      "invalid key prefix",
 			ctx:       context.Background(),
 			keyPrefix: "groundplane/",
-			mutations: []Mutation{{Type: MutationDelete, Key: "/record"}},
+			mutations: []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: "/record"}},
 		},
 		{
 			name:       "condition key",
 			ctx:        context.Background(),
 			keyPrefix:  "/groundplane/",
-			conditions: []Condition{{Key: "record"}},
+			conditions: []testkeyvalue.Condition{{Key: "record"}},
 		},
 		{
 			name:       "negative revision",
 			ctx:        context.Background(),
 			keyPrefix:  "/groundplane/",
-			conditions: []Condition{{Key: "/record", ModRevision: -1}},
+			conditions: []testkeyvalue.Condition{{Key: "/record", ModRevision: -1}},
 		},
 		{
 			name:       "revisioned prefix condition",
 			ctx:        context.Background(),
 			keyPrefix:  "/groundplane/",
-			conditions: []Condition{{Key: "/records/", ModRevision: 1, Prefix: true}},
+			conditions: []testkeyvalue.Condition{{Key: "/records/", ModRevision: 1, Prefix: true}},
 		},
 		{
 			name:      "mutation key",
 			ctx:       context.Background(),
 			keyPrefix: "/groundplane/",
-			mutations: []Mutation{{Type: MutationDelete, Key: "record"}},
+			mutations: []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: "record"}},
 		},
 		{
 			name:      "prefix put",
 			ctx:       context.Background(),
 			keyPrefix: "/groundplane/",
-			mutations: []Mutation{{Type: MutationPut, Key: "/records/", Prefix: true}},
+			mutations: []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: "/records/", Prefix: true}},
 		},
 		{
 			name:      "mutation type",
 			ctx:       context.Background(),
 			keyPrefix: "/groundplane/",
-			mutations: []Mutation{{Key: "/record"}},
+			mutations: []testkeyvalue.Mutation{{Key: "/record"}},
 		},
 	}
 	for _, test := range tests {

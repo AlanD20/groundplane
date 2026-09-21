@@ -9,6 +9,14 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -43,8 +51,7 @@ func TestAttachTaskClaimAndAcknowledgementAdvanceProvisioningAtomically(t *testi
 	terminalAt := record.CreatedAt.Add(2 * time.Second)
 	terminal, err := tasks.AcknowledgeTask(
 		ctx, agentID, 1, record.TaskID, taskAssignmentIDForTest(t, tasks,
-			record.TaskID),
-		TaskStatusCompleted, completedComposeTaskResult(), terminalAt)
+			record.TaskID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(), terminalAt)
 
 	if err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
@@ -55,9 +62,11 @@ func TestAttachTaskClaimAndAcknowledgementAdvanceProvisioningAtomically(t *testi
 		t.Fatalf("ready Attach = %#v, %v", ready, err)
 	}
 	replay, err := tasks.AcknowledgeTask(
-		ctx, agentID, 1, record.TaskID, taskAssignmentIDForTest(t, tasks,
-			record.TaskID),
-		TaskStatusCompleted, completedComposeTaskResult(), terminalAt.Add(time.Second))
+		ctx, agentID, 1, record.TaskID, taskAssignmentIDForTest(
+			t,
+			tasks,
+			record.TaskID,
+		), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(), terminalAt.Add(time.Second))
 
 	if err != nil || replay.Revision != terminal.Revision {
 		t.Fatalf("AcknowledgeTask(replay) = %#v, %v", replay, err)
@@ -84,13 +93,15 @@ func TestAttachTaskPendingAbortAtomicallyFailsProvisioning(t *testing.T) {
 	createTestAttach(t, ctx, attaches, scope, record, &facts)
 
 	aborted, err := tasks.AbortPendingTask(ctx, record.TaskID, record.CreatedAt.Add(time.Second))
-	if err != nil || aborted.Record.Status != TaskStatusAborted {
+	if err != nil || aborted.Record.Status != testtaskjournal.TaskStatusAborted {
 		t.Fatalf("AbortPendingTask() = %#v, %v", aborted.Record, err)
 	}
 	assertAttachTaskEnvironmentEpoch(t, ctx, store, scope.Environment.Record.ID, aborted.Revision)
 	failed, err := attaches.GetAttach(ctx, record.ID)
-	if err != nil || failed.Record.Status != core.AttachFailed || failed.Record.Operation != AttachOperationProvision ||
-		failed.Record.TaskID != record.TaskID || failed.Revision != aborted.Revision {
+	if err != nil || failed.Record.Status != core.AttachFailed ||
+		failed.Record.Operation != testattachments.AttachOperationProvision ||
+		failed.Record.TaskID != record.TaskID ||
+		failed.Revision != aborted.Revision {
 		t.Fatalf("failed Attach/aborted Task = %#v/%#v, %v", failed, aborted, err)
 	}
 	replay, err := tasks.AbortPendingTask(ctx, record.TaskID, record.CreatedAt.Add(2*time.Second))
@@ -120,13 +131,12 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 		t.Fatalf("ClaimNextTask() found/error = %v/%v", found, err)
 	}
 	terminalAt := record.CreatedAt.Add(2 * time.Second)
-	result := TaskResultRecord{
-		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, ReconciliationRequired: true,
+	result := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone, ReconciliationRequired: true,
 	}
 	terminal, err := tasks.AcknowledgeTask(
 		ctx, agentID, 2, record.TaskID, taskAssignmentIDForTest(t, tasks,
-			record.TaskID),
-		TaskStatusTimedOut, result, terminalAt)
+			record.TaskID), testtaskjournal.TaskStatusTimedOut, result, terminalAt)
 
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(timeout) error = %v", err)
@@ -139,7 +149,7 @@ func TestAttachTaskRetryReplacesProvisioningTaskAtomically(t *testing.T) {
 	retryAt := terminalAt.Add(time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 803)
 	marker := pendingRetryMarker(terminal.Record, retryID, retryAt, "attach-retry-key-0001")
-	retryResult, err := tasks.RetryTask(ctx, record.TaskID, retryID, TaskActorOperator, marker)
+	retryResult, err := tasks.RetryTask(ctx, record.TaskID, retryID, testtaskjournal.TaskActorOperator, marker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -203,9 +213,7 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 		agentID,
 		20,
 		grantRecord.TaskID,
-		taskAssignmentIDForTest(t, tasks, grantRecord.TaskID),
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		taskAssignmentIDForTest(t, tasks, grantRecord.TaskID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		grantRecord.CreatedAt.Add(2*time.Second),
 	); err != nil {
 		t.Fatalf("AcknowledgeTask(grant) error = %v", err)
@@ -216,7 +224,7 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 	}
 
 	sourceScope := scope
-	sourceScope.Grants = []Versioned[AttachRecord]{grant}
+	sourceScope.Grants = []testkeyvalue.Versioned[testattachments.Record]{grant}
 	record, facts := testPendingAttach(t, sourceScope, 85, "granted-source", sourceScope.Grants)
 	expectedCiphertext := append([]byte(nil), facts.Ciphertext...)
 	defer clear(expectedCiphertext)
@@ -232,10 +240,14 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 		agentID,
 		20,
 		record.TaskID,
-		taskAssignmentIDForTest(t, tasks, record.TaskID),
-		TaskStatusTimedOut,
-		TaskResultRecord{
-			Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+		taskAssignmentIDForTest(
+			t,
+			tasks,
+			record.TaskID,
+		),
+		testtaskjournal.TaskStatusTimedOut,
+		testtaskjournal.TaskResultRecord{
+			Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
 			ReconciliationRequired: true,
 		},
 		failureAt,
@@ -272,7 +284,7 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 		ctx,
 		record.TaskID,
 		retryID,
-		TaskActorOperator,
+		testtaskjournal.TaskActorOperator,
 		pendingRetryMarker(failedTask.Record, retryID, retryAt, "grant-restart-retry-0001"),
 	)
 	if err != nil {
@@ -291,9 +303,7 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 		agentID,
 		20,
 		retryID,
-		taskAssignmentIDForTest(t, tasks, retryID),
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		taskAssignmentIDForTest(t, tasks, retryID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		retryAt.Add(2*time.Second),
 	); err != nil {
 		t.Fatalf("AcknowledgeTask(retry) error = %v", err)
@@ -316,11 +326,11 @@ func TestAttachGrantFailureSurvivesRepositoryRestartWithoutDuplicateIdentity(t *
 		t.Fatalf("ready encrypted facts after restart = %#v, %v, %v", retriedFacts, foundFacts, err)
 	}
 	clear(retriedFacts.Ciphertext)
-	reverse, err := store.Get(ctx, attachGrantedByKey(grant.Record.ID, record.ID))
+	reverse, err := store.Get(ctx, testattachments.AttachGrantedByKey(grant.Record.ID, record.ID))
 	if err != nil || reverse.Entry == nil || string(reverse.Entry.Value) != record.ID {
 		t.Fatalf("reverse grant edge after restart = %#v, %v", reverse, err)
 	}
-	page, err := attaches.ListAttaches(ctx, record.EnvironmentID, PageRequest{Limit: 10})
+	page, err := attaches.ListAttaches(ctx, record.EnvironmentID, testkeyvalue.PageRequest{Limit: 10})
 	if err != nil || len(page.Items) != 2 {
 		t.Fatalf("Attach page after restart = %#v, %v", page, err)
 	}
@@ -352,10 +362,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 		3,
 		record.TaskID, taskAssignmentIDForTest(t, tasks,
 
-			record.TaskID),
-
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+			record.TaskID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		record.CreatedAt.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeTask(provision) error = %v", err)
 	}
@@ -371,19 +378,19 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 		t.Fatalf("ClaimNextTask(detach) found/error = %v/%v", found, err)
 	}
 	detachFailureAt := detachAt.Add(2 * time.Second)
-	failedResult := TaskResultRecord{
-		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, ReconciliationRequired: true,
+	failedResult := testtaskjournal.TaskResultRecord{
+		Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone, ReconciliationRequired: true,
 	}
 	failedTask, err := tasks.AcknowledgeTask(
 		ctx, agentID, 3, detachID, taskAssignmentIDForTest(t, tasks,
-			detachID),
-		TaskStatusTimedOut, failedResult, detachFailureAt)
+			detachID), testtaskjournal.TaskStatusTimedOut, failedResult, detachFailureAt)
 
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(detach timeout) error = %v", err)
 	}
 	failed, err := attaches.GetAttach(ctx, record.ID)
-	if err != nil || failed.Record.Status != core.AttachFailed || failed.Record.Operation != AttachOperationDetach ||
+	if err != nil || failed.Record.Status != core.AttachFailed ||
+		failed.Record.Operation != testattachments.AttachOperationDetach ||
 		failed.Revision != failedTask.Revision {
 		t.Fatalf("failed detach Attach = %#v, %v", failed, err)
 	}
@@ -391,7 +398,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	retryAt := detachFailureAt.Add(time.Second)
 	retryID := ids.NewAt(ids.KindTask, retryAt, 806)
 	marker := pendingRetryMarker(failedTask.Record, retryID, retryAt, "detach-retry-key-0001")
-	retryResult, err := tasks.RetryTask(ctx, detachID, retryID, TaskActorOperator, marker)
+	retryResult, err := tasks.RetryTask(ctx, detachID, retryID, testtaskjournal.TaskActorOperator, marker)
 	if err != nil {
 		t.Fatalf("RetryTask(detach) error = %v", err)
 	}
@@ -420,10 +427,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 		3,
 		retryID, taskAssignmentIDForTest(t, tasks,
 
-			retryID),
-
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+			retryID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		retryAt.Add(2*time.Second))
 
 	if err != nil {
@@ -435,14 +439,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 	if kind != errs.KindAttachNotFound {
 		t.Fatalf("GetAttach(detached) error = %v, want Attach not found", err)
 	}
-	for _, key := range []string{
-		attachNameKey(record.EnvironmentID, record.Name),
-		attachOwnerKey(record.EnvironmentID, record.ID),
-		attachServiceKey(record.ServiceID, record.ID),
-		attachBackingServiceKey(record.BackingServiceID, record.ID),
-		attachBackingProjectKey(record.BackingProjectID, record.ID),
-		attachFactsKey(record.ID),
-	} {
+	for _, key := range []string{testattachments.AttachNameKey(record.EnvironmentID, record.Name), testattachments.AttachOwnerKey(record.EnvironmentID, record.ID), testattachments.AttachServiceKey(record.ServiceID, record.ID), testattachments.AttachBackingServiceKey(record.BackingServiceID, record.ID), testattachments.AttachBackingProjectKey(record.BackingProjectID, record.ID), testattachments.AttachFactsKey(record.ID)} {
 		result, getErr := store.Get(ctx, key)
 		if getErr != nil || result == nil || result.Entry != nil || result.ReadRevision != terminal.Revision {
 			t.Fatalf("detached Attach companion %s = %#v, %v", key, result, getErr)
@@ -454,10 +451,7 @@ func TestDetachTaskFailureRetryAndSuccessAdvanceAttachAtomically(t *testing.T) {
 		3,
 		retryID, taskAssignmentIDForTest(t, tasks,
 
-			retryID),
-
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+			retryID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		retryAt.Add(3*time.Second))
 
 	if err != nil || replay.Revision != terminal.Revision {
@@ -482,7 +476,10 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 		if err != nil {
 			t.Fatalf("advanceAttachReady() error = %v", err)
 		}
-		exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
+		exclusionKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+			testbackupruntime.BackupSourceTargetAttach,
+			record.ID,
+		)
 		if err != nil {
 			t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
 		}
@@ -519,7 +516,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 		if err != nil || stored.Record.Status != core.AttachReady {
 			t.Fatalf("GetAttach(after publication race) = %#v/%v", stored, err)
 		}
-		taskEntry, err := store.Get(ctx, taskKey(task.ID))
+		taskEntry, err := store.Get(ctx, testtaskjournal.TaskStorageKey(task.ID))
 		if err != nil || taskEntry.Entry != nil {
 			t.Fatalf("detach race Task = %#v/%v", taskEntry, err)
 		}
@@ -554,9 +551,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 			agentID,
 			12,
 			record.TaskID,
-			taskAssignmentIDForTest(t, tasks, record.TaskID),
-			TaskStatusCompleted,
-			completedComposeTaskResult(),
+			taskAssignmentIDForTest(t, tasks, record.TaskID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 			record.CreatedAt.Add(2*time.Second),
 		); err != nil {
 			t.Fatalf("AcknowledgeTask(provision) error = %v", err)
@@ -575,17 +570,24 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 			agentID,
 			12,
 			detachTask.ID,
-			taskAssignmentIDForTest(t, tasks, detachTask.ID),
-			TaskStatusTimedOut,
-			TaskResultRecord{
-				Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone, ReconciliationRequired: true,
+			taskAssignmentIDForTest(
+				t,
+				tasks,
+				detachTask.ID,
+			),
+			testtaskjournal.TaskStatusTimedOut,
+			testtaskjournal.TaskResultRecord{
+				Kind: testtaskjournal.TaskResultCompose, Diagnostic: testtaskjournal.TaskResultDiagnosticNone, ReconciliationRequired: true,
 			},
 			detachAt.Add(2*time.Second),
 		)
 		if err != nil {
 			t.Fatalf("AcknowledgeTask(detach timeout) error = %v", err)
 		}
-		exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
+		exclusionKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+			testbackupruntime.BackupSourceTargetAttach,
+			record.ID,
+		)
 		if err != nil {
 			t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
 		}
@@ -635,7 +637,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 					ctx,
 					detachTask.ID,
 					retryID,
-					TaskActorOperator,
+					testtaskjournal.TaskActorOperator,
 					pendingRetryMarker(failedTask.Record, retryID, retryAt, test.key),
 				)
 				if err != nil {
@@ -656,7 +658,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 				}
 				stored, err := attaches.GetAttach(ctx, record.ID)
 				if err != nil || stored.Record.Status != core.AttachFailed ||
-					stored.Record.Operation != AttachOperationDetach {
+					stored.Record.Operation != testattachments.AttachOperationDetach {
 					t.Fatalf("GetAttach(after retry race) = %#v/%v", stored, err)
 				}
 			})
@@ -692,9 +694,7 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 			agentID,
 			13,
 			record.TaskID,
-			taskAssignmentIDForTest(t, tasks, record.TaskID),
-			TaskStatusCompleted,
-			completedComposeTaskResult(),
+			taskAssignmentIDForTest(t, tasks, record.TaskID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 			record.CreatedAt.Add(2*time.Second),
 		); err != nil {
 			t.Fatalf("AcknowledgeTask(provision) error = %v", err)
@@ -708,7 +708,10 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 		if _, found, err := tasks.ClaimNextTask(ctx, agentID, 13, detachAt.Add(time.Second)); err != nil || !found {
 			t.Fatalf("ClaimNextTask(detach) found/error = %v/%v", found, err)
 		}
-		exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
+		exclusionKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+			testbackupruntime.BackupSourceTargetAttach,
+			record.ID,
+		)
 		if err != nil {
 			t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
 		}
@@ -728,8 +731,12 @@ func TestAttachTaskBackedDetachRacesBackupSourceExclusion(t *testing.T) {
 			agentID,
 			13,
 			detachTask.ID,
-			taskAssignmentIDForTest(t, raceTasks, detachTask.ID),
-			TaskStatusCompleted,
+			taskAssignmentIDForTest(
+				t,
+				raceTasks,
+				detachTask.ID,
+			),
+			testtaskjournal.TaskStatusCompleted,
 			completedComposeTaskResult(),
 			detachAt.Add(2*time.Second),
 		)
@@ -782,7 +789,10 @@ func TestAttachTaskBackedDetachRaceRejectsInvalidBackupSourceExclusion(t *testin
 			if err != nil {
 				t.Fatalf("advanceAttachReady() error = %v", err)
 			}
-			exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
+			exclusionKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+				testbackupruntime.BackupSourceTargetAttach,
+				record.ID,
+			)
 			if err != nil {
 				t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
 			}
@@ -820,9 +830,9 @@ func attachDetachRaceEnvelope(
 	ctx context.Context,
 	repository *AttachRepository,
 	scope AttachCreateScope,
-	current Versioned[AttachRecord],
+	current testkeyvalue.Versioned[testattachments.Record],
 	createdAt time.Time,
-) (AttachCreateScope, AttachTaskRenderInput, TaskRecord, IdempotencyMarker) {
+) (AttachCreateScope, testattachrender.AttachTaskRenderInput, TaskRecord, testidempotency.IdempotencyMarker) {
 	t.Helper()
 	hierarchy, err := NewHierarchyRepository(repository.store)
 	if err != nil {
@@ -833,26 +843,29 @@ func attachDetachRaceEnvelope(
 		t.Fatalf("GetEnvironment() error = %v", err)
 	}
 	task := validTaskRecord(createdAt)
-	owner, err := EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {
 		t.Fatalf("EnvironmentTaskOwner() error = %v", err)
 	}
 	task.Owner = owner
-	task.Actor = TaskActorOperator
+	task.Actor = testtaskjournal.TaskActorOperator
 	task.ID = ids.NewAt(ids.KindTask, createdAt, 940)
 	task.OperationID = ids.NewAt(ids.KindOperation, createdAt, 941)
 	task.IdempotencyKey = "attach-detach-exclusion-race-key-0001"
 	task.PlanID = ids.NewAt(ids.KindPlan, createdAt, 942)
 	task.RenderGeneration = int32(scope.ComposeProjection.Record.RenderGeneration)
-	task.Type = TaskDetach
+	task.Type = testtaskjournal.TaskDetach
 	task.Target = current.Record.ID
-	task.Params = map[string]string{TaskMutationEnvironmentParam: current.Record.EnvironmentID}
+	task.Params = map[string]string{testtaskjournal.TaskMutationEnvironmentParam: current.Record.EnvironmentID}
 	marker := pendingTaskMarker(task)
 	marker.Locator.ScopeID = current.Record.EnvironmentID
 	marker.Locator.Method = "DELETE"
 	marker.Locator.Route = "/attaches/{id}"
-	marker.ReplayTarget = &IdempotencyReplayTarget{Kind: IdempotencyReplayTargetAttach, ID: current.Record.ID}
-	renderInput := AttachTaskRenderInput{
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetAttach,
+		ID:   current.Record.ID,
+	}
+	renderInput := testattachrender.AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: current.Record.ID, AttachName: current.Record.Name,
 		TenantID: scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
 		ProjectID: scope.Project.Record.ID, ProjectSlug: scope.Project.Record.Slug,
@@ -867,11 +880,17 @@ func attachDetachRaceEnvelope(
 		EnvironmentEpochRevision: attachTestEpochRevision(t, ctx, repository.store, current.Record.EnvironmentID),
 		RuntimeProjection:        scope.ComposeProjection.Record,
 		RuntimePreparation:       configuredAttachRuntimePreparation(task, current.Record.EnvironmentID),
-		Services:                 attachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
-		Networks:                 attachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
-		Volumes:                  append([]EnvironmentVolumeIdentity(nil), scope.ComposeProjection.Record.Volumes...),
+		Services: testattachrender.AttachTaskServiceSnapshots(
+			scope.ComposeProjection.Record.DesiredServices,
+		),
+		Networks: testattachrender.AttachTaskOwnedNetworkSnapshots(
+			scope.ComposeProjection.Record.DesiredZones,
+		),
+		Volumes: append(
+			[]testenvironmentprojection.EnvironmentVolumeIdentity(nil),
+			scope.ComposeProjection.Record.Volumes...),
 		VolumeMounts: append(
-			[]EnvironmentServiceVolumeMount(nil),
+			[]testenvironmentprojection.EnvironmentServiceVolumeMount(nil),
 			scope.ComposeProjection.Record.VolumeMounts...),
 		ConsumerServiceIDs: []string{current.Record.ServiceID},
 		GrantAttachIDs:     append([]string(nil), current.Record.GrantAttachIDs...),
@@ -887,7 +906,7 @@ func assertAttachTaskEnvironmentEpoch(
 	wantRevision int64,
 ) {
 	t.Helper()
-	result, err := store.Get(ctx, environmentMutationEpochKey(environmentID))
+	result, err := store.Get(ctx, testhierarchy.EnvironmentMutationEpochKey(environmentID))
 	if err != nil || result.Entry == nil || result.Entry.ModRevision != wantRevision {
 		t.Fatalf("Attach Task Environment epoch = %#v, %v; want revision %d", result, err, wantRevision)
 	}

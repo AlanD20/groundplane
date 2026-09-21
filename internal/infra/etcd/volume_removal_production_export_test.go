@@ -8,6 +8,13 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	testscriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	testscriptsourcereference "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -18,11 +25,11 @@ type VolumeRemovalProductionFixture struct {
 	Blueprint     *EnvironmentBlueprintRepository
 	Idempotency   *IdempotencyRepository
 	Tasks         *TaskRepository
-	Store         Store
+	Store         testkeyvalue.Store
 	Evidence      *VolumeEvidenceStageAudit
 	EnvironmentID string
-	reserved      []ScriptSourcePreparationMember
-	authority     *ScriptSourceReferenceAuthority
+	reserved      []testscriptsourceevidence.ScriptSourcePreparationMember
+	authority     *testscriptsourcepublication.Authority
 }
 
 func (fixture *ExecutedArtifactFixture) VolumeMutationFixture(t *testing.T) *VolumeRemovalProductionFixture {
@@ -34,7 +41,7 @@ func (fixture *ExecutedArtifactFixture) VolumeMutationFixture(t *testing.T) *Vol
 	if err != nil {
 		t.Fatal(err)
 	}
-	idempotency, err := newIdempotencyRepository(fixture.store)
+	idempotency, err := NewIdempotencyRepository(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +59,7 @@ func NewVolumeRemovalProductionFixture(t *testing.T) *VolumeRemovalProductionFix
 		t.Fatal(err)
 	}
 	_, environment := createEnvironmentBlueprintOwners(t, blueprint.HierarchyRepository)
-	idempotency, err := newIdempotencyRepository(store)
+	idempotency, err := NewIdempotencyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +67,7 @@ func NewVolumeRemovalProductionFixture(t *testing.T) *VolumeRemovalProductionFix
 	if err != nil {
 		t.Fatal(err)
 	}
-	authority, err := newScriptSourceReferenceAuthority(store)
+	authority, err := testscriptsourcepublication.NewAuthority(store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,8 +97,11 @@ func (fixture *VolumeRemovalProductionFixture) CompleteCreate(t *testing.T, task
 		1,
 		taskID,
 		assignment.Assignment.Record.AssignmentID,
-		TaskStatusCompleted,
-		TaskResultRecord{Kind: TaskResultEnvironmentDirectory, Diagnostic: TaskResultDiagnosticNone},
+		testtaskjournal.TaskStatusCompleted,
+		testtaskjournal.TaskResultRecord{
+			Kind:       testtaskjournal.TaskResultEnvironmentDirectory,
+			Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+		},
 		task.Record.CreatedAt.Add(2*time.Millisecond),
 	)
 	if err != nil {
@@ -111,25 +121,30 @@ func (fixture *VolumeRemovalProductionFixture) ReserveVolume(t *testing.T, volum
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(payload)
-	value, err := encodeEnvelope("script-runner-snapshot", storedScriptRunnerSnapshot{
+	value, err := testrecordcodec.Encode("script-runner-snapshot", testscriptsourceevidence.StoredScriptRunnerSnapshot{
 		ExecutionID: executionID, SnapshotID: snapshotID, SHA256: hex.EncodeToString(digest[:]), Payload: payload,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(value)
-	key := scriptRunnerSnapshotKey(snapshotID)
+	key := testscriptexecutions.ScriptRunnerSnapshotKey(snapshotID)
 	revision, err := fixture.Store.Put(ctx, key, value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture.reserved = []ScriptSourcePreparationMember{{
-		Reference: ScriptSourceReference{
+	fixture.reserved = []testscriptsourceevidence.ScriptSourcePreparationMember{{
+		Reference: testscriptsourcereference.Reference{
 			OperationID: ids.New(ids.KindOperation), ScriptExecutionID: executionID,
-			Source:        ScriptSourceIdentity{Kind: ScriptSourceVolume, VolumeID: volumeID},
+			Source: testscriptsourcereference.SourceIdentity{
+				Kind:     testscriptsourcereference.SourceVolume,
+				VolumeID: volumeID,
+			},
 			SourceOwnerID: fixture.EnvironmentID, SourceModRevision: revision, SourceDigest: hex.EncodeToString(digest[:]),
 		},
-		Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: key}},
+		Evidence: testscriptsourceevidence.ScriptSourceEvidence{
+			Existing: &testscriptsourceevidence.ScriptExistingSourceEvidence{SourceKey: key},
+		},
 	}}
 	if _, err := fixture.authority.Prepare(ctx, fixture.reserved[0].Reference.OperationID, fixture.reserved); err != nil {
 		t.Fatal(err)

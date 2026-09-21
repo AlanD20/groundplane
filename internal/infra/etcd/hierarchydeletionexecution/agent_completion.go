@@ -98,8 +98,10 @@ func (repository *Executor) ConsumeAgentTerminal(
 		receipt.ActionOrdinal != action.Ordinal ||
 		receipt.ChildOperationID != proof.ChildOperationID || receipt.AttemptID != proof.AttemptID ||
 		receipt.TaskID != proof.TaskID || receipt.AssignmentID != proof.AssignmentID ||
-		receipt.AttemptGeneration != proof.AttemptGeneration || receipt.TerminalTaskDigest != proof.TerminalTaskDigest ||
-		receipt.Terminal != proof.Terminal || receipt.ResultDigest != proof.ResultDigest ||
+		receipt.AttemptGeneration != proof.AttemptGeneration ||
+		receipt.TerminalTaskDigest != proof.TerminalTaskDigest ||
+		receipt.Terminal != proof.Terminal ||
+		receipt.ResultDigest != proof.ResultDigest ||
 		receipt.ErrorDigest != proof.ErrorDigest ||
 		receipt.CheckpointDigest != proof.CheckpointDigest {
 		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
@@ -117,8 +119,10 @@ func (repository *Executor) ConsumeAgentTerminal(
 		progress.ChildOperationID != proof.ChildOperationID || progress.ActionOrdinal != action.Ordinal ||
 		progress.TaskID != proof.TaskID || progress.AssignmentID != proof.AssignmentID ||
 		progress.AttemptGeneration != proof.AttemptGeneration || progress.Terminal != proof.Terminal ||
-		progress.TerminalTaskDigest != proof.TerminalTaskDigest || progress.ResultDigest != proof.ResultDigest ||
-		progress.ErrorDigest != proof.ErrorDigest || progress.CheckpointDigest != proof.CheckpointDigest ||
+		progress.TerminalTaskDigest != proof.TerminalTaskDigest ||
+		progress.ResultDigest != proof.ResultDigest ||
+		progress.ErrorDigest != proof.ErrorDigest ||
+		progress.CheckpointDigest != proof.CheckpointDigest ||
 		progress.ReceiptRevision != proof.ReceiptRevision ||
 		progress.ReceiptDigest != proof.ReceiptDigest ||
 		progress.ConsumedAction != wantConsumed {
@@ -348,7 +352,8 @@ func ValidateHierarchyDeletionActiveAction(
 	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) error {
-	if operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting || operation.Tombstone.PlanCount == nil ||
+	if operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting ||
+		operation.Tombstone.PlanCount == nil ||
 		operation.Tombstone.PlanDigest == nil ||
 		operation.Fence.ActiveActionOrdinal == nil ||
 		*operation.Fence.ActiveActionOrdinal != action.Ordinal ||

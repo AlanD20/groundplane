@@ -3,6 +3,10 @@ package etcd
 import (
 	"context"
 	"errors"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"io"
 	"testing"
 )
@@ -14,16 +18,20 @@ type releasePlanningTestStore struct {
 func (*releasePlanningTestStore) Health(context.Context) error { return nil }
 
 func (store *releasePlanningTestStore) Put(ctx context.Context, key string, value []byte) (int64, error) {
-	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: value}})
+	result, err := store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}},
+	)
 	return result.Revision, err
 }
 
 func (store *releasePlanningTestStore) Delete(ctx context.Context, key string) (int64, error) {
-	result, err := store.Transact(ctx, nil, []Mutation{{Type: MutationDelete, Key: key}})
+	result, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: key}})
 	return result.Revision, err
 }
 
-func (*releasePlanningTestStore) Watch(context.Context, string, int64) (*WatchStream, error) {
+func (*releasePlanningTestStore) Watch(context.Context, string, int64) (*testkeyvalue.WatchStream, error) {
 	return nil, errors.New("release planning test store does not support watches")
 }
 
@@ -36,10 +44,10 @@ func (*releasePlanningTestStore) Close() error { return nil }
 func releasePlanningTestProjection(
 	environmentID string,
 	task TaskRecord,
-) EnvironmentComposeProjection {
+) testenvironmentprojection.EnvironmentComposeProjection {
 	projection := environmentBlueprintTestProjection(environmentID, task, 1)
 	service := projection.DesiredServices[0].Desired
-	projection.DesiredServices = []EnvironmentServiceProjection{{
+	projection.DesiredServices = []testservices.EnvironmentServiceProjection{{
 		EnvironmentID: environmentID,
 		Desired:       service,
 	}}
@@ -67,8 +75,12 @@ func TestReleasePlanningLoadsPublishedBlueprintProjection(t *testing.T) {
 		projection,
 		environmentBlueprintTestZoneChanges(t, hierarchy, projection),
 		environmentBlueprintTestServiceChanges(t, hierarchy, projection),
-		environmentBlueprintTestRouteChanges(t, hierarchy, projection),
-		ComponentTaskPreparation{},
+		environmentBlueprintTestRouteChanges(
+			t,
+			hierarchy,
+			projection,
+		),
+		testcomponentplanning.ComponentTaskPreparation{},
 		task,
 		environmentBlueprintTestMarker(task, environment.Record.ID),
 	)

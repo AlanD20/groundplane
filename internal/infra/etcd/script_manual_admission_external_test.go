@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"google.golang.org/protobuf/proto"
@@ -19,7 +19,7 @@ func TestManualScriptArtifactAdmissionRequiresActiveMatchingRoot(t *testing.T) {
 		t.Run(change, func(t *testing.T) {
 			ctx := context.Background()
 			fixture := etcd.NewManualScriptAdmissionFixture(t)
-			plan, err := controller.BuildManualScriptPlan(ctx, controller.ManualScriptPlanInput{
+			plan, err := testtaskplanning.BuildManualScriptPlan(ctx, testtaskplanning.ManualScriptPlanInput{
 				TaskID: fixture.Task.ID, OperationID: fixture.Task.OperationID, PlanID: fixture.Task.PlanID,
 				StepID: fixture.Execution.StepID, ExecutionID: fixture.Execution.ID,
 				SnapshotID: fixture.Execution.SnapshotID, Sources: fixture.Sources,

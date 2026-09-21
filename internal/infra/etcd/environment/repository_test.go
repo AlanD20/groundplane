@@ -6,7 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,26 +17,26 @@ const (
 )
 
 type hierarchyFake struct {
-	get       etcdinfra.Versioned[etcdinfra.EnvironmentRecord]
-	page      etcdinfra.Page[etcdinfra.EnvironmentRecord]
+	get       testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	page      testkeyvalue.Page[testhierarchy.EnvironmentRecord]
 	getErr    error
 	listErr   error
 	projectID string
-	request   etcdinfra.PageRequest
+	request   testkeyvalue.PageRequest
 }
 
 func (fake *hierarchyFake) GetEnvironment(
 	context.Context,
 	string,
-) (etcdinfra.Versioned[etcdinfra.EnvironmentRecord], error) {
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
 	return fake.get, fake.getErr
 }
 
 func (fake *hierarchyFake) ListEnvironments(
 	_ context.Context,
 	projectID string,
-	request etcdinfra.PageRequest,
-) (etcdinfra.Page[etcdinfra.EnvironmentRecord], error) {
+	request testkeyvalue.PageRequest,
+) (testkeyvalue.Page[testhierarchy.EnvironmentRecord], error) {
 	fake.projectID, fake.request = projectID, request
 	return fake.page, fake.listErr
 }
@@ -55,11 +56,11 @@ func (fake *reservationsFake) ListZoneSubnetReservationsAtRevision(
 	return fake.values[id], fake.err
 }
 
-func storedEnvironment(id string) etcdinfra.EnvironmentRecord {
-	return etcdinfra.EnvironmentRecord{
+func storedEnvironment(id string) testhierarchy.EnvironmentRecord {
+	return testhierarchy.EnvironmentRecord{
 		ID: id, ProjectID: testProjectID, Name: "production", NetworkPool: "10.40.0.0/16",
 		VolumeDir:         "/var/lib/groundplane/vol/tenant/" + testProjectID + "/" + id,
-		ProvisioningState: etcdinfra.EnvironmentProvisioningReady,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 	}
 }
 
@@ -69,7 +70,7 @@ func TestRepositoryGetProjectsIdentityPoolVolumeAndCapacity(t *testing.T) {
 	deletionTaskID := "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	record := storedEnvironment(testEnvironmentID)
 	record.DeletionTaskID = deletionTaskID
-	hierarchy := &hierarchyFake{get: etcdinfra.Versioned[etcdinfra.EnvironmentRecord]{
+	hierarchy := &hierarchyFake{get: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
 		Record: record, ReadRevision: 41,
 	}}
 	zones := &reservationsFake{values: map[string][]string{testEnvironmentID: {"10.40.1.0/24", "10.40.2.0/24"}}}
@@ -89,8 +90,8 @@ func TestRepositoryGetProjectsIdentityPoolVolumeAndCapacity(t *testing.T) {
 // preserve the opaque cursor, and use the page's fixed revision for every item.
 func TestRepositoryListForwardsPaginationCursorAndFixedRevision(t *testing.T) {
 	secondID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	hierarchy := &hierarchyFake{page: etcdinfra.Page[etcdinfra.EnvironmentRecord]{
-		Items: []etcdinfra.Versioned[etcdinfra.EnvironmentRecord]{
+	hierarchy := &hierarchyFake{page: testkeyvalue.Page[testhierarchy.EnvironmentRecord]{
+		Items: []testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
 			{Record: storedEnvironment(testEnvironmentID)}, {Record: storedEnvironment(secondID)},
 		}, NextCursor: "opaque-next", Revision: 73,
 	}}
@@ -118,8 +119,8 @@ func TestRepositoryPropagatesReadFailures(t *testing.T) {
 		Get(context.Background(), testEnvironmentID); !errors.Is(err, want) {
 		t.Fatalf("GetEnvironment() error = %v", err)
 	}
-	hierarchy := &hierarchyFake{page: etcdinfra.Page[etcdinfra.EnvironmentRecord]{
-		Items: []etcdinfra.Versioned[etcdinfra.EnvironmentRecord]{
+	hierarchy := &hierarchyFake{page: testkeyvalue.Page[testhierarchy.EnvironmentRecord]{
+		Items: []testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
 			{Record: storedEnvironment(testEnvironmentID)},
 		}, Revision: 9,
 	}}

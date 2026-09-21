@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	api "github.com/AlanD20/groundplane/pkg/api"
@@ -50,7 +50,7 @@ func TestVolumeRemovalProductionCheckpointService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := controller.NewVolumeRemovalCheckpointService(runtime)
+	service, err := testtaskcheckpoint.NewVolumeRemovalCheckpointService(runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,8 +129,11 @@ func TestVolumeRemovalProductionCheckpointService(t *testing.T) {
 		1,
 		task.ID,
 		claimed.Assignment.Record.AssignmentID,
-		etcd.TaskStatusCompleted,
-		etcd.TaskResultRecord{Kind: etcd.TaskResultEnvironmentDirectory, Diagnostic: etcd.TaskResultDiagnosticNone},
+		testtaskjournal.TaskStatusCompleted,
+		testtaskjournal.TaskResultRecord{
+			Kind:       testtaskjournal.TaskResultEnvironmentDirectory,
+			Diagnostic: testtaskjournal.TaskResultDiagnosticNone,
+		},
 		time.Now().UTC(),
 	)
 	if err != nil {

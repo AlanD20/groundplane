@@ -6,6 +6,12 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testattachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -38,9 +44,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		agentID,
 		14,
 		grantRecord.TaskID,
-		taskAssignmentIDForTest(t, tasks, grantRecord.TaskID),
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		taskAssignmentIDForTest(t, tasks, grantRecord.TaskID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		grantRecord.CreatedAt.Add(2*time.Second),
 	); err != nil {
 		t.Fatalf("AcknowledgeTask(grant) error = %v", err)
@@ -51,7 +55,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 	}
 
 	sourceScope := scope
-	sourceScope.Grants = []Versioned[AttachRecord]{grant}
+	sourceScope.Grants = []testkeyvalue.Versioned[testattachments.Record]{grant}
 	record, facts := testPendingAttach(t, sourceScope, 95, "replay-source", sourceScope.Grants)
 	createTestAttach(t, ctx, attaches, sourceScope, record, &facts)
 	if _, found, err := tasks.ClaimNextTask(
@@ -68,9 +72,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		agentID,
 		15,
 		record.TaskID,
-		taskAssignmentIDForTest(t, tasks, record.TaskID),
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		taskAssignmentIDForTest(t, tasks, record.TaskID), testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		record.CreatedAt.Add(4*time.Second),
 	); err != nil {
 		t.Fatalf("AcknowledgeTask(source) error = %v", err)
@@ -83,7 +85,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAttach(grant refreshed) error = %v", err)
 	}
-	sourceScope.Grants = []Versioned[AttachRecord]{grant}
+	sourceScope.Grants = []testkeyvalue.Versioned[testattachments.Record]{grant}
 
 	detachAt := record.CreatedAt.Add(5 * time.Second)
 	detachTask := publishTestDetach(t, ctx, attaches, sourceScope, ready, detachAt)
@@ -97,21 +99,19 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		agentID,
 		16,
 		detachTask.ID,
-		assignmentID,
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		assignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		terminalAt,
 	); err != nil {
 		t.Fatalf("AcknowledgeTask(detach) error = %v", err)
 	}
 
-	dependentValue, err := encodeAttachDependentGrantIndex(record.ID, []string{grantRecord.ID})
+	dependentValue, err := testattachments.EncodeAttachDependentGrantIndex(record.ID, []string{grantRecord.ID})
 	if err != nil {
 		t.Fatalf("encodeAttachDependentGrantIndex() error = %v", err)
 	}
 	defer clear(dependentValue)
 	unlistedGrantID := ids.NewAt(ids.KindAttach, terminalAt, 961)
-	unlistedValue, err := encodeAttachDependentGrantIndex(record.ID, []string{unlistedGrantID})
+	unlistedValue, err := testattachments.EncodeAttachDependentGrantIndex(record.ID, []string{unlistedGrantID})
 	if err != nil {
 		t.Fatalf("encodeAttachDependentGrantIndex(unlisted) error = %v", err)
 	}
@@ -121,32 +121,38 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		value []byte
 	}{
 		"name index": {
-			key:   attachNameKey(record.EnvironmentID, record.Name),
+			key:   testattachments.AttachNameKey(record.EnvironmentID, record.Name),
 			value: []byte(record.ID),
 		},
 		"owner index": {
-			key:   attachOwnerKey(record.EnvironmentID, record.ID),
+			key:   testattachments.AttachOwnerKey(record.EnvironmentID, record.ID),
 			value: []byte(record.ID),
 		},
 		"backing service index": {
-			key:   attachBackingServiceKey(record.BackingServiceID, record.ID),
+			key:   testattachments.AttachBackingServiceKey(record.BackingServiceID, record.ID),
 			value: []byte(record.ID),
 		},
 		"backing project index": {
-			key:   attachBackingProjectKey(record.BackingProjectID, record.ID),
+			key:   testattachments.AttachBackingProjectKey(record.BackingProjectID, record.ID),
 			value: []byte(record.ID),
 		},
 		"service index": {
-			key:   attachServiceKey(record.ServiceID, record.ID),
+			key:   testattachments.AttachServiceKey(record.ServiceID, record.ID),
 			value: []byte(record.ID),
 		},
-		"encrypted facts": {key: attachFactsKey(record.ID), value: []byte(record.ID)},
+		"encrypted facts": {key: testattachments.AttachFactsKey(record.ID), value: []byte(record.ID)},
 		"grant reverse index": {
-			key:   attachGrantedByKey(grantRecord.ID, record.ID),
+			key:   testattachments.AttachGrantedByKey(grantRecord.ID, record.ID),
 			value: []byte(record.ID),
 		},
-		"grant dependent index":          {key: attachDependentGrantKey(record.ID), value: dependentValue},
-		"unlisted grant dependent index": {key: attachDependentGrantKey(record.ID), value: unlistedValue},
+		"grant dependent index": {
+			key:   testattachments.AttachDependentGrantKey(record.ID),
+			value: dependentValue,
+		},
+		"unlisted grant dependent index": {
+			key:   testattachments.AttachDependentGrantKey(record.ID),
+			value: unlistedValue,
+		},
 	}
 	for name, companion := range companions {
 		if _, err := store.Put(ctx, companion.key, companion.value); err != nil {
@@ -157,9 +163,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 			agentID,
 			16,
 			detachTask.ID,
-			assignmentID,
-			TaskStatusCompleted,
-			completedComposeTaskResult(),
+			assignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 			terminalAt.Add(time.Second),
 		); err == nil {
 			t.Fatalf("completed detach replay accepted dangling %s", name)
@@ -170,9 +174,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 	}
 	reusedNameOwnerID := ids.NewAt(ids.KindAttach, terminalAt, 960)
 	if _, err := store.Put(
-		ctx,
-		attachNameKey(record.EnvironmentID, record.Name),
-		[]byte(reusedNameOwnerID),
+		ctx, testattachments.AttachNameKey(record.EnvironmentID, record.Name), []byte(reusedNameOwnerID),
 	); err != nil {
 		t.Fatalf("Put(reused name owner) error = %v", err)
 	}
@@ -181,14 +183,12 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		agentID,
 		16,
 		detachTask.ID,
-		assignmentID,
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		assignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		terminalAt.Add(2*time.Second),
 	); !isKind(err, errs.KindInternal) {
 		t.Fatalf("completed detach replay with dangling reused name error = %v, want internal", err)
 	}
-	if _, err := store.Delete(ctx, attachNameKey(record.EnvironmentID, record.Name)); err != nil {
+	if _, err := store.Delete(ctx, testattachments.AttachNameKey(record.EnvironmentID, record.Name)); err != nil {
 		t.Fatalf("Delete(reused name owner) error = %v", err)
 	}
 	successorRecord, successorFacts := testPendingAttach(t, scope, 96, record.Name, nil)
@@ -198,15 +198,13 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		agentID,
 		16,
 		detachTask.ID,
-		assignmentID,
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		assignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		terminalAt.Add(2*time.Second),
 	); err != nil {
 		t.Fatalf("completed detach replay with exact successor name owner error = %v", err)
 	}
-	successorKey := attachKey(successorRecord.ID)
-	successorValue, err := encodeAttachRecord(successorRecord)
+	successorKey := testattachments.AttachKey(successorRecord.ID)
+	successorValue, err := testattachments.EncodeAttachRecord(successorRecord)
 	if err != nil {
 		t.Fatalf("encodeAttachRecord(successor) error = %v", err)
 	}
@@ -221,7 +219,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 			value: func() []byte {
 				mismatched := successorRecord
 				mismatched.Name = "different-name"
-				value, encodeErr := encodeAttachRecord(mismatched)
+				value, encodeErr := testattachments.EncodeAttachRecord(mismatched)
 				if encodeErr != nil {
 					t.Fatalf("encodeAttachRecord(mismatched successor) error = %v", encodeErr)
 				}
@@ -239,9 +237,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 				agentID,
 				16,
 				detachTask.ID,
-				assignmentID,
-				TaskStatusCompleted,
-				completedComposeTaskResult(),
+				assignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 				terminalAt.Add(2*time.Second),
 			); !isKind(err, errs.KindInternal) {
 				t.Fatalf("completed detach replay with %s error = %v, want internal", test.name, err)
@@ -255,19 +251,19 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAttachTaskRenderInput() error = %v", err)
 	}
-	originalRenderInputValue, err := encodeAttachTaskRenderInput(storedRenderInput.Record)
+	originalRenderInputValue, err := testattachrender.EncodeAttachTaskRenderInput(storedRenderInput.Record)
 	if err != nil {
 		t.Fatalf("encodeAttachTaskRenderInput(original) error = %v", err)
 	}
 	defer clear(originalRenderInputValue)
 	for _, test := range []struct {
 		name   string
-		mutate func(AttachTaskRenderInput) AttachTaskRenderInput
+		mutate func(testattachrender.AttachTaskRenderInput) testattachrender.AttachTaskRenderInput
 	}{
 		{
 			name: "two consumers",
-			mutate: func(input AttachTaskRenderInput) AttachTaskRenderInput {
-				input.Services = append(input.Services, AttachTaskServiceSnapshot{
+			mutate: func(input testattachrender.AttachTaskRenderInput) testattachrender.AttachTaskRenderInput {
+				input.Services = append(input.Services, testattachrender.AttachTaskServiceSnapshot{
 					ID:   ids.NewAt(ids.KindService, terminalAt.Add(100*time.Second), 999),
 					Name: input.Services[0].Name + "-second",
 				})
@@ -281,8 +277,8 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		},
 		{
 			name: "nine grants",
-			mutate: func(input AttachTaskRenderInput) AttachTaskRenderInput {
-				input.GrantAttachIDs = make([]string, MaximumAttachGrants+1)
+			mutate: func(input testattachrender.AttachTaskRenderInput) testattachrender.AttachTaskRenderInput {
+				input.GrantAttachIDs = make([]string, testattachments.MaximumAttachGrants+1)
 				for index := range input.GrantAttachIDs {
 					input.GrantAttachIDs[index] = ids.NewAt(
 						ids.KindAttach,
@@ -295,12 +291,14 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		},
 	} {
 		t.Run("render evidence "+test.name, func(t *testing.T) {
-			corruptValue, encodeErr := encodeAttachTaskRenderInput(test.mutate(storedRenderInput.Record))
+			corruptValue, encodeErr := testattachrender.EncodeAttachTaskRenderInput(
+				test.mutate(storedRenderInput.Record),
+			)
 			if encodeErr != nil {
 				t.Fatalf("encodeAttachTaskRenderInput(%s) error = %v", test.name, encodeErr)
 			}
 			defer clear(corruptValue)
-			renderKey := attachTaskRenderInputKey(detachTask.PlanID)
+			renderKey := testattachrender.AttachTaskRenderInputKey(detachTask.PlanID)
 			if _, err := store.Put(ctx, renderKey, corruptValue); err != nil {
 				t.Fatalf("Put(%s render evidence) error = %v", test.name, err)
 			}
@@ -314,9 +312,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 				agentID,
 				16,
 				detachTask.ID,
-				assignmentID,
-				TaskStatusCompleted,
-				completedComposeTaskResult(),
+				assignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 				terminalAt.Add(2*time.Second),
 			); !isKind(err, errs.KindInternal) {
 				t.Fatalf("completed detach replay with %s error = %v, want internal", test.name, err)
@@ -334,7 +330,10 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 			}
 		})
 	}
-	exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, record.ID)
+	exclusionKey, err := testbackupruntime.BackupSourceTargetExclusionKey(
+		testbackupruntime.BackupSourceTargetAttach,
+		record.ID,
+	)
 	if err != nil {
 		t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
 	}
@@ -374,9 +373,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 				agentID,
 				16,
 				detachTask.ID,
-				assignmentID,
-				TaskStatusCompleted,
-				completedComposeTaskResult(),
+				assignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 				terminalAt.Add(2*time.Second),
 			); !isKind(err, test.wantKind) {
 				t.Fatalf("completed detach replay with %s exclusion error = %v, want %v", test.name, err, test.wantKind)
@@ -386,8 +383,8 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 			}
 		})
 	}
-	replayTargetKey, err := idempotencyReplayTargetKey(
-		IdempotencyReplayTarget{Kind: IdempotencyReplayTargetAttach, ID: record.ID},
+	replayTargetKey, err := testidempotency.IdempotencyReplayTargetKey(
+		testidempotency.IdempotencyReplayTarget{Kind: testidempotency.IdempotencyReplayTargetAttach, ID: record.ID},
 		"DELETE",
 		"/attaches/{id}",
 		detachTask.IdempotencyKey,
@@ -406,9 +403,7 @@ func TestCompletedAttachDetachReplayRejectsDanglingCompanions(t *testing.T) {
 		agentID,
 		16,
 		detachTask.ID,
-		assignmentID,
-		TaskStatusCompleted,
-		completedComposeTaskResult(),
+		assignmentID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(),
 		terminalAt.Add(2*time.Second),
 	); err == nil {
 		t.Fatal("completed detach replay accepted a missing stable replay target")
@@ -424,8 +419,8 @@ type attachReplayReadGuardStore struct {
 
 func (store *attachReplayReadGuardStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	if store.sawRenderInput && len(request.Keys) > 1 {
 		store.readCompanions = true
 	}

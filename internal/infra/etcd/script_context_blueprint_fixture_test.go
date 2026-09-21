@@ -7,6 +7,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/core"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -14,23 +18,23 @@ import (
 // Publication-shape tests use real bodyless primary metadata and wire context;
 // their checkpoint records still do not pretend to be full executable plans.
 func scriptContextBlueprintPrimaryFixture(
-	t *testing.T, store *memoryHierarchyStore, execution ScriptExecutionRecord, explicit bool,
+	t *testing.T, store *memoryHierarchyStore, execution testscriptexecutions.ScriptExecutionRecord, explicit bool,
 ) ReleaseHookExecutionPublication {
 	t.Helper()
-	key := scriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID)
+	key := testscripts.ScriptSetScriptKey(execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID)
 	read, err := store.Get(context.Background(), key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var record ScriptRecord
+	var record testscripts.Record
 	if read.Entry != nil {
-		record, err = decodeScriptRecord(read.Entry.Value)
+		record, err = testscripts.DecodeRecord(read.Entry.Value)
 		if err != nil {
 			t.Fatal(err)
 		}
 		record.Desired.Body = "exit 0"
 	} else {
-		record, err = NewScriptRecord(execution.EnvironmentID, execution.ServiceID, core.Script{
+		record, err = testscripts.NewRecord(execution.EnvironmentID, execution.ServiceID, core.Script{
 			ID: execution.ScriptID, Slug: "setup", ServiceName: "worker", When: core.ScriptPreDeploy, Body: "exit 0",
 		})
 		if err != nil {
@@ -50,10 +54,14 @@ func scriptContextBlueprintPrimaryFixture(
 	body := scriptBlueprintGeneration(record)
 	execution.ScriptGeneration, execution.BodySHA256 = record.ActiveGeneration, body.BodySHA256
 	execution = withScriptContextSnapshot(t, execution)
-	sources := ScriptExecutionSources{
-		Revision:       revision,
-		Script:         Versioned[ScriptRecord]{Record: record, Revision: revision, ReadRevision: revision},
-		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{Record: body},
+	sources := testscriptsourcequeries.ScriptExecutionSources{
+		Revision: revision,
+		Script: testkeyvalue.Versioned[testscripts.Record]{
+			Record:       record,
+			Revision:     revision,
+			ReadRevision: revision,
+		},
+		BodyGeneration: testkeyvalue.Versioned[testscripts.BodyGenerationRecord]{Record: body},
 	}
 	sources.Script.Record.Desired.Body = ""
 	sources.Environment.Record.ID = execution.EnvironmentID
@@ -65,9 +73,18 @@ func scriptContextBlueprintPrimaryFixture(
 		if err := proto.Unmarshal(execution.Snapshot, &snapshot); err != nil {
 			t.Fatal(err)
 		}
-		captured, err := scriptContextFromStoredDesired(record)
-		if err != nil {
-			t.Fatal(err)
+		captured := &agentpb.ScriptExplicitExecutionContext{
+			ImageReference: record.Desired.Execution.Image,
+			User:           record.Desired.Execution.User,
+			EntryIds:       append([]string(nil), record.Desired.Execution.EntryIDs...),
+			Volumes:        make([]*agentpb.ScriptExplicitVolumeGrant, len(record.Desired.Execution.Volumes)),
+		}
+		for index, grant := range record.Desired.Execution.Volumes {
+			captured.Volumes[index] = &agentpb.ScriptExplicitVolumeGrant{
+				VolumeId: grant.VolumeID,
+				Target:   grant.Target,
+				ReadOnly: grant.ReadOnly,
+			}
 		}
 		digest, err := executionplan.ScriptExecutionContextDigest(captured)
 		if err != nil {
@@ -87,15 +104,19 @@ func scriptContextBlueprintPrimaryFixture(
 	return ReleaseHookExecutionPublication{Sources: sources, Execution: execution}
 }
 
-func writeScriptContextPrimaryFixture(t *testing.T, store *memoryHierarchyStore, record ScriptRecord) int64 {
+func writeScriptContextPrimaryFixture(t *testing.T, store *memoryHierarchyStore, record testscripts.Record) int64 {
 	t.Helper()
-	value, err := encodeScriptRecord(record)
+	value, err := testscripts.EncodeRecord(record)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer clear(value)
-	key := scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
-	result, err := store.Transact(context.Background(), nil, []Mutation{{Type: MutationPut, Key: key, Value: value}})
+	key := testscripts.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
+	result, err := store.Transact(
+		context.Background(),
+		nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: value}},
+	)
 	if err != nil || !result.Succeeded {
 		t.Fatalf("write Script primary fixture: %v", err)
 	}

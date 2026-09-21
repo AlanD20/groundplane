@@ -29,7 +29,9 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != retry.ID ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != retry.ID ||
 		!marker.CreatedAt.Equal(retry.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(

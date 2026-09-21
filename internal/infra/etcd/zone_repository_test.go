@@ -7,6 +7,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 func TestZoneRepositoryReadsAndPagesSelectedProjection(t *testing.T) {
@@ -26,15 +30,14 @@ func TestZoneRepositoryReadsAndPagesSelectedProjection(t *testing.T) {
 	if err != nil || stored.Record.Desired != zones[0] || stored.Record.EnvironmentID != environment.Record.ID {
 		t.Fatalf("GetZone() = %#v, %v", stored, err)
 	}
-	first, err := repository.ListZones(ctx, environment.Record.ID, PageRequest{Limit: 1})
+	first, err := repository.ListZones(ctx, environment.Record.ID, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil || len(first.Items) != 1 || first.NextCursor == "" ||
 		first.Items[0].Record.Desired.Name != "backend" {
 		t.Fatalf("ListZones(first) = %#v, %v", first, err)
 	}
 	second, err := repository.ListZones(
 		ctx,
-		environment.Record.ID,
-		PageRequest{Limit: 1, Cursor: first.NextCursor},
+		environment.Record.ID, testkeyvalue.PageRequest{Limit: 1, Cursor: first.NextCursor},
 	)
 	if err != nil || len(second.Items) != 1 || second.NextCursor != "" || second.Revision != first.Revision ||
 		second.Items[0].Record.Desired.Name != "frontend" {
@@ -55,7 +58,7 @@ func TestZoneRepositoryListPinsSelectedHeadRevision(t *testing.T) {
 	seedServiceRepositoryTestDesiredProjection(
 		t, store, zoneRepositoryTestProjection(t, environment.Record.ID, 1002, initial...),
 	)
-	head, err := store.Get(ctx, environmentBlueprintHeadKey(environment.Record.ID))
+	head, err := store.Get(ctx, testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID))
 	if err != nil || head == nil || head.Entry == nil {
 		t.Fatalf("read initial Environment head = %#v, %v", head, err)
 	}
@@ -67,11 +70,11 @@ func TestZoneRepositoryListPinsSelectedHeadRevision(t *testing.T) {
 		t, store, zoneRepositoryTestProjection(t, environment.Record.ID, 1003, latest...),
 	)
 
-	current, err := repository.ListZones(ctx, environment.Record.ID, PageRequest{Limit: 10})
+	current, err := repository.ListZones(ctx, environment.Record.ID, testkeyvalue.PageRequest{Limit: 10})
 	if err != nil || len(current.Items) != 3 {
 		t.Fatalf("ListZones(current) = %#v, %v", current, err)
 	}
-	fixed, err := repository.ListZones(ctx, environment.Record.ID, PageRequest{
+	fixed, err := repository.ListZones(ctx, environment.Record.ID, testkeyvalue.PageRequest{
 		Limit: 10, Revision: fixedRevision,
 	})
 	if err != nil || len(fixed.Items) != 2 || fixed.Revision != fixedRevision ||
@@ -85,15 +88,15 @@ func zoneRepositoryTestProjection(
 	environmentID string,
 	revisionOffset int64,
 	zones ...core.Zone,
-) EnvironmentComposeProjection {
+) testenvironmentprojection.EnvironmentComposeProjection {
 	t.Helper()
-	projection := EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:    environmentID,
 		RevisionID:       ids.NewAt(ids.KindTask, serviceRecordTestTime(), revisionOffset),
 		RenderGeneration: 1,
 	}
 	for _, zone := range zones {
-		projection.DesiredZones = append(projection.DesiredZones, EnvironmentZoneProjection{
+		projection.DesiredZones = append(projection.DesiredZones, testenvironmentprojection.EnvironmentZoneProjection{
 			EnvironmentID: environmentID, Desired: zone,
 		})
 	}
@@ -102,7 +105,7 @@ func zoneRepositoryTestProjection(
 
 func zoneRepositoryTestHierarchy(
 	t *testing.T,
-) (*ZoneRepository, *memoryHierarchyStore, Versioned[EnvironmentRecord]) {
+) (*ZoneRepository, *memoryHierarchyStore, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]) {
 	t.Helper()
 	_, store, environment, _ := serviceRepositoryTestHierarchy(t)
 	repository, err := newZoneRepository(store)

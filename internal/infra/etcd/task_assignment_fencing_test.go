@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -31,29 +32,34 @@ func TestAgentTaskAcknowledgementFencesExactAssignmentAndReplay(t *testing.T) {
 	}
 	staleID := ids.NewAt(ids.KindAssignment, now, 82)
 	if _, err := repository.AcknowledgeTask(
-		ctx, agentID, 9, task.ID, staleID,
-		TaskStatusCompleted, completedComposeTaskResult(), now.Add(2*time.Second),
+		ctx, agentID, 9, task.ID, staleID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(), now.Add(2*time.Second),
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcknowledgeTask(stale) error = %v, want state conflict", err)
 	}
 	active, err := repository.GetTaskAssignment(ctx, task.ID)
 	if err != nil || active.Assignment.Record != claim.Assignment.Record ||
-		active.Task.Record.Status != TaskStatusRunning || active.Task.Record.Result != nil {
+		active.Task.Record.Status != testtaskjournal.TaskStatusRunning || active.Task.Record.Result != nil {
 		t.Fatalf("GetTaskAssignment(after stale acknowledgement) = %#v, %v", active, err)
 	}
 	terminalAt := now.Add(2 * time.Second)
 	terminal, err := repository.AcknowledgeTask(
-		ctx, agentID, 9, task.ID, claim.Assignment.Record.AssignmentID,
-		TaskStatusCompleted, completedComposeTaskResult(), terminalAt,
+		ctx,
+		agentID,
+		9,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		completedComposeTaskResult(),
+		terminalAt,
 	)
-	wantTerminalAssignment := TaskTerminalAssignmentRecord{
+	wantTerminalAssignment := testtaskjournal.TaskTerminalAssignmentRecord{
 		AssignmentID:    claim.Assignment.Record.AssignmentID,
 		AgentID:         agentID,
 		AgentGeneration: 9,
 	}
-	if err != nil || terminal.Record.Status != TaskStatusCompleted || terminal.Record.Result == nil ||
-		terminal.Record.Result.Kind != TaskResultCompose || terminal.Record.Result.ExitCode != 0 ||
-		terminal.Record.Result.FailedStepID != "" || terminal.Record.Result.Diagnostic != TaskResultDiagnosticNone ||
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted || terminal.Record.Result == nil ||
+		terminal.Record.Result.Kind != testtaskjournal.TaskResultCompose || terminal.Record.Result.ExitCode != 0 ||
+		terminal.Record.Result.FailedStepID != "" || terminal.Record.Result.Diagnostic != testtaskjournal.TaskResultDiagnosticNone ||
 		terminal.Record.Result.ReconciliationRequired || len(terminal.Record.Result.Projects) != 0 ||
 		len(terminal.Record.Result.ProxyEvidence) != 0 || len(terminal.Record.Result.RecreateEvidence) != 0 ||
 		terminal.Record.Result.CandidateAbsenceEvidence != nil ||
@@ -69,20 +75,25 @@ func TestAgentTaskAcknowledgementFencesExactAssignmentAndReplay(t *testing.T) {
 		t.Fatalf("GetTaskAssignment(terminal) error = %v, want state conflict", err)
 	}
 	if _, err := repository.AcknowledgeTask(
-		ctx, agentID, 9, task.ID, staleID,
-		TaskStatusCompleted, completedComposeTaskResult(), now.Add(3*time.Second),
+		ctx, agentID, 9, task.ID, staleID, testtaskjournal.TaskStatusCompleted, completedComposeTaskResult(), now.Add(3*time.Second),
 	); !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("AcknowledgeTask(stale replay) error = %v, want state conflict", err)
 	}
 	replayed, err := repository.AcknowledgeTask(
-		ctx, agentID, 9, task.ID, claim.Assignment.Record.AssignmentID,
-		TaskStatusCompleted, completedComposeTaskResult(), now.Add(3*time.Second),
+		ctx,
+		agentID,
+		9,
+		task.ID,
+		claim.Assignment.Record.AssignmentID,
+		testtaskjournal.TaskStatusCompleted,
+		completedComposeTaskResult(),
+		now.Add(3*time.Second),
 	)
 	if err != nil {
 		t.Fatalf("AcknowledgeTask(replay) error = %v", err)
 	}
-	terminalValue, terminalEncodeErr := encodeTaskRecord(terminal.Record)
-	replayedValue, replayedEncodeErr := encodeTaskRecord(replayed.Record)
+	terminalValue, terminalEncodeErr := EncodeTaskRecord(terminal.Record)
+	replayedValue, replayedEncodeErr := EncodeTaskRecord(replayed.Record)
 	if terminalEncodeErr != nil || replayedEncodeErr != nil || replayed.Revision != terminal.Revision ||
 		!bytes.Equal(replayedValue, terminalValue) {
 		t.Fatalf("AcknowledgeTask(replay) = %#v, %v, want original %#v", replayed, err, terminal)
@@ -107,7 +118,7 @@ func TestAgentTaskProgressFencesExactAssignmentAndGeneration(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("ClaimNextTask() = %#v, %t, %v", claim, found, err)
 	}
-	input := taskEventInput(task.ID, 1, TaskEventStateRunning)
+	input := taskEventInput(task.ID, 1, testtaskjournal.TaskEventStateRunning)
 	input.Identity.AssignmentID = claim.Assignment.Record.AssignmentID
 	input.Identity.AgentID = agentID
 	input.Identity.AgentGeneration = 6

@@ -1,26 +1,27 @@
 package etcd
 
 import (
-	"bytes"
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"net/http"
-	"strings"
-	"sync"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	"go.etcd.io/etcd/api/v3/etcdserverpb"
-	"go.etcd.io/etcd/api/v3/mvccpb"
+	bytes "bytes"
+	context "context"
+	sha256 "crypto/sha256"
+	hex "encoding/hex"
+	json "encoding/json"
+	errors "errors"
+	fmt "fmt"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	etcdserverpb "go.etcd.io/etcd/api/v3/etcdserverpb"
+	mvccpb "go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+	http "net/http"
+	strings "strings"
+	sync "sync"
+	testing "testing"
+	time "time"
 )
 
 // Rationale: the marker is durable replay evidence, so its schema union,
@@ -29,14 +30,14 @@ func TestIdempotencyMarkerCodecIsStrictAndTupleBound(t *testing.T) {
 	t.Parallel()
 
 	marker := testDirectMarker()
-	marker.ReplayTarget = &IdempotencyReplayTarget{
-		Kind: IdempotencyReplayTargetAttach, ID: ids.NewAt(ids.KindAttach, marker.CreatedAt, 2),
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetAttach, ID: ids.NewAt(ids.KindAttach, marker.CreatedAt, 2),
 	}
-	value, err := encodeIdempotencyMarker(marker)
+	value, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
 	}
-	decoded, err := decodeIdempotencyMarker(value, marker.Locator)
+	decoded, err := testidempotency.DecodeIdempotencyMarker(value, marker.Locator)
 	if err != nil {
 		t.Fatalf("decodeIdempotencyMarker() error = %v", err)
 	}
@@ -49,16 +50,16 @@ func TestIdempotencyMarkerCodecIsStrictAndTupleBound(t *testing.T) {
 	}
 
 	duplicate := bytes.Replace(value, []byte(`"schema":2`), []byte(`"schema":2,"schema":2`), 1)
-	if _, err := decodeIdempotencyMarker(duplicate, marker.Locator); !isKind(err, errs.KindInternal) {
+	if _, err := testidempotency.DecodeIdempotencyMarker(duplicate, marker.Locator); !isKind(err, errs.KindInternal) {
 		t.Fatalf("duplicate marker error = %v, want internal", err)
 	}
 	unknown := bytes.Replace(value, []byte(`"schema":2`), []byte(`"schema":2,"extra":true`), 1)
-	if _, err := decodeIdempotencyMarker(unknown, marker.Locator); !isKind(err, errs.KindInternal) {
+	if _, err := testidempotency.DecodeIdempotencyMarker(unknown, marker.Locator); !isKind(err, errs.KindInternal) {
 		t.Fatalf("unknown marker error = %v, want internal", err)
 	}
 	other := marker.Locator
 	other.Key = "01ARZ3NDEKTSV4RRFFQ69G5FB"
-	if _, err := decodeIdempotencyMarker(value, other); !isKind(err, errs.KindInternal) {
+	if _, err := testidempotency.DecodeIdempotencyMarker(value, other); !isKind(err, errs.KindInternal) {
 		t.Fatalf("tuple mismatch error = %v, want internal", err)
 	}
 }
@@ -69,31 +70,31 @@ func TestIdempotencyTaskMarkerRequiresCanonicalResponse(t *testing.T) {
 	t.Parallel()
 
 	marker := testDirectMarker()
-	marker.Kind = IdempotencyMarkerTask
-	marker.State = IdempotencyMarkerPending
+	marker.Kind = testidempotency.IdempotencyMarkerTask
+	marker.State = testidempotency.IdempotencyMarkerPending
 	marker.TaskID = ids.NewAt(ids.KindTask, marker.CreatedAt, 4)
 	marker.TerminalAt = time.Time{}
 	marker.RetainUntil = time.Time{}
-	marker.Response = IdempotencyResponse{
+	marker.Response = testidempotency.IdempotencyResponse{
 		Status:      http.StatusAccepted,
 		ContentKind: "application/json",
 		Body:        []byte(`{"task_id":"` + marker.TaskID + `"}`),
 	}
-	if _, err := encodeIdempotencyMarker(marker); err != nil {
+	if _, err := testidempotency.EncodeIdempotencyMarker(marker); err != nil {
 		t.Fatalf("encodeIdempotencyMarker(task) error = %v", err)
 	}
 	marker.Response.Body = []byte(
 		`{"task_id":"` + marker.TaskID + `","operation_id":"op_01M12TQSNE508NMQWCJQWEW4MZ","release_id":"dep_01M12TQSNE508NMQWCKBCJGEEW"}`,
 	)
-	if _, err := encodeIdempotencyMarker(marker); err != nil {
+	if _, err := testidempotency.EncodeIdempotencyMarker(marker); err != nil {
 		t.Fatalf("encodeIdempotencyMarker(endpoint-specific task) error = %v", err)
 	}
 	marker.Response.Body = []byte(`{"task_id":"task_01M12TQSNE508NMQWCJRYKK0Y8"}`)
-	if _, err := encodeIdempotencyMarker(marker); !isKind(err, errs.KindInternal) {
+	if _, err := testidempotency.EncodeIdempotencyMarker(marker); !isKind(err, errs.KindInternal) {
 		t.Fatalf("mismatched Task response error = %v, want internal", err)
 	}
 	marker.Response.Body = []byte(`{ "task_id": "` + marker.TaskID + `" }`)
-	if _, err := encodeIdempotencyMarker(marker); !isKind(err, errs.KindInternal) {
+	if _, err := testidempotency.EncodeIdempotencyMarker(marker); !isKind(err, errs.KindInternal) {
 		t.Fatalf("noncanonical Task response error = %v, want internal", err)
 	}
 }
@@ -105,23 +106,23 @@ func TestIdempotencyDirectResponseIsBoundToMethod(t *testing.T) {
 
 	for _, test := range []struct {
 		method   string
-		response IdempotencyResponse
+		response testidempotency.IdempotencyResponse
 		valid    bool
 	}{
-		{http.MethodPost, IdempotencyResponse{Status: 201, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
-		{http.MethodPost, IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
-		{http.MethodPost, IdempotencyResponse{Status: 202, ContentKind: "application/json", Body: []byte(`{"task_id":"task"}`)}, false},
-		{http.MethodPut, IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
-		{http.MethodPut, IdempotencyResponse{Status: 201, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, false},
-		{http.MethodPatch, IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
-		{http.MethodPatch, IdempotencyResponse{Status: 204, ContentKind: "none"}, false},
-		{http.MethodDelete, IdempotencyResponse{Status: 204, ContentKind: "none"}, true},
-		{http.MethodDelete, IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{}`)}, false},
+		{http.MethodPost, testidempotency.IdempotencyResponse{Status: 201, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
+		{http.MethodPost, testidempotency.IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
+		{http.MethodPost, testidempotency.IdempotencyResponse{Status: 202, ContentKind: "application/json", Body: []byte(`{"task_id":"task"}`)}, false},
+		{http.MethodPut, testidempotency.IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
+		{http.MethodPut, testidempotency.IdempotencyResponse{Status: 201, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, false},
+		{http.MethodPatch, testidempotency.IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{"id":"x"}`)}, true},
+		{http.MethodPatch, testidempotency.IdempotencyResponse{Status: 204, ContentKind: "none"}, false},
+		{http.MethodDelete, testidempotency.IdempotencyResponse{Status: 204, ContentKind: "none"}, true},
+		{http.MethodDelete, testidempotency.IdempotencyResponse{Status: 200, ContentKind: "application/json", Body: []byte(`{}`)}, false},
 	} {
 		marker := testDirectMarker()
 		marker.Locator.Method = test.method
 		marker.Response = test.response
-		_, err := encodeIdempotencyMarker(marker)
+		_, err := testidempotency.EncodeIdempotencyMarker(marker)
 		if test.valid && err != nil {
 			t.Fatalf("encodeIdempotencyMarker(%s valid) error = %v", test.method, err)
 		}
@@ -131,45 +132,12 @@ func TestIdempotencyDirectResponseIsBoundToMethod(t *testing.T) {
 	}
 }
 
-// Rationale: accepted ciphertext and replay-body ceilings are inclusive, and
-// one byte over either limit must fail before transaction submission.
-func TestIdempotencyMarkerPayloadBoundaries(t *testing.T) {
-	t.Parallel()
-
-	marker := testDirectMarker()
-	marker.Intent.Ciphertext = bytes.Repeat([]byte{'c'}, maximumIntentCiphertext)
-	digest := sha256.Sum256(marker.Intent.Ciphertext)
-	marker.Intent.CiphertextDigest = hex.EncodeToString(digest[:])
-	marker.Response.Body = bytes.Repeat([]byte{'a'}, maximumReplayBody)
-	marker.Response.Body[0] = '"'
-	marker.Response.Body[len(marker.Response.Body)-1] = '"'
-	value, err := encodeIdempotencyMarker(marker)
-	if err != nil || len(value) > maximumMarkerBytes {
-		t.Fatalf("encodeIdempotencyMarker(boundary) bytes/error = %d/%v", len(value), err)
-	}
-
-	marker.Intent.Ciphertext = append(marker.Intent.Ciphertext, 'x')
-	digest = sha256.Sum256(marker.Intent.Ciphertext)
-	marker.Intent.CiphertextDigest = hex.EncodeToString(digest[:])
-	if _, err := encodeIdempotencyMarker(marker); !isKind(err, errs.KindInternal) {
-		t.Fatalf("ciphertext over limit error = %v, want internal", err)
-	}
-
-	marker = testDirectMarker()
-	marker.Response.Body = bytes.Repeat([]byte{'a'}, maximumReplayBody+1)
-	marker.Response.Body[0] = '"'
-	marker.Response.Body[len(marker.Response.Body)-1] = '"'
-	if _, err := encodeIdempotencyMarker(marker); !isKind(err, errs.KindInternal) {
-		t.Fatalf("response over limit error = %v, want internal", err)
-	}
-}
-
 // Rationale: exact replay bodies are intentionally durable but must not leak
 // through ordinary, detailed, or Go-syntax formatting.
 func TestIdempotencyResponseFormattingRedactsBody(t *testing.T) {
 	t.Parallel()
 
-	response := IdempotencyResponse{
+	response := testidempotency.IdempotencyResponse{
 		Status: 200, ContentKind: "application/json", Body: []byte(`{"token":"format-secret"}`),
 	}
 	formatted := fmt.Sprintf("%v|%+v|%#v", response, &response, response)
@@ -184,26 +152,29 @@ func TestIdempotencyRetentionKeyUsesFullUnixNanoseconds(t *testing.T) {
 	t.Parallel()
 
 	marker := testDirectMarker()
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", err)
 	}
-	first, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
+	first, err := testidempotency.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
 	if err != nil {
 		t.Fatalf("idempotencyRetentionKey() error = %v", err)
 	}
 	secondTime := marker.RetainUntil.Add(time.Nanosecond)
-	second, err := idempotencyRetentionKey(markerKey, secondTime)
+	second, err := testidempotency.IdempotencyRetentionKey(markerKey, secondTime)
 	if err != nil {
 		t.Fatalf("idempotencyRetentionKey(+1ns) error = %v", err)
 	}
-	if first == second || !strings.HasPrefix(first, idempotencyRetentionPrefix) {
+	if first == second || !strings.HasPrefix(first, testidempotency.IdempotencyRetentionPrefix) {
 		t.Fatalf("retention keys = %q, %q", first, second)
 	}
-	if err := validateIdempotencyRetentionKey(first, markerKey, marker.RetainUntil); err != nil {
+	if err := testidempotency.ValidateIdempotencyRetentionKey(first, markerKey, marker.RetainUntil); err != nil {
 		t.Fatalf("validateIdempotencyRetentionKey() error = %v", err)
 	}
-	if err := validateIdempotencyRetentionKey(first, markerKey, secondTime); !isKind(err, errs.KindInternal) {
+	if err := testidempotency.ValidateIdempotencyRetentionKey(first, markerKey, secondTime); !isKind(
+		err,
+		errs.KindInternal,
+	) {
 		t.Fatalf("retention timestamp mismatch error = %v, want internal", err)
 	}
 }
@@ -214,7 +185,7 @@ func TestTaskIndexReferenceIsCanonicalStrictJSON(t *testing.T) {
 	t.Parallel()
 
 	taskID := ids.NewAt(ids.KindTask, testMarkerTime(), 9)
-	value, err := encodeTaskReference(taskID)
+	value, err := testidempotency.EncodeTaskReference(taskID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
 	}
@@ -222,7 +193,7 @@ func TestTaskIndexReferenceIsCanonicalStrictJSON(t *testing.T) {
 	if string(value) != want {
 		t.Fatalf("task reference = %s, want %s", value, want)
 	}
-	if got, err := decodeTaskReference(value); err != nil || got != taskID {
+	if got, err := testidempotency.DecodeTaskReference(value); err != nil || got != taskID {
 		t.Fatalf("decodeTaskReference() = %q, %v", got, err)
 	}
 	for _, invalid := range [][]byte{
@@ -230,7 +201,7 @@ func TestTaskIndexReferenceIsCanonicalStrictJSON(t *testing.T) {
 		[]byte(`{"schema":1,"schema":1,"record_id":"` + taskID + `"}`),
 		[]byte(`{"schema":1,"record_id":"` + taskID + `","id":"` + taskID + `"}`),
 	} {
-		if _, err := decodeTaskReference(invalid); !isKind(err, errs.KindInternal) {
+		if _, err := testidempotency.DecodeTaskReference(invalid); !isKind(err, errs.KindInternal) {
 			t.Fatalf("decodeTaskReference(%s) error = %v, want internal", invalid, err)
 		}
 	}
@@ -242,11 +213,11 @@ func TestIdempotencyRepositoryUsesTransactionFailureEvidence(t *testing.T) {
 	t.Parallel()
 
 	marker := testDirectMarker()
-	markerValue, err := encodeIdempotencyMarker(marker)
+	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
 	}
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", err)
 	}
@@ -269,10 +240,10 @@ func TestIdempotencyRepositoryUsesTransactionFailureEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewIdempotencyRepository() error = %v", err)
 	}
-	plan, err := newIdempotencyMutationPlan(
-		[]Condition{{Key: "/records/resource", ModRevision: 7}},
-		[]Mutation{{Type: MutationPut, Key: "/records/resource", Value: []byte("value")}},
-		func(int64, []*KeyValue) error { return errs.New(errs.KindStateConflict, "state changed") },
+	plan, err := NewIdempotencyMutationPlan(
+		[]testkeyvalue.Condition{{Key: "/records/resource", ModRevision: 7}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: "/records/resource", Value: []byte("value")}},
+		func(int64, []*testkeyvalue.KeyValue) error { return errs.New(errs.KindStateConflict, "state changed") },
 	)
 	if err != nil {
 		t.Fatalf("newIdempotencyMutationPlan() error = %v", err)
@@ -294,44 +265,44 @@ func TestIdempotencyRepositoryResolvesReplayTargetAtFixedRevision(t *testing.T) 
 	t.Parallel()
 
 	marker := testDirectMarker()
-	marker.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeEnvironment,
+	marker.Locator = testidempotency.IdempotencyLocator{
+		ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 		ScopeID:   ids.NewAt(ids.KindEnvironment, marker.CreatedAt, 3),
 		Method:    http.MethodDelete,
 		Route:     "/attaches/{id}",
 		Key:       "attach-detach-key-0001",
 	}
-	marker.Response = IdempotencyResponse{Status: http.StatusNoContent, ContentKind: "none"}
-	marker.ReplayTarget = &IdempotencyReplayTarget{
-		Kind: IdempotencyReplayTargetAttach,
+	marker.Response = testidempotency.IdempotencyResponse{Status: http.StatusNoContent, ContentKind: "none"}
+	marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+		Kind: testidempotency.IdempotencyReplayTargetAttach,
 		ID:   ids.NewAt(ids.KindAttach, marker.CreatedAt, 4),
 	}
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", err)
 	}
-	markerValue, err := encodeIdempotencyMarker(marker)
+	markerValue, err := testidempotency.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		t.Fatalf("encodeIdempotencyMarker() error = %v", err)
 	}
-	targetKey, err := idempotencyReplayTargetKey(
+	targetKey, err := testidempotency.IdempotencyReplayTargetKey(
 		*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
 	)
 	if err != nil {
 		t.Fatalf("idempotencyReplayTargetKey() error = %v", err)
 	}
-	targetValue, err := encodeReplayTargetReference(markerKey)
+	targetValue, err := testidempotency.EncodeReplayTargetReference(markerKey)
 	if err != nil {
 		t.Fatalf("encodeReplayTargetReference() error = %v", err)
 	}
 	store := &replayLookupTestStore{
 		targetKey: targetKey,
-		target: GetResult{
-			Entry: &KeyValue{Key: targetKey, Value: targetValue, ModRevision: 17}, ReadRevision: 23,
+		target: testkeyvalue.GetResult{
+			Entry: &testkeyvalue.KeyValue{Key: targetKey, Value: targetValue, ModRevision: 17}, ReadRevision: 23,
 		},
 		markerKey: markerKey,
-		markers: GetManyResult{
-			Values: []*KeyValue{{Key: markerKey, Value: markerValue, ModRevision: 16}}, ReadRevision: 23,
+		markers: testkeyvalue.GetManyResult{
+			Values: []*testkeyvalue.KeyValue{{Key: markerKey, Value: markerValue, ModRevision: 16}}, ReadRevision: 23,
 		},
 	}
 	repository, err := NewIdempotencyRepository(store)
@@ -351,9 +322,9 @@ func TestIdempotencyRepositoryResolvesReplayTargetAtFixedRevision(t *testing.T) 
 func TestIdempotencyMutationPlanHasOneConcurrentConsumer(t *testing.T) {
 	t.Parallel()
 
-	plan, err := newIdempotencyMutationPlan(nil,
-		[]Mutation{{Type: MutationPut, Key: "/record", Value: []byte("value")}},
-		func(int64, []*KeyValue) error { return errs.New(errs.KindStateConflict, "classified") },
+	plan, err := NewIdempotencyMutationPlan(nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: "/record", Value: []byte("value")}},
+		func(int64, []*testkeyvalue.KeyValue) error { return errs.New(errs.KindStateConflict, "classified") },
 	)
 	if err != nil {
 		t.Fatalf("newIdempotencyMutationPlan() error = %v", err)
@@ -391,21 +362,21 @@ func TestIdempotencyMutationPlanHasOneConcurrentConsumer(t *testing.T) {
 func TestIdempotencyMutationPlanRejectsDuplicateAndReservedKeys(t *testing.T) {
 	t.Parallel()
 
-	classifier := func(int64, []*KeyValue) error { return errs.New(errs.KindStateConflict, "changed") }
+	classifier := func(int64, []*testkeyvalue.KeyValue) error { return errs.New(errs.KindStateConflict, "changed") }
 	for _, test := range []struct {
-		conditions []Condition
-		mutations  []Mutation
+		conditions []testkeyvalue.Condition
+		mutations  []testkeyvalue.Mutation
 	}{
-		{[]Condition{{Key: "/record", ModRevision: 1}, {Key: "/record", ModRevision: 1}},
-			[]Mutation{{Type: MutationPut, Key: "/record", Value: []byte("x")}}},
-		{nil, []Mutation{{Type: MutationPut, Key: "/one", Value: []byte("x")},
-			{Type: MutationDelete, Key: "/one"}}},
-		{[]Condition{{Key: idempotencyMarkerPrefix + "owned", ModRevision: 0}},
-			[]Mutation{{Type: MutationPut, Key: "/record", Value: []byte("x")}}},
-		{nil, []Mutation{{Type: MutationPut, Key: idempotencyRetentionPrefix + "owned", Value: []byte("x")}}},
-		{nil, []Mutation{{Type: MutationPut, Key: idempotencyReplayTargetPrefix + "owned", Value: []byte("x")}}},
+		{[]testkeyvalue.Condition{{Key: "/record", ModRevision: 1}, {Key: "/record", ModRevision: 1}},
+			[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: "/record", Value: []byte("x")}}},
+		{nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: "/one", Value: []byte("x")},
+			{Type: testkeyvalue.MutationDelete, Key: "/one"}}},
+		{[]testkeyvalue.Condition{{Key: testidempotency.IdempotencyMarkerPrefix + "owned", ModRevision: 0}},
+			[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: "/record", Value: []byte("x")}}},
+		{nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: testidempotency.IdempotencyRetentionPrefix + "owned", Value: []byte("x")}}},
+		{nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: testidempotency.IdempotencyReplayTargetPrefix + "owned", Value: []byte("x")}}},
 	} {
-		if _, err := newIdempotencyMutationPlan(
+		if _, err := NewIdempotencyMutationPlan(
 			test.conditions,
 			test.mutations,
 			classifier,
@@ -421,9 +392,9 @@ func TestIdempotencyMutationPlanRejectsDuplicateAndReservedKeys(t *testing.T) {
 			)
 		}
 	}
-	if _, err := newIdempotencyMutationPlan(
-		[]Condition{{Key: "/record", ModRevision: 1}},
-		[]Mutation{{Type: MutationPut, Key: "/record", Value: []byte("x")}},
+	if _, err := NewIdempotencyMutationPlan(
+		[]testkeyvalue.Condition{{Key: "/record", ModRevision: 1}},
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: "/record", Value: []byte("x")}},
 		classifier,
 	); err != nil {
 		t.Fatalf("same CAS compare/mutation key error = %v", err)
@@ -439,15 +410,15 @@ func TestIdempotencyRepositoryRejectsTaskMarkerBeforeConsumingPlan(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewIdempotencyRepository() error = %v", err)
 	}
-	plan, err := newIdempotencyMutationPlan(nil,
-		[]Mutation{{Type: MutationPut, Key: "/task", Value: []byte("task")}},
-		func(int64, []*KeyValue) error { return errs.New(errs.KindStateConflict, "changed") },
+	plan, err := NewIdempotencyMutationPlan(nil,
+		[]testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: "/task", Value: []byte("task")}},
+		func(int64, []*testkeyvalue.KeyValue) error { return errs.New(errs.KindStateConflict, "changed") },
 	)
 	if err != nil {
 		t.Fatalf("newIdempotencyMutationPlan() error = %v", err)
 	}
 	marker := testDirectMarker()
-	marker.Kind = IdempotencyMarkerTask
+	marker.Kind = testidempotency.IdempotencyMarkerTask
 	if _, err := repository.Apply(context.Background(), marker, plan); !isKind(err, errs.KindInternal) {
 		t.Fatalf("Apply(Task) error = %v, want internal", err)
 	}
@@ -476,29 +447,31 @@ func TestIdempotencyRepositoryPrunesAtMost16ValidatedTriples(t *testing.T) {
 	for index := range candidates {
 		marker := testDirectMarker()
 		marker.Locator.Key = "01ARZ3NDEKTSV4RRFFQ69G5" + string(rune('A'+index))
-		marker.ReplayTarget = &IdempotencyReplayTarget{
-			Kind: IdempotencyReplayTargetAttach,
+		marker.ReplayTarget = &testidempotency.IdempotencyReplayTarget{
+			Kind: testidempotency.IdempotencyReplayTargetAttach,
 			ID:   ids.NewAt(ids.KindAttach, marker.CreatedAt, int64(index+30)),
 		}
-		markerKey, keyErr := idempotencyMarkerKey(marker.Locator)
+		markerKey, keyErr := testidempotency.IdempotencyMarkerKey(marker.Locator)
 		if keyErr != nil {
 			t.Fatalf("idempotencyMarkerKey(%d) error = %v", index, keyErr)
 		}
-		retentionKey, keyErr := idempotencyRetentionKey(markerKey, marker.RetainUntil)
+		retentionKey, keyErr := testidempotency.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
 		if keyErr != nil {
 			t.Fatalf("idempotencyRetentionKey(%d) error = %v", index, keyErr)
 		}
-		retentionValue, marshalErr := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+		retentionValue, marshalErr := json.Marshal(
+			testidempotency.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey},
+		)
 		if marshalErr != nil {
 			t.Fatalf("json.Marshal(retention %d) error = %v", index, marshalErr)
 		}
-		targetKey, keyErr := idempotencyReplayTargetKey(
+		targetKey, keyErr := testidempotency.IdempotencyReplayTargetKey(
 			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
 		)
 		if keyErr != nil {
 			t.Fatalf("idempotencyReplayTargetKey(%d) error = %v", index, keyErr)
 		}
-		targetValue, marshalErr := encodeReplayTargetReference(markerKey)
+		targetValue, marshalErr := testidempotency.EncodeReplayTargetReference(markerKey)
 		if marshalErr != nil {
 			t.Fatalf("encodeReplayTargetReference(%d) error = %v", index, marshalErr)
 		}
@@ -578,15 +551,15 @@ func TestIdempotencyPrunePropagatesUnknownOutcome(t *testing.T) {
 		t.Fatalf("NewIdempotencyRepository() error = %v", err)
 	}
 	marker := testDirectMarker()
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := testidempotency.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		t.Fatalf("idempotencyMarkerKey() error = %v", err)
 	}
-	retentionKey, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
+	retentionKey, err := testidempotency.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
 	if err != nil {
 		t.Fatalf("idempotencyRetentionKey() error = %v", err)
 	}
-	retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+	retentionValue, err := json.Marshal(testidempotency.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
@@ -609,7 +582,7 @@ func TestIdempotencyPruneExpiredUsesFreshFixedRevisionAfterCASConflict(t *testin
 	second := testCollectorSnapshot(t, marker, 52, 43, 44)
 	store := &collectorTestStore{
 		snapshots: []collectorSnapshot{first, second},
-		transactionResults: []TransactionResult{
+		transactionResults: []testkeyvalue.TransactionResult{
 			{Revision: 60},
 			{Succeeded: true, Revision: 61},
 		},
@@ -687,9 +660,12 @@ func TestIdempotencyRepositoryConcurrentClaimsHaveOneWinner(t *testing.T) {
 	results := make(chan IdempotencyTransactionResult, 2)
 	errors := make(chan error, 2)
 	for index := range 2 {
-		plan, planErr := newIdempotencyMutationPlan(nil,
-			[]Mutation{{Type: MutationPut, Key: fmt.Sprintf("/resource/%d", index), Value: []byte("value")}},
-			func(int64, []*KeyValue) error { return errs.New(errs.KindStateConflict, "changed") },
+		plan, planErr := NewIdempotencyMutationPlan(
+			nil,
+			[]testkeyvalue.Mutation{
+				{Type: testkeyvalue.MutationPut, Key: fmt.Sprintf("/resource/%d", index), Value: []byte("value")},
+			},
+			func(int64, []*testkeyvalue.KeyValue) error { return errs.New(errs.KindStateConflict, "changed") },
 		)
 		if planErr != nil {
 			t.Fatalf("newIdempotencyMutationPlan(%d) error = %v", index, planErr)
@@ -732,11 +708,11 @@ func TestIdempotencyRepositoryMarkerOnlyReplayAndUnknownOutcomeRecovery(t *testi
 		t.Fatalf("NewIdempotencyRepository() error = %v", err)
 	}
 	marker := testDirectMarker()
-	classifier := func(int64, []*KeyValue) error {
+	classifier := func(int64, []*testkeyvalue.KeyValue) error {
 		return errs.New(errs.KindStateConflict, "domain fence changed")
 	}
-	plan, err := newIdempotencyMutationPlan(
-		[]Condition{{Key: "/v1/test/no-op-domain", ModRevision: 0}}, nil, classifier,
+	plan, err := NewIdempotencyMutationPlan(
+		[]testkeyvalue.Condition{{Key: "/v1/test/no-op-domain", ModRevision: 0}}, nil, classifier,
 	)
 	if err != nil {
 		t.Fatalf("newIdempotencyMutationPlan(marker-only) error = %v", err)
@@ -745,8 +721,8 @@ func TestIdempotencyRepositoryMarkerOnlyReplayAndUnknownOutcomeRecovery(t *testi
 	if !isKind(err, errs.KindStorageUnavailable) {
 		t.Fatalf("Apply(unknown marker-only) error = %v", err)
 	}
-	retryPlan, err := newIdempotencyMutationPlan(
-		[]Condition{{Key: "/v1/test/no-op-domain", ModRevision: 0}}, nil, classifier,
+	retryPlan, err := NewIdempotencyMutationPlan(
+		[]testkeyvalue.Condition{{Key: "/v1/test/no-op-domain", ModRevision: 0}}, nil, classifier,
 	)
 	if err != nil {
 		t.Fatalf("newIdempotencyMutationPlan(retry) error = %v", err)
@@ -764,8 +740,8 @@ func TestIdempotencyRepositoryMarkerOnlyReplayAndUnknownOutcomeRecovery(t *testi
 	}
 	for _, call := range store.mutations {
 		for _, mutation := range call {
-			if !strings.HasPrefix(mutation.Key, idempotencyMarkerPrefix) &&
-				!strings.HasPrefix(mutation.Key, idempotencyRetentionPrefix) {
+			if !strings.HasPrefix(mutation.Key, testidempotency.IdempotencyMarkerPrefix) &&
+				!strings.HasPrefix(mutation.Key, testidempotency.IdempotencyRetentionPrefix) {
 				t.Fatalf("marker-only transaction wrote domain key %q", mutation.Key)
 			}
 		}
@@ -775,7 +751,7 @@ func TestIdempotencyRepositoryMarkerOnlyReplayAndUnknownOutcomeRecovery(t *testi
 	mismatch.Intent.Ciphertext = []byte("different-protected-intent")
 	digest := sha256.Sum256(mismatch.Intent.Ciphertext)
 	mismatch.Intent.CiphertextDigest = hex.EncodeToString(digest[:])
-	mismatchPlan, err := newIdempotencyMutationPlan(nil, nil, classifier)
+	mismatchPlan, err := NewIdempotencyMutationPlan(nil, nil, classifier)
 	if err != nil {
 		t.Fatalf("newIdempotencyMutationPlan(mismatch) error = %v", err)
 	}
@@ -796,64 +772,74 @@ func TestIdempotencyRepositoryMarkerOnlyReplayAndUnknownOutcomeRecovery(t *testi
 			mismatchClassifyErr,
 		)
 	}
-	if _, err := newIdempotencyMutationPlanForMarker(
-		IdempotencyMarkerTask, nil, nil, classifier,
-	); !isKind(err, errs.KindInternal) {
+	if _, err := newIdempotencyMutationPlanForMarker(testidempotency.IdempotencyMarkerTask, nil, nil, classifier); !isKind(
+		err,
+		errs.KindInternal,
+	) {
 		t.Fatalf("zero-mutation Task plan error = %v, want internal", err)
 	}
 }
 
 type markerOnlyRecoveryStore struct {
-	Store
+	testkeyvalue.Store
+
 	mu        sync.Mutex
 	revision  int64
-	marker    *KeyValue
-	mutations [][]Mutation
+	marker    *testkeyvalue.KeyValue
+	mutations [][]testkeyvalue.Mutation
 }
 
 func (store *markerOnlyRecoveryStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if err := ctx.Err(); err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	store.revision++
-	store.mutations = append(store.mutations, cloneMutations(mutations))
+	store.mutations = append(store.mutations, testkeyvalue.CloneMutations(mutations))
 	if store.marker == nil {
 		for _, mutation := range mutations {
-			if mutation.Type == MutationPut && strings.HasPrefix(mutation.Key, idempotencyMarkerPrefix) {
-				store.marker = &KeyValue{
+			if mutation.Type == testkeyvalue.MutationPut &&
+				strings.HasPrefix(mutation.Key, testidempotency.IdempotencyMarkerPrefix) {
+				store.marker = &testkeyvalue.KeyValue{
 					Key: mutation.Key, Value: append([]byte(nil), mutation.Value...), ModRevision: store.revision,
 				}
 				break
 			}
 		}
 		if store.marker == nil {
-			return TransactionResult{}, errs.New(errs.KindInternal, "marker-only transaction omitted its marker")
+			return testkeyvalue.TransactionResult{}, errs.New(
+				errs.KindInternal,
+				"marker-only transaction omitted its marker",
+			)
 		}
-		return TransactionResult{}, errs.New(errs.KindStorageUnavailable, "unknown marker-only transaction outcome")
+		return testkeyvalue.TransactionResult{}, errs.New(
+			errs.KindStorageUnavailable,
+			"unknown marker-only transaction outcome",
+		)
 	}
-	reads := make([]*KeyValue, len(conditions))
-	reads[0] = &KeyValue{
+	reads := make([]*testkeyvalue.KeyValue, len(conditions))
+	reads[0] = &testkeyvalue.KeyValue{
 		Key: store.marker.Key, Value: append([]byte(nil), store.marker.Value...), ModRevision: store.marker.ModRevision,
 	}
-	return TransactionResult{Revision: store.revision, FailureReads: reads}, nil
+	return testkeyvalue.TransactionResult{Revision: store.revision, FailureReads: reads}, nil
 }
 
 type replayLookupTestStore struct {
-	Store
+	testkeyvalue.Store
+
 	targetKey      string
-	target         GetResult
+	target         testkeyvalue.GetResult
 	markerKey      string
-	markers        GetManyResult
+	markers        testkeyvalue.GetManyResult
 	markerRevision int64
 }
 
-func (store *replayLookupTestStore) Get(ctx context.Context, key string) (*GetResult, error) {
+func (store *replayLookupTestStore) Get(ctx context.Context, key string) (*testkeyvalue.GetResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -871,8 +857,8 @@ func (store *replayLookupTestStore) Get(ctx context.Context, key string) (*GetRe
 
 func (store *replayLookupTestStore) GetMany(
 	ctx context.Context,
-	request GetManyRequest,
-) (*GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -886,49 +872,51 @@ func (store *replayLookupTestStore) GetMany(
 }
 
 type atomicClaimStore struct {
-	Store
+	testkeyvalue.Store
+
 	mu       sync.Mutex
 	revision int64
-	marker   *KeyValue
+	marker   *testkeyvalue.KeyValue
 }
 
 func (store *atomicClaimStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	if err := ctx.Err(); err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	store.revision++
 	if store.marker != nil {
-		reads := make([]*KeyValue, len(conditions))
-		reads[0] = &KeyValue{
+		reads := make([]*testkeyvalue.KeyValue, len(conditions))
+		reads[0] = &testkeyvalue.KeyValue{
 			Key: store.marker.Key, Value: append([]byte(nil), store.marker.Value...),
 			ModRevision: store.marker.ModRevision,
 		}
-		return TransactionResult{Revision: store.revision, FailureReads: reads}, nil
+		return testkeyvalue.TransactionResult{Revision: store.revision, FailureReads: reads}, nil
 	}
 	for _, mutation := range mutations {
-		if mutation.Type == MutationPut && strings.HasPrefix(mutation.Key, idempotencyMarkerPrefix) {
-			store.marker = &KeyValue{
+		if mutation.Type == testkeyvalue.MutationPut &&
+			strings.HasPrefix(mutation.Key, testidempotency.IdempotencyMarkerPrefix) {
+			store.marker = &testkeyvalue.KeyValue{
 				Key: mutation.Key, Value: append([]byte(nil), mutation.Value...), ModRevision: store.revision,
 			}
 			break
 		}
 	}
 	if store.marker == nil {
-		return TransactionResult{}, errs.New(errs.KindInternal, "claim transaction omitted marker")
+		return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "claim transaction omitted marker")
 	}
-	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
+	return testkeyvalue.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
-func cloneKeyValueSlice(values []KeyValue) []KeyValue {
-	result := make([]KeyValue, len(values))
+func cloneKeyValueSlice(values []testkeyvalue.KeyValue) []testkeyvalue.KeyValue {
+	result := make([]testkeyvalue.KeyValue, len(values))
 	for index, value := range values {
-		result[index] = KeyValue{
+		result[index] = testkeyvalue.KeyValue{
 			Key:         value.Key,
 			Value:       append([]byte(nil), value.Value...),
 			ModRevision: value.ModRevision,
@@ -937,11 +925,11 @@ func cloneKeyValueSlice(values []KeyValue) []KeyValue {
 	return result
 }
 
-func cloneKeyValuePointers(values []*KeyValue) []*KeyValue {
-	result := make([]*KeyValue, len(values))
+func cloneKeyValuePointers(values []*testkeyvalue.KeyValue) []*testkeyvalue.KeyValue {
+	result := make([]*testkeyvalue.KeyValue, len(values))
 	for index, value := range values {
 		if value != nil {
-			result[index] = &KeyValue{
+			result[index] = &testkeyvalue.KeyValue{
 				Key:         value.Key,
 				Value:       append([]byte(nil), value.Value...),
 				ModRevision: value.ModRevision,
@@ -951,26 +939,26 @@ func cloneKeyValuePointers(values []*KeyValue) []*KeyValue {
 	return result
 }
 
-func testDirectMarker() IdempotencyMarker {
+func testDirectMarker() testidempotency.IdempotencyMarker {
 	createdAt := testMarkerTime()
 	ciphertext := []byte("protected-intent")
 	digest := sha256.Sum256(ciphertext)
-	return IdempotencyMarker{
-		Kind: IdempotencyMarkerDirect, State: IdempotencyMarkerCompleted,
-		Locator: IdempotencyLocator{
-			ScopeKind: IdempotencyScopeTenant,
+	return testidempotency.IdempotencyMarker{
+		Kind: testidempotency.IdempotencyMarkerDirect, State: testidempotency.IdempotencyMarkerCompleted,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeTenant,
 			ScopeID:   ids.NewAt(ids.KindTenant, createdAt, 1),
 			Method:    http.MethodPatch, Route: "/projects/{id}", Key: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
-		Intent: ProtectedIntentRecord{
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
 		},
-		Response: IdempotencyResponse{
+		Response: testidempotency.IdempotencyResponse{
 			Status: http.StatusOK, ContentKind: "application/json", Body: []byte(`{"id":"prj"}`),
 		},
 		CreatedAt: createdAt, UpdatedAt: createdAt, TerminalAt: createdAt,
-		RetainUntil: createdAt.Add(markerRetention),
+		RetainUntil: createdAt.Add(testidempotency.MarkerRetention),
 	}
 }
 

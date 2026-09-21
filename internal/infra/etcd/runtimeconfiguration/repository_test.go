@@ -19,7 +19,7 @@ import (
 
 var fixtureTime = time.Date(2026, 9, 14, 10, 0, 0, 0, time.UTC)
 
-// Rationale: SVC-15/JOURNEY-02 recovery must retain the exact acknowledged
+// Rationale: the etcd SVC-15/JOURNEY-02 owner must retain the exact acknowledged
 // byte identity, metadata, and source generations after the earlier Task is removed.
 func TestSnapshotSurvivesEarlierTaskRemoval(t *testing.T) {
 	store := newMemoryStore()
@@ -340,7 +340,7 @@ func fixtureID(kind ids.Kind, seed int64) string { return ids.NewAt(kind, fixtur
 
 func mustRepository(t *testing.T, store Store) *Repository {
 	t.Helper()
-	repository, err := NewRepository(store)
+	repository, err := newRepository(store)
 	if err != nil {
 		t.Fatalf("NewRepository: %v", err)
 	}

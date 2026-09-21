@@ -11,6 +11,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,9 +24,9 @@ import (
 type releaseTerminalFixture struct {
 	store      *releaseTerminalAuditStore
 	task       TaskRecord
-	assignment TaskAssignmentRecord
-	result     TaskResultRecord
-	head       ReleaseOperationHead
+	assignment testtaskassignments.TaskAssignmentRecord
+	result     testtaskjournal.TaskResultRecord
+	head       testreleases.ReleaseOperationHead
 	agentID    string
 	now        time.Time
 }
@@ -45,19 +51,19 @@ func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
 	runtimes := make([]executionplan.CandidateRuntime, count)
 
 	members := make([]domain.GroupMember, count)
-	fenceMembers := make([]ReleaseFenceMember, count)
-	steps := make([]TaskStepRecord, count*5)
-	proxyEvidence := make([]TaskProxyEvidence, count)
-	mutations := make([]Mutation, 0, count*2+4)
+	fenceMembers := make([]testreleases.ReleaseFenceMember, count)
+	steps := make([]testtaskjournal.TaskStepRecord, count*5)
+	proxyEvidence := make([]testtaskjournal.TaskProxyEvidence, count)
+	mutations := make([]testkeyvalue.Mutation, 0, count*2+4)
 	for index := range members {
 		serviceID := ids.New(ids.KindService)
 		releaseID := ids.New(ids.KindDeployment)
 		ordinal := uint32(index + 1)
 		members[index] = domain.GroupMember{Ordinal: ordinal, ServiceID: serviceID, ReleaseID: releaseID}
-		fenceMembers[index] = ReleaseFenceMember{
+		fenceMembers[index] = testreleases.ReleaseFenceMember{
 			ServiceID: serviceID, CandidateReleaseID: releaseID, RenderInputDigest: renderDigest,
 		}
-		proxyEvidence[index] = TaskProxyEvidence{
+		proxyEvidence[index] = testtaskjournal.TaskProxyEvidence{
 			ServiceID: serviceID, Target: string(domain.WorkloadBlue), ProxyGeneration: 1,
 			ConfigSHA256: strings.Repeat("3", 64), ReleaseID: releaseID,
 		}
@@ -80,25 +86,32 @@ func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
 			t.Fatalf("ValidateIntent(%d) error = %v", index, err)
 		}
 		checkpoint := domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: now}
-		intentValue, err := encodeReleaseRecord("release-intent", intent)
+		intentValue, err := testreleases.EncodeReleaseRecord("release-intent", intent)
 		if err != nil {
 			t.Fatal(err)
 		}
-		checkpointValue, err := encodeReleaseRecord("release-checkpoint", checkpoint)
+		checkpointValue, err := testreleases.EncodeReleaseRecord("release-checkpoint", checkpoint)
 		if err != nil {
 			t.Fatal(err)
 		}
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationPut, Key: releaseIntentStagingKey(publicationID, releaseID), Value: intentValue},
-			Mutation{
-				Type:  MutationPut,
-				Key:   releaseCheckpointStagingKey(publicationID, releaseID),
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testreleases.ReleaseIntentStagingKey(publicationID, releaseID),
+				Value: intentValue,
+			},
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testreleases.ReleaseCheckpointStagingKey(publicationID, releaseID),
 				Value: checkpointValue,
 			},
 		)
 		for step := range 5 {
-			steps[index*5+step] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.New(ids.KindStep)}
+			steps[index*5+step] = testtaskjournal.TaskStepRecord{
+				Kind: testtaskjournal.TaskStepOperation,
+				ID:   ids.New(ids.KindStep),
+			}
 		}
 	}
 	sort.Slice(proxyEvidence, func(left int, right int) bool {
@@ -116,14 +129,14 @@ func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	head := ReleaseOperationHead{
+	head := testreleases.ReleaseOperationHead{
 		OperationID: operationID, PublicationID: publicationID, EnvironmentID: environmentID,
 		ReleaseGroupID: groupID, FailurePolicy: domain.OnFailureLeaveActive, State: domain.StatePending,
 		Attempts: []domain.Attempt{{ID: taskID, TaskID: taskID, StartedAt: now}}, Members: members,
 		Progress: &progress, LatestTaskID: taskID, ConfiguredTimeoutSeconds: 15 * 60 * 60,
 		ComputedBudgetSeconds: 6 * 60 * 60, CreatedAt: now, UpdatedAt: now,
 	}
-	markerValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
+	markerValue, err := testreleases.EncodeReleaseRecord("release-publication", testreleases.ReleasePublicationMarker{
 		PublicationID: publicationID, OperationID: operationID, ManifestDigest: manifestDigest, PublishedAt: now,
 		PreparedRuntimes: runtimes,
 		CandidateReleaseDescriptor: executionplan.CandidateReleaseDescriptor{
@@ -134,22 +147,39 @@ func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	headValue, err := encodeReleaseRecord("release-operation", head)
+	headValue, err := testreleases.EncodeReleaseRecord("release-operation", head)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fenceValue, err := encodeReleaseRecord("release-fence-set", ReleaseFenceSet{
+	fenceValue, err := testreleases.EncodeReleaseRecord("release-fence-set", testreleases.ReleaseFenceSet{
 		EnvironmentID: environmentID, Generation: 1, OperationID: operationID,
 		AttemptTaskID: taskID, Group: true, Members: fenceMembers,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	mutations = append(mutations,
-		Mutation{Type: MutationPut, Key: releasePublicationKey(publicationID), Value: markerValue},
-		Mutation{Type: MutationPut, Key: releaseOperationKey(operationID), Value: headValue},
-		Mutation{Type: MutationPut, Key: releaseFenceSetKey(environmentID), Value: fenceValue},
-		Mutation{Type: MutationPut, Key: environmentMutationEpochKey(environmentID), Value: []byte(`{"schema":1}`)},
+	mutations = append(
+		mutations,
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleases.ReleasePublicationKey(publicationID),
+			Value: markerValue,
+		},
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleases.ReleaseOperationKey(operationID),
+			Value: headValue,
+		},
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testreleases.ReleaseFenceSetKey(environmentID),
+			Value: fenceValue,
+		},
+		testkeyvalue.Mutation{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testhierarchy.EnvironmentMutationEpochKey(environmentID),
+			Value: []byte(`{"schema":1}`),
+		},
 	)
 	if seeded, err := store.Transact(ctx, nil, mutations); err != nil || !seeded.Succeeded {
 		t.Fatalf("seed release terminal fixture = %#v, %v", seeded, err)
@@ -158,30 +188,34 @@ func newReleaseTerminalFixture(t *testing.T, count int) releaseTerminalFixture {
 	audited := &releaseTerminalAuditStore{memoryHierarchyStore: store}
 	task := TaskRecord{
 		ID: taskID, OperationID: operationID,
-		Owner: TaskOwner{
-			WorkspaceType: TaskWorkspaceTenant,
+		Owner: testtaskjournal.TaskOwner{
+			WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
 			TenantID:      tenantID,
 			ProjectID:     projectID,
 			EnvironmentID: environmentID,
 		},
-		Executor: TaskExecutorAgent, PlanID: planID, PlanHash: planHash, RenderGeneration: 1,
-		Type: TaskDeploy, Target: groupID, Params: map[string]string{TaskReleasePublicationParam: publicationID}, Steps: steps,
+		Executor: testtaskjournal.TaskExecutorAgent, PlanID: planID, PlanHash: planHash, RenderGeneration: 1,
+		Type: testtaskjournal.TaskDeploy, Target: groupID, Params: map[string]string{testreleaserender.TaskReleasePublicationParam: publicationID}, Steps: steps,
 	}
-	assignment := TaskAssignmentRecord{AssignmentID: ids.New(ids.KindAssignment), ExecutionEpoch: 1}
+	assignment := testtaskassignments.TaskAssignmentRecord{AssignmentID: ids.New(ids.KindAssignment), ExecutionEpoch: 1}
 	agentID := ids.New(ids.KindAgent)
 
 	return releaseTerminalFixture{
 		store: audited, task: task, assignment: assignment, head: head, agentID: agentID, now: now,
-		result: TaskResultRecord{
-			Kind:           TaskResultCompose,
-			Diagnostic:     TaskResultDiagnosticNone,
+		result: testtaskjournal.TaskResultRecord{
+			Kind:           testtaskjournal.TaskResultCompose,
+			Diagnostic:     testtaskjournal.TaskResultDiagnosticNone,
 			ProxyEvidence:  proxyEvidence,
 			ExecutionEpoch: 1,
 		},
 	}
 }
 
-func (f releaseTerminalFixture) finalize(t *testing.T, status TaskStatus, guards ...Condition) (bool, error) {
+func (f releaseTerminalFixture) finalize(
+	t *testing.T,
+	status testtaskjournal.TaskStatus,
+	guards ...testkeyvalue.Condition,
+) (bool, error) {
 	t.Helper()
 	repository, err := newTaskRepository(f.store)
 	if err != nil {
@@ -189,7 +223,7 @@ func (f releaseTerminalFixture) finalize(t *testing.T, status TaskStatus, guards
 	}
 	read, err := f.store.GetMany(
 		context.Background(),
-		GetManyRequest{Keys: []string{releaseOperationKey(f.head.OperationID)}},
+		testkeyvalue.GetManyRequest{Keys: []string{testreleases.ReleaseOperationKey(f.head.OperationID)}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -212,7 +246,7 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 	t.Parallel()
 	f := newReleaseTerminalFixture(t, domain.MaximumGroupMembers)
 	for transaction := 0; ; transaction++ {
-		processed, err := f.finalize(t, TaskStatusCompleted)
+		processed, err := f.finalize(t, testtaskjournal.TaskStatusCompleted)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -229,21 +263,33 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 	if f.store.maximumAggregate != 92 {
 		t.Fatalf("maximum operations=%d, want 92", f.store.maximumAggregate)
 	}
-	closed, err := f.store.GetMany(context.Background(), GetManyRequest{Keys: []string{
-		releaseOperationKey(f.head.OperationID), releaseFenceSetKey(f.head.EnvironmentID),
-	}})
+	closed, err := f.store.GetMany(
+		context.Background(),
+		testkeyvalue.GetManyRequest{
+			Keys: []string{
+				testreleases.ReleaseOperationKey(f.head.OperationID),
+				testreleases.ReleaseFenceSetKey(f.head.EnvironmentID),
+			},
+		},
+	)
 	if err != nil || closed.Values[0] == nil || closed.Values[1] != nil {
 		t.Fatalf("closed operation=%#v, %v", closed, err)
 	}
-	head, err := decodeReleaseRecord[ReleaseOperationHead](closed.Values[0].Value, "release-operation")
+	head, err := testreleases.DecodeReleaseRecord[testreleases.ReleaseOperationHead](
+		closed.Values[0].Value,
+		"release-operation",
+	)
 	if err != nil || head.State != domain.StateCompleted || head.Progress == nil ||
 		len(head.Progress.Results) != domain.MaximumGroupMembers {
 		t.Fatalf("closed head=%#v, %v", head, err)
 	}
 	for _, member := range head.Members {
 		receipt, err := f.store.Get(context.Background(), serviceruntimerecord.Key(member.ServiceID))
-		terminal, terminalErr := f.store.Get(context.Background(), releaseTerminalKey(member.ReleaseID))
-		projection, projectionErr := f.store.Get(context.Background(), releaseProjectionKey(member.ServiceID))
+		terminal, terminalErr := f.store.Get(context.Background(), testreleases.ReleaseTerminalKey(member.ReleaseID))
+		projection, projectionErr := f.store.Get(
+			context.Background(),
+			testreleases.ReleaseProjectionKey(member.ServiceID),
+		)
 		if err != nil || terminalErr != nil || projectionErr != nil || receipt.Entry == nil || terminal.Entry == nil ||
 			projection.Entry == nil {
 			t.Fatal("missing atomic terminal output")
@@ -252,7 +298,7 @@ func TestReleaseTerminalizationBatchesMaximumGroupBelowTransactionCeiling(t *tes
 			receipt.Entry.ModRevision != projection.Entry.ModRevision {
 			t.Fatal("runtime not atomically published with owning successful member")
 		}
-		record, err := decodeReleaseRecord[serviceruntimerecord.Record](
+		record, err := testreleases.DecodeReleaseRecord[serviceruntimerecord.Record](
 			receipt.Entry.Value,
 			"service-acknowledged-runtime",
 		)
@@ -274,9 +320,9 @@ type releaseTerminalAuditStore struct {
 
 func (store *releaseTerminalAuditStore) MeasureTransaction(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionBudget, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionBudget, error) {
 	prefix := "/proof/"
 	if store.keyPrefix != "" {
 		prefix = store.keyPrefix
@@ -286,15 +332,15 @@ func (store *releaseTerminalAuditStore) MeasureTransaction(
 
 func (store *releaseTerminalAuditStore) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	budget, err := store.MeasureTransaction(ctx, conditions, mutations)
 	if err != nil {
-		return TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	if !budget.Fits() {
-		return TransactionResult{}, errs.New(
+		return testkeyvalue.TransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"test terminal transaction exceeds physical budget",
 		)
@@ -305,8 +351,8 @@ func (store *releaseTerminalAuditStore) Transact(
 	if store.raceKey != "" {
 		key := store.raceKey
 		store.raceKey = ""
-		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []Mutation{{Type: MutationPut, Key: key, Value: []byte("concurrent runtime")}}); err != nil {
-			return TransactionResult{}, err
+		if _, err := store.memoryHierarchyStore.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: key, Value: []byte("concurrent runtime")}}); err != nil {
+			return testkeyvalue.TransactionResult{}, err
 		}
 	}
 	aggregate := len(conditions) + len(mutations)

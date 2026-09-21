@@ -6,6 +6,18 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testrecordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testscriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testscriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 // Rationale: an initial Release has no predecessor execution from which to
@@ -17,7 +29,7 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 	record := withScriptContextSnapshot(t, scriptCheckpointTestRecord(at))
 	generationID := record.ID
 	revision := int64(41)
-	script, err := NewScriptRecord(record.EnvironmentID, record.ServiceID, core.Script{
+	script, err := testscripts.NewRecord(record.EnvironmentID, record.ServiceID, core.Script{
 		ID: record.ScriptID, Slug: "migrate", ServiceName: "api",
 		When: core.ScriptPostDeploy, Body: "exit 0",
 	})
@@ -25,43 +37,48 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 		t.Fatal(err)
 	}
 	script.ScriptSetGeneration = generationID
-	sources := ScriptExecutionSources{
+	sources := testscriptsourcequeries.ScriptExecutionSources{
 		Revision: revision,
-		Tenant:   Versioned[TenantRecord]{ReadRevision: revision},
-		Project:  Versioned[ProjectRecord]{ReadRevision: revision},
-		Environment: Versioned[EnvironmentRecord]{
-			Record: EnvironmentRecord{ID: record.EnvironmentID}, ReadRevision: revision,
+		Tenant:   testkeyvalue.Versioned[testhierarchy.TenantRecord]{ReadRevision: revision},
+		Project:  testkeyvalue.Versioned[testhierarchy.ProjectRecord]{ReadRevision: revision},
+		Environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record: testhierarchy.EnvironmentRecord{ID: record.EnvironmentID}, ReadRevision: revision,
 		},
-		Service: Versioned[ServiceRecord]{
-			Record: ServiceRecord{Desired: core.Service{ID: record.ServiceID}}, ReadRevision: revision,
+		Service: testkeyvalue.Versioned[testservices.ServiceRecord]{
+			Record: testservices.ServiceRecord{Desired: core.Service{ID: record.ServiceID}}, ReadRevision: revision,
 		},
-		ScriptSet: Versioned[ScriptSetGenerationRecord]{
-			Record:   ScriptSetGenerationRecord{EnvironmentID: record.EnvironmentID, GenerationID: generationID},
+		ScriptSet: testkeyvalue.Versioned[testscripts.SetGenerationRecord]{
+			Record:   testscripts.SetGenerationRecord{EnvironmentID: record.EnvironmentID, GenerationID: generationID},
 			Revision: 31, ReadRevision: revision,
 		},
-		Script: Versioned[ScriptRecord]{Record: script, Revision: 32, ReadRevision: revision},
-		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{
-			Record: ScriptBodyGenerationRecord{
+		Script: testkeyvalue.Versioned[testscripts.Record]{Record: script, Revision: 32, ReadRevision: revision},
+		BodyGeneration: testkeyvalue.Versioned[testscripts.BodyGenerationRecord]{
+			Record: testscripts.BodyGenerationRecord{
 				ScriptID: record.ScriptID, Generation: record.ScriptGeneration, BodySHA256: record.BodySHA256,
 			},
 			Revision: 33, ReadRevision: revision,
 		},
-		Release: ServingRelease{
+		Release: testreleasequeries.ServingRelease{
 			Intent: domain.Intent{ID: record.ReleaseID}, Revision: revision,
 		},
-		RenderInput: Versioned[ReleaseRenderInput]{
-			Record: ReleaseRenderInput{
-				ReleaseID:  record.ReleaseID,
-				Projection: EnvironmentComposeProjection{RenderGeneration: record.RenderGeneration},
+		RenderInput: testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]{
+			Record: testreleaserender.ReleaseRenderInput{
+				ReleaseID: record.ReleaseID,
+				Projection: testenvironmentprojection.EnvironmentComposeProjection{
+					RenderGeneration: record.RenderGeneration,
+				},
 			},
 			ReadRevision: revision,
 		},
-		DesiredHead: Versioned[EnvironmentBlueprintHead]{
-			Record:   EnvironmentBlueprintHead{EnvironmentID: record.EnvironmentID, RevisionID: record.CurrentTaskID},
+		DesiredHead: testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintHead]{
+			Record: testblueprints.EnvironmentBlueprintHead{
+				EnvironmentID: record.EnvironmentID,
+				RevisionID:    record.CurrentTaskID,
+			},
 			Revision: 34, ReadRevision: revision,
 		},
-		DesiredProjection: Versioned[EnvironmentComposeProjection]{
-			Record: EnvironmentComposeProjection{
+		DesiredProjection: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+			Record: testenvironmentprojection.EnvironmentComposeProjection{
 				EnvironmentID: record.EnvironmentID, RevisionID: record.CurrentTaskID,
 				RenderGeneration: record.RenderGeneration,
 			},
@@ -69,10 +86,10 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 		},
 	}
 	evidence := ReleasePublicationEvidence{
-		Manifest: VersionedReleaseManifest{ReadRevision: revision},
+		Manifest: testreleases.VersionedReleaseManifest{ReadRevision: revision},
 		Task: TaskRecord{
 			ID: record.CurrentTaskID, OperationID: record.OperationID, PlanHash: record.PlanHash,
-			Params: map[string]string{ReleaseHookStepExecutionParam(record.StepID): record.ID},
+			Params: map[string]string{testreleaserender.ReleaseHookStepExecutionParam(record.StepID): record.ID},
 		},
 		Hooks: []ReleaseHookExecutionPublication{{Sources: sources, Execution: record}},
 	}
@@ -81,10 +98,13 @@ func TestPrepareReleaseHookPublicationBindsInitialPostDeployScriptSetGeneration(
 		t.Fatalf("prepareReleaseHookPublicationFragment() error = %v", err)
 	}
 	defer clearReleaseHookPublicationFragment(fragment)
-	if len(fragment.mutations) == 0 || fragment.mutations[0].Key != scriptExecutionKey(record.ID) {
+	if len(fragment.mutations) == 0 || fragment.mutations[0].Key != testscriptexecutions.ScriptExecutionKey(record.ID) {
 		t.Fatalf("release hook mutations = %#v", fragment.mutations)
 	}
-	stored, err := decodeEnvelope[ScriptExecutionRecord](fragment.mutations[0].Value, "script-execution")
+	stored, err := testrecordcodec.Decode[testscriptexecutions.ScriptExecutionRecord](
+		fragment.mutations[0].Value,
+		"script-execution",
+	)
 	if err != nil {
 		t.Fatalf("decode stored Script execution: %v", err)
 	}

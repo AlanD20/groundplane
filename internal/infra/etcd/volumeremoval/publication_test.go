@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -50,10 +50,10 @@ func TestVolumeRemovalInitialPublicationResumesSharedRecords(t *testing.T) {
 	defer clear(progressValue)
 	// Storage is the double here. This proves record interoperability only, not
 	// the complete desired/Task/ownership publication transaction.
-	result, err := store.Transact(context.Background(), nil, []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: removalrecord.RuntimeKey(runtime.OperationID), Value: runtimeValue},
-		{Type: etcd.MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, 1), Value: attemptValue},
-		{Type: etcd.MutationPut, Key: removalrecord.ProgressKey(runtime.OperationID), Value: progressValue},
+	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: removalrecord.RuntimeKey(runtime.OperationID), Value: runtimeValue},
+		{Type: testkeyvalue.MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, 1), Value: attemptValue},
+		{Type: testkeyvalue.MutationPut, Key: removalrecord.ProgressKey(runtime.OperationID), Value: progressValue},
 	})
 	if err != nil || !result.Succeeded {
 		t.Fatalf("persist prepared record set: %v", err)
