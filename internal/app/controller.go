@@ -38,26 +38,21 @@ import (
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 
-	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
-	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	scriptoperations "github.com/AlanD20/groundplane/internal/controller/scripts"
 	"github.com/AlanD20/groundplane/internal/controller/secrets"
-	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"github.com/AlanD20/groundplane/internal/controller/volume"
-	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/controllerconfig"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
-	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -189,86 +184,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: reserve Runner network pool: %w", err)
 	}
-	runnerRecords, err := etcd.NewRunnerRepository(store)
+	authority, err := newControllerAuthorityComposition(ctx, cfg, store)
 	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Runner repository: %w", err)
-	}
-	tasks, err := etcd.NewTaskRepository(store)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Task repository: %w", err)
-	}
-	if err := tasks.EnsureTaskJournalSchema(ctx); err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("validate Task journal schema", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	idempotency, err := etcd.NewIdempotencyRepository(store)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize idempotency repository: %w", err)
-	}
-	hierarchyRecords, err := etcd.NewHierarchyRepository(store)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize hierarchy repository: %w", err)
-	}
-	environmentBlueprintRecords, err := etcd.NewEnvironmentBlueprintRepository(store)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Environment Blueprint repository: %w", err)
-	}
-	releaseGroups, err := etcdreleasegroup.New(store)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize release group repository: %w", err)
-	}
-	releaseLedger, err := etcd.NewReleaseLedger(store, tasks)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize release ledger: %w", err)
-	}
-	if err := hierarchyRecords.ValidateEnvironmentVolumeDirs(ctx, cfg.Storage.VolumeRoot); err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: validate persisted environment volume directories: %w", err)
-	}
-	hierarchyRepository, err := hierarchycontroller.NewEtcdRepository(hierarchyRecords)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize hierarchy adapter: %w", err)
-	}
-	hierarchyService, err := hierarchycontroller.NewService(hierarchyRepository)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize hierarchy service: %w", err)
-	}
-	agents, err := etcd.NewLocalAgentRepository(store)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize local Agent repository: %w", err)
-	}
-	authenticator, err := channeltransport.NewAuthenticator(agents)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Agent channel authenticator: %w", err)
-	}
-	controllerKey := &ageinfra.ControllerKey{Path: cfg.AgeKeyPath}
-	if err := controllerKey.Load(ctx); err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: load Controller age key: %w", err)
-	}
-	intentProtector, err := secretvalue.NewControllerKeyProtector(controllerKey)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize idempotent intent protector: %w", err)
-	}
-	intentCoordinator, err := requestidempotency.NewCoordinator(intentProtector)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+		return nil, err
 	}
 	entryValues, err := entryvalues.New(store)
 	if err != nil {
@@ -280,12 +198,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry repository: %w", err)
 	}
-	entryReadRepository, err := entryoperations.NewReadRepository(hierarchyRecords, entryRecords, entryValues)
+	entryReadRepository, err := entryoperations.NewReadRepository(authority.hierarchyRecords, entryRecords, entryValues)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry read repositories: %w", err)
 	}
-	entryReads, err := entryoperations.NewReadService(entryReadRepository, intentProtector)
+	entryReads, err := entryoperations.NewReadService(entryReadRepository, authority.intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry reads: %w", err)
@@ -305,7 +223,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script repository: %w", err)
 	}
-	scriptReadRepository, err := scriptoperations.NewReadRepository(hierarchyRecords, serviceRecords, scriptRecords)
+	scriptReadRepository, err := scriptoperations.NewReadRepository(authority.hierarchyRecords, serviceRecords, scriptRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script read repositories: %w", err)
@@ -326,14 +244,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Service desired revision repository: %w", err)
 	}
 	serviceMutationRepository, err := serviceoperations.NewMutationRepository(
-		hierarchyRecords, serviceRecords, zoneRecords, serviceDesiredRevisionRecords, releaseLedger,
+		authority.hierarchyRecords, serviceRecords, zoneRecords, serviceDesiredRevisionRecords, authority.releaseLedger,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service mutation repositories: %w", err)
 	}
 	scriptMutationRepository, err := scriptoperations.NewMutationRepository(
-		hierarchyRecords, serviceRecords, scriptRecords, releaseLedger,
+		authority.hierarchyRecords, serviceRecords, scriptRecords, authority.releaseLedger,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -378,12 +296,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret repository: %w", err)
 	}
-	secretReadRepository, err := secrets.NewReadRepository(hierarchyRecords, secretRecords)
+	secretReadRepository, err := secrets.NewReadRepository(authority.hierarchyRecords, secretRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret read repositories: %w", err)
 	}
-	secretReads, err := secrets.NewReadService(secretReadRepository, intentProtector)
+	secretReads, err := secrets.NewReadService(secretReadRepository, authority.intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret reads: %w", err)
@@ -393,7 +311,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector repository: %w", err)
 	}
-	connectorReadRepository, err := connectors.NewReadRepository(hierarchyRecords, connectorRecords)
+	connectorReadRepository, err := connectors.NewReadRepository(authority.hierarchyRecords, connectorRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector read repositories: %w", err)
@@ -403,7 +321,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector reads: %w", err)
 	}
-	volumeReads, err := volume.NewReadService(hierarchyRecords)
+	volumeReads, err := volume.NewReadService(authority.hierarchyRecords)
 	if err != nil {
 		closeErr := store.Close()
 		return nil, errs.Wrap(errs.KindInternal, errors.Join(
@@ -452,7 +370,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach repository: %w", err)
 	}
-	attachFactValues, err := attachments.NewFactService(attachRecords, intentProtector)
+	attachFactValues, err := attachments.NewFactService(attachRecords, authority.intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach fact service: %w", err)
@@ -468,7 +386,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	planResolver, err := taskplanning.NewTaskPlanResolverWithAttachments(
 		cfg.Storage.VolumeRoot,
-		hierarchyRecords,
+		authority.hierarchyRecords,
 		attachRecords,
 		serviceRecords,
 		attachFactValues,
@@ -478,7 +396,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize execution plan resolver: %w", err)
 	}
-	if err := componentregistration.ConfigureReleasePlans(planResolver, releaseLedger); err != nil {
+	if err := componentregistration.ConfigureReleasePlans(planResolver, authority.releaseLedger); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize release plan resolver: %w", err)
 	}
@@ -491,14 +409,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize backup plan resolver: %w", err)
 	}
 	backingHookCheckpoints, err := taskcheckpoint.NewBackingHookCheckpointService(
-		tasks, planResolver, attachRecords, attachFactValues,
+		authority.tasks, planResolver, attachRecords, attachFactValues,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backing hook checkpoint service: %w", err)
 	}
 	materializationResolver, err := initializeTaskMaterializationResolver(
-		store, hierarchyRecords, entryValues, secretRecords, planResolver, intentProtector,
+		store, authority.hierarchyRecords, entryValues, secretRecords, planResolver, authority.intentProtector,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -521,7 +439,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	backupSecrets, err := backupcapability.NewBackupSecretResolver(backupSecretEvidence, intentProtector)
+	backupSecrets, err := backupcapability.NewBackupSecretResolver(backupSecretEvidence, authority.intentProtector)
 	if err != nil {
 		// Rationale: initialization is already failing; store shutdown is
 		// best-effort and must not replace the primary typed error.
@@ -529,38 +447,38 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	resolverComposition, err := newControllerResolverComposition(
-		ctx, cfg.Storage.VolumeRoot, componentRecords, resolverBaselines, resolutionProjections, tasks, intentCoordinator, planResolver,
+		ctx, cfg.Storage.VolumeRoot, componentRecords, resolverBaselines, resolutionProjections, authority.tasks, authority.intentCoordinator, planResolver,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, err
 	}
 	agentRuntime := channeltransport.New(
-		authenticator, tasks, planResolver, materializationResolver, backupSecrets, backupCheckpoints,
+		authority.authenticator, authority.tasks, planResolver, materializationResolver, backupSecrets, backupCheckpoints,
 		resolverComposition.executionPlanner, scriptArtifacts, scriptCheckpoints, backingHookCheckpoints,
 	)
 	blueprintReleases, err := blueprintrelease.NewService(
-		releaseLedger, scriptRecords, planResolver, scriptArtifacts, scriptSourceReferences,
-		agents, agentRuntime.Registry,
+		authority.releaseLedger, scriptRecords, planResolver, scriptArtifacts, scriptSourceReferences,
+		authority.agents, agentRuntime.Registry,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Blueprint candidate-release service: %w", err)
 	}
-	staleTasks, err := agentruntime.NewStaleTaskMaintenance(agents, agentRuntime.Registry, tasks)
+	staleTasks, err := agentruntime.NewStaleTaskMaintenance(authority.agents, agentRuntime.Registry, authority.tasks)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)
 	}
 	runnerComposition, err := newControllerRunnerComposition(
-		cfg, runnerRecords, tasks, hierarchyRecords, idempotency, intentCoordinator,
+		cfg, authority.runnerRecords, authority.tasks, authority.hierarchyRecords, authority.idempotency, authority.intentCoordinator,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, err
 	}
 	releaseGroupMutations, err := releasegroup.NewMutationService(
-		releaseGroups, hierarchyRecords, tasks, idempotency, intentCoordinator,
+		authority.releaseGroups, authority.hierarchyRecords, authority.tasks, authority.idempotency, authority.intentCoordinator,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -572,35 +490,35 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize release execution timeout: %w", err)
 	}
 	releaseOperations, err := releaseoperation.NewService(
-		releaseLedger, serviceRecords, releaseGroups, idempotency, intentCoordinator,
+		authority.releaseLedger, serviceRecords, authority.releaseGroups, authority.idempotency, authority.intentCoordinator,
 		planResolver, scriptRecords, scriptArtifacts, releaseExecutionTimeout,
-		agents, agentRuntime.Registry,
+		authority.agents, agentRuntime.Registry,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize release operation service: %w", err)
 	}
-	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, idempotency, intentCoordinator)
+	hierarchyDeletions, err := newHierarchyDeletionRuntime(store, authority.idempotency, authority.intentCoordinator)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)
 	}
 	backupComposition, err := newControllerBackupComposition(
-		store, logger, hierarchyRecords, backupPolicyRecords, backupPolicyRepository,
-		backupRuntimeRecords, backupKeyRecords, attachFactValues, intentCoordinator,
-		idempotency, intentProtector, controllerKey,
+		store, logger, authority.hierarchyRecords, backupPolicyRecords, backupPolicyRepository,
+		backupRuntimeRecords, backupKeyRecords, attachFactValues, authority.intentCoordinator,
+		authority.idempotency, authority.intentProtector, authority.controllerKey,
 	)
 	if err != nil {
 		return nil, err
 	}
 	networkRecords, err := networketcd.NewRepository(
-		hierarchyRecords,
+		authority.hierarchyRecords,
 		serviceRecords,
 		zoneRecords,
 		routeRecords,
 		attachRecords,
-		tasks,
-		idempotency,
+		authority.tasks,
+		authority.idempotency,
 		attachFactValues,
 	)
 	if err != nil {
@@ -619,59 +537,59 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	networkCapability, err := networkcontroller.NewEtcdService(
 		networkRecords,
 		planResolver,
-		intentCoordinator,
+		authority.intentCoordinator,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Network capability: %w", err)
 	}
 	serviceMutations, err := newControllerServiceMutations(
-		serviceMutationRepository, planResolver, attachFactValues, intentCoordinator, idempotency,
+		serviceMutationRepository, planResolver, attachFactValues, authority.intentCoordinator, authority.idempotency,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, err
 	}
 	scriptMutations, err := newControllerScriptMutations(
-		scriptMutationRepository, scriptArtifacts, agents, agentRuntime.Registry, intentCoordinator, idempotency,
+		scriptMutationRepository, scriptArtifacts, authority.agents, agentRuntime.Registry, authority.intentCoordinator, authority.idempotency,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, err
 	}
-	entryGeneration, err := entrygeneration.NewEntryGenerationService(secretRecords, attachFactValues, intentProtector)
+	entryGeneration, err := entrygeneration.NewEntryGenerationService(secretRecords, attachFactValues, authority.intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry generation: %w", err)
 	}
-	entryCreationIdempotency, err := entryoperations.NewCreationIdempotency(intentCoordinator, idempotency)
+	entryCreationIdempotency, err := entryoperations.NewCreationIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry creation idempotency: %w", err)
 	}
-	entryBulkUpsertIdempotency, err := entryoperations.NewBulkUpsertIdempotency(intentCoordinator, idempotency)
+	entryBulkUpsertIdempotency, err := entryoperations.NewBulkUpsertIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry bulk upsert idempotency: %w", err)
 	}
-	entryEditIdempotency, err := entryoperations.NewEditIdempotency(intentCoordinator, idempotency)
+	entryEditIdempotency, err := entryoperations.NewEditIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry edit idempotency: %w", err)
 	}
-	entryRemovalIdempotency, err := entryoperations.NewRemovalIdempotency(intentCoordinator, idempotency)
+	entryRemovalIdempotency, err := entryoperations.NewRemovalIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry removal idempotency: %w", err)
 	}
-	secretCreationIdempotency, err := secrets.NewCreationIdempotency(intentCoordinator, idempotency)
+	secretCreationIdempotency, err := secrets.NewCreationIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret creation idempotency: %w", err)
 	}
 	secretMutations, err := secrets.NewCreationService(
 		secretReadRepository,
-		intentProtector,
+		authority.intentProtector,
 		secretCreationIdempotency,
 	)
 	if err != nil {
@@ -679,12 +597,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Secret creation service: %w", err)
 	}
 	connectorComposition, err := newControllerConnectorComposition(
-		store, hierarchyRecords, secretRecords, connectorRecords, intentCoordinator, idempotency, intentProtector,
+		store, authority.hierarchyRecords, secretRecords, connectorRecords, authority.intentCoordinator, authority.idempotency, authority.intentProtector,
 	)
 	if err != nil {
 		return nil, err
 	}
-	secretDeletionIdempotency, err := secrets.NewDeletionIdempotency(intentCoordinator, idempotency)
+	secretDeletionIdempotency, err := secrets.NewDeletionIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret deletion idempotency: %w", err)
@@ -695,13 +613,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Secret deletion service: %w", err)
 	}
 	attachMutationRecords, err := attachments.NewRepository(
-		hierarchyRecords, serviceRecords, attachRecords,
+		authority.hierarchyRecords, serviceRecords, attachRecords,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach mutation repository: %w", err)
 	}
-	attachMutationIdempotency, err := attachments.NewMutationIdempotency(intentCoordinator, idempotency)
+	attachMutationIdempotency, err := attachments.NewMutationIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach mutation idempotency: %w", err)
@@ -719,12 +637,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach mutation service: %w", err)
 	}
-	taskRetryIdempotency, err := taskoperations.NewRetryIdempotency(intentCoordinator, idempotency)
+	taskRetryIdempotency, err := taskoperations.NewRetryIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry idempotency: %w", err)
 	}
-	taskMutations, err := taskoperations.NewRetryService(tasks, taskRetryIdempotency, backupComposition.runs)
+	taskMutations, err := taskoperations.NewRetryService(authority.tasks, taskRetryIdempotency, backupComposition.runs)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry service: %w", err)
@@ -738,7 +656,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backing Zone cascade: %w", err)
 	}
-	environmentBlueprintIdempotency, err := desiredrevision.NewIdempotency(intentCoordinator, idempotency)
+	environmentBlueprintIdempotency, err := desiredrevision.NewIdempotency(authority.intentCoordinator, authority.idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint idempotency: %w", err)
@@ -749,7 +667,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize desired revision repository: %w", err)
 	}
 	environmentBlueprintRepository, err := blueprint.NewRepository(
-		environmentBlueprintRecords,
+		authority.environmentBlueprintRecords,
 		desiredRevisionRecords,
 		zoneRecords,
 		serviceRecords,
@@ -768,7 +686,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	entryDesiredMutations, err := entryoperations.NewDesiredMutationService(
 		cfg.Storage.VolumeRoot, environmentBlueprintRepository, entryGeneration, materializationResolver,
-		entryCreationIdempotency, entryEditIdempotency, entryRemovalIdempotency, planResolver, hierarchyRecords,
+		entryCreationIdempotency, entryEditIdempotency, entryRemovalIdempotency, planResolver, authority.hierarchyRecords,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -785,8 +703,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Entry mutation service: %w", err)
 	}
 	releaseGroupBlueprints, err := releasegroup.NewReleaseGroupBlueprintPlanner(
-		releaseGroups,
-		hierarchyRecords,
+		authority.releaseGroups,
+		authority.hierarchyRecords,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -807,7 +725,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		runnerComposition.pools.Environment,
 		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
-		intentProtector,
+		authority.intentProtector,
 		planResolver,
 		attachFactValues,
 		componentCatalog,
@@ -817,7 +735,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Backing-service creation: %w", err)
 	}
 	componentCredentials, err := componentcapability.NewCredentialReferenceResolver(
-		hierarchyRecords,
+		authority.hierarchyRecords,
 		secretReads,
 		secretMutations,
 	)
@@ -826,7 +744,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Component credentials: %w", err)
 	}
 	platformComponentMutations, err := controllerdns.NewPlatformMutationService(
-		componentRecords, tasks, idempotency, intentCoordinator, resolverComposition.renderer, resolverComposition.renderPlanner,
+		componentRecords, authority.tasks, authority.idempotency, authority.intentCoordinator, resolverComposition.renderer, resolverComposition.renderPlanner,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -852,8 +770,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	volumeMutations, err := configureVolumeMutationPlans(
 		cfg.Storage.VolumeRoot,
 		environmentBlueprintRepository,
-		intentCoordinator,
-		idempotency,
+		authority.intentCoordinator,
+		authority.idempotency,
 		volumeReads, backupPolicyRecords, store, planResolver, agentRuntime,
 	)
 	if err != nil {
@@ -861,22 +779,22 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Volume mutations: %w", err)
 	}
 	hierarchyMutations, err := newControllerHierarchyMutations(
-		cfg, hierarchyRecords, zoneRecords, intentCoordinator, idempotency,
+		cfg, authority.hierarchyRecords, zoneRecords, authority.intentCoordinator, authority.idempotency,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, err
 	}
 	platform, err := newControllerPlatform(ctx, controllerPlatformDependencies{
-		Config: cfg, Key: controllerKey, Store: store, Agents: agents, Tasks: tasks,
-		Intents: intentCoordinator, Idempotency: idempotency, Channel: agentRuntime,
+		Config: cfg, Key: authority.controllerKey, Store: store, Agents: authority.agents, Tasks: authority.tasks,
+		Intents: authority.intentCoordinator, Idempotency: authority.idempotency, Channel: agentRuntime,
 		EtcdEndpoints: etcdEndpoints, Tick: tick, Logger: logger,
 	})
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform runtime: %w", err)
 	}
-	runnerLifecycle, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerComposition.tokens, cfg, runnerComposition.pools)
+	runnerLifecycle, err := newRunnerLifecycleExecutor(logger, authority.runnerRecords, runnerComposition.tokens, cfg, runnerComposition.pools)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
@@ -885,7 +803,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	controllerTaskHandler, err := taskdispatch.NewResourceHandler(
 		platform.agents,
 		backingZoneCascades,
-		runnerRecords,
+		authority.runnerRecords,
 		runnerLifecycle,
 	)
 	if err != nil {
@@ -894,7 +812,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
 	}
 	controllerTaskRunner, err := newControllerTaskRuntime(
-		ctx, tasks, controllerTaskHandler, backupComposition.keys, hierarchyDeletions,
+		ctx, authority.tasks, controllerTaskHandler, backupComposition.keys, hierarchyDeletions,
 		platform.agents, agentRuntime.Registry, platform.native, tick, logger,
 	)
 	if err != nil {
@@ -902,14 +820,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task runner: %w", err)
 	}
-	taskAborts, err := taskoperations.NewAbortService(tasks, agentRuntime.Registry, controllerTaskRunner)
+	taskAborts, err := taskoperations.NewAbortService(authority.tasks, agentRuntime.Registry, controllerTaskRunner)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
 	}
 	serviceReads, err := newServiceReadResources(
-		hierarchyRecords, serviceRecords, zoneRecords, releaseLedger, agents, agentRuntime.Registry,
+		authority.hierarchyRecords, serviceRecords, zoneRecords, authority.releaseLedger, authority.agents, agentRuntime.Registry,
 	)
 	if err != nil {
 		// Preserve the initialization error; cleanup is best-effort.
@@ -920,8 +838,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	srv := handlers.New(store, logger, handlers.Options{
 		Host: platform.host, ControllerConfig: controllerConfig, ControllerUpdates: platform.upgrades,
 		OnHTTPReady: platform.readiness.MarkHTTPReady, MutationAdmission: platform.upgrades,
-		Agents: platform.reads, AgentMutations: platform.mutations, Tenants: hierarchyService,
-		Projects:                hierarchyService,
+		Agents: platform.reads, AgentMutations: platform.mutations, Tenants: authority.hierarchyService,
+		Projects:                authority.hierarchyService,
 		ProjectMutations:        hierarchyMutations.projectMutations,
 		ProjectChanges:          hierarchyMutations.projectChanges,
 		BackingServices:         backingServiceReads,
@@ -935,9 +853,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ZoneMutations:         networkCapability,
 		Routes:                networkCapability,
 		RouteMutations:        networkCapability,
-		ReleaseGroups:         releaseGroups,
+		ReleaseGroups:         authority.releaseGroups,
 		ReleaseGroupMutations: releaseGroupMutations,
-		Releases:              releaseLedger,
+		Releases:              authority.releaseLedger,
 		ReleaseOperations:     releaseOperations,
 		Scripts:               scriptReads,
 		ScriptMutations:       scriptMutations,
@@ -949,7 +867,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Connectors:            connectorReads,
 		ConnectorMutations:    connectorComposition.mutations,
 		ConnectorDeletions:    connectorComposition.deletions,
-		Runners:               runnerRecords,
+		Runners:               authority.runnerRecords,
 		RunnerProvisioning:    runnerComposition.provisioning,
 		RunnerMutations:       runnerComposition.mutations,
 		RunnerRemovals:        runnerComposition.removals,
@@ -973,7 +891,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		AgentTaskWake:         agentRuntime.Registry.WakeTaskDispatch,
 		TenantMutations:       hierarchyMutations.tenantMutations,
 		TenantChanges:         hierarchyMutations.tenantChanges,
-		Console:               consoleAssets, Tasks: tasks, Logs: serviceReads.logs,
+		Console:               consoleAssets, Tasks: authority.tasks, Logs: serviceReads.logs,
 	})
 
 	wired := &Controller{
@@ -981,7 +899,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Logger:          logger,
 		server:          srv,
 		agent:           agentRuntime,
-		scheduler:       scheduler.New(logger, platform.upgrades, tick, tasks, idempotency, staleTasks, backupComposition.schedules),
+		scheduler:       scheduler.New(logger, platform.upgrades, tick, authority.tasks, authority.idempotency, staleTasks, backupComposition.schedules),
 		controllerTasks: controllerTaskRunner,
 		localAgent:      platform.reconciliation,
 		attachMutations: attachMutations,
