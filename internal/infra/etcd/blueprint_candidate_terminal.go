@@ -30,7 +30,7 @@ func (change *blueprintCandidateTerminalChange) clear() {
 	if change == nil {
 		return
 	}
-	clearMutations(change.mutations)
+	etcdstore.ZeroMutationBytes(change.mutations)
 	change.conditions = nil
 	change.mutations = nil
 }
@@ -185,11 +185,11 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		ctx, task, assignment, terminalStatus, result, agentID, terminalAt, revision,
 	)
 	if err != nil {
-		clearMutations(capture.mutations)
+		etcdstore.ZeroMutationBytes(capture.mutations)
 		return blueprintCandidateTerminalChange{}, err
 	}
 	if !processed || !capture.called {
-		clearMutations(capture.mutations)
+		etcdstore.ZeroMutationBytes(capture.mutations)
 		return blueprintCandidateTerminalChange{}, releases.CorruptReleaseRecord()
 	}
 	combinedConditions, combinedMutations, err := mergeBlueprintCandidateTerminalChange(
@@ -201,7 +201,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		},
 	)
 	if err != nil {
-		clearMutations(capture.mutations)
+		etcdstore.ZeroMutationBytes(capture.mutations)
 		return blueprintCandidateTerminalChange{}, err
 	}
 	return blueprintCandidateTerminalChange{

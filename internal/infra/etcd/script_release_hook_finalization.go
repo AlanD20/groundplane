@@ -25,7 +25,7 @@ func (transfer *releaseHookExecutionRetryTransfer) clear() {
 	if transfer == nil {
 		return
 	}
-	clearMutations(transfer.mutations)
+	etcdstore.ZeroMutationBytes(transfer.mutations)
 	transfer.conditions = nil
 	transfer.mutations = nil
 }
@@ -119,7 +119,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	}
 	conditions := make([]etcdstore.Condition, 0, len(active)*4)
 	mutations := make([]etcdstore.Mutation, 0, len(active)*4)
-	defer clearMutations(mutations)
+	defer etcdstore.ZeroMutationBytes(mutations)
 	for index, hook := range active {
 		values := details.Values[index*3 : index*3+3]
 		if values[0] == nil || values[1] == nil || values[2] == nil {

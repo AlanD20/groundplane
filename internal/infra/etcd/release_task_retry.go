@@ -24,7 +24,7 @@ func (change *releaseTaskRetryChange) clear() {
 	if change == nil {
 		return
 	}
-	clearMutations(change.mutations)
+	etcdstore.ZeroMutationBytes(change.mutations)
 	change.conditions = nil
 	change.mutations = nil
 }

@@ -277,7 +277,7 @@ func (ledger *ReleaseLedger) Publish(
 			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,
 		})
 		if encodeErr != nil {
-			clearMutations(mutations)
+			etcdstore.ZeroMutationBytes(mutations)
 			return ReleasePublicationResult{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
 		serviceValue, encodeErr := json.Marshal(
@@ -285,7 +285,7 @@ func (ledger *ReleaseLedger) Publish(
 		)
 		if encodeErr != nil {
 			clear(environmentValue)
-			clearMutations(mutations)
+			etcdstore.ZeroMutationBytes(mutations)
 			return ReleasePublicationResult{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
 		mutations = append(
@@ -302,7 +302,7 @@ func (ledger *ReleaseLedger) Publish(
 			},
 		)
 	}
-	defer clearMutations(mutations)
+	defer etcdstore.ZeroMutationBytes(mutations)
 	mutations = append(
 		mutations,
 		etcdstore.Mutation{
@@ -489,11 +489,5 @@ func classifyReleasePublicationConflict(values []*etcdstore.KeyValue) error {
 func clearStagedReleaseRecords(records []releaseStagedWrite) {
 	for index := range records {
 		clear(records[index].value)
-	}
-}
-
-func clearMutations(mutations []etcdstore.Mutation) {
-	for index := range mutations {
-		clear(mutations[index].Value)
 	}
 }

@@ -111,7 +111,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		{Key: base.Values[2].Key, ModRevision: base.Values[2].ModRevision},
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(pending)*4)
-	defer clearMutations(mutations)
+	defer etcdstore.ZeroMutationBytes(mutations)
 	for offset, index := range pending {
 		keys, values := detailKeys[offset*5:offset*5+5], details.Values[offset*5:offset*5+5]
 		if values[0] == nil || values[1] == nil || values[3] != nil || values[4] != nil {

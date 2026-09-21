@@ -175,7 +175,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		{Key: baseKeys[3], ModRevision: base.Values[3].ModRevision},
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(pending)*4)
-	defer func() { clearMutations(mutations) }()
+	defer func() { etcdstore.ZeroMutationBytes(mutations) }()
 	for offset, index := range pending {
 		values := details.Values[offset*6 : offset*6+6]
 		keys := detailKeys[offset*6 : offset*6+6]
@@ -332,7 +332,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			return false, err
 		}
 		if !budget.Fits() {
-			clearMutations(mutations[priorMutations:])
+			etcdstore.ZeroMutationBytes(mutations[priorMutations:])
 			conditions, mutations = conditions[:priorConditions], mutations[:priorMutations]
 			if priorMutations == 0 {
 				return false, errs.New(errs.KindValidationFailed, "release terminal member exceeds transaction budget")

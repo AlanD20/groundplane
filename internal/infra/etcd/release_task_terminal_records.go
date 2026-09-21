@@ -42,20 +42,20 @@ func releaseTerminalRecordMutations(
 	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[1], Value: checkpointValue})
 	terminalValue, err := releases.EncodeReleaseRecord("release-terminal-summary", terminal)
 	if err != nil {
-		clearMutations(mutations)
+		etcdstore.ZeroMutationBytes(mutations)
 		return nil, err
 	}
 	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[3], Value: terminalValue})
 	retentionValue, err := releases.EncodeReleaseRecord("release-retention", retention)
 	if err != nil {
-		clearMutations(mutations)
+		etcdstore.ZeroMutationBytes(mutations)
 		return nil, err
 	}
 	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[4], Value: retentionValue})
 	if writeProjection {
 		projectionValue, err := releases.EncodeReleaseRecord("service-release-projection", projection)
 		if err != nil {
-			clearMutations(mutations)
+			etcdstore.ZeroMutationBytes(mutations)
 			return nil, err
 		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[2], Value: projectionValue})

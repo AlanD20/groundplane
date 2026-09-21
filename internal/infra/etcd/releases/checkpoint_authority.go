@@ -1,10 +1,9 @@
-package etcd
+package releases
 
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"slices"
 	"time"
 
@@ -45,7 +44,7 @@ type releaseCheckpointTransaction struct {
 	mutations  []etcdstore.Mutation
 	checkpoint domain.Checkpoint
 	projection domain.ServiceProjection
-	head       releases.ReleaseOperationHead
+	head       ReleaseOperationHead
 	duplicate  bool
 }
 
@@ -83,7 +82,7 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 	ctx context.Context,
 	input ReleaseCheckpointAdvance,
 ) (releaseCheckpointTransaction, error) {
-	if ctx == nil || authority == nil || authority.store == nil || releases.ValidatePublicationID(input.PublicationID) != nil ||
+	if ctx == nil || authority == nil || authority.store == nil || ValidatePublicationID(input.PublicationID) != nil ||
 		input.Now.IsZero() || input.Now.Location() != time.UTC {
 		return releaseCheckpointTransaction{}, errs.New(
 			errs.KindValidationFailed,
@@ -94,8 +93,8 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		return releaseCheckpointTransaction{}, err
 	}
 	keys := []string{
-		releases.ReleasePublicationKey(input.PublicationID), releases.ReleaseOperationKey(input.OperationID),
-		releases.ReleaseCheckpointStagingKey(input.PublicationID, input.ReleaseID), releases.ReleaseFenceSetKey(input.EnvironmentID),
+		ReleasePublicationKey(input.PublicationID), ReleaseOperationKey(input.OperationID),
+		ReleaseCheckpointStagingKey(input.PublicationID, input.ReleaseID), ReleaseFenceSetKey(input.EnvironmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(input.EnvironmentID),
 	}
 	loaded, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
@@ -103,18 +102,18 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		return releaseCheckpointTransaction{}, err
 	}
 	if loaded == nil || len(loaded.Values) != len(keys) {
-		return releaseCheckpointTransaction{}, releases.CorruptReleaseRecord()
+		return releaseCheckpointTransaction{}, CorruptReleaseRecord()
 	}
 	for index := range loaded.Values {
 		if loaded.Values[index] == nil {
-			return releaseCheckpointTransaction{}, releases.CorruptReleaseRecord()
+			return releaseCheckpointTransaction{}, CorruptReleaseRecord()
 		}
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](loaded.Values[0].Value, "release-publication")
+	marker, err := DecodeReleaseRecord[ReleasePublicationMarker](loaded.Values[0].Value, "release-publication")
 	if err != nil || marker.PublicationID != input.PublicationID || marker.OperationID != input.OperationID {
-		return releaseCheckpointTransaction{}, releases.CorruptReleaseRecord()
+		return releaseCheckpointTransaction{}, CorruptReleaseRecord()
 	}
-	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](loaded.Values[1].Value, "release-operation")
+	head, err := DecodeReleaseRecord[ReleaseOperationHead](loaded.Values[1].Value, "release-operation")
 	if err != nil || head.OperationID != input.OperationID || head.EnvironmentID != input.EnvironmentID ||
 		head.State.Terminal() || head.State == domain.StateRecoveryRequired {
 		return releaseCheckpointTransaction{}, errs.New(
@@ -122,11 +121,11 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 			"release operation does not accept checkpoints",
 		)
 	}
-	checkpoint, err := releases.DecodeReleaseRecord[domain.Checkpoint](loaded.Values[2].Value, "release-checkpoint")
+	checkpoint, err := DecodeReleaseRecord[domain.Checkpoint](loaded.Values[2].Value, "release-checkpoint")
 	if err != nil || checkpoint.ReleaseID != input.ReleaseID || domain.ValidateCheckpoint(checkpoint) != nil {
-		return releaseCheckpointTransaction{}, releases.CorruptReleaseRecord()
+		return releaseCheckpointTransaction{}, CorruptReleaseRecord()
 	}
-	fence, err := releases.DecodeReleaseRecord[releases.ReleaseFenceSet](loaded.Values[3].Value, "release-fence-set")
+	fence, err := DecodeReleaseRecord[ReleaseFenceSet](loaded.Values[3].Value, "release-fence-set")
 	if err != nil || fence.OperationID != input.OperationID || fence.EnvironmentID != input.EnvironmentID {
 		return releaseCheckpointTransaction{}, errs.New(
 			errs.KindStateConflict,
@@ -157,7 +156,7 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 			projection, _, err := authority.loadProjectionAt(ctx, member.ServiceID, loaded.ReadRevision)
 			return releaseCheckpointTransaction{
 				checkpoint: domain.CloneCheckpoint(checkpoint), projection: projection,
-				head: cloneReleaseOperationHead(head), duplicate: true,
+				head: CloneReleaseOperationHead(head), duplicate: true,
 			}, err
 		}
 	}
@@ -198,11 +197,11 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		projection.ServingSlot = memberSlot(input.Evidence)
 		projection.Revision++
 	}
-	checkpointValue, err := releases.EncodeReleaseRecord("release-checkpoint", next)
+	checkpointValue, err := EncodeReleaseRecord("release-checkpoint", next)
 	if err != nil {
 		return releaseCheckpointTransaction{}, err
 	}
-	projectionValue, err := releases.EncodeReleaseRecord("service-release-projection", projection)
+	projectionValue, err := EncodeReleaseRecord("service-release-projection", projection)
 	if err != nil {
 		clear(checkpointValue)
 		return releaseCheckpointTransaction{}, err
@@ -213,20 +212,20 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		{Key: keys[2], ModRevision: loaded.Values[2].ModRevision},
 		{Key: keys[3], ModRevision: loaded.Values[3].ModRevision},
 		{Key: keys[4], ModRevision: loaded.Values[4].ModRevision},
-		{Key: releases.ReleaseProjectionKey(member.ServiceID), ModRevision: projectionRevision},
+		{Key: ReleaseProjectionKey(member.ServiceID), ModRevision: projectionRevision},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[2], Value: checkpointValue}}
 	if input.NextState == domain.StateServing {
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releases.ReleaseProjectionKey(member.ServiceID), Value: projectionValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: ReleaseProjectionKey(member.ServiceID), Value: projectionValue},
 		)
 	} else {
 		clear(projectionValue)
 	}
 	return releaseCheckpointTransaction{
 		conditions: conditions, mutations: mutations, checkpoint: next,
-		projection: projection, head: cloneReleaseOperationHead(head),
+		projection: projection, head: CloneReleaseOperationHead(head),
 	}, nil
 }
 
@@ -234,7 +233,7 @@ func (prepared *releaseCheckpointTransaction) clear() {
 	if prepared == nil {
 		return
 	}
-	clearMutations(prepared.mutations)
+	etcdstore.ZeroMutationBytes(prepared.mutations)
 	prepared.conditions = nil
 	prepared.mutations = nil
 }
@@ -246,31 +245,31 @@ func (authority *ReleaseCheckpointAuthority) loadProjectionAt(
 ) (domain.ServiceProjection, int64, error) {
 	result, err := authority.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{releases.ReleaseProjectionKey(serviceID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{ReleaseProjectionKey(serviceID)}, Revision: revision},
 	)
 	if err != nil {
 		return domain.ServiceProjection{}, 0, err
 	}
 	if result == nil || len(result.Values) != 1 {
-		return domain.ServiceProjection{}, 0, releases.CorruptReleaseRecord()
+		return domain.ServiceProjection{}, 0, CorruptReleaseRecord()
 	}
 	if result.Values[0] == nil {
 		return domain.ServiceProjection{}, 0, nil
 	}
-	value, err := releases.DecodeReleaseRecord[domain.ServiceProjection](result.Values[0].Value, "service-release-projection")
+	value, err := DecodeReleaseRecord[domain.ServiceProjection](result.Values[0].Value, "service-release-projection")
 	if err != nil {
 		return domain.ServiceProjection{}, 0, err
 	}
 	return value, result.Values[0].ModRevision, nil
 }
 
-func releaseFenceMember(fence releases.ReleaseFenceSet, releaseID string) (releases.ReleaseFenceMember, bool) {
+func releaseFenceMember(fence ReleaseFenceSet, releaseID string) (ReleaseFenceMember, bool) {
 	for _, member := range fence.Members {
 		if member.CandidateReleaseID == releaseID {
 			return member, true
 		}
 	}
-	return releases.ReleaseFenceMember{}, false
+	return ReleaseFenceMember{}, false
 }
 
 func memberSlot(evidence *domain.EffectEvidence) domain.Slot {
@@ -280,7 +279,7 @@ func memberSlot(evidence *domain.EffectEvidence) domain.Slot {
 	return evidence.ObservedSlot
 }
 
-func cloneReleaseOperationHead(value releases.ReleaseOperationHead) releases.ReleaseOperationHead {
+func CloneReleaseOperationHead(value ReleaseOperationHead) ReleaseOperationHead {
 	value.Attempts = slices.Clone(value.Attempts)
 	value.Members = slices.Clone(value.Members)
 	if value.Progress != nil {

@@ -69,7 +69,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		{Key: base.Values[3].Key, ModRevision: base.Values[3].ModRevision},
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(pending)*3)
-	defer clearMutations(mutations)
+	defer etcdstore.ZeroMutationBytes(mutations)
 	for offset, index := range pending {
 		member := head.Members[index]
 		intentValue, checkpointValue, projectionValue := details.Values[offset*3], details.Values[offset*3+1], details.Values[offset*3+2]
@@ -271,7 +271,7 @@ func (repository *TaskRepository) closeRecoveredRelease(
 		{Type: etcdstore.MutationDelete, Key: releases.ReleaseFenceSetKey(task.Owner.EnvironmentID)},
 		{Type: etcdstore.MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
 	}
-	defer clearMutations(mutations)
+	defer etcdstore.ZeroMutationBytes(mutations)
 	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)
 	if err != nil {
 		return false, err

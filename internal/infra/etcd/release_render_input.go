@@ -72,7 +72,7 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
 	result := ReleaseTaskRenderInput{
-		PublicationID: publicationID, Operation: cloneReleaseOperationHead(head),
+		PublicationID: publicationID, Operation: releases.CloneReleaseOperationHead(head),
 		Members: make([]releaserender.ReleaseTaskRenderMember, len(manifest.Members)),
 	}
 	for index, reference := range manifest.Members {

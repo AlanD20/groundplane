@@ -149,5 +149,5 @@ func prepareReleaseHookPublicationFragment(
 }
 
 func clearReleaseHookPublicationFragment(fragment releaseHookPublicationFragment) {
-	clearMutations(fragment.mutations)
+	etcdstore.ZeroMutationBytes(fragment.mutations)
 }

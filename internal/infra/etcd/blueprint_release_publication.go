@@ -228,7 +228,7 @@ func (publication *BlueprintReleasePublication) Clear() {
 	if publication == nil {
 		return
 	}
-	clearMutations(publication.mutations)
+	etcdstore.ZeroMutationBytes(publication.mutations)
 	publication.sources.Clear()
 	clearScriptSourcePreparationMembers(publication.members)
 	*publication = BlueprintReleasePublication{}

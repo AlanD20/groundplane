@@ -90,7 +90,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,
 		})
 		if encodeErr != nil {
-			clearMutations(mutations)
+			etcdstore.ZeroMutationBytes(mutations)
 			return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
 		serviceValue, encodeErr := json.Marshal(
@@ -98,7 +98,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		)
 		if encodeErr != nil {
 			clear(environmentValue)
-			clearMutations(mutations)
+			etcdstore.ZeroMutationBytes(mutations)
 			return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
 		mutations = append(
@@ -118,7 +118,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if len(evidence.Hooks) != 0 {
 		if evidence.HookPrepared.key != blueprintReleaseHookStageKey(evidence.Task.OperationID) ||
 			evidence.HookPrepared.revision <= 0 {
-			clearMutations(mutations)
+			etcdstore.ZeroMutationBytes(mutations)
 			return BlueprintReleasePublication{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint hook preparation is incomplete",
@@ -136,7 +136,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	var sourceFragment ScriptSourcePublicationFragment
 	if !evidence.SourcePrepared.IsZero() {
 		if authority == nil || len(evidence.SourceMembers) == 0 {
-			clearMutations(mutations)
+			etcdstore.ZeroMutationBytes(mutations)
 			return BlueprintReleasePublication{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint Script source publication is incomplete",
@@ -144,7 +144,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		}
 		sourceFragment, err = authority.FinalPublicationFragment(ctx, evidence.SourcePrepared)
 		if err != nil {
-			clearMutations(mutations)
+			etcdstore.ZeroMutationBytes(mutations)
 			return BlueprintReleasePublication{}, err
 		}
 	}
@@ -153,7 +153,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		Conditions: conditions, Mutations: mutations, SourceFragment: sourceFragment,
 		SourceAuthority: authority, SourceMembers: evidence.SourceMembers,
 	})
-	clearMutations(mutations)
+	etcdstore.ZeroMutationBytes(mutations)
 	if err != nil {
 		sourceFragment.Clear()
 		return BlueprintReleasePublication{}, err
