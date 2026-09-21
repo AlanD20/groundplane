@@ -208,7 +208,7 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	if err != nil {
 		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
-	resolved, err := secrets.resolveSecretAtRevision(ctx, sources.Project.Record.ID, reference, sources.Revision)
+	resolved, err := secrets.ResolveSecretAtRevision(ctx, sources.Project.Record.ID, reference, sources.Revision)
 	if err != nil {
 		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
