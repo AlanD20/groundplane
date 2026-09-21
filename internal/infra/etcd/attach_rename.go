@@ -21,7 +21,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateAttachVersion(current); err != nil {
+	if err := attachrecord.ValidateAttachVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	replacement := current.Record

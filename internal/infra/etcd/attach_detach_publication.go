@@ -336,7 +336,7 @@ func validateAttachDetachScope(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateAttachVersion(current); err != nil {
+	if err := attachrecord.ValidateAttachVersion(current); err != nil {
 		return err
 	}
 	record := current.Record

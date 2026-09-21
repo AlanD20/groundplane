@@ -15,7 +15,7 @@ func (repository *AttachRepository) ReplaceLifecycle(
 	current etcdstore.Versioned[attachrecord.Record],
 	replacement attachrecord.Record,
 ) (etcdstore.Versioned[attachrecord.Record], error) {
-	if err := validateAttachVersion(current); err != nil {
+	if err := attachrecord.ValidateAttachVersion(current); err != nil {
 		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if err := attachrecord.ValidateAttachRecord(replacement); err != nil {
@@ -119,11 +119,4 @@ func attachImmutableEqual(left attachrecord.Record, right attachrecord.Record) b
 		}
 	}
 	return true
-}
-
-func validateAttachVersion(current etcdstore.Versioned[attachrecord.Record]) error {
-	if current.Revision <= 0 {
-		return errs.New(errs.KindValidationFailed, "Attach record revision must be positive")
-	}
-	return attachrecord.ValidateAttachRecord(current.Record)
 }

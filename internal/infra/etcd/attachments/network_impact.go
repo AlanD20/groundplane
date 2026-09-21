@@ -1,8 +1,7 @@
-package etcd
+package attachments
 
 import (
 	"context"
-	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -16,12 +15,12 @@ const backingZoneImpactPageSize = int64(128)
 
 // ListAttachesByBackingNetworkAtRevision returns the complete stable-id ordered
 // dependency set selected by a backing Project and its owned network.
-func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
+func (repository *Reader) ListAttachesByBackingNetworkAtRevision(
 	ctx context.Context,
 	backingProjectID string,
 	networkID string,
 	revision int64,
-) ([]etcdstore.Versioned[attachrecord.Record], error) {
+) ([]etcdstore.Versioned[Record], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
@@ -52,7 +51,7 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 		start = page.Values[len(page.Values)-1].Key
 	}
 	if len(indexes) == 0 {
-		return []etcdstore.Versioned[attachrecord.Record]{}, nil
+		return []etcdstore.Versioned[Record]{}, nil
 	}
 	keys := make([]string, len(indexes))
 	idsByIndex := make([]string, len(indexes))
@@ -62,7 +61,7 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 			string(value.Value) != attachID {
 			return nil, errs.New(errs.KindInternal, "backing Zone Attach index is corrupt")
 		}
-		keys[index] = attachrecord.AttachKey(attachID)
+		keys[index] = AttachKey(attachID)
 		idsByIndex[index] = attachID
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -72,23 +71,23 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != len(keys) {
 		return nil, errs.New(errs.KindInternal, "backing Zone Attach snapshot is incomplete")
 	}
-	result := make([]etcdstore.Versioned[attachrecord.Record], 0, len(keys))
+	result := make([]etcdstore.Versioned[Record], 0, len(keys))
 	for index, value := range stored.Values {
 		if value == nil {
 			return nil, errs.New(errs.KindInternal, "backing Zone Attach record is missing")
 		}
-		record, err := attachrecord.DecodeAttachRecord(value.Value)
+		record, err := DecodeAttachRecord(value.Value)
 		if err != nil || record.ID != idsByIndex[index] || record.BackingProjectID != backingProjectID {
-			return nil, attachrecord.CorruptAttachRecord()
+			return nil, CorruptAttachRecord()
 		}
 		if record.BackingNetworkID != networkID {
 			continue
 		}
-		result = append(result, etcdstore.Versioned[attachrecord.Record]{
+		result = append(result, etcdstore.Versioned[Record]{
 			Record: record, Revision: value.ModRevision, ReadRevision: revision,
 		})
 	}
-	slices.SortFunc(result, func(left, right etcdstore.Versioned[attachrecord.Record]) int {
+	slices.SortFunc(result, func(left, right etcdstore.Versioned[Record]) int {
 		return strings.Compare(left.Record.ID, right.Record.ID)
 	})
 	return result, nil

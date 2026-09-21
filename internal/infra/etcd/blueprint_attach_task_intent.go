@@ -1,7 +1,6 @@
 package etcd
 
 import (
-	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -11,7 +10,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -92,41 +90,6 @@ func PrepareEnvironmentBlueprintAttachTask(
 		return BlueprintAttachTaskPreparation{}, err
 	}
 	return preparation, nil
-}
-
-func (repository *AttachRepository) GetBlueprintAttachTaskIntent(
-	ctx context.Context,
-	taskID string,
-) (etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent], bool, error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, err
-	}
-	if ids.Validate(ids.KindTask, taskID) != nil {
-		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, errs.New(
-			errs.KindValidationFailed,
-			"Blueprint Attach Task id is invalid",
-		)
-	}
-	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{attachrecord.BlueprintAttachTaskIntentKey(taskID)}})
-	if err != nil {
-		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, err
-	}
-	if result == nil || len(result.Values) != 1 {
-		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, errs.New(
-			errs.KindInternal,
-			"Blueprint Attach Task intent read is incomplete",
-		)
-	}
-	if result.Values[0] == nil {
-		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{ReadRevision: result.ReadRevision}, false, nil
-	}
-	intent, err := attachrecord.DecodeBlueprintAttachTaskIntent(result.Values[0].Value)
-	if err != nil {
-		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, err
-	}
-	return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{
-		Record: intent, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
-	}, true, nil
 }
 
 func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPreparation) error {

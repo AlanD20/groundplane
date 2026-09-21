@@ -14,7 +14,7 @@ func (repository *AttachRepository) DeleteDetachedAttach(
 	ctx context.Context,
 	current etcdstore.Versioned[attachrecord.Record],
 ) (int64, error) {
-	if err := validateAttachVersion(current); err != nil {
+	if err := attachrecord.ValidateAttachVersion(current); err != nil {
 		return 0, err
 	}
 	if current.Record.Status != core.AttachDetached {
@@ -49,7 +49,7 @@ func prepareAttachRemoval(
 	current etcdstore.Versioned[attachrecord.Record],
 	revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, [][]byte, error) {
-	if err := validateAttachVersion(current); err != nil {
+	if err := attachrecord.ValidateAttachVersion(current); err != nil {
 		return nil, nil, nil, err
 	}
 	if revision <= 0 {

@@ -26,6 +26,7 @@ type AttachCreateScope struct {
 }
 
 type AttachRepository struct {
+	*attachrecord.Reader
 	store etcdstore.Store
 }
 
@@ -38,5 +39,5 @@ func NewAttachRepository(store etcdstore.Store) (*AttachRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
 	}
-	return &AttachRepository{store: store}, nil
+	return &AttachRepository{Reader: attachrecord.NewReader(store), store: store}, nil
 }
