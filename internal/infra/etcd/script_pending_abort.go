@@ -11,6 +11,7 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -26,6 +27,21 @@ type pendingScriptAbortChange struct {
 	mutations  []etcdstore.Mutation
 }
 
+// scriptClaimSourceChange combines source activation with the claiming Task's
+// execution fence. It is not reusable source-publication authority.
+type scriptClaimSourceChange struct {
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
+}
+
+func (change *scriptClaimSourceChange) Clear() {
+	if change == nil {
+		return
+	}
+	etcdstore.ClearMutationValues(change.mutations)
+	*change = scriptClaimSourceChange{}
+}
+
 func (change *pendingScriptAbortChange) clear() {
 	if change == nil {
 		return
@@ -39,41 +55,41 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 	task TaskRecord,
 	taskRevision int64,
 	revision int64,
-) (ScriptSourceReleaseFragment, bool, error) {
+) (scriptClaimSourceChange, bool, error) {
 	if task.Type != taskjournal.TaskScript && !blueprintScriptTaskShape(task) {
-		return ScriptSourceReleaseFragment{}, true, nil
+		return scriptClaimSourceChange{}, true, nil
 	}
 	steps, err := preparedScriptExecutionSteps(task)
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, false, err
+		return scriptClaimSourceChange{}, false, err
 	}
 	if len(steps) == 0 {
-		return ScriptSourceReleaseFragment{}, true, nil
+		return scriptClaimSourceChange{}, true, nil
 	}
 	key := scriptsourceevidence.ScriptSourceRootKey(task.OperationID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, false, err
+		return scriptClaimSourceChange{}, false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return ScriptSourceReleaseFragment{}, false, releases.CorruptReleaseRecord()
+		return scriptClaimSourceChange{}, false, releases.CorruptReleaseRecord()
 	}
 	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.OperationID {
-		return ScriptSourceReleaseFragment{}, false, releases.CorruptReleaseRecord()
+		return scriptClaimSourceChange{}, false, releases.CorruptReleaseRecord()
 	}
 	if root.Phase == scriptsourceevidence.ScriptOperationSourceReleasing && root.ReleasePath == scriptsourceevidence.ScriptSourceReleaseNormal &&
 		(root.RetryDisposition == sourceref.RetryDispositionAbandoned ||
 			root.RetryDisposition == sourceref.RetryDispositionForbidden) {
-		return ScriptSourceReleaseFragment{}, false, nil
+		return scriptClaimSourceChange{}, false, nil
 	}
 	if root.Phase != scriptsourceevidence.ScriptOperationSourceActive || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
 		(root.RetryDisposition != sourceref.RetryDispositionUndecided &&
 			root.RetryDisposition != sourceref.RetryDispositionTransferred) ||
 		read.Values[0].ModRevision != taskRevision {
-		return ScriptSourceReleaseFragment{}, false, releases.CorruptReleaseRecord()
+		return scriptClaimSourceChange{}, false, releases.CorruptReleaseRecord()
 	}
-	change := ScriptSourceReleaseFragment{conditions: []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
+	change := scriptClaimSourceChange{conditions: []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
 	if task.Type == taskjournal.TaskScript {
 		execution, value, err := (composeScriptRepository(repository.store)).manualScriptExecutionAtRevision(
 			ctx,
@@ -82,20 +98,21 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 		)
 		if err != nil || !manualScriptRootMatches(execution, root) || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference {
-			return ScriptSourceReleaseFragment{}, false, errs.New(
+			return scriptClaimSourceChange{}, false, errs.New(
 				errs.KindInternal,
 				"manual Script claim source authority is corrupt",
 			)
 		}
 		if root.RetryDisposition == sourceref.RetryDispositionTransferred {
-			authority, err := newScriptSourceReferenceAuthority(repository.store)
+			authority, err := scriptsourcepublication.NewAuthority(repository.store)
 			if err != nil {
-				return ScriptSourceReleaseFragment{}, false, err
+				return scriptClaimSourceChange{}, false, err
 			}
-			change, err = authority.PrepareRetryActivation(ctx, task.OperationID, read.Values[0].ModRevision)
+			activation, err := authority.PrepareRetryActivation(ctx, task.OperationID, read.Values[0].ModRevision)
 			if err != nil {
-				return ScriptSourceReleaseFragment{}, false, err
+				return scriptClaimSourceChange{}, false, err
 			}
+			change = scriptClaimSourceChange{conditions: activation.Conditions(), mutations: activation.Mutations()}
 		}
 		change.conditions = append(change.conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
 	}
@@ -161,7 +178,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
@@ -187,9 +204,9 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
-	conditions := append([]etcdstore.Condition(nil), final.conditions...)
+	conditions := append([]etcdstore.Condition(nil), final.Conditions()...)
 	conditions = append(conditions, guards[1:]...)
-	mutations := append([]etcdstore.Mutation(nil), final.mutations...)
+	mutations := append([]etcdstore.Mutation(nil), final.Mutations()...)
 	final.Clear()
 	return pendingScriptAbortChange{
 		applies: true, terminalAt: terminalAt, conditions: conditions, mutations: mutations,
@@ -209,7 +226,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 		return pendingScriptAbortChange{}, err
 	}
 	terminalAt := *terminal.FinishedAt
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
@@ -222,11 +239,11 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 		return pendingScriptAbortChange{}, err
 	}
 	defer release.Clear()
-	if len(release.conditions) == 0 || len(release.mutations) == 0 {
+	if len(release.Conditions()) == 0 || len(release.Mutations()) == 0 {
 		return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 	}
-	conditions := append([]etcdstore.Condition{{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision}}, release.conditions...)
-	mutations := append([]etcdstore.Mutation(nil), release.mutations...)
+	conditions := append([]etcdstore.Condition{{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision}}, release.Conditions()...)
+	mutations := append([]etcdstore.Mutation(nil), release.Mutations()...)
 	defer etcdstore.ClearMutationValues(mutations)
 	for index, execution := range executions {
 		next, encodeErr := abortScriptExecutionBeforeStart(

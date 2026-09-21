@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -109,7 +110,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID), ModRevision: read.Values[1].ModRevision},
 		executionCondition, reportCondition,
 	}
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return scriptTerminalSourceRelease{}, false, err
 	}
@@ -137,10 +138,10 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 			return scriptTerminalSourceRelease{}, false, err
 		}
 		defer clear(encoded)
-		mutations := append(cloneBlueprintCandidateMutations(release.mutations), reportMutation,
+		mutations := append(cloneBlueprintCandidateMutations(release.Mutations()), reportMutation,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: executionValue.Key, Value: encoded})
 		defer etcdstore.ClearMutationValues(mutations)
-		transaction, err := repository.store.Transact(ctx, append(guards, release.conditions...), mutations)
+		transaction, err := repository.store.Transact(ctx, append(guards, release.Conditions()...), mutations)
 		if err != nil {
 			return scriptTerminalSourceRelease{}, false, err
 		}
@@ -170,7 +171,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	defer final.Clear()
 	return scriptTerminalSourceRelease{
-		conditions: append(append([]etcdstore.Condition(nil), final.conditions...), executionCondition, reportCondition),
-		mutations:  append(cloneBlueprintCandidateMutations(final.mutations), reportMutation),
+		conditions: append(append([]etcdstore.Condition(nil), final.Conditions()...), executionCondition, reportCondition),
+		mutations:  append(cloneBlueprintCandidateMutations(final.Mutations()), reportMutation),
 	}, false, nil
 }

@@ -10,6 +10,7 @@ import (
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -83,7 +84,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	defer clearScriptSourcePreparationMembers(members)
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return result, err
 	}
@@ -108,7 +109,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	defer fragment.Clear()
-	execution.SourceMembershipCount, execution.SourceMembershipSHA256 = prepared.membershipCount, prepared.membershipSHA256
+	execution.SourceMembershipCount, execution.SourceMembershipSHA256 = prepared.MembershipCount(), prepared.MembershipSHA256()
 	primary, err := preparedScriptPrimary(ctx, repository.store, sources)
 	if err != nil {
 		return result, err
@@ -133,7 +134,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	conditions = append(conditions, sourceConditions...)
-	conditions = append(conditions, fragment.conditions...)
+	conditions = append(conditions, fragment.Conditions()...)
 	executionValue, err := recordcodec.Encode("script-execution", execution)
 	if err != nil {
 		return result, err
@@ -156,7 +157,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 	}
-	mutations = append(mutations, fragment.mutations...)
+	mutations = append(mutations, fragment.Mutations()...)
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations,
 		classifyScriptExecutionPublication(len(conditions)))
 	if err != nil {

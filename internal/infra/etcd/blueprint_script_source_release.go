@@ -10,6 +10,7 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -235,7 +236,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	if pending != nil && root.ReleaseCursor != root.MembershipCount {
 		return pending.projection(executionGuards), false, nil
 	}
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return scriptTerminalSourceRelease{}, false, err
 	}
@@ -263,8 +264,8 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	// Environment epoch, writer, and recovery authority. Add only source and
 	// execution evidence here; duplicate compares are rejected by its compiler.
 	change := scriptTerminalSourceRelease{
-		conditions: append(append([]etcdstore.Condition(nil), final.conditions...), executionGuards...),
-		mutations:  cloneBlueprintCandidateMutations(final.mutations),
+		conditions: append(append([]etcdstore.Condition(nil), final.Conditions()...), executionGuards...),
+		mutations:  cloneBlueprintCandidateMutations(final.Mutations()),
 	}
 	if task.Type == taskjournal.TaskUpdate {
 		change.conditions = append(change.conditions, closingCondition)
@@ -280,7 +281,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	values []*etcdstore.KeyValue,
 	terminalAt time.Time,
 ) (scriptTerminalSourceRelease, error) {
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return scriptTerminalSourceRelease{}, err
 	}
@@ -288,8 +289,8 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	if err != nil {
 		return scriptTerminalSourceRelease{}, err
 	}
-	conditions := append([]etcdstore.Condition(nil), release.conditions...)
-	mutations := cloneBlueprintCandidateMutations(release.mutations)
+	conditions := append([]etcdstore.Condition(nil), release.Conditions()...)
+	mutations := cloneBlueprintCandidateMutations(release.Mutations())
 	release.Clear()
 	for index, execution := range executions {
 		if !terminalAt.After(execution.UpdatedAt) {

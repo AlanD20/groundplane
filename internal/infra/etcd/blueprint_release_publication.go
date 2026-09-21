@@ -14,6 +14,7 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -119,8 +120,8 @@ type BlueprintReleasePublication struct {
 	operationID   string
 	conditions    []etcdstore.Condition
 	mutations     []etcdstore.Mutation
-	sources       ScriptSourcePublicationFragment
-	authority     *ScriptSourceReferenceAuthority
+	sources       scriptsourcepublication.ScriptSourcePublicationFragment
+	authority     *scriptsourcepublication.Authority
 	members       []scriptsourceevidence.ScriptSourcePreparationMember
 	retained      *blueprintRuntimeRetention
 }
@@ -130,8 +131,8 @@ type blueprintReleasePublicationInput struct {
 	OperationID     string
 	Conditions      []etcdstore.Condition
 	Mutations       []etcdstore.Mutation
-	SourceFragment  ScriptSourcePublicationFragment
-	SourceAuthority *ScriptSourceReferenceAuthority
+	SourceFragment  scriptsourcepublication.ScriptSourcePublicationFragment
+	SourceAuthority *scriptsourcepublication.Authority
 	SourceMembers   []scriptsourceevidence.ScriptSourcePreparationMember
 }
 
@@ -145,10 +146,10 @@ func newBlueprintReleasePublication(input blueprintReleasePublicationInput) (Blu
 	}
 	publication := BlueprintReleasePublication{
 		environmentID: input.EnvironmentID, operationID: input.OperationID,
-		conditions: append(append([]etcdstore.Condition(nil), input.Conditions...), input.SourceFragment.conditions...),
+		conditions: append(append([]etcdstore.Condition(nil), input.Conditions...), input.SourceFragment.Conditions()...),
 		mutations: append(
 			cloneBlueprintReleaseMutations(input.Mutations),
-			cloneBlueprintReleaseMutations(input.SourceFragment.mutations)...),
+			cloneBlueprintReleaseMutations(input.SourceFragment.Mutations())...),
 		sources: input.SourceFragment, authority: input.SourceAuthority,
 		members: cloneScriptSourcePreparationMembers(input.SourceMembers),
 	}
@@ -179,8 +180,8 @@ func (publication BlueprintReleasePublication) validate(environmentID string, ta
 				!slices.Equal(publication.conditions, publication.retained.conditions) ||
 				publication.authority != nil ||
 				len(publication.members) != 0 ||
-				len(publication.sources.conditions) != 0 ||
-				len(publication.sources.mutations) != 0 {
+				len(publication.sources.Conditions()) != 0 ||
+				len(publication.sources.Mutations()) != 0 {
 				return errs.New(
 					errs.KindValidationFailed,
 					"Blueprint retained runtime publication does not match its Task",

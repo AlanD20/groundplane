@@ -10,6 +10,7 @@ import (
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -222,7 +223,7 @@ type BlueprintReleasePublicationEvidence struct {
 	Plan                       *agentpb.ExecutionPlan
 	Hooks                      []ReleaseHookExecutionPublication
 	PublishedAt                time.Time
-	SourcePrepared             PreparedSourceSet
+	SourcePrepared             scriptsourcepublication.PreparedSourceSet
 	SourceMembers              []scriptsourceevidence.ScriptSourcePreparationMember
 	HookPrepared               PreparedBlueprintReleaseHooks
 }

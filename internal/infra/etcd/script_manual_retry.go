@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -28,7 +29,7 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 		return scriptTerminalSourceRelease{}, taskassignments.CorruptTaskAssignment()
 	}
 	*terminalAt = *terminal.FinishedAt
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return scriptTerminalSourceRelease{}, err
 	}
@@ -43,10 +44,10 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	}
 	defer fragment.Clear()
 	return scriptTerminalSourceRelease{
-		conditions: append(append([]etcdstore.Condition(nil), fragment.conditions...),
+		conditions: append(append([]etcdstore.Condition(nil), fragment.Conditions()...),
 			etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
 			etcdstore.Condition{Key: manualScriptClosingReportKey(task.ID)}),
-		mutations: cloneBlueprintCandidateMutations(fragment.mutations),
+		mutations: cloneBlueprintCandidateMutations(fragment.Mutations()),
 	}, nil
 }
 
@@ -96,7 +97,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		!root.RetryExpiresAt.Equal(*source.RetainUntil) {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script retry sources changed")
 	}
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
@@ -118,14 +119,14 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
-	mutations := append(cloneBlueprintCandidateMutations(fragment.mutations),
+	mutations := append(cloneBlueprintCandidateMutations(fragment.Mutations()),
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: executionValue.Key, Value: encoded})
 	values := make([][]byte, len(mutations))
 	for index, mutation := range mutations {
 		values[index] = mutation.Value
 	}
 	return scriptTaskChange{applies: true,
-		conditions: append(append([]etcdstore.Condition(nil), fragment.conditions...),
+		conditions: append(append([]etcdstore.Condition(nil), fragment.Conditions()...),
 			etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
 			etcdstore.Condition{Key: retentionKey, ModRevision: read.Values[1].ModRevision},
 			etcdstore.Condition{Key: taskjournal.TaskAssignmentIndexKey(source.ID)}, etcdstore.Condition{Key: manualScriptClosingReportKey(source.ID)}),

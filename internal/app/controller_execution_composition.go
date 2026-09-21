@@ -9,6 +9,7 @@ import (
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
@@ -27,7 +28,7 @@ type controllerExecutionComposition struct {
 	backingHookCheckpoints  *taskcheckpoint.BackingHookCheckpointService
 	materializationResolver *taskmaterialization.TaskMaterializationResolver
 	scriptArtifacts         *taskplanning.ScriptArtifactService
-	scriptSourceReferences  *etcd.ScriptSourceReferenceAuthority
+	scriptSourceReferences  *scriptsourcepublication.Authority
 	backupSecrets           *backupcapability.BackupSecretResolver
 }
 

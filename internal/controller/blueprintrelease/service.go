@@ -23,6 +23,7 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"strings"
@@ -36,7 +37,7 @@ type Service struct {
 	scripts     *etcd.ScriptRepository
 	plans       *taskplanning.TaskPlanResolver
 	preparation *taskplanning.ScriptRunnerPreparationService
-	sources     *etcd.ScriptSourceReferenceAuthority
+	sources     *scriptsourcepublication.Authority
 }
 
 func NewService(
@@ -44,7 +45,7 @@ func NewService(
 	scripts *etcd.ScriptRepository,
 	plans *taskplanning.TaskPlanResolver,
 	artifacts *taskplanning.ScriptArtifactService,
-	sources *etcd.ScriptSourceReferenceAuthority,
+	sources *scriptsourcepublication.Authority,
 	agents *agentregistration.Repository,
 	images workloadseal.Resolver,
 ) (*Service, error) {
@@ -304,7 +305,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	if err != nil {
 		return Prepared{}, err
 	}
-	var sourcePrepared etcd.PreparedSourceSet
+	var sourcePrepared scriptsourcepublication.PreparedSourceSet
 	if len(sourceMembers) != 0 {
 		sourcePrepared, err = service.sources.Prepare(ctx, task.OperationID, sourceMembers)
 		if err != nil {

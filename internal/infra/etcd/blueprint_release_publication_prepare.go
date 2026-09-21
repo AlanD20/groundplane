@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -18,7 +19,7 @@ import (
 // indexes, Script checkpoints, and prepared source root into one opaque fragment.
 func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	ctx context.Context,
-	authority *ScriptSourceReferenceAuthority,
+	authority *scriptsourcepublication.Authority,
 	evidence BlueprintReleasePublicationEvidence,
 ) (BlueprintReleasePublication, error) {
 	if ctx == nil || ledger == nil || ledger.store == nil || evidence.Manifest.Revision <= 0 ||
@@ -134,7 +135,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: evidence.HookPrepared.key})
 	}
-	var sourceFragment ScriptSourcePublicationFragment
+	var sourceFragment scriptsourcepublication.ScriptSourcePublicationFragment
 	if !evidence.SourcePrepared.IsZero() {
 		if authority == nil || len(evidence.SourceMembers) == 0 {
 			etcdstore.ZeroMutationBytes(mutations)

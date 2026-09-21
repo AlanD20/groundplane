@@ -1,4 +1,4 @@
-package etcd
+package scriptsourcepublication
 
 import (
 	"bytes"
@@ -109,12 +109,13 @@ func (fragment *ScriptSourcePublicationFragment) Clear() {
 	*fragment = ScriptSourcePublicationFragment{}
 }
 
-type ScriptSourceReferenceAuthority struct {
-	store      hierarchyStore
+type Authority struct {
+	store      sourceStore
 	repository *ref.Repository
 }
 
-func newScriptSourceReferenceAuthority(store hierarchyStore) (*ScriptSourceReferenceAuthority, error) {
+// NewScriptSourceReferenceAuthority constructs the source membership authority.
+func NewAuthority(store sourceStore) (*Authority, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "Script source reference store is required")
 	}
@@ -122,17 +123,10 @@ func newScriptSourceReferenceAuthority(store hierarchyStore) (*ScriptSourceRefer
 	if err != nil {
 		return nil, ref.ToApplicationError(err)
 	}
-	return &ScriptSourceReferenceAuthority{store: store, repository: repository}, nil
+	return &Authority{store: store, repository: repository}, nil
 }
 
-// NewScriptSourceReferenceAuthority constructs the Controller-composed source
-// authority. The concrete type remains the only writer of prepared source
-// memberships and active roots.
-func NewScriptSourceReferenceAuthority(store etcdstore.Store) (*ScriptSourceReferenceAuthority, error) {
-	return newScriptSourceReferenceAuthority(store)
-}
-
-func (authority *ScriptSourceReferenceAuthority) Prepare(
+func (authority *Authority) Prepare(
 	ctx context.Context,
 	operationID string,
 	members []scriptsourceevidence.ScriptSourcePreparationMember,
@@ -153,7 +147,7 @@ func (authority *ScriptSourceReferenceAuthority) Prepare(
 
 // Abandon releases a matching preparation's exact committed membership prefix.
 // Current source records are deliberately not re-adopted during cleanup.
-func (authority *ScriptSourceReferenceAuthority) Abandon(
+func (authority *Authority) Abandon(
 	ctx context.Context,
 	operationID string,
 	members []scriptsourceevidence.ScriptSourcePreparationMember,
@@ -167,14 +161,14 @@ func (authority *ScriptSourceReferenceAuthority) Abandon(
 
 // RecoverPreparations must finish before the single Controller accepts new
 // mutations. Published source roots are not preparation cleanup authority.
-func (authority *ScriptSourceReferenceAuthority) RecoverPreparations(ctx context.Context) error {
+func (authority *Authority) RecoverPreparations(ctx context.Context) error {
 	if authority == nil || authority.repository == nil {
 		return errs.New(errs.KindValidationFailed, "Script source recovery authority is missing")
 	}
 	return ref.ToApplicationError(authority.repository.RecoverPreparations(ctx))
 }
 
-func (authority *ScriptSourceReferenceAuthority) FinalPublicationFragment(
+func (authority *Authority) FinalPublicationFragment(
 	ctx context.Context,
 	prepared PreparedSourceSet,
 ) (ScriptSourcePublicationFragment, error) {
@@ -199,7 +193,7 @@ func (authority *ScriptSourceReferenceAuthority) FinalPublicationFragment(
 	return result, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) PrepareNormalRelease(
+func (authority *Authority) PrepareNormalRelease(
 	ctx context.Context,
 	operationID string,
 	disposition ref.RetryDisposition,
@@ -216,7 +210,7 @@ func (authority *ScriptSourceReferenceAuthority) PrepareNormalRelease(
 	return result, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) PrepareRetryAvailable(
+func (authority *Authority) PrepareRetryAvailable(
 	ctx context.Context, operationID string, rootRevision int64, expiresAt time.Time,
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryAvailable(ctx, operationID, rootRevision, expiresAt)
@@ -230,7 +224,7 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryAvailable(
 	}, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) ReleaseNext(
+func (authority *Authority) ReleaseNext(
 	ctx context.Context,
 	operationID string,
 	guards []etcdstore.Condition,
@@ -239,7 +233,7 @@ func (authority *ScriptSourceReferenceAuthority) ReleaseNext(
 	return processed, drained, ref.ToApplicationError(err)
 }
 
-func (authority *ScriptSourceReferenceAuthority) ReleaseRetryExpiryNext(
+func (authority *Authority) ReleaseRetryExpiryNext(
 	ctx context.Context, operationID string, guards []etcdstore.Condition,
 ) (bool, bool, error) {
 	processed, drained, err := authority.repository.ReleaseRetryExpiryNext(
@@ -260,7 +254,7 @@ func scriptSourceReleaseGuards(guards []etcdstore.Condition) []ref.Condition {
 	return converted
 }
 
-func (authority *ScriptSourceReferenceAuthority) PrepareRetryTransfer(
+func (authority *Authority) PrepareRetryTransfer(
 	ctx context.Context, operationID string, rootRevision int64, at time.Time,
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryTransfer(ctx, operationID, rootRevision, at)
@@ -274,7 +268,7 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryTransfer(
 	}, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) PrepareRetryActivation(
+func (authority *Authority) PrepareRetryActivation(
 	ctx context.Context, operationID string, rootRevision int64,
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryActivation(ctx, operationID, rootRevision)
@@ -288,7 +282,7 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryActivation(
 	}, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiry(
+func (authority *Authority) PrepareRetryExpiry(
 	ctx context.Context, operationID string, rootRevision int64, now time.Time,
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryExpiry(ctx, operationID, rootRevision, now)
@@ -302,7 +296,7 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiry(
 	}, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) PrepareReleaseFinalization(
+func (authority *Authority) PrepareReleaseFinalization(
 	ctx context.Context,
 	operationID string,
 ) (ScriptSourceReleaseFragment, error) {
@@ -318,7 +312,7 @@ func (authority *ScriptSourceReferenceAuthority) PrepareReleaseFinalization(
 	return result, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiryFinalization(
+func (authority *Authority) PrepareRetryExpiryFinalization(
 	ctx context.Context, operationID string,
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryExpiryFinalization(ctx, operationID)
@@ -332,7 +326,7 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiryFinalization(
 	}, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) validateMembers(
+func (authority *Authority) validateMembers(
 	ctx context.Context,
 	operationID string,
 	members []scriptsourceevidence.ScriptSourcePreparationMember,
@@ -414,7 +408,7 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 	return converted, nil
 }
 
-func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx context.Context, member ref.Member) error {
+func (authority *Authority) validateExistingSource(ctx context.Context, member ref.Member) error {
 	read, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{member.SourceKey}, Revision: member.Reference.SourceModRevision,
 	})

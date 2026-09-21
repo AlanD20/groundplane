@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -64,7 +65,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		{Key: manualScriptClosingReportKey(task.ID)},
 		{Key: read.Values[1].Key, ModRevision: read.Values[1].ModRevision},
 	}
-	authority, err := newScriptSourceReferenceAuthority(repository.store)
+	authority, err := scriptsourcepublication.NewAuthority(repository.store)
 	if err != nil {
 		return false, err
 	}
@@ -83,10 +84,10 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 			return false, err
 		}
 		defer clear(encoded)
-		mutations := append(cloneBlueprintCandidateMutations(fragment.mutations),
+		mutations := append(cloneBlueprintCandidateMutations(fragment.Mutations()),
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: read.Values[1].Key, Value: encoded})
 		defer etcdstore.ClearMutationValues(mutations)
-		transaction, err := repository.store.Transact(ctx, append(guards, fragment.conditions...), mutations)
+		transaction, err := repository.store.Transact(ctx, append(guards, fragment.Conditions()...), mutations)
 		if err != nil {
 			return false, err
 		}
@@ -117,7 +118,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		return false, err
 	}
 	defer final.Clear()
-	transaction, err := repository.store.Transact(ctx, append(guards, final.conditions...), final.mutations)
+	transaction, err := repository.store.Transact(ctx, append(guards, final.Conditions()...), final.Mutations())
 	if err != nil {
 		return false, err
 	}

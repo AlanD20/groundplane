@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
@@ -13,11 +14,11 @@ import (
 func initializeExecutionSourceReferences(
 	ctx context.Context,
 	store etcdstore.Store,
-) (*etcd.ScriptSourceReferenceAuthority, error) {
+) (*scriptsourcepublication.Authority, error) {
 	if err := etcd.RecoverTaskSecretPinSources(ctx, store); err != nil {
 		return nil, err
 	}
-	authority, err := etcd.NewScriptSourceReferenceAuthority(store)
+	authority, err := scriptsourcepublication.NewAuthority(store)
 	if err != nil {
 		return nil, err
 	}
