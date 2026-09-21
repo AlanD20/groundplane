@@ -8,7 +8,6 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -49,7 +48,7 @@ func componentTaskDesiredProjectionZones(
 	if ids.Validate(ids.KindTask, desiredRevisionID) != nil {
 		return "", nil, errs.New(errs.KindStateConflict, "Component Task desired revision is invalid")
 	}
-	hierarchy := &HierarchyRepository{Reader: hierarchyrecord.NewReader(store), store: store, ProjectionReader: environmentqueries.NewProjectionReader(store)}
+	hierarchy := composeHierarchyRepository(store)
 	projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(
 		ctx, intent.EnvironmentID, desiredRevisionID,
 	)

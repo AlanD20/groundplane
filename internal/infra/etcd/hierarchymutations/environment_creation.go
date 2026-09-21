@@ -1,4 +1,4 @@
-package etcd
+package hierarchymutations
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyRepository) CreateEnvironment(
+func (repository *Repository) CreateEnvironment(
 	ctx context.Context,
 	record hierarchyrecord.EnvironmentRecord,
 ) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
@@ -20,7 +20,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	if err := hierarchyrecord.ValidateEnvironment(record); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	owner, err := repository.GetProject(ctx, record.ProjectID)
+	owner, err := repository.reader.GetProject(ctx, record.ProjectID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}

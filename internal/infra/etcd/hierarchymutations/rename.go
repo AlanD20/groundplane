@@ -1,4 +1,4 @@
-package etcd
+package hierarchymutations
 
 import (
 	"context"
@@ -9,13 +9,13 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyRepository) RenameTenant(
+func (repository *Repository) RenameTenant(
 	ctx context.Context,
 	id string,
 	expectedRevision int64,
 	slug string,
 ) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
-	current, err := repository.GetTenant(ctx, id)
+	current, err := repository.reader.GetTenant(ctx, id)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
@@ -46,13 +46,13 @@ func (repository *HierarchyRepository) RenameTenant(
 
 // RenameTenantProject renames only ordinary tenant-owned Projects. Backing
 // Project lifecycle is owned by its facade and is not exposed through this seam.
-func (repository *HierarchyRepository) RenameTenantProject(
+func (repository *Repository) RenameTenantProject(
 	ctx context.Context,
 	id string,
 	expectedRevision int64,
 	slug string,
 ) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
-	current, err := repository.GetProject(ctx, id)
+	current, err := repository.reader.GetProject(ctx, id)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}

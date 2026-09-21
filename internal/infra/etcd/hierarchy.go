@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchymutations"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -20,6 +21,7 @@ type hierarchyStore interface {
 type HierarchyRepository struct {
 	*hierarchyrecord.Reader
 	*environmentqueries.ProjectionReader
+	*hierarchymutations.Repository
 	store hierarchyStore
 }
 
@@ -45,7 +47,16 @@ func newHierarchyRepository(store hierarchyStore) (*HierarchyRepository, error) 
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "hierarchy store is required")
 	}
-	return &HierarchyRepository{Reader: hierarchyrecord.NewReader(store), store: store, ProjectionReader: environmentqueries.NewProjectionReader(store)}, nil
+	return composeHierarchyRepository(store), nil
+}
+
+func composeHierarchyRepository(store hierarchyStore) *HierarchyRepository {
+	return &HierarchyRepository{
+		Reader:           hierarchyrecord.NewReader(store),
+		ProjectionReader: environmentqueries.NewProjectionReader(store),
+		Repository:       hierarchymutations.NewRepository(store),
+		store:            store,
+	}
 }
 
 func newEnvironmentBlueprintRepository(
@@ -63,22 +74,4 @@ func newEnvironmentBlueprintRepository(
 		HierarchyRepository: hierarchy,
 		transactions:        transactions,
 	}, nil
-}
-
-func (repository *HierarchyRepository) diagnoseCreate(ctx context.Context, primary string, slug string) error {
-	primaryResult, err := repository.store.Get(ctx, primary)
-	if err != nil {
-		return err
-	}
-	slugResult, err := repository.store.Get(ctx, slug)
-	if err != nil {
-		return err
-	}
-	if slugResult.Entry != nil {
-		return errs.New(errs.KindSlugConflict, "slug is already in use")
-	}
-	if primaryResult.Entry != nil {
-		return errs.New(errs.KindStateConflict, "stable id is already in use")
-	}
-	return errs.New(errs.KindStateConflict, "hierarchy changed during create")
 }

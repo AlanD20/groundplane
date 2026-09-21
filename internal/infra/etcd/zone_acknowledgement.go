@@ -7,7 +7,6 @@ import (
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -109,7 +108,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 			{Type: etcdstore.MutationDelete, Key: keys[6]},
 		}, nil
 	}
-	hierarchy := &HierarchyRepository{Reader: hierarchyrecord.NewReader(repository.store), store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
+	hierarchy := composeHierarchyRepository(repository.store)
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx, intent.Claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},

@@ -1,4 +1,4 @@
-package etcd
+package hierarchymutations
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 func renameRecord[T any](
 	ctx context.Context,
-	store hierarchyStore,
+	store mutationStore,
 	current etcdstore.Versioned[T],
 	replacement T,
 	primaryKey string,
@@ -92,7 +92,7 @@ func renameRecord[T any](
 
 func diagnoseRename(
 	ctx context.Context,
-	store hierarchyStore,
+	store mutationStore,
 	primaryKey string,
 	expectedRevision int64,
 	oldSlugKey string,
