@@ -1,4 +1,4 @@
-package etcd
+package runners
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *RunnerRepository) GetRunnerDeletionTombstone(
+func (repository *Reader) GetRunnerDeletionTombstone(
 	ctx context.Context,
 	runnerID string,
 ) (etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord], bool, error) {

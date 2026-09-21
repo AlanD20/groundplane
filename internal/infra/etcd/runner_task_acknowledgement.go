@@ -54,7 +54,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		result.Values[2] != nil {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner provisioning state does not match its task")
 	}
-	record, err := decodeRunnerAggregate(result.Values[0], result.Values[1])
+	record, err := runnerrecord.DecodeRunnerAggregate(result.Values[0], result.Values[1])
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -84,7 +84,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	allocation, err := (&RunnerRepository{store: repository.store}).readRunnerAllocationEvidence(
+	allocation, err := (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(
 		ctx, record, revision,
 	)
 	if err != nil {
@@ -147,7 +147,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 		base.Values[2] == nil || base.Values[3] == nil {
 		return runnerTaskChange{}, errs.New(errs.KindInternal, "runner removal state is inconsistent")
 	}
-	record, err := decodeRunnerAggregate(base.Values[0], base.Values[1])
+	record, err := runnerrecord.DecodeRunnerAggregate(base.Values[0], base.Values[1])
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -162,7 +162,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 		!evidence.matchesRecord(record) || !evidence.matchesIntent(intent) {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner removal intent does not match its task")
 	}
-	allocation, err := (&RunnerRepository{store: repository.store}).readRunnerAllocationEvidence(ctx, record, revision)
+	allocation, err := (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(ctx, record, revision)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}

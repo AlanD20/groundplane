@@ -50,7 +50,7 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 		stored.Values[2] != nil {
 		return errs.New(errs.KindStateConflict, "runner creation replay evidence is incomplete")
 	}
-	record, err := decodeRunnerAggregate(stored.Values[0], stored.Values[1])
+	record, err := runnerrecord.DecodeRunnerAggregate(stored.Values[0], stored.Values[1])
 	if err != nil || record.Desired.ID != task.Target || record.CreateTaskID != task.ID {
 		return errs.New(errs.KindStateConflict, "runner creation replay retained corrupt target state")
 	}
@@ -61,7 +61,7 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 	if record.ProvisioningState != wantState {
 		return errs.New(errs.KindStateConflict, "runner creation replay target state changed")
 	}
-	_, err = (&RunnerRepository{store: repository.store}).readRunnerAllocationEvidence(ctx, record, revision)
+	_, err = (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(ctx, record, revision)
 	return err
 }
 
@@ -125,7 +125,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 	if stored.Values[0] == nil || stored.Values[1] == nil || stored.Values[5] == nil || stored.Values[7] == nil {
 		return errs.New(errs.KindStateConflict, "failed runner removal lost target state")
 	}
-	record, err := decodeRunnerAggregate(stored.Values[0], stored.Values[1])
+	record, err := runnerrecord.DecodeRunnerAggregate(stored.Values[0], stored.Values[1])
 	if err != nil || record.Desired.ID != task.Target || !evidence.matchesRecord(record) {
 		return errs.New(errs.KindStateConflict, "failed runner removal retained corrupt target state")
 	}

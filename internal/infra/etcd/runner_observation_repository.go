@@ -2,13 +2,11 @@ package etcd
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (repository *RunnerRepository) PutRunnerObservation(
@@ -71,36 +69,4 @@ func (repository *RunnerRepository) PutRunnerObservation(
 	return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
-}
-
-func (repository *RunnerRepository) GetRunnerObservation(
-	ctx context.Context,
-	runnerID string,
-) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
-	}
-	if err := recordcodec.ValidateID(ids.KindRunner, runnerID); err != nil {
-		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
-	}
-	result, err := repository.store.Get(ctx, runnerrecord.RunnerObservationKey(runnerID))
-	if err != nil {
-		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
-	}
-	if result == nil {
-		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, errs.New(
-			errs.KindInternal,
-			"runner observation read is empty",
-		)
-	}
-	if result.Entry == nil {
-		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{ReadRevision: result.ReadRevision}, false, nil
-	}
-	record, err := runnerrecord.DecodeRunnerObservation(result.Entry.Value)
-	if err != nil || record.RunnerID != runnerID {
-		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, errs.New(errs.KindInternal, "runner observation is corrupt")
-	}
-	return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{
-		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
-	}, true, nil
 }

@@ -102,11 +102,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		)
 	}
 	defer etcdstore.ClearValues(base.Values)
-	record, err := decodeRunnerAggregate(base.Values[0], base.Values[1])
+	record, err := runnerrecord.DecodeRunnerAggregate(base.Values[0], base.Values[1])
 	if err != nil || record.Desired.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	allocation, err := (&RunnerRepository{store: repository.store}).readRunnerAllocationEvidence(ctx, record, 0)
+	allocation, err := (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(ctx, record, 0)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}

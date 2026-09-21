@@ -75,7 +75,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 			"runner readiness evidence is incomplete",
 		)
 	}
-	runner, err := decodeRunnerAggregate(state.Values[0], state.Values[1])
+	runner, err := runnerrecord.DecodeRunnerAggregate(state.Values[0], state.Values[1])
 	if err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, err
 	}

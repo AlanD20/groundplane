@@ -50,7 +50,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		result.Values[2] != nil || result.Values[3] != nil {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner is not available for removal retry")
 	}
-	record, err := decodeRunnerAggregate(result.Values[0], result.Values[1])
+	record, err := runnerrecord.DecodeRunnerAggregate(result.Values[0], result.Values[1])
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -72,7 +72,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	allocation, err := (&RunnerRepository{store: repository.store}).readRunnerAllocationEvidence(
+	allocation, err := (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(
 		ctx, record, revision,
 	)
 	if err != nil {

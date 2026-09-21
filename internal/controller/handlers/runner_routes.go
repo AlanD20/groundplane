@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -17,7 +17,7 @@ import (
 
 type RunnerReader interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
-	ListRunners(context.Context, etcd.RunnerFilter, etcdstore.PageRequest) (etcdstore.Page[runnerrecord.RunnerRecord], error)
+	ListRunners(context.Context, runnerrecord.RunnerFilter, etcdstore.PageRequest) (etcdstore.Page[runnerrecord.RunnerRecord], error)
 	GetRunnerObservation(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
 	GetRunnerDeletionTombstone(context.Context, string) (etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord], bool, error)
 }
@@ -78,7 +78,7 @@ func (s *Server) listRunners(
 	if (request.Tenant == "") == (request.Project == "") {
 		return nil, errs.New(errs.KindValidationFailed, "Runner list requires exactly one Tenant or Project")
 	}
-	page, err := s.runners.ListRunners(ctx, etcd.RunnerFilter{
+	page, err := s.runners.ListRunners(ctx, runnerrecord.RunnerFilter{
 		TenantID: request.Tenant, ProjectID: request.Project,
 	}, etcdstore.PageRequest{Limit: request.Limit, Cursor: request.Cursor})
 	if err != nil {

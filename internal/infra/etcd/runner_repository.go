@@ -2,15 +2,12 @@ package etcd
 
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type RunnerFilter struct {
-	TenantID  string
-	ProjectID string
-}
-
 type RunnerRepository struct {
+	*runnerrecord.Reader
 	store hierarchyStore
 }
 
@@ -22,5 +19,9 @@ func newRunnerRepository(store hierarchyStore) (*RunnerRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "runner store is required")
 	}
-	return &RunnerRepository{store: store}, nil
+	return composeRunnerRepository(store), nil
+}
+
+func composeRunnerRepository(store hierarchyStore) *RunnerRepository {
+	return &RunnerRepository{Reader: runnerrecord.NewReader(store), store: store}
 }
