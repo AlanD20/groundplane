@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { operations } from "@/lib/api.generated";
 import type {
   Connector,
   ConnectorCreateInput,
@@ -7,6 +6,7 @@ import type {
 } from "@/lib/types";
 import type { ConnectorMutationIntent } from "@/lib/connector-intent";
 import { controllerRequest } from "@/lib/controller-json-request";
+import { requestTask, type TaskResponse } from "@/features/task/api";
 import { isTaskNotFoundError } from "@/lib/controller-request-errors";
 import {
   loadPendingConnectorRemovals,
@@ -20,8 +20,6 @@ import {
   type ConnectorCreateRequest,
   type ConnectorTaskAccepted,
 } from "./api";
-type TaskResponse =
-  operations["task.show"]["responses"][200]["content"]["application/json"];
 export type ConnectorState = {
   connectors: Connector[];
   connectorsLoading: boolean;
@@ -149,10 +147,7 @@ export function useConnectorStore(
           continue;
         }
         connectorRemovalPolls.current.add(taskId);
-        void controllerRequest<TaskResponse>(
-          `/tasks/${encodeURIComponent(taskId)}`,
-          200,
-        )
+        void requestTask(taskId)
           .then(async (task) => {
             connectorRemovalPollBackoff.current.delete(taskId);
             update((draft) => {

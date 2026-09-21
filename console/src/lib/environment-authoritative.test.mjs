@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { applyAuthoritativeEnvironmentScalars } from './environment-authoritative.ts'
+import { applyAuthoritativeEnvironmentScalars } from '../features/environment/authoritative-state.ts'
 
 // QA: OWN-02, NET-02, UI-01; local merge, not rename or network persistence.
 // Rationale: a synchronous edit response must update returned scalars without
@@ -20,6 +20,7 @@ test('Environment edit applies returned scalars and preserves hydrated children'
     status: 'pending',
     provisioningState: 'provisioning',
     createTaskId: 'task_old',
+    deletionTaskId: 'task_delete_old',
     volumeDir: '/old',
     zones,
     services,
@@ -36,6 +37,7 @@ test('Environment edit applies returned scalars and preserves hydrated children'
     status: 'healthy',
     provisioningState: 'ready',
     createTaskId: null,
+    deletionTaskId: 'task_delete_authoritative',
     volumeDir: '/authoritative',
   }
 

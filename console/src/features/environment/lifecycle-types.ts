@@ -12,10 +12,8 @@ import {
   type EnvironmentMutationKind,
   type EnvironmentRemovalDraft,
   type PendingResourceRemoval,
-  type TaskResponse,
 } from "@/features/environment/environment-removal-model";
-
-export type EnvironmentDeletionResponse = { task_id: string };
+import type { TaskResponse } from "@/features/task/api";
 
 export type EnvironmentLifecycleDraft = EnvironmentRemovalDraft & {
   projectError: string | null;
@@ -27,9 +25,6 @@ export type EnvironmentLifecycleOptions<
 > = {
   active: MutableRefObject<boolean>;
   update: (fn: (draft: State) => void) => void;
-  requestTask: RequestTask;
-  deleteResource: DeleteResource;
-  retryResource: RetryResource;
   listEnvironments: (
     projectId: string,
     signal?: AbortSignal,
@@ -53,20 +48,9 @@ type RequestTask = (
   taskId: string,
   signal?: AbortSignal,
 ) => Promise<TaskResponse>;
-type DeleteResource = (
-  resource: "environments" | "services" | "routes" | "entries" | "scripts",
-  id: string,
-  idempotencyKey: string,
-) => Promise<EnvironmentDeletionResponse>;
-type RetryResource = (
-  taskId: string,
-  idempotencyKey: string,
-) => Promise<EnvironmentDeletionResponse>;
 
 export type EnvironmentLifecycle<State extends EnvironmentLifecycleDraft> = {
-  pendingResourceRemovals: MutableRefObject<
-    Map<string, PendingResourceRemoval>
-  >;
+  isResourceRemovalTask: (taskId: string) => boolean;
   requestResourceRemovalTask: RequestTask;
   monitorResourceRemoval: (taskId: string) => void;
   reconcileResourceRemoval: (

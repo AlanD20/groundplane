@@ -21,12 +21,14 @@ import {
 } from "@/features/environment/operation-storage";
 import { newULID } from "@/lib/utils";
 import { isDefinitiveRemovalRequestRejection } from "@/features/environment/removal-outcome";
+import { requestResourceRemoval } from "./resource-removal-api";
+import { retryTask } from "@/features/task/api";
 
 const resourceRemovalObservationFreshMs = 1_500;
 export function useEnvironmentLifecycle<
   State extends EnvironmentLifecycleDraft,
 >(options: EnvironmentLifecycleOptions<State>): EnvironmentLifecycle<State> {
-  const { active, update, deleteResource, retryResource } = options;
+  const { active, update } = options;
   const removalState = useResourceRemovalState<State>(update);
   const {
     pendingResourceRemovals,
@@ -161,16 +163,14 @@ export function useEnvironmentLifecycle<
       update((draft) => {
         draft.environmentDeletionRevision += 1;
       });
-      const request = deleteResource(
+      const request = requestResourceRemoval(
         resource,
         trackedRemoval.resourceId,
         intent.idempotencyKey,
       )
-        .then((accepted) => {
-          if (!accepted.task_id)
-            throw new Error("Controller response is missing task_id");
-          pendingResourceRemovals.current.set(accepted.task_id, trackedRemoval);
-          resourceRemovalTasks.current.set(key, accepted.task_id);
+        .then((acceptedTaskId) => {
+          pendingResourceRemovals.current.set(acceptedTaskId, trackedRemoval);
+          resourceRemovalTasks.current.set(key, acceptedTaskId);
           persistPendingResourceRemovals(pendingResourceRemovals.current);
           update((draft) => {
             draft.environmentDeletionRevision += 1;
@@ -179,11 +179,11 @@ export function useEnvironmentLifecycle<
                 draft,
                 trackedRemoval.resourceId,
               );
-              if (environment) environment.deletionTaskId = accepted.task_id;
+              if (environment) environment.deletionTaskId = acceptedTaskId;
             }
           });
-          monitorResourceRemoval(accepted.task_id);
-          return accepted.task_id;
+          monitorResourceRemoval(acceptedTaskId);
+          return acceptedTaskId;
         })
         .catch((error) => {
           if (isDefinitiveRemovalRequestRejection(error)) {
@@ -215,7 +215,6 @@ export function useEnvironmentLifecycle<
       return request;
     },
     [
-      deleteResource,
       isEnvironmentDeletionPending,
       monitorResourceRemoval,
       nextEnvironmentGeneration,
@@ -265,10 +264,8 @@ export function useEnvironmentLifecycle<
       };
       resourceRemovalRetryIntents.current.set(taskId, intent);
       persistResourceRemovalRetryIntents(resourceRemovalRetryIntents.current);
-      const request = retryResource(taskId, intent.idempotencyKey)
-        .then((accepted) => {
-          if (!accepted.task_id)
-            throw new Error("Controller response is missing task_id");
+      const request = retryTask(taskId, intent.idempotencyKey)
+        .then((acceptedTaskId) => {
           forgetResourceRemoval(taskId, removal);
           const currentGeneration =
             removal.kind === "environment"
@@ -295,12 +292,12 @@ export function useEnvironmentLifecycle<
             });
           }
           pendingResourceRemovals.current.set(
-            accepted.task_id,
+            acceptedTaskId,
             acceptedRemoval,
           );
           resourceRemovalTasks.current.set(
             resourceRemovalKey(acceptedRemoval),
-            accepted.task_id,
+            acceptedTaskId,
           );
           persistPendingResourceRemovals(pendingResourceRemovals.current);
           update((draft) => {
@@ -310,15 +307,15 @@ export function useEnvironmentLifecycle<
                 draft,
                 acceptedRemoval.resourceId,
               );
-              if (environment) environment.deletionTaskId = accepted.task_id;
+              if (environment) environment.deletionTaskId = acceptedTaskId;
             }
           });
           resourceRemovalRetryIntents.current.delete(taskId);
           persistResourceRemovalRetryIntents(
             resourceRemovalRetryIntents.current,
           );
-          monitorResourceRemoval(accepted.task_id);
-          return accepted.task_id;
+          monitorResourceRemoval(acceptedTaskId);
+          return acceptedTaskId;
         })
         .finally(() => {
           if (resourceRemovalRetries.current.get(taskId) === request)
@@ -327,7 +324,7 @@ export function useEnvironmentLifecycle<
       resourceRemovalRetries.current.set(taskId, request);
       return request;
     },
-    [forgetResourceRemoval, monitorResourceRemoval, retryResource, update],
+    [forgetResourceRemoval, monitorResourceRemoval, update],
   );
 
   const waitForResourceRemoval = useCallback(
@@ -460,8 +457,13 @@ export function useEnvironmentLifecycle<
       });
   }, [update]);
 
+  const isResourceRemovalTask = useCallback(
+    (taskId: string) => pendingResourceRemovals.current.has(taskId),
+    [],
+  );
+
   return {
-    pendingResourceRemovals,
+    isResourceRemovalTask,
     requestResourceRemovalTask,
     monitorResourceRemoval,
     reconcileResourceRemoval,

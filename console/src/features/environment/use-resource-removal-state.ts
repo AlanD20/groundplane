@@ -4,8 +4,8 @@ import {
   findEnvironment,
   type EnvironmentMutationKind,
   type PendingResourceRemoval,
-  type TaskResponse,
 } from "@/features/environment/environment-removal-model";
+import type { TaskResponse } from "@/features/task/api";
 import {
   loadEnvironmentDeletionFailures,
   loadPendingResourceRemovalIntents,

@@ -1,6 +1,9 @@
 import type { operations } from "@/lib/api.generated";
 import type { Script, ScriptInput, ScriptPatch } from "./types";
-import { scriptExecutionFromAPI, scriptExecutionToAPI } from "./execution-wire";
+import {
+  scriptExecutionFromAPI,
+  scriptExecutionToAPI,
+} from "./execution-wire.ts";
 
 export type ScriptCreateRequest =
   operations["script.create"]["requestBody"]["content"]["application/json"];

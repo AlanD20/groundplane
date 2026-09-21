@@ -1,7 +1,5 @@
-import type { operations } from '@/lib/api.generated'
 import type { Project } from '@/lib/types'
-
-export type TaskResponse = operations['task.show']['responses'][200]['content']['application/json']
+import type { TaskResponse } from '@/features/task/api'
 
 export type PendingResourceRemoval =
   | { kind: 'environment'; projectId: string; resourceId: string; generation: number }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { entryFromAPI } from './entry-api.ts'
+import { entryFromAPI } from '../features/entry/projection.ts'
 
 // QA: ENT-04, SCRIPT-01; local response projection, not materialization or grants.
 // Rationale: Script selection uses immutable Entry identity metadata, never a

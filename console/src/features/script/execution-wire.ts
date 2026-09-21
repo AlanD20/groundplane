@@ -1,6 +1,6 @@
 import type { components } from "@/lib/api.generated";
 import type { ScriptExecution } from "./types";
-import { scriptExecutionError } from "./execution";
+import { scriptExecutionError } from "./execution.ts";
 
 type ExecutionWire = components["schemas"]["ScriptExecution"];
 

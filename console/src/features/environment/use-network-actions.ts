@@ -6,8 +6,8 @@ import {
   type EnvironmentRemovalDraft,
   type EnvironmentMutationKind,
   type PendingResourceRemoval,
-  type TaskResponse,
 } from "./environment-removal-model";
+import type { TaskResponse } from "@/features/task/api";
 import {
   zoneFromAPI,
   routeFromAPI,

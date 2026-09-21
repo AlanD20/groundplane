@@ -267,6 +267,13 @@ type CoreDNSConfigUpdate = {
   forwarders?: { domain: string; upstream: string }[];
 };
 
+function resolverList(value: string): string[] {
+  return value
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean);
+}
+
 async function replaceCoreDNSConfig(
   updateComponentConfig: ReturnType<typeof useStore>["updateComponentConfig"],
   refreshPlatformComponents: ReturnType<

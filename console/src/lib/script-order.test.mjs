@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { scriptFromAPI } from './script-api.ts'
+import { scriptFromAPI } from '../features/script/request-model.ts'
 import { parseScriptOrder } from '../features/script/script-order.ts'
 
 const script = {

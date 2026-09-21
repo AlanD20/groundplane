@@ -13,6 +13,7 @@ import { createEnvironmentActions } from "@/features/environment/actions";
 import { useEnvironmentMutationIntents } from "@/features/environment/use-mutation-intents";
 import { useTaskJournal } from "@/features/task/use-task-journal";
 import { useTaskEventStreams } from "@/features/task/use-task-event-streams";
+import { createTaskActions } from "@/features/task/actions";
 import {
   createAgentActions,
   useAgentRefresh,
@@ -40,7 +41,7 @@ import { createServiceActions } from "@/features/service/actions";
 import { useRunnerStore } from "@/features/runner/use-runner-store";
 import { listAllRoutes } from "@/features/environment/network-api";
 import { useConnectorStore } from "@/features/connectors/use-connector-store";
-import { controllerRequest, waitForRequest } from "./controller-json-request";
+import { controllerRequest } from "./controller-json-request";
 import { useBackupStore } from "@/features/backup/use-backup-store";
 import {
   createSecretActions,
@@ -58,27 +59,13 @@ import {
   useRef,
   useState,
 } from "react";
-import type { operations } from "./api.generated";
 import { watchTransientLogs } from "./transient-logs";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
 import { createBlueprintActions } from "@/features/blueprint/api";
 import { adapters as seedAdapters } from "./workspace-seed";
 import { useEnvironmentLifecycle } from "@/features/environment/use-environment-lifecycle";
-import type { TaskResponse } from "@/features/environment/environment-removal-model";
-
 import { environmentDeletionGuard } from "@/features/environment/mutation-guard";
 import { seed, type State, type StoreContext } from "./store-model";
-type EnvironmentDeleteResponse =
-  operations["environment.delete"]["responses"][202]["content"]["application/json"];
-
-type BackupKeyRotateResponse =
-  operations["backup.key.rotate"]["responses"][202]["content"]["application/json"];
-
-type TaskRetryResponse =
-  operations["task.retry"]["responses"][202]["content"]["application/json"];
-
-type TaskAbortResponse =
-  operations["task.abort"]["responses"][202]["content"]["application/json"];
 
 const Ctx = createContext<StoreContext | null>(null);
 
@@ -124,43 +111,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     removeRunner,
   } = useRunnerStore(update);
 
-  const requestEnvironmentTask = useCallback(
-    (taskId: string, signal?: AbortSignal) =>
-      controllerRequest<TaskResponse>(
-        `/tasks/${encodeURIComponent(taskId)}`,
-        200,
-        { signal },
-      ),
-    [],
-  );
-  const deleteEnvironmentResource = useCallback(
-    (
-      resource: "environments" | "services" | "routes" | "entries" | "scripts",
-      resourceId: string,
-      idempotencyKey: string,
-    ) =>
-      controllerRequest<EnvironmentDeleteResponse>(
-        `/${resource}/${encodeURIComponent(resourceId)}`,
-        202,
-        { method: "DELETE", idempotencyKey },
-      ),
-    [],
-  );
-  const retryEnvironmentResource = useCallback(
-    (taskId: string, idempotencyKey: string) =>
-      controllerRequest<TaskRetryResponse>(
-        `/tasks/${encodeURIComponent(taskId)}/retry`,
-        202,
-        { method: "POST", idempotencyKey },
-      ),
-    [],
-  );
   const environmentLifecycle = useEnvironmentLifecycle<State>({
     active: providerActive,
     update,
-    requestTask: requestEnvironmentTask,
-    deleteResource: deleteEnvironmentResource,
-    retryResource: retryEnvironmentResource,
     listEnvironments: listAllEnvironments,
     listServices: listAllServices,
     listRoutes: listAllRoutes,
@@ -168,7 +121,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     listScripts: listAllScripts,
   });
   const {
-    pendingResourceRemovals,
+    isResourceRemovalTask,
     requestResourceRemovalTask,
     monitorResourceRemoval,
     reconcileResourceRemoval,
@@ -210,19 +163,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     dispatchResourceRemoval,
   });
 
-  const requestBackupKeyRotation = useCallback(
-    (environmentId: string) =>
-      controllerRequest<BackupKeyRotateResponse>(
-        `/environments/${encodeURIComponent(environmentId)}/rotate-key`,
-        202,
-        { method: "POST" },
-      ),
-    [],
-  );
   const backupStore = useBackupStore({
     active: providerActive,
     request: controllerRequest,
-    requestKeyRotation: requestBackupKeyRotation,
     assertEnvironmentMutable,
   });
 
@@ -333,6 +276,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     useConnectorStore(state, update, connectorEnvironmentIds);
 
   const taskJournalActions = useTaskJournal(state, update);
+  const taskActions = useMemo(
+    () =>
+      createTaskActions({
+        isResourceRemovalTask,
+        requestResourceRemovalTask,
+        monitorResourceRemoval,
+        reconcileResourceRemoval,
+        retryResourceRemoval,
+        reconcileZoneRemoval,
+        reconcileConnectorRemoval,
+      }),
+    [
+      isResourceRemovalTask,
+      monitorResourceRemoval,
+      reconcileConnectorRemoval,
+      reconcileResourceRemoval,
+      reconcileZoneRemoval,
+      requestResourceRemovalTask,
+      retryResourceRemoval,
+    ],
+  );
 
   const value = useMemo<StoreContext>(() => {
     return {
@@ -385,17 +349,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       refreshEnvironmentDeletion,
       isEnvironmentDeletionPending,
       ...taskJournalActions,
-      retryTask: (taskId) =>
-        retryResourceRemoval(taskId) ??
-        controllerRequest<TaskRetryResponse>(
-          `/tasks/${encodeURIComponent(taskId)}/retry`,
-          202,
-          { method: "POST" },
-        ).then((accepted) => {
-          if (!accepted.task_id)
-            throw new Error("Controller response is missing task_id");
-          return accepted.task_id;
-        }),
+      ...taskActions,
       ...createReleaseActions(state, assertEnvironmentMutable),
       ...createTenantActions(state, update),
       ...createProjectActions(update),
@@ -404,36 +358,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         update,
         lifecycle: environmentLifecycle,
         providerActive,
-        requestEnvironmentTask,
         assertEnvironmentMutable,
         mutations: environmentMutations,
       }),
       watchTaskEvents,
-      getTask: async (taskId, signal) => {
-        const task = pendingResourceRemovals.current.has(taskId)
-          ? await waitForRequest(requestResourceRemovalTask(taskId), signal)
-          : await controllerRequest<TaskResponse>(
-              `/tasks/${encodeURIComponent(taskId)}`,
-              200,
-              { signal },
-            );
-        reconcileZoneRemoval(taskId, task);
-        if (pendingResourceRemovals.current.has(taskId)) {
-          monitorResourceRemoval(taskId);
-          void reconcileResourceRemoval(taskId, task).catch(() => undefined);
-        }
-        await reconcileConnectorRemoval(taskId, task);
-        return task;
-      },
-      abortTask: async (taskId) => {
-        const accepted = await controllerRequest<TaskAbortResponse>(
-          `/tasks/${encodeURIComponent(taskId)}/abort`,
-          202,
-          { method: "POST" },
-        );
-        if (accepted.task_id !== taskId)
-          throw new Error("Task abort returned a different Task id");
-      },
       ...createBlueprintActions(assertEnvironmentMutable),
       ...networkActions,
       ...createServiceActions(
@@ -474,6 +402,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     backupStore,
     update,
     taskJournalActions,
+    taskActions,
     watchTaskEvents,
     refreshPlatformComponents,
     refreshComponentConfig,
@@ -482,9 +411,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     refreshEnvironmentServices,
     refreshAgents,
     dispatchResourceRemoval,
-    monitorResourceRemoval,
-    reconcileResourceRemoval,
-    requestResourceRemovalTask,
     nextEnvironmentGeneration,
     settleEnvironmentMutation,
     shouldPreserveEnvironmentOnLoad,
@@ -492,7 +418,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     refreshEnvironmentDeletion,
     isEnvironmentDeletionPending,
     waitForResourceRemoval,
-    retryResourceRemoval,
     observeEnvironmentDeletionTasks,
     environmentGenerations,
     assertEnvironmentMutable,

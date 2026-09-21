@@ -5,8 +5,8 @@ import type { EnvironmentLifecycle } from "@/features/environment/lifecycle-type
 import {
   findEnvironment,
   type EnvironmentRemovalDraft,
-  type TaskResponse,
 } from "./environment-removal-model";
+import { requestTask, type TaskResponse } from "@/features/task/api";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { environmentMutationKey } from "@/features/environment/operation-storage";
 import { environmentFromAPI } from "@/features/environment/projection";
@@ -47,10 +47,6 @@ type Options = {
   update: (change: (draft: Workspace) => void) => void;
   lifecycle: EnvironmentLifecycle<Workspace>;
   providerActive: RefObject<boolean>;
-  requestEnvironmentTask: (
-    taskId: string,
-    signal?: AbortSignal,
-  ) => Promise<TaskResponse>;
   assertEnvironmentMutable: (environmentId: string, operation: string) => void;
   mutations: ReturnType<typeof useEnvironmentMutationIntents>;
 };
@@ -59,7 +55,6 @@ export function createEnvironmentActions({
   update,
   lifecycle,
   providerActive,
-  requestEnvironmentTask,
   assertEnvironmentMutable,
   mutations,
 }: Options): EnvironmentActions {
@@ -122,7 +117,7 @@ export function createEnvironmentActions({
         let task: TaskResponse;
         try {
           task = await observeEnvironmentTask(
-            requestEnvironmentTask,
+            requestTask,
             accepted.task_id,
             providerActive,
             observationController.signal,

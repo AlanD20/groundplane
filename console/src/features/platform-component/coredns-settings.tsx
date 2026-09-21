@@ -11,13 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { CodeEditor } from "@/components/ui/code-editor";
 
-function resolverList(value: string): string[] {
-  return value
-    .trim()
-    .split(/[\s,]+/)
-    .filter(Boolean);
-}
-
 export function CoreDnsSettings({
   upstream,
   upstreamAuto,

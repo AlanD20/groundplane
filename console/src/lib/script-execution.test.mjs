@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { scriptFromAPI, scriptCreateToAPI, scriptPatchToAPI } from './script-api.ts'
+import { scriptFromAPI, scriptCreateToAPI, scriptPatchToAPI } from '../features/script/request-model.ts'
 
 const image = `setup@sha256:${'a'.repeat(64)}`
 const volumeId = 'vol_01ARZ3NDEKTSV4RRFFQ69G5FAV'

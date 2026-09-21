@@ -5,8 +5,8 @@ import type {
   TaskJournalState,
   TaskJournalSurface,
 } from "@/lib/types";
-import type { TaskResponse } from "@/features/environment/environment-removal-model";
 import { controllerRequest } from "@/lib/controller-json-request";
+import { requestTask } from "./api";
 import {
   emptyTaskJournal,
   taskJournalKey,
@@ -93,12 +93,6 @@ export function useTaskJournal(
       state.taskJournals[taskJournalKey(scope)] ?? emptyTaskJournal(),
     loadTaskJournal,
     getTaskJournalDetail: async (taskId, signal) =>
-      taskFromAPI(
-        await controllerRequest<TaskResponse>(
-          `/tasks/${encodeURIComponent(taskId)}`,
-          200,
-          { signal },
-        ),
-      ),
+      taskFromAPI(await requestTask(taskId, signal)),
   };
 }

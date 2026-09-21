@@ -4,8 +4,8 @@ import {
   environmentDeletionTaskError,
   findEnvironment,
   terminalTaskStatuses,
-  type TaskResponse,
 } from "@/features/environment/environment-removal-model";
+import { requestTask, type TaskResponse } from "@/features/task/api";
 
 import { isAuthoritativeTaskUnavailable } from "@/features/environment/removal-outcome";
 
@@ -23,7 +23,6 @@ export function useResourceRemovalObservation<
   const {
     active,
     update,
-    requestTask,
     listEnvironments,
     listServices,
     listRoutes,
@@ -98,7 +97,7 @@ export function useResourceRemovalObservation<
       resourceRemovalTaskRequests.current.set(taskId, request);
       return request;
     },
-    [active, recordResourceRemovalError, requestTask],
+    [active, recordResourceRemovalError],
   );
 
   const reconcileResourceRemoval = useCallback(

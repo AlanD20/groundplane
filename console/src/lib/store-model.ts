@@ -7,6 +7,7 @@ import {
   type TaskJournalActions,
 } from "@/features/task/use-task-journal";
 import { type TaskEventActions } from "@/features/task/use-task-event-streams";
+import { type TaskActions } from "@/features/task/actions";
 import {
   type AgentActions,
   type AgentState,
@@ -48,10 +49,7 @@ import {
   adapters as seedAdapters,
   platform as seedPlatform,
 } from "./workspace-seed";
-import type {
-  EnvironmentDeletionFailure,
-  TaskResponse,
-} from "@/features/environment/environment-removal-model";
+import type { EnvironmentDeletionFailure } from "@/features/environment/environment-removal-model";
 
 export type State = ReusableSecretState &
   ConnectorState &
@@ -138,6 +136,7 @@ export type StoreContext = State &
   AgentActions &
   TaskJournalActions &
   TaskEventActions &
+  TaskActions &
   EnvironmentActions &
   ReleaseActions &
   ComponentActions &
@@ -174,8 +173,4 @@ export type StoreContext = State &
     ) => EnvironmentDeletionFailure | null;
     refreshEnvironmentDeletion: (environmentId: string) => Promise<void>;
     isEnvironmentDeletionPending: (environmentId: string) => boolean;
-    // mutations
-    retryTask: (taskId: string) => Promise<string>;
-    getTask: (taskId: string, signal?: AbortSignal) => Promise<TaskResponse>;
-    abortTask: (taskId: string) => Promise<void>;
   };

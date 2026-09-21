@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { taskTypeFromAPI } from './task-read-model.ts'
+import { taskTypeFromAPI } from '../features/task/task-type.ts'
 
 // QA: TASK-01, UI-05; local response vocabulary, not durable Task provenance.
 // Rationale: the Console must reject a widened Task vocabulary rather than

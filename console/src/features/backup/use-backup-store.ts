@@ -42,9 +42,6 @@ type AttachPageResponse =
 type BackupStoreOptions = {
   active: MutableRefObject<boolean>;
   request: VolumeRequest;
-  requestKeyRotation: (
-    environmentId: string,
-  ) => Promise<BackupKeyRotateResponse>;
   assertEnvironmentMutable: (environmentId: string, action: string) => void;
 };
 
@@ -300,7 +297,6 @@ async function exportBackupKey(
 export function useBackupStore({
   active,
   request,
-  requestKeyRotation,
   assertEnvironmentMutable,
 }: BackupStoreOptions) {
   const [backupPolicies, setBackupPolicies] = useState<
@@ -541,14 +537,18 @@ export function useBackupStore({
   const rotateBackupKey = useCallback(
     async (environmentId: string): Promise<string> => {
       assertEnvironmentMutable(environmentId, "Backup key rotation");
-      const response = await requestKeyRotation(environmentId);
+      const response = await request<BackupKeyRotateResponse>(
+        `/environments/${encodeURIComponent(environmentId)}/rotate-key`,
+        202,
+        { method: "POST" },
+      );
       if (!response.task_id)
         throw new Error(
           "Controller returned an empty backup key rotation task id",
         );
       return response.task_id;
     },
-    [assertEnvironmentMutable, requestKeyRotation],
+    [assertEnvironmentMutable, request],
   );
 
   const getBackupPolicyState = useCallback(
