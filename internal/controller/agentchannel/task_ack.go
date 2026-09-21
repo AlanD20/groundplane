@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -63,7 +64,7 @@ func (s *Server) acknowledge(
 			}
 		} else {
 			recoveryDigest, decodeErr := hex.DecodeString(assignment.Assignment.Record.ReleaseRecoveryRecordSHA256)
-			oldPrimaryReplay := assignment.Assignment.Record.ExecutionMode == etcd.TaskExecutionModeRecoveryOnly &&
+			oldPrimaryReplay := assignment.Assignment.Record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly &&
 				acknowledgement.GetExecutionEpoch() < assignment.Assignment.Record.ExecutionEpoch &&
 				len(acknowledgement.GetReleaseRecoveryRecordSha256()) == 0
 			if !oldPrimaryReplay && assignment.Assignment.Record.ExecutionEpoch != acknowledgement.GetExecutionEpoch() {

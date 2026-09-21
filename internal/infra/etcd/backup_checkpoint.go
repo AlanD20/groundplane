@@ -8,6 +8,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -221,7 +222,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup task assignment copies differ",
 		)
 	}
-	assignment, err := decodeTaskAssignment(claimValue.Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(claimValue.Value)
 	if err != nil || assignment.AssignmentID != input.AssignmentID ||
 		assignment.TaskID != input.TaskID ||
 		assignment.Executor != task.Executor ||
@@ -397,7 +398,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
 	defer clearKeyValues(assignmentResult.Values)
-	assignment, err := decodeTaskAssignment(assignmentResult.Values[0].Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(assignmentResult.Values[0].Value)
 	if err != nil || assignment.AssignmentID != input.AssignmentID ||
 		assignment.TaskID != input.TaskID || assignment.Executor != task.Executor ||
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration {

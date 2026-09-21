@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -38,7 +39,7 @@ func (s *Server) dispatchResolvedTaskAssignment(
 	defer clearBackingHookPlanSecrets(assignment.GetPlan())
 	expired := false
 	sent, err := session.sendAssignment(func() error {
-		if recovered && claim.Assignment.Record.ExecutionMode == etcd.TaskExecutionModeForward &&
+		if recovered && claim.Assignment.Record.ExecutionMode == taskassignments.TaskExecutionModeForward &&
 			!s.now().UTC().Before(claim.Assignment.Record.Deadline.UTC()) {
 			expired = true
 			return nil
@@ -173,7 +174,7 @@ func (s *Server) taskAssignmentMessage(
 		}
 	}
 	executionDeadline := record.Deadline
-	if record.ExecutionMode == etcd.TaskExecutionModeRecoveryOnly {
+	if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 		executionDeadline = record.RecoveryDeadline
 		if claim.RecoveryProofRequired {
 			if record.RecoveryExecutionDeadline.IsZero() {

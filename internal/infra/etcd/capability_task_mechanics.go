@@ -5,6 +5,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -34,11 +35,11 @@ func EncodeCapabilityTaskReference(taskID string) ([]byte, error) {
 func DecodeCapabilityTaskReference(value []byte) (string, error) {
 	return idempotencyrecord.DecodeTaskReference(value)
 }
-func EncodeCapabilityTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
-	return encodeTaskAssignment(record)
+func EncodeCapabilityTaskAssignment(record taskassignments.TaskAssignmentRecord) ([]byte, error) {
+	return taskassignments.EncodeTaskAssignment(record)
 }
-func DecodeCapabilityTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
-	return decodeTaskAssignment(value)
+func DecodeCapabilityTaskAssignment(value []byte) (taskassignments.TaskAssignmentRecord, error) {
+	return taskassignments.DecodeTaskAssignment(value)
 }
 func DecodeCapabilityIdempotencyMarker(value []byte, locator idempotencyrecord.IdempotencyLocator) (idempotencyrecord.IdempotencyMarker, error) {
 	return idempotencyrecord.DecodeIdempotencyMarker(value, locator)

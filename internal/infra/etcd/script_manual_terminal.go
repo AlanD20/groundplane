@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -20,7 +21,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	ctx context.Context,
 	task TaskRecord,
 	taskValue *etcdstore.KeyValue,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	assignmentValue, assignmentIndexValue *etcdstore.KeyValue,
 	status taskjournal.TaskStatus,
 	terminalAt *time.Time,
@@ -44,15 +45,15 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 ||
 		read.Values[0] == nil || read.Values[1] == nil || taskValue == nil ||
 		assignmentValue == nil || assignmentIndexValue == nil || terminalAt == nil {
-		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || !manualScriptRootMatches(execution, root) {
-		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	activeTaskID, err := idempotencyrecord.DecodeTaskReference(read.Values[1].Value)
 	if err != nil || activeTaskID != task.ID {
-		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	if execution.State == ScriptExecutionNotStarted && !result.ReconciliationRequired &&
 		(status == taskjournal.TaskStatusFailed || status == taskjournal.TaskStatusTimedOut) {
@@ -85,7 +86,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	current := TaskAssignment{
 		Task:       etcdstore.Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
-		Assignment: etcdstore.Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+		Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 	}
 	report, reportCondition, reportMutation, err := repository.prepareScriptClosingReport(ctx,
 		current, status, result, *terminalAt, root.Phase == ScriptOperationSourceActive)
@@ -118,7 +119,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		if (!preparedAbort && (!execution.ActiveReference || !terminalAt.After(execution.UpdatedAt))) ||
 			root.ReleasePath != ScriptSourceReleaseAbsent ||
 			(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
-			return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+			return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 		}
 		release, err := authority.PrepareNormalRelease(ctx, task.OperationID, disposition)
 		if err != nil {
@@ -146,7 +147,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
 		root.RetryDisposition != disposition || execution.ActiveReference || !execution.UpdatedAt.Equal(*terminalAt) {
-		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	processed, drained, err := authority.ReleaseNext(ctx, task.OperationID, guards)
 	if err != nil {
@@ -159,7 +160,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		return scriptTerminalSourceRelease{}, true, nil
 	}
 	if !drained {
-		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	final, err := authority.PrepareReleaseFinalization(ctx, task.OperationID)
 	if err != nil {

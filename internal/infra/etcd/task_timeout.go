@@ -5,6 +5,7 @@ import (
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -35,13 +36,13 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 	for _, assignment := range assignments {
 		record := assignment.Assignment.Record
 		deadline := record.Deadline
-		if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+		if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			deadline = record.RecoveryDeadline
 		}
 		if terminalAt.Before(deadline) {
 			continue
 		}
-		if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+		if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			if assignment.RecoveryProofRequired {
 				continue
 			}
@@ -110,9 +111,9 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 		if err != nil {
 			return expired, err
 		}
-		assignment, err := decodeTaskAssignment(value.Value)
+		assignment, err := taskassignments.DecodeTaskAssignment(value.Value)
 		assignmentDeadline := assignment.Deadline
-		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			assignmentDeadline = assignment.RecoveryDeadline
 		}
 		if err != nil || assignment.TaskID != taskID || !assignmentDeadline.Equal(deadline) {
@@ -121,7 +122,7 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 		if deadline.After(now) {
 			break
 		}
-		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			processed, markErr := repository.markReleaseRecoveryProofRequired(ctx, assignment, page.ReadRevision, now)
 			if markErr != nil {
 				if errors.Is(markErr, errs.New(errs.KindStateConflict, "")) {

@@ -7,6 +7,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -121,7 +122,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 			"hierarchy deletion root assignment indexes disagree",
 		)
 	}
-	assignment, err := decodeTaskAssignment(assignmentValue.Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(assignmentValue.Value)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}

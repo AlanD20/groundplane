@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -233,7 +234,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task has no matching active assignment")
 		}
-		assignment, err := decodeTaskAssignment(assignmentValue.Value)
+		assignment, err := taskassignments.DecodeTaskAssignment(assignmentValue.Value)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -265,7 +266,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				Revision:     taskValue.ModRevision,
 				ReadRevision: primaryAndAssignment.ReadRevision,
 			},
-			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 		}, terminalStatus, result)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -273,7 +274,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		var recoveryAcknowledgement releaseRecoveryAcknowledgement
 		var terminalScriptSourceRelease scriptTerminalSourceRelease
 		if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
-			assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			recoveryAcknowledgement, err = repository.releaseRecoveryAcknowledgementAtRevision(
 				ctx, task, assignment, terminalStatus, *result, primaryAndAssignment.ReadRevision,
 			)
@@ -466,7 +467,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		if recoveryAcknowledgement.final {
 			conditions = append(conditions, recoveryAcknowledgement.conditions...)
-			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseRecoveryKey(task.ID)})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: taskassignments.ReleaseRecoveryKey(task.ID)})
 		}
 		conditions = append(conditions, terminalScriptSourceRelease.conditions...)
 		mutations = append(mutations, terminalScriptSourceRelease.mutations...)

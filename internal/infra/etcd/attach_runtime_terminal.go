@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -14,7 +15,7 @@ import (
 )
 
 func (repository *TaskRepository) prepareAcknowledgedAttachTask(
-	ctx context.Context, terminal TaskRecord, assignment TaskAssignmentRecord, revision int64,
+	ctx context.Context, terminal TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (attachTaskChange, error) {
 	change, err := repository.prepareAttachTaskAcknowledgement(ctx, terminal, terminal.Status, revision)
 	if err != nil || !change.applies || terminal.Status != taskjournal.TaskStatusCompleted {

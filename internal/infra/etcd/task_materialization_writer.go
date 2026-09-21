@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -195,7 +196,7 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 func (repository *TaskRepository) prepareTaskMaterializationAcknowledgement(
 	ctx context.Context,
 	terminal TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	readRevision int64,
 ) (taskMaterializationProjectionChange, error) {
 	change, err := repository.prepareTaskMaterializationProjectionAcknowledgement(

@@ -1,6 +1,7 @@
 package agentchannel
 
 import (
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
 
@@ -74,7 +75,7 @@ func (s *Server) dispatchReady(
 		); err != nil {
 			return err
 		}
-		if assignment.Assignment.Record.ExecutionMode == etcd.TaskExecutionModeForward &&
+		if assignment.Assignment.Record.ExecutionMode == taskassignments.TaskExecutionModeForward &&
 			!s.now().UTC().Before(assignment.Assignment.Record.Deadline.UTC()) {
 			continue
 		}

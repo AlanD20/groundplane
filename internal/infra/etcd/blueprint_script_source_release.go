@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -36,7 +37,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	ctx context.Context,
 	task TaskRecord,
 	taskValue *etcdstore.KeyValue,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	assignmentValue *etcdstore.KeyValue,
 	assignmentIndexValue *etcdstore.KeyValue,
 	recovery releaseRecoveryAcknowledgement,
@@ -56,8 +57,8 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		return scriptTerminalSourceRelease{}, false, err
 	}
 	if taskValue == nil || assignmentValue == nil || assignmentIndexValue == nil || revision <= 0 ||
-		(assignment.ExecutionMode == TaskExecutionModeRecoveryOnly && (!recovery.final || recovery.value == nil)) {
-		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+		(assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly && (!recovery.final || recovery.value == nil)) {
+		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	lifecycleKey, lifecycleValue, _, err := repository.assignmentLifecycleIndexAtRevision(
 		ctx,
@@ -76,7 +77,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		environmentID = task.Owner.EnvironmentID
 	}
 	if environmentID == "" || environmentID != task.Owner.EnvironmentID {
-		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	rootKey := scriptSourceRootKey(task.OperationID)
 	keys := []string{
@@ -111,7 +112,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	}
 	activeTaskID, err := idempotencyrecord.DecodeTaskReference(read.Values[2].Value)
 	if err != nil || activeTaskID != task.ID {
-		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	if materializes {
 		writer, decodeErr := decodeTaskMaterializationWriter(read.Values[writerIndex].Value)
@@ -176,7 +177,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	if task.Type == taskjournal.TaskUpdate {
 		current := TaskAssignment{
 			Task:       etcdstore.Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
-			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 		}
 		report, condition, mutation, reportErr := repository.prepareScriptClosingReport(
 			ctx, current, submittedStatus, submittedResult, *terminalAt, root.Phase == ScriptOperationSourceActive,

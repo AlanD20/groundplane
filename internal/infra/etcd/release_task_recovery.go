@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
@@ -15,7 +16,7 @@ import (
 func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	terminalStatus taskjournal.TaskStatus,
 	result taskjournal.TaskResultRecord,
 	agentID string,

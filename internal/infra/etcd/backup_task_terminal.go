@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -118,7 +119,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 		)
 	}
 	storedTask, taskErr := decodeTaskRecord(anchor.Values[0].Value)
-	storedAssignment, assignmentErr := decodeTaskAssignment(anchor.Values[1].Value)
+	storedAssignment, assignmentErr := taskassignments.DecodeTaskAssignment(anchor.Values[1].Value)
 	if taskErr != nil || assignmentErr != nil || !bytes.Equal(anchor.Values[0].Value, currentTaskValue) ||
 		storedTask.ID != task.ID ||
 		storedAssignment != assignment ||

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -152,7 +153,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		return true, err
 	}
 	keys := []string{taskjournal.TaskActiveOperationKey(task.OperationID), taskjournal.TaskAssignmentIndexKey(root.AttemptID()),
-		taskjournal.TaskRecoveryProofRequiredKey(root.AttemptID()), releaseRecoveryKey(root.AttemptID()), taskjournal.TaskStorageKey(root.AttemptID())}
+		taskjournal.TaskRecoveryProofRequiredKey(root.AttemptID()), taskassignments.ReleaseRecoveryKey(root.AttemptID()), taskjournal.TaskStorageKey(root.AttemptID())}
 	hookInputIndex := -1
 	if task.Configuration.BackingHookInputs != nil {
 		hookInputIndex = len(keys)
@@ -200,11 +201,11 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		return true, nil
 	}
 	if read.Values[3] != nil {
-		recovery, decodeErr := decodeReleaseRecoveryRecord(read.Values[3].Value)
+		recovery, decodeErr := taskassignments.DecodeReleaseRecoveryRecord(read.Values[3].Value)
 		if decodeErr != nil {
 			return true, decodeErr
 		}
-		if recovery.Phase != ReleaseRecoveryPhaseProven {
+		if recovery.Phase != taskassignments.ReleaseRecoveryPhaseProven {
 			return true, nil
 		}
 	}

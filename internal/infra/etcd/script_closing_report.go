@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -92,7 +93,7 @@ func (repository *TaskRepository) readScriptClosingReport(
 		return scriptClosingReport{}, nil, err
 	}
 	if read == nil || read.ReadRevision != current.Task.ReadRevision || len(read.Values) != 1 {
-		return scriptClosingReport{}, nil, corruptTaskAssignment()
+		return scriptClosingReport{}, nil, taskassignments.CorruptTaskAssignment()
 	}
 	value := read.Values[0]
 	if value == nil {
@@ -134,7 +135,7 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 		}, nil
 	}
 	if value != nil {
-		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, corruptTaskAssignment()
+		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, taskassignments.CorruptTaskAssignment()
 	}
 	task, assignment := current.Task.Record, current.Assignment.Record
 	report = scriptClosingReport{
@@ -168,7 +169,7 @@ func (repository *TaskRepository) resumeScriptClosingReport(
 		return TaskAssignment{}, true, err
 	}
 	if !taskjournal.IsTerminalTaskStatus(terminal.Record.Status) {
-		return TaskAssignment{}, true, corruptTaskAssignment()
+		return TaskAssignment{}, true, taskassignments.CorruptTaskAssignment()
 	}
 	current.Task = terminal
 	return current, true, nil

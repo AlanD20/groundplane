@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
@@ -28,14 +29,14 @@ type releaseRecoveryProofExpectation struct {
 }
 
 func validateReleaseRecoveryProof(
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	procedure *agentpb.CandidateReleaseProcedure,
 	result taskjournal.TaskResultRecord,
 	expectations []releaseRecoveryProofExpectation,
 ) error {
 	authority := assignment.RestorationAuthority
 	if authority == nil || result.ReconciliationRequired || len(expectations) != len(authority.Candidates) {
-		return corruptTaskAssignment()
+		return taskassignments.CorruptTaskAssignment()
 	}
 	absenceIndex, proxyIndex, recreateIndex := 0, 0, 0
 	for memberIndex, candidate := range authority.Candidates {
@@ -44,10 +45,10 @@ func validateReleaseRecoveryProof(
 		if kind != releaseRecoveryProofCaptured && kind != releaseRecoveryProofProxy &&
 			kind != releaseRecoveryProofRecreate ||
 			(kind == releaseRecoveryProofRecreate) != (expectation.priorTopologyArtifactID != "") {
-			return corruptTaskAssignment()
+			return taskassignments.CorruptTaskAssignment()
 		}
 		switch candidate.Target {
-		case ReleaseRestorationCandidateAbsence:
+		case taskassignments.ReleaseRestorationCandidateAbsence:
 			evidence := result.CandidateAbsenceEvidence
 			if evidence == nil || !evidence.AbsenceProven || evidence.AssignmentID != assignment.AssignmentID ||
 				evidence.PlanHash != authority.PlanHash || evidence.AuthoritySHA256 != assignment.RestorationAuthoritySHA256 ||
@@ -55,16 +56,16 @@ func validateReleaseRecoveryProof(
 				memberIndex >= len(procedure.GetMembers()) ||
 				evidence.ComposeProjectName != procedure.GetMembers()[memberIndex].GetCandidateAbsence().
 					GetComposeProjectName() {
-				return corruptTaskAssignment()
+				return taskassignments.CorruptTaskAssignment()
 			}
 			if evidence.Candidates[absenceIndex].ServiceID != candidate.ServiceID ||
 				evidence.Candidates[absenceIndex].ReleaseID != candidate.ReleaseID {
-				return corruptTaskAssignment()
+				return taskassignments.CorruptTaskAssignment()
 			}
 			absenceIndex++
-		case ReleaseRestorationServingPredecessor:
+		case taskassignments.ReleaseRestorationServingPredecessor:
 			if authority.AppliedPredecessor == nil {
-				return corruptTaskAssignment()
+				return taskassignments.CorruptTaskAssignment()
 			}
 			artifact := &agentpb.ComposeArtifact{}
 			encoded := authority.AppliedPredecessor.ComposeArtifact
@@ -72,7 +73,7 @@ func validateReleaseRecoveryProof(
 				encoded = expectation.nativeArtifact
 			}
 			if proto.Unmarshal(encoded, artifact) != nil {
-				return corruptTaskAssignment()
+				return taskassignments.CorruptTaskAssignment()
 			}
 			var workload, proxy *agentpb.ComposeService
 			for _, item := range artifact.GetServices() {
@@ -82,7 +83,7 @@ func validateReleaseRecoveryProof(
 				switch item.GetRole() {
 				case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY:
 					if proxy != nil {
-						return corruptTaskAssignment()
+						return taskassignments.CorruptTaskAssignment()
 					}
 					proxy = item
 				case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT,
@@ -91,13 +92,13 @@ func validateReleaseRecoveryProof(
 						continue
 					}
 					if workload != nil {
-						return corruptTaskAssignment()
+						return taskassignments.CorruptTaskAssignment()
 					}
 					workload = item
 				}
 			}
 			if workload == nil {
-				return corruptTaskAssignment()
+				return taskassignments.CorruptTaskAssignment()
 			}
 			target := workload.GetSlot()
 			if target == "" {
@@ -105,7 +106,7 @@ func validateReleaseRecoveryProof(
 			}
 			releaseID := composeServiceReleaseID(workload)
 			if kind == releaseRecoveryProofProxy && proxy == nil {
-				return corruptTaskAssignment()
+				return taskassignments.CorruptTaskAssignment()
 			}
 			if kind == releaseRecoveryProofProxy || kind == releaseRecoveryProofCaptured && proxy != nil {
 				generation, generationErr := executionplan.ProxyConfigGeneration(proxy.GetProxyConfigJson(), releaseID)
@@ -137,7 +138,7 @@ func validateReleaseRecoveryProof(
 				proxyIndex++
 			} else {
 				if recreateIndex >= len(result.RecreateEvidence) {
-					return corruptTaskAssignment()
+					return taskassignments.CorruptTaskAssignment()
 				}
 				evidence := result.RecreateEvidence[recreateIndex]
 				expectedArtifactID := artifact.GetArtifactId()
@@ -146,19 +147,19 @@ func validateReleaseRecoveryProof(
 				}
 				if evidence.ServiceID != candidate.ServiceID || evidence.ArtifactID != expectedArtifactID ||
 					!evidence.Compensated || evidence.ReleaseID != releaseID || evidence.Target != target {
-					return corruptTaskAssignment()
+					return taskassignments.CorruptTaskAssignment()
 				}
 				recreateIndex++
 			}
 		default:
-			return corruptTaskAssignment()
+			return taskassignments.CorruptTaskAssignment()
 		}
 	}
 	if proxyIndex != len(result.ProxyEvidence) || recreateIndex != len(result.RecreateEvidence) ||
 		absenceIndex == 0 && result.CandidateAbsenceEvidence != nil ||
 		absenceIndex > 0 &&
 			(result.CandidateAbsenceEvidence == nil || absenceIndex != len(result.CandidateAbsenceEvidence.Candidates)) {
-		return corruptTaskAssignment()
+		return taskassignments.CorruptTaskAssignment()
 	}
 	return nil
 }
@@ -172,7 +173,7 @@ const (
 // recoveryProofSelectionAtRevision binds the ordinary plan compiler's strategy
 // branch to immutable publication inputs, never to a current Service projection.
 func (repository *TaskRepository) recoveryProofSelectionAtRevision(
-	ctx context.Context, task TaskRecord, assignment TaskAssignmentRecord, revision int64,
+	ctx context.Context, task TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (*agentpb.CandidateReleaseProcedure, []releaseRecoveryProofExpectation, []etcdstore.Condition, error) {
 	publication := task.Params[TaskReleasePublicationParam]
 	keys := []string{releases.ReleasePublicationKey(publication), releases.ReleaseManifestStagingKey(publication)}
@@ -218,7 +219,7 @@ func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 			}
 			continue
 		}
-		if candidate.Target == ReleaseRestorationCandidateAbsence {
+		if candidate.Target == taskassignments.ReleaseRestorationCandidateAbsence {
 			continue
 		}
 		if task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback {
@@ -245,7 +246,7 @@ func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	member releases.ReleaseStagedMemberRef,
 	revision int64,
 ) (releaseRecoveryProofExpectation, []etcdstore.Condition, error) {
@@ -342,7 +343,7 @@ func ordinaryRecoveryIntentMatchesAttempt(task TaskRecord, intent domain.Intent,
 }
 
 func recoveryRenderMatchesPredecessor(
-	render ReleaseRenderInput, intent domain.Intent, authority *ReleaseRestorationAuthority,
+	render ReleaseRenderInput, intent domain.Intent, authority *taskassignments.ReleaseRestorationAuthority,
 ) bool {
 	if authority == nil || render.PriorRuntime == nil || render.PriorArtifactID == "" ||
 		render.PriorWorkload == nil || intent.PriorServingReleaseID == "" {

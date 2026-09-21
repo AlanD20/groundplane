@@ -7,6 +7,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -135,7 +136,7 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 	}
 	defer clearKeyValues(primary.Values)
 	task, taskErr := decodeTaskRecord(primary.Values[0].Value)
-	assignment, assignmentErr := decodeTaskAssignment(primary.Values[1].Value)
+	assignment, assignmentErr := taskassignments.DecodeTaskAssignment(primary.Values[1].Value)
 	if taskErr != nil || assignmentErr != nil {
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindInternal, "Backing hook assignment is corrupt")
 	}

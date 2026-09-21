@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 
@@ -42,9 +43,9 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 		}
 		_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, current.Task.ReadRevision)
 		if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
-			return TaskAssignment{}, corruptTaskAssignment()
+			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
 		}
-		if assignment.ExecutionMode == TaskExecutionModeForward {
+		if assignment.ExecutionMode == taskassignments.TaskExecutionModeForward {
 			effect, evidenceConditions, classifyErr := repository.releaseEffectEvidenceAtRevision(
 				ctx, task, assignment, procedure, current.Task.ReadRevision,
 			)
@@ -57,7 +58,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 					ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
 				}
 				taskBytes, _ := encodeTaskRecord(task)
-				assignmentBytes, _ := encodeTaskAssignment(assignment)
+				assignmentBytes, _ := taskassignments.EncodeTaskAssignment(assignment)
 				transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
 					ctx,
 					task,
@@ -102,8 +103,8 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 			}
 			return repository.GetTaskAssignment(ctx, task.ID)
 		}
-		if assignment.ExecutionMode != TaskExecutionModeRecoveryOnly || current.ReleaseRecovery == nil {
-			return TaskAssignment{}, corruptTaskAssignment()
+		if assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly || current.ReleaseRecovery == nil {
+			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
 		}
 		if err := repository.incrementAssignmentEpoch(ctx, current, nil); err != nil {
 			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
@@ -120,7 +121,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 
 type releaseRecoveryAcknowledgement struct {
 	conditions []etcdstore.Condition
-	record     releaseRecoveryRecord
+	record     taskassignments.ReleaseRecoveryRecord
 	value      *etcdstore.KeyValue
 	final      bool
 	status     taskjournal.TaskStatus

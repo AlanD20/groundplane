@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"sort"
@@ -79,9 +80,9 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
+) (taskassignments.ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
 	if task.Type == taskjournal.TaskUpdate || task.Params[TaskReleasePublicationParam] == "" {
-		return ReleaseRestorationAuthority{}, "", nil, corruptTaskAssignment()
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, taskassignments.CorruptTaskAssignment()
 	}
 	publicationID := task.Params[TaskReleasePublicationParam]
 	keys := []string{
@@ -90,35 +91,35 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
-		return ReleaseRestorationAuthority{}, "", nil, err
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil || read.Values[1] == nil {
-		return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
 	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
 	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	procedure, descriptorErr := validateReleaseCandidateMarker(task, marker, manifest)
 	if markerErr != nil || manifestErr != nil || descriptorErr != nil {
-		return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
-	target := ReleaseRestorationTarget("")
+	target := taskassignments.ReleaseRestorationTarget("")
 	artifactID := ""
 	for _, member := range procedure.GetMembers() {
-		memberTarget := ReleaseRestorationCandidateAbsence
+		memberTarget := taskassignments.ReleaseRestorationCandidateAbsence
 		if member.GetServingPredecessor() != nil {
-			memberTarget = ReleaseRestorationServingPredecessor
+			memberTarget = taskassignments.ReleaseRestorationServingPredecessor
 		}
 		if target == "" {
 			target, artifactID = memberTarget, member.GetCandidateArtifactId()
 		}
 		if target != memberTarget || artifactID != member.GetCandidateArtifactId() {
-			return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
+			return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 		}
 	}
-	candidates := make([]ReleaseRestorationCandidate, len(manifest.Members))
+	candidates := make([]taskassignments.ReleaseRestorationCandidate, len(manifest.Members))
 	for index, member := range manifest.Members {
-		candidates[index] = ReleaseRestorationCandidate{
+		candidates[index] = taskassignments.ReleaseRestorationCandidate{
 			ServiceID: member.ServiceID,
 			ReleaseID: member.ReleaseID,
 			Target:    target,
@@ -130,7 +131,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 		}
 		return candidates[left].ServiceID < candidates[right].ServiceID
 	})
-	authority := ReleaseRestorationAuthority{
+	authority := taskassignments.ReleaseRestorationAuthority{
 		Schema: 1, TaskID: task.ID, OperationID: task.OperationID, PlanHash: task.PlanHash,
 		EnvironmentID: task.Owner.EnvironmentID, CandidateArtifactID: artifactID, Candidates: candidates,
 	}
@@ -142,35 +143,35 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 		revision,
 	)
 	if err != nil {
-		return ReleaseRestorationAuthority{}, "", nil, err
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
 	authority.NativePredecessors = witnesses
 	if err := validateNativeRestorationDescriptor(authority, procedure); err != nil {
-		return ReleaseRestorationAuthority{}, "", nil, err
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
 	projectionRevision := int64(0)
 	if read.Values[2] != nil {
 		projectionRevision = read.Values[2].ModRevision
 	}
-	if target == ReleaseRestorationServingPredecessor {
+	if target == taskassignments.ReleaseRestorationServingPredecessor {
 		if read.Values[2] == nil {
-			return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
+			return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 		}
 		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[2].Value)
 		if decodeErr != nil || projection.EnvironmentID != task.Owner.EnvironmentID ||
 			len(projection.ComposeArtifact) == 0 {
-			return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
+			return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 		}
 		digest := sha256.Sum256(projection.ComposeArtifact)
-		authority.AppliedPredecessor = &ReleaseAppliedPredecessorAuthority{
+		authority.AppliedPredecessor = &taskassignments.ReleaseAppliedPredecessorAuthority{
 			KeyRevision: projectionRevision, RevisionID: projection.RevisionID,
 			RenderGeneration: projection.RenderGeneration, ComposeArtifactSHA256: hex.EncodeToString(digest[:]),
 			ComposeArtifact: append([]byte(nil), projection.ComposeArtifact...),
 		}
 	}
-	digest, err := releaseRestorationAuthoritySHA256(authority)
+	digest, err := taskassignments.ReleaseRestorationAuthoritySHA256(authority)
 	if err != nil {
-		return ReleaseRestorationAuthority{}, "", nil, err
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
 	return authority, digest, append(sourceConditions, []etcdstore.Condition{
 		{Key: keys[0], ModRevision: read.Values[0].ModRevision},
@@ -198,7 +199,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	task TaskRecord,
 	writer taskMaterializationWriterRecord,
 	revision int64,
-) (ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
+) (taskassignments.ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	keys := []string{
 		releases.ReleasePublicationKey(publicationID),
@@ -207,24 +208,24 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
-		return ReleaseRestorationAuthority{}, "", nil, err
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil || read.Values[1] == nil || writer.BlueprintAppliedPredecessor == nil {
-		return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
 	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
 	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	procedure, descriptorErr := validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, task, manifest)
 	if markerErr != nil || manifestErr != nil || descriptorErr != nil ||
 		validateBlueprintCandidateManifest(task, marker, manifest) != nil {
-		return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
 	observed, observedErr := taskMaterializationAppliedPredecessorFromValue(
 		read.Values[2], task.Owner.EnvironmentID, task.RenderGeneration,
 	)
 	if observedErr != nil || observed != *writer.BlueprintAppliedPredecessor {
-		return ReleaseRestorationAuthority{}, "", nil, errs.New(
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, errs.New(
 			errs.KindStateConflict,
 			"Blueprint applied predecessor changed during claim",
 		)
@@ -234,7 +235,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[2].Value)
 		if decodeErr != nil || projection.RevisionID != observed.RevisionID ||
 			projection.RenderGeneration != observed.RenderGeneration {
-			return ReleaseRestorationAuthority{}, "", nil, errs.New(
+			return taskassignments.ReleaseRestorationAuthority{}, "", nil, errs.New(
 				errs.KindStateConflict,
 				"Blueprint applied predecessor artifact changed during claim",
 			)
@@ -249,7 +250,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 		revision,
 	)
 	if err != nil {
-		return ReleaseRestorationAuthority{}, "", nil, err
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
 	authority, digest, err := buildBlueprintNativeRestorationAuthority(
 		task,
@@ -260,10 +261,10 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 		composeArtifact,
 	)
 	if err != nil {
-		return ReleaseRestorationAuthority{}, "", nil, err
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
 	if err := validateSelectedRestorationTargets(procedure, authority.Candidates); err != nil {
-		return ReleaseRestorationAuthority{}, "", nil, err
+		return taskassignments.ReleaseRestorationAuthority{}, "", nil, err
 	}
 	projectionRevision := int64(0)
 	if read.Values[2] != nil {
@@ -279,19 +280,19 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 
 func validateSelectedRestorationTargets(
 	procedure *agentpb.CandidateReleaseProcedure,
-	candidates []ReleaseRestorationCandidate,
+	candidates []taskassignments.ReleaseRestorationCandidate,
 ) error {
 	if len(candidates) != len(procedure.GetMembers()) {
-		return corruptTaskAssignment()
+		return taskassignments.CorruptTaskAssignment()
 	}
 	for index, member := range procedure.GetMembers() {
 		candidate := candidates[index]
 		if candidate.ServiceID != member.GetServiceId() || candidate.ReleaseID != member.GetCandidateReleaseId() ||
-			candidate.Target == ReleaseRestorationServingPredecessor && member.GetServingPredecessor() == nil ||
-			candidate.Target == ReleaseRestorationCandidateAbsence && member.GetCandidateAbsence() == nil ||
-			candidate.Target != ReleaseRestorationServingPredecessor &&
-				candidate.Target != ReleaseRestorationCandidateAbsence {
-			return corruptTaskAssignment()
+			candidate.Target == taskassignments.ReleaseRestorationServingPredecessor && member.GetServingPredecessor() == nil ||
+			candidate.Target == taskassignments.ReleaseRestorationCandidateAbsence && member.GetCandidateAbsence() == nil ||
+			candidate.Target != taskassignments.ReleaseRestorationServingPredecessor &&
+				candidate.Target != taskassignments.ReleaseRestorationCandidateAbsence {
+			return taskassignments.CorruptTaskAssignment()
 		}
 	}
 	return nil
@@ -369,14 +370,14 @@ func (repository *TaskRepository) CandidateReleaseDescriptor(
 
 func validateAssignmentRestorationDescriptor(
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	procedure *agentpb.CandidateReleaseProcedure,
 ) error {
 	authority := assignment.RestorationAuthority
-	if authority == nil || validateReleaseRestorationAuthority(*authority) != nil ||
+	if authority == nil || taskassignments.ValidateReleaseRestorationAuthority(*authority) != nil ||
 		authority.TaskID != task.ID || authority.OperationID != task.OperationID || authority.PlanHash != task.PlanHash ||
 		len(authority.Candidates) != len(procedure.GetMembers()) {
-		return corruptTaskAssignment()
+		return taskassignments.CorruptTaskAssignment()
 	}
 	if err := validateSelectedRestorationTargets(procedure, authority.Candidates); err != nil {
 		return err
@@ -385,7 +386,7 @@ func validateAssignmentRestorationDescriptor(
 		candidate := authority.Candidates[index]
 		if candidate.ServiceID != member.GetServiceId() || candidate.ReleaseID != member.GetCandidateReleaseId() ||
 			authority.CandidateArtifactID != member.GetCandidateArtifactId() {
-			return corruptTaskAssignment()
+			return taskassignments.CorruptTaskAssignment()
 		}
 	}
 	if taskHasBlueprintCandidateAppliedAuthority(task) || task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
@@ -393,11 +394,11 @@ func validateAssignmentRestorationDescriptor(
 			return err
 		}
 	} else if len(authority.NativePredecessors) != 0 {
-		return corruptTaskAssignment()
+		return taskassignments.CorruptTaskAssignment()
 	}
-	digest, err := releaseRestorationAuthoritySHA256(*authority)
+	digest, err := taskassignments.ReleaseRestorationAuthoritySHA256(*authority)
 	if err != nil || digest != assignment.RestorationAuthoritySHA256 {
-		return corruptTaskAssignment()
+		return taskassignments.CorruptTaskAssignment()
 	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -22,7 +23,7 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	}
 	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, status, *terminalAt)
 	if err != nil || terminal.RetainUntil == nil || terminal.FinishedAt == nil {
-		return scriptTerminalSourceRelease{}, corruptTaskAssignment()
+		return scriptTerminalSourceRelease{}, taskassignments.CorruptTaskAssignment()
 	}
 	*terminalAt = *terminal.FinishedAt
 	authority, err := newScriptSourceReferenceAuthority(repository.store)

@@ -3,6 +3,7 @@ package etcd
 import (
 	"encoding/hex"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 // blueprintAcknowledgedRuntime contributes only a successful member's sealed
 // input to the same transaction as its terminal Task and serving projection.
 func blueprintAcknowledgedRuntime(
-	marker releases.ReleasePublicationMarker, task TaskRecord, assignment TaskAssignmentRecord,
+	marker releases.ReleasePublicationMarker, task TaskRecord, assignment taskassignments.TaskAssignmentRecord,
 	member releases.ReleaseStagedMemberRef, result taskjournal.TaskResultRecord, terminalAt time.Time,
 ) ([]byte, error) {
 	if result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 || result.Diagnostic != taskjournal.TaskResultDiagnosticNone ||

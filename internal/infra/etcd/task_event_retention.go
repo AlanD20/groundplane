@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
@@ -37,7 +38,7 @@ func nextTaskControllerTimestamp(previous time.Time, supplied time.Time) (time.T
 	return previous.Add(time.Nanosecond), nil
 }
 
-func taskCheckpointAssignmentMatches(checkpoint TaskEventCheckpoint, assignment TaskAssignmentRecord) bool {
+func taskCheckpointAssignmentMatches(checkpoint TaskEventCheckpoint, assignment taskassignments.TaskAssignmentRecord) bool {
 	identity := checkpoint.Identity
 	return identity.AssignmentID == assignment.AssignmentID && identity.AgentID == assignment.AgentID &&
 		identity.AgentGeneration == assignment.AgentGeneration && identity.Attempt > 0 && identity.Attempt <= assignment.ExecutionEpoch

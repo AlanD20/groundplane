@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 )
@@ -11,7 +12,7 @@ import (
 func (repository *TaskRepository) releaseComponentEffectAtRevision(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	revision int64,
 ) (bool, error) {
 	if len(task.ComponentActionStepIDs) == 0 {
@@ -23,7 +24,7 @@ func (repository *TaskRepository) releaseComponentEffectAtRevision(
 	}
 	if snapshot.Revision != revision || snapshot.Task.NextEventSequence != task.NextEventSequence ||
 		!slices.Equal(snapshot.Task.ComponentActionStepIDs, task.ComponentActionStepIDs) {
-		return false, corruptTaskAssignment()
+		return false, taskassignments.CorruptTaskAssignment()
 	}
 	for _, event := range snapshot.Events {
 		if !slices.Contains(task.ComponentActionStepIDs, event.Identity.StepID) {
@@ -33,7 +34,7 @@ func (repository *TaskRepository) releaseComponentEffectAtRevision(
 			event.Identity.AgentGeneration != assignment.AgentGeneration ||
 			event.Identity.Attempt == 0 ||
 			event.Identity.Attempt > assignment.ExecutionEpoch {
-			return false, corruptTaskAssignment()
+			return false, taskassignments.CorruptTaskAssignment()
 		}
 		if event.State != taskjournal.TaskEventStatePending {
 			return true, nil
@@ -44,7 +45,7 @@ func (repository *TaskRepository) releaseComponentEffectAtRevision(
 			continue
 		}
 		if !taskCheckpointAssignmentMatches(checkpoint, assignment) {
-			return false, corruptTaskAssignment()
+			return false, taskassignments.CorruptTaskAssignment()
 		}
 		if checkpoint.EffectPossible {
 			return true, nil

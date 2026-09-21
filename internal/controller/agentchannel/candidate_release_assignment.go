@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -56,12 +57,12 @@ func candidateReleaseAssignmentAuthority(
 	record := claim.Assignment.Record
 	result := candidateReleaseWireAuthority{}
 	switch record.ExecutionMode {
-	case etcd.TaskExecutionModeForward:
+	case taskassignments.TaskExecutionModeForward:
 		result.mode = agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD
 		if record.ReleaseRecoveryRecordSHA256 != "" {
 			return result, errs.New(errs.KindInternal, "forward assignment carries recovery record authority")
 		}
-	case etcd.TaskExecutionModeRecoveryOnly:
+	case taskassignments.TaskExecutionModeRecoveryOnly:
 		result.mode = agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY
 		digest, err := hex.DecodeString(record.ReleaseRecoveryRecordSHA256)
 		if err != nil || len(digest) != 32 {
@@ -97,9 +98,9 @@ func candidateReleaseAssignmentAuthority(
 	for index, candidate := range authority.Candidates {
 		target := agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_UNSPECIFIED
 		switch candidate.Target {
-		case etcd.ReleaseRestorationServingPredecessor:
+		case taskassignments.ReleaseRestorationServingPredecessor:
 			target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR
-		case etcd.ReleaseRestorationCandidateAbsence:
+		case taskassignments.ReleaseRestorationCandidateAbsence:
 			target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE
 		default:
 			return candidateReleaseWireAuthority{}, errs.New(
@@ -156,11 +157,11 @@ func candidateReleaseAssignmentAuthority(
 		}
 		phase := agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_UNSPECIFIED
 		switch directive.Phase {
-		case etcd.ReleaseRecoveryPhaseProbe:
+		case taskassignments.ReleaseRecoveryPhaseProbe:
 			phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE
-		case etcd.ReleaseRecoveryPhaseCompensate:
+		case taskassignments.ReleaseRecoveryPhaseCompensate:
 			phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_COMPENSATE
-		case etcd.ReleaseRecoveryPhaseProven:
+		case taskassignments.ReleaseRecoveryPhaseProven:
 			phase = agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN
 		default:
 			return candidateReleaseWireAuthority{}, errs.New(errs.KindInternal, "durable recovery phase is invalid")

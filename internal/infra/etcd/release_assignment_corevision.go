@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,12 +21,12 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 	defer clear(taskValue)
 	record := current.Assignment.Record
 	record.ExecutionEpoch++
-	encoded, err := encodeTaskAssignment(record)
+	encoded, err := taskassignments.EncodeTaskAssignment(record)
 	if err != nil {
 		return err
 	}
 	defer clear(encoded)
-	old, err := encodeTaskAssignment(current.Assignment.Record)
+	old, err := taskassignments.EncodeTaskAssignment(current.Assignment.Record)
 	if err != nil {
 		return err
 	}
@@ -50,21 +51,21 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 		{Key: lifecycleKey, ModRevision: lifecycleValue.ModRevision},
 	}
 	conditions = append(conditions, evidenceConditions...)
-	if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+	if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 		recoveryRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{releaseRecoveryKey(record.TaskID)}, Revision: current.Task.ReadRevision,
+			Keys: []string{taskassignments.ReleaseRecoveryKey(record.TaskID)}, Revision: current.Task.ReadRevision,
 		})
 		if readErr != nil || recoveryRead == nil || len(recoveryRead.Values) != 1 || recoveryRead.Values[0] == nil {
 			if readErr != nil {
 				return readErr
 			}
-			return corruptTaskAssignment()
+			return taskassignments.CorruptTaskAssignment()
 		}
 		conditions = append(conditions, etcdstore.Condition{
-			Key: releaseRecoveryKey(record.TaskID), ModRevision: recoveryRead.Values[0].ModRevision,
+			Key: taskassignments.ReleaseRecoveryKey(record.TaskID), ModRevision: recoveryRead.Values[0].ModRevision,
 		})
 	} else {
-		conditions = append(conditions, etcdstore.Condition{Key: releaseRecoveryKey(record.TaskID)})
+		conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(record.TaskID)})
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(record.TaskID), Value: taskValue},

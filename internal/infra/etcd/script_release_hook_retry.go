@@ -5,6 +5,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -117,7 +118,7 @@ func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, err
 func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	revision int64,
 ) (bool, []etcdstore.Condition, error) {
 	steps, err := releaseHookExecutionSteps(task)

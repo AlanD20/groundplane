@@ -5,6 +5,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -121,7 +122,7 @@ func (repository *TaskRepository) prepareServiceTaskAcknowledgement(
 func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
 ) (serviceTaskChange, error) {

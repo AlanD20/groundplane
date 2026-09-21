@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -24,7 +25,7 @@ func blueprintNativePredecessorReferences(
 			Serving: runtime.Serving,
 		}
 		if runtime.Serving != nil {
-			digest, err := domain.Digest(ReleaseNativePredecessorAuthority{ServiceID: runtime.ServiceID,
+			digest, err := domain.Digest(taskassignments.ReleaseNativePredecessorAuthority{ServiceID: runtime.ServiceID,
 				CurrentArtifact: runtime.CurrentArtifact, RetainedPriorArtifact: runtime.RetainedPriorArtifact})
 			if err != nil {
 				return nil, err
@@ -112,8 +113,8 @@ func resolveBlueprintNativePredecessors(
 			if err != nil || digest != reference.PriorRuntimeSHA256 || witness.ServiceID != reference.ServiceID ||
 				member.Intent.PriorServingReleaseID != reference.Serving.ServingReleaseID ||
 				member.Render.PriorTarget != reference.Serving.Target ||
-				!recoveryRenderMatchesPredecessor(member.Render, member.Intent, &ReleaseRestorationAuthority{
-					NativePredecessors: []ReleaseNativePredecessorAuthority{*witness},
+				!recoveryRenderMatchesPredecessor(member.Render, member.Intent, &taskassignments.ReleaseRestorationAuthority{
+					NativePredecessors: []taskassignments.ReleaseNativePredecessorAuthority{*witness},
 				}) {
 				return nil, releases.CorruptReleaseRecord()
 			}

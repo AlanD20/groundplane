@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strings"
 	"time"
@@ -215,7 +216,7 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	defer clearKeyValues(primary.Values)
 	execution, executionErr := recordcodec.Decode[ScriptExecutionRecord](primary.Values[0].Value, "script-execution")
 	task, taskErr := decodeTaskRecord(primary.Values[1].Value)
-	assignment, assignmentErr := decodeTaskAssignment(primary.Values[2].Value)
+	assignment, assignmentErr := taskassignments.DecodeTaskAssignment(primary.Values[2].Value)
 	if executionErr != nil || taskErr != nil || assignmentErr != nil ||
 		validateScriptExecutionRecord(execution) != nil {
 		return scriptCheckpointAnchor{}, errs.New(errs.KindInternal, "Script checkpoint durable state is corrupt")

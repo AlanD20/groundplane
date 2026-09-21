@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,7 +20,7 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 		(task.Type != taskjournal.TaskScript && task.Params[TaskReleasePublicationParam] == "") {
 		return nil, nil
 	}
-	if task.Params[TaskReleasePublicationParam] != "" && assignment.ExecutionMode == TaskExecutionModeForward &&
+	if task.Params[TaskReleasePublicationParam] != "" && assignment.ExecutionMode == taskassignments.TaskExecutionModeForward &&
 		(result.ExecutionEpoch != assignment.ExecutionEpoch || result.ReleaseRecoveryRecordSHA256 != "") {
 		return nil, errs.New(errs.KindStateConflict, "release terminal execution epoch changed")
 	}
@@ -39,7 +40,7 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 	if task.Type == taskjournal.TaskScript {
 		return nil, nil
 	}
-	if assignment.ExecutionMode != TaskExecutionModeForward ||
+	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
 		result.Diagnostic != taskjournal.TaskResultDiagnosticTimeoutBeforeEffect || result.ReconciliationRequired {
 		if task.Type == taskjournal.TaskUpdate && result.ReconciliationRequired {
 			conditions = append(conditions, etcdstore.Condition{Key: blueprintClosingReportKey(task.ID)})
@@ -48,7 +49,7 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 	}
 	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, current.Task.ReadRevision)
 	if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
-		return nil, corruptTaskAssignment()
+		return nil, taskassignments.CorruptTaskAssignment()
 	}
 	effect, evidence, err := repository.releaseEffectEvidenceAtRevision(
 		ctx,

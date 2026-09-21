@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"strconv"
@@ -180,7 +181,7 @@ func (repository *TaskRepository) entryRuntimeClaimConditions(
 }
 
 func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
-	ctx context.Context, terminal TaskRecord, assignment TaskAssignmentRecord, revision int64,
+	ctx context.Context, terminal TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
 	if terminal.Type != taskjournal.TaskUpdate || terminal.Params[TaskResourceKindParam] != TaskResourceEntry ||
 		terminal.Status != taskjournal.TaskStatusCompleted || terminal.EntryRuntime == nil || len(terminal.EntryRuntime.Updates) == 0 {

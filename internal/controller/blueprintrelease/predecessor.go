@@ -5,6 +5,7 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"slices"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -64,7 +65,7 @@ func (service *Service) preparePredecessor(
 	if captured.serving == nil {
 		return nil
 	}
-	render.PriorRuntime = &etcd.ReleaseNativePredecessorAuthority{
+	render.PriorRuntime = &taskassignments.ReleaseNativePredecessorAuthority{
 		ServiceID: captured.native.ServiceID, CurrentArtifact: slices.Clone(captured.native.CurrentArtifact),
 		RetainedPriorArtifact: slices.Clone(captured.native.RetainedPriorArtifact),
 	}

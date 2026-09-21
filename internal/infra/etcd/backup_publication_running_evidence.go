@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
@@ -116,7 +117,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 		return false
 	}
 	assignmentValue := read.Values[4]
-	assignment, err := decodeTaskAssignment(assignmentValue.Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(assignmentValue.Value)
 	if err != nil || assignmentValue.Key != keys[4] ||
 		assignmentValue.ModRevision <= publicationRevision ||
 		assignmentValue.ModRevision > taskRevision || assignment.TaskID != task.ID ||

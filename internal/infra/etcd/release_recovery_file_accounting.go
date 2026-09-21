@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -10,7 +11,7 @@ import (
 
 func releaseRestorationStepIDs(
 	procedure *agentpb.CandidateReleaseProcedure,
-	candidates []ReleaseRestorationCandidate,
+	candidates []taskassignments.ReleaseRestorationCandidate,
 ) ([]string, error) {
 	if err := validateSelectedRestorationTargets(procedure, candidates); err != nil {
 		return nil, err
@@ -20,8 +21,8 @@ func releaseRestorationStepIDs(
 
 func releaseApplicableCompensationStepIDs(
 	procedure *agentpb.CandidateReleaseProcedure,
-	candidates []ReleaseRestorationCandidate,
-	evidence []releaseRecoveryMutationEvidence,
+	candidates []taskassignments.ReleaseRestorationCandidate,
+	evidence []taskassignments.ReleaseRecoveryMutationEvidence,
 ) ([]string, error) {
 	if err := validateSelectedRestorationTargets(procedure, candidates); err != nil {
 		return nil, err
@@ -50,12 +51,12 @@ func releaseApplicableCompensationStepIDs(
 			continue
 		}
 		switch candidates[index].Target {
-		case ReleaseRestorationServingPredecessor:
+		case taskassignments.ReleaseRestorationServingPredecessor:
 			result = append(result, member.GetServingPredecessor().GetCompensateStepId())
-		case ReleaseRestorationCandidateAbsence:
+		case taskassignments.ReleaseRestorationCandidateAbsence:
 			result = append(result, member.GetCandidateAbsence().GetCompensateStepId())
 		default:
-			return nil, corruptTaskAssignment()
+			return nil, taskassignments.CorruptTaskAssignment()
 		}
 	}
 	return result, nil
@@ -63,10 +64,10 @@ func releaseApplicableCompensationStepIDs(
 
 func releaseMutationEvidenceByStep(
 	procedure *agentpb.CandidateReleaseProcedure,
-	evidence []releaseRecoveryMutationEvidence,
-) (map[string]releaseRecoveryMutationEvidence, error) {
+	evidence []taskassignments.ReleaseRecoveryMutationEvidence,
+) (map[string]taskassignments.ReleaseRecoveryMutationEvidence, error) {
 	ordered, _, _ := releaseForwardMutationSteps(procedure)
-	result := make(map[string]releaseRecoveryMutationEvidence, len(evidence))
+	result := make(map[string]taskassignments.ReleaseRecoveryMutationEvidence, len(evidence))
 	evidenceIndex := 0
 	for _, stepID := range ordered {
 		if evidenceIndex >= len(evidence) || evidence[evidenceIndex].StepID != stepID {
@@ -74,13 +75,13 @@ func releaseMutationEvidenceByStep(
 		}
 		item := evidence[evidenceIndex]
 		if !item.Running {
-			return nil, corruptTaskAssignment()
+			return nil, taskassignments.CorruptTaskAssignment()
 		}
 		result[stepID] = item
 		evidenceIndex++
 	}
 	if evidenceIndex != len(evidence) {
-		return nil, corruptTaskAssignment()
+		return nil, taskassignments.CorruptTaskAssignment()
 	}
 	return result, nil
 }
@@ -113,22 +114,22 @@ func releaseForwardMutationSteps(
 func (repository *TaskRepository) releaseCandidateMutationEvidenceAtRevision(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	procedure *agentpb.CandidateReleaseProcedure,
 	revision int64,
-) (bool, []releaseRecoveryMutationEvidence, error) {
+) (bool, []taskassignments.ReleaseRecoveryMutationEvidence, error) {
 	ordered, mutationSteps, fileSteps := releaseForwardMutationSteps(procedure)
 	snapshot, err := repository.ListTaskEvents(ctx, task.ID, revision)
 	if err != nil || snapshot.Revision != revision || snapshot.Task.NextEventSequence != task.NextEventSequence {
 		if err != nil {
 			return false, nil, err
 		}
-		return false, nil, corruptTaskAssignment()
+		return false, nil, taskassignments.CorruptTaskAssignment()
 	}
-	evidenceByStep := make(map[string]releaseRecoveryMutationEvidence)
+	evidenceByStep := make(map[string]taskassignments.ReleaseRecoveryMutationEvidence)
 	for _, checkpoint := range snapshot.Task.EventCheckpoints {
 		if !taskCheckpointAssignmentMatches(checkpoint, assignment) {
-			return false, nil, corruptTaskAssignment()
+			return false, nil, taskassignments.CorruptTaskAssignment()
 		}
 		if _, mutation := mutationSteps[checkpoint.Identity.StepID]; !mutation {
 			continue
@@ -136,7 +137,7 @@ func (repository *TaskRepository) releaseCandidateMutationEvidenceAtRevision(
 		_, file := fileSteps[checkpoint.Identity.StepID]
 		running := checkpoint.Running || !file && checkpoint.EffectPossible
 		if running {
-			evidenceByStep[checkpoint.Identity.StepID] = releaseRecoveryMutationEvidence{
+			evidenceByStep[checkpoint.Identity.StepID] = taskassignments.ReleaseRecoveryMutationEvidence{
 				StepID: checkpoint.Identity.StepID, Running: true, Completed: checkpoint.Completed,
 			}
 		}
@@ -145,7 +146,7 @@ func (repository *TaskRepository) releaseCandidateMutationEvidenceAtRevision(
 		if event.Identity.AssignmentID != assignment.AssignmentID || event.Identity.AgentID != assignment.AgentID ||
 			event.Identity.AgentGeneration != assignment.AgentGeneration || event.Identity.Attempt == 0 ||
 			event.Identity.Attempt > assignment.ExecutionEpoch {
-			return false, nil, corruptTaskAssignment()
+			return false, nil, taskassignments.CorruptTaskAssignment()
 		}
 		if _, mutation := mutationSteps[event.Identity.StepID]; !mutation {
 			continue
@@ -168,7 +169,7 @@ func (repository *TaskRepository) releaseCandidateMutationEvidenceAtRevision(
 			evidenceByStep[event.Identity.StepID] = evidence
 		}
 	}
-	evidence := make([]releaseRecoveryMutationEvidence, 0, len(evidenceByStep))
+	evidence := make([]taskassignments.ReleaseRecoveryMutationEvidence, 0, len(evidenceByStep))
 	for _, stepID := range ordered {
 		if item, ok := evidenceByStep[stepID]; ok {
 			evidence = append(evidence, item)

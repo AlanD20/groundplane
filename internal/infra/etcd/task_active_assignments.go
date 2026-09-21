@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -40,14 +41,14 @@ func (repository *TaskRepository) ListAgentAssignments(
 		return []TaskAssignment{}, nil
 	}
 
-	records := make([]TaskAssignmentRecord, len(assignments.Values))
+	records := make([]taskassignments.TaskAssignmentRecord, len(assignments.Values))
 	companionKeys := make([]string, 0, len(assignments.Values)*4)
 	for index, value := range assignments.Values {
 		taskID, err := taskjournal.TaskIDFromAssignmentKey(agentID, value.Key)
 		if err != nil {
 			return nil, err
 		}
-		record, err := decodeTaskAssignment(value.Value)
+		record, err := taskassignments.DecodeTaskAssignment(value.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -58,11 +59,11 @@ func (repository *TaskRepository) ListAgentAssignments(
 			return nil, errs.New(errs.KindStateConflict, "durable Task assignment belongs to another Agent generation")
 		}
 		if record.ClaimedTaskRevision >= value.ModRevision {
-			return nil, corruptTaskAssignment()
+			return nil, taskassignments.CorruptTaskAssignment()
 		}
 		records[index] = record
 		timeoutDeadline := record.Deadline
-		if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+		if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			timeoutDeadline = record.RecoveryDeadline
 		}
 		companionKeys = append(
@@ -91,8 +92,8 @@ func (repository *TaskRepository) ListAgentAssignments(
 		assignmentValue := assignments.Values[index]
 		proofRequired := proofRequiredValue != nil
 		if taskValue == nil || indexValue == nil ||
-			timeoutValue == nil == (record.ExecutionMode == TaskExecutionModeForward || !proofRequired) ||
-			proofRequired && record.ExecutionMode != TaskExecutionModeRecoveryOnly {
+			timeoutValue == nil == (record.ExecutionMode == taskassignments.TaskExecutionModeForward || !proofRequired) ||
+			proofRequired && record.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly {
 			return nil, errs.New(errs.KindInternal, "assigned Task companion is missing")
 		}
 		lifecycleValue := timeoutValue
@@ -137,15 +138,15 @@ func (repository *TaskRepository) ListAgentAssignments(
 				return nil, corruptTaskMaterializationWriter()
 			}
 		}
-		var recovery *ReleaseRecoveryDirective
+		var recovery *taskassignments.ReleaseRecoveryDirective
 		if task.Params[TaskReleasePublicationParam] != "" {
 			_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(
 				ctx, task, assignments.ReadRevision,
 			)
 			if descriptorErr != nil || validateAssignmentRestorationDescriptor(task, record, procedure) != nil {
-				return nil, corruptTaskAssignment()
+				return nil, taskassignments.CorruptTaskAssignment()
 			}
-			if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
+			if record.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 				recovery, err = repository.releaseRecoveryDirectiveAtRevision(
 					ctx, task, record, procedure, assignments.ReadRevision,
 				)
@@ -155,7 +156,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 			}
 		}
 		result[index] = TaskAssignment{
-			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{
+			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
 				Record: record, Revision: assignmentValue.ModRevision,
 				ReadRevision: assignments.ReadRevision,
 			},
@@ -198,7 +199,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		return []TaskAssignment{}, nil
 	}
 	claimValue := claims.Values[0]
-	claim, err := decodeTaskAssignment(claimValue.Value)
+	claim, err := taskassignments.DecodeTaskAssignment(claimValue.Value)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +241,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		return nil, errs.New(errs.KindInternal, "controller Task claim and Task are inconsistent")
 	}
 	return []TaskAssignment{{
-		Assignment: etcdstore.Versioned[TaskAssignmentRecord]{
+		Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
 			Record: claim, Revision: claimValue.ModRevision, ReadRevision: claims.ReadRevision,
 		},
 		Task: etcdstore.Versioned[TaskRecord]{

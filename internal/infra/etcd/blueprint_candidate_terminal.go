@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
@@ -97,7 +98,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	ctx context.Context,
 	task TaskRecord,
 	writer taskMaterializationWriterRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	terminalStatus taskjournal.TaskStatus,
 	result taskjournal.TaskResultRecord,
 	agentID string,
@@ -134,7 +135,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	baseConditions, manifest, epochValue := authority.conditions, authority.manifest, authority.epochValue
 	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, revision)
 	if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
-		return blueprintCandidateTerminalChange{}, corruptTaskAssignment()
+		return blueprintCandidateTerminalChange{}, taskassignments.CorruptTaskAssignment()
 	}
 	baseConditions, err = appendBlueprintCandidateCondition(baseConditions, writerCondition)
 	if err != nil {

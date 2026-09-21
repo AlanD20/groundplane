@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -82,7 +83,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if task.Status != taskjournal.TaskStatusRunning || assignmentValue == nil || assignmentIndexValue == nil {
 			return TaskEventAppend{}, errs.New(errs.KindStateConflict, "task event has no matching active assignment")
 		}
-		assignment, err := decodeTaskAssignment(assignmentValue.Value)
+		assignment, err := taskassignments.DecodeTaskAssignment(assignmentValue.Value)
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
@@ -112,9 +113,9 @@ func (repository *TaskRepository) AppendTaskEvent(
 
 		var recoveryValue *etcdstore.KeyValue
 		var recoveryMutation []etcdstore.Mutation
-		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			recoveryRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys: []string{releaseRecoveryKey(task.ID)}, Revision: result.ReadRevision,
+				Keys: []string{taskassignments.ReleaseRecoveryKey(task.ID)}, Revision: result.ReadRevision,
 			})
 			if readErr != nil {
 				return TaskEventAppend{}, readErr
@@ -122,32 +123,32 @@ func (repository *TaskRepository) AppendTaskEvent(
 			if recoveryRead == nil || recoveryRead.ReadRevision != result.ReadRevision ||
 				len(recoveryRead.Values) != 1 ||
 				recoveryRead.Values[0] == nil {
-				return TaskEventAppend{}, corruptTaskAssignment()
+				return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
 			}
 			recoveryValue = recoveryRead.Values[0]
-			record, decodeErr := decodeReleaseRecoveryRecord(recoveryValue.Value)
-			digest, digestErr := releaseRecoveryRecordSHA256(record)
+			record, decodeErr := taskassignments.DecodeReleaseRecoveryRecord(recoveryValue.Value)
+			digest, digestErr := taskassignments.ReleaseRecoveryRecordSHA256(record)
 			if decodeErr != nil || digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 ||
 				record.TaskID != task.ID || record.AssignmentID != assignment.AssignmentID ||
 				record.OperationID != task.OperationID || record.PlanHash != task.PlanHash ||
 				record.RestorationAuthoritySHA256 != assignment.RestorationAuthoritySHA256 ||
 				!record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
-				return TaskEventAppend{}, corruptTaskAssignment()
+				return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
 			}
-			next, changed, advanceErr := advanceReleaseRecoveryRecord(record, input, result.ReadRevision)
+			next, changed, advanceErr := taskassignments.AdvanceReleaseRecoveryRecord(record, input, result.ReadRevision)
 			if advanceErr != nil {
 				return TaskEventAppend{}, advanceErr
 			}
 			if changed {
-				encoded, encodeErr := encodeReleaseRecoveryRecord(next)
+				encoded, encodeErr := taskassignments.EncodeReleaseRecoveryRecord(next)
 				if encodeErr != nil {
 					return TaskEventAppend{}, encodeErr
 				}
 				defer clear(encoded)
 				recoveryMutation = []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: recoveryValue.Key, Value: encoded}}
 			}
-		} else if assignment.ExecutionMode != TaskExecutionModeForward {
-			return TaskEventAppend{}, corruptTaskAssignment()
+		} else if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward {
+			return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
 		}
 
 		eventKey := taskjournal.TaskEventKey(task.ID, prepared.Sequence)

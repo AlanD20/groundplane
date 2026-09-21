@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -23,7 +24,7 @@ func validateBackupSecretResolutionRequest(request backupsecret.Request) error {
 
 func validateBackupSecretTaskAssignment(
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	request backupsecret.Request,
 ) error {
 	if task.ID != request.TaskID || task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune ||

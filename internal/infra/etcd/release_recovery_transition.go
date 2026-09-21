@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"slices"
@@ -20,7 +21,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	ctx context.Context,
 	task TaskRecord,
 	taskValue *etcdstore.KeyValue,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	assignmentValue *etcdstore.KeyValue,
 	assignmentIndexValue *etcdstore.KeyValue,
 	status taskjournal.TaskStatus,
@@ -31,7 +32,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	if task.Params[TaskReleasePublicationParam] == "" || !result.ReconciliationRequired {
 		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
-	if assignment.ExecutionMode != TaskExecutionModeForward || result.ExecutionEpoch != assignment.ExecutionEpoch ||
+	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward || result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		result.ReleaseRecoveryRecordSHA256 != "" || assignment.ExecutionEpoch == math.MaxUint32 ||
 		assignment.RestorationAuthority == nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, errs.New(
@@ -41,13 +42,13 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	}
 	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, revision)
 	if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
-		return etcdstore.Versioned[TaskRecord]{}, true, corruptTaskAssignment()
+		return etcdstore.Versioned[TaskRecord]{}, true, taskassignments.CorruptTaskAssignment()
 	}
 	stepIDs, err := releaseRestorationStepIDs(procedure, assignment.RestorationAuthority.Candidates)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
-	reportDigest, err := canonicalPrimaryReportSHA256(status, result)
+	reportDigest, err := taskassignments.CanonicalPrimaryReportSHA256(status, result)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
@@ -61,28 +62,28 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
-	record := releaseRecoveryRecord{
+	record := taskassignments.ReleaseRecoveryRecord{
 		Schema: 1, TaskID: task.ID, AssignmentID: assignment.AssignmentID, OperationID: task.OperationID,
 		PlanHash: task.PlanHash, RestorationAuthoritySHA256: assignment.RestorationAuthoritySHA256,
 		PrimaryReportSHA256: reportDigest, PrimaryStatus: status, PrimaryResult: result,
 		RecoveryDeadline: assignment.RecoveryDeadline,
 		MutationEvidence: mutationEvidence,
-		RecoveryStepIDs:  stepIDs, Cursor: 0, Phase: ReleaseRecoveryPhaseProbe, EvidenceRevision: revision,
+		RecoveryStepIDs:  stepIDs, Cursor: 0, Phase: taskassignments.ReleaseRecoveryPhaseProbe, EvidenceRevision: revision,
 	}
-	recoveryValue, err := encodeReleaseRecoveryRecord(record)
+	recoveryValue, err := taskassignments.EncodeReleaseRecoveryRecord(record)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	defer clear(recoveryValue)
-	recoveryDigest, err := releaseRecoveryRecordSHA256(record)
+	recoveryDigest, err := taskassignments.ReleaseRecoveryRecordSHA256(record)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	next := assignment
-	next.ExecutionMode = TaskExecutionModeRecoveryOnly
+	next.ExecutionMode = taskassignments.TaskExecutionModeRecoveryOnly
 	next.ExecutionEpoch++
 	next.ReleaseRecoveryRecordSHA256 = recoveryDigest
-	nextValue, err := encodeTaskAssignment(next)
+	nextValue, err := taskassignments.EncodeTaskAssignment(next)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
@@ -105,7 +106,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 		{Key: assignmentValue.Key, ModRevision: assignmentValue.ModRevision},
 		{Key: assignmentIndexValue.Key, ModRevision: assignmentIndexValue.ModRevision},
 		{Key: timeoutKey, ModRevision: timeoutRead.Values[0].ModRevision},
-		{Key: releaseRecoveryKey(task.ID)},
+		{Key: taskassignments.ReleaseRecoveryKey(task.ID)},
 		{Key: taskjournal.TaskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline)},
 		{Key: taskjournal.TaskRecoveryProofRequiredKey(task.ID)},
 	}
@@ -116,7 +117,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 		{Type: etcdstore.MutationPut, Key: assignmentIndexValue.Key, Value: nextValue},
 		{Type: etcdstore.MutationDelete, Key: timeoutKey},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline), Value: nextValue},
-		{Type: etcdstore.MutationPut, Key: releaseRecoveryKey(task.ID), Value: recoveryValue},
+		{Type: etcdstore.MutationPut, Key: taskassignments.ReleaseRecoveryKey(task.ID), Value: recoveryValue},
 	})
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
@@ -135,7 +136,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 func (repository *TaskRepository) releaseEffectEvidenceAtRevision(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	procedure *agentpb.CandidateReleaseProcedure,
 	revision int64,
 ) (bool, []etcdstore.Condition, error) {
@@ -162,33 +163,33 @@ func (repository *TaskRepository) releaseEffectEvidenceAtRevision(
 func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	status taskjournal.TaskStatus,
 	result taskjournal.TaskResultRecord,
 	revision int64,
 ) (releaseRecoveryAcknowledgement, error) {
 	read, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{releaseRecoveryKey(task.ID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{taskassignments.ReleaseRecoveryKey(task.ID)}, Revision: revision},
 	)
 	if err != nil || read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		if err != nil {
 			return releaseRecoveryAcknowledgement{}, err
 		}
-		return releaseRecoveryAcknowledgement{}, corruptTaskAssignment()
+		return releaseRecoveryAcknowledgement{}, taskassignments.CorruptTaskAssignment()
 	}
-	record, err := decodeReleaseRecoveryRecord(read.Values[0].Value)
-	digest, digestErr := releaseRecoveryRecordSHA256(record)
+	record, err := taskassignments.DecodeReleaseRecoveryRecord(read.Values[0].Value)
+	digest, digestErr := taskassignments.ReleaseRecoveryRecordSHA256(record)
 	if err != nil || digestErr != nil || digest != assignment.ReleaseRecoveryRecordSHA256 ||
 		record.TaskID != task.ID || record.AssignmentID != assignment.AssignmentID ||
 		record.OperationID != task.OperationID || record.PlanHash != task.PlanHash ||
 		record.RestorationAuthoritySHA256 != assignment.RestorationAuthoritySHA256 ||
 		!record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
-		return releaseRecoveryAcknowledgement{}, corruptTaskAssignment()
+		return releaseRecoveryAcknowledgement{}, taskassignments.CorruptTaskAssignment()
 	}
 	resolved := releaseRecoveryAcknowledgement{record: record, value: read.Values[0]}
 	if result.ExecutionEpoch < assignment.ExecutionEpoch && result.ReleaseRecoveryRecordSHA256 == "" {
-		replayDigest, replayErr := canonicalPrimaryReportSHA256(status, result)
+		replayDigest, replayErr := taskassignments.CanonicalPrimaryReportSHA256(status, result)
 		if replayErr != nil || replayDigest != record.PrimaryReportSHA256 {
 			return releaseRecoveryAcknowledgement{}, errs.New(
 				errs.KindStateConflict,
@@ -207,7 +208,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	if status != taskjournal.TaskStatusCompleted || result.ReconciliationRequired {
 		return resolved, nil
 	}
-	if record.Phase != ReleaseRecoveryPhaseProven || int(record.Cursor) != len(record.RecoveryStepIDs) {
+	if record.Phase != taskassignments.ReleaseRecoveryPhaseProven || int(record.Cursor) != len(record.RecoveryStepIDs) {
 		return releaseRecoveryAcknowledgement{}, errs.New(
 			errs.KindStateConflict,
 			"release recovery proof is incomplete",
@@ -235,7 +236,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	}
 	primary := taskjournal.CloneTaskResult(&record.PrimaryResult)
 	if primary == nil {
-		return releaseRecoveryAcknowledgement{}, corruptTaskAssignment()
+		return releaseRecoveryAcknowledgement{}, taskassignments.CorruptTaskAssignment()
 	}
 	primary.ReconciliationRequired = false
 	primary.Projects = slices.Clone(result.Projects)
@@ -252,7 +253,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	resolved.final, resolved.status, resolved.result = true, record.PrimaryStatus, *primary
 	resolved.conditions = append(
 		conditions,
-		etcdstore.Condition{Key: releaseRecoveryKey(task.ID), ModRevision: read.Values[0].ModRevision},
+		etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(task.ID), ModRevision: read.Values[0].ModRevision},
 	)
 	return resolved, nil
 }
@@ -283,7 +284,7 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 		!recordcodec.ValidSHA256(result.ReleaseRecoveryRecordSHA256) {
 		return status, nil, true, errs.New(errs.KindStateConflict, "terminal release recovery replay status changed")
 	}
-	if task.Result == nil || !validTerminalTaskStatus(task.Status) || task.TerminalAssignment == nil ||
+	if task.Result == nil || !taskassignments.ValidTerminalTaskStatus(task.Status) || task.TerminalAssignment == nil ||
 		task.Result.ExecutionEpoch != result.ExecutionEpoch ||
 		task.Result.ReleaseRecoveryRecordSHA256 != result.ReleaseRecoveryRecordSHA256 ||
 		task.TerminalAssignment.AssignmentID != assignmentID || task.TerminalAssignment.AgentID != agentID ||
@@ -317,7 +318,7 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 			"terminal release recovery replay absence evidence changed",
 		)
 	}
-	keys := []string{releaseRecoveryKey(task.ID), taskjournal.TaskActiveOperationKey(task.OperationID)}
+	keys := []string{taskassignments.ReleaseRecoveryKey(task.ID), taskjournal.TaskActiveOperationKey(task.OperationID)}
 	steps, stepsErr := releaseHookExecutionSteps(task)
 	if stepsErr != nil {
 		return status, nil, true, stepsErr
@@ -352,14 +353,14 @@ func (repository *TaskRepository) candidateReleaseTimeoutResult(
 ) (taskjournal.TaskResultRecord, bool, error) {
 	record := assignment.Assignment.Record
 	if assignment.Task.Record.Params[TaskReleasePublicationParam] == "" ||
-		record.ExecutionMode != TaskExecutionModeForward {
+		record.ExecutionMode != taskassignments.TaskExecutionModeForward {
 		return taskjournal.TaskResultRecord{}, false, nil
 	}
 	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(
 		ctx, assignment.Task.Record, assignment.Task.ReadRevision,
 	)
 	if err != nil || validateAssignmentRestorationDescriptor(assignment.Task.Record, record, procedure) != nil {
-		return taskjournal.TaskResultRecord{}, true, corruptTaskAssignment()
+		return taskjournal.TaskResultRecord{}, true, taskassignments.CorruptTaskAssignment()
 	}
 	result := taskjournal.TaskResultRecord{
 		Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticTimeoutBeforeEffect,
@@ -370,12 +371,12 @@ func (repository *TaskRepository) candidateReleaseTimeoutResult(
 
 func (repository *TaskRepository) assignmentLifecycleIndexAtRevision(
 	ctx context.Context,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	assignmentValue *etcdstore.KeyValue,
 	revision int64,
 ) (string, *etcdstore.KeyValue, bool, error) {
 	deadline := assignment.Deadline
-	if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+	if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 		deadline = assignment.RecoveryDeadline
 	}
 	timeoutKey := taskjournal.TaskTimeoutIndexKey(assignment.TaskID, deadline)
@@ -385,13 +386,13 @@ func (repository *TaskRepository) assignmentLifecycleIndexAtRevision(
 		return "", nil, false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 {
-		return "", nil, false, corruptTaskAssignment()
+		return "", nil, false, taskassignments.CorruptTaskAssignment()
 	}
 	timeoutValue, proofValue := read.Values[0], read.Values[1]
 	proofRequired := proofValue != nil
 	if timeoutValue == nil == !proofRequired ||
-		proofRequired && assignment.ExecutionMode != TaskExecutionModeRecoveryOnly {
-		return "", nil, false, corruptTaskAssignment()
+		proofRequired && assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly {
+		return "", nil, false, taskassignments.CorruptTaskAssignment()
 	}
 	selectedKey, selectedValue := timeoutKey, timeoutValue
 	if proofRequired {
@@ -399,24 +400,24 @@ func (repository *TaskRepository) assignmentLifecycleIndexAtRevision(
 	}
 	if selectedValue.ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(selectedValue.Value, assignmentValue.Value) {
-		return "", nil, false, corruptTaskAssignment()
+		return "", nil, false, taskassignments.CorruptTaskAssignment()
 	}
 	return selectedKey, selectedValue, proofRequired, nil
 }
 
 func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 	ctx context.Context,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	revision int64,
 	observedAt time.Time,
 ) (bool, error) {
-	if assignment.ExecutionMode != TaskExecutionModeRecoveryOnly || assignment.RestorationAuthority == nil ||
+	if assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly || assignment.RestorationAuthority == nil ||
 		revision <= 0 ||
 		!observedAt.Equal(observedAt.UTC()) ||
 		observedAt.Before(assignment.RecoveryDeadline) {
 		return false, errs.New(errs.KindStateConflict, "release recovery deadline authority changed")
 	}
-	assignmentValue, err := encodeTaskAssignment(assignment)
+	assignmentValue, err := taskassignments.EncodeTaskAssignment(assignment)
 	if err != nil {
 		return false, err
 	}
@@ -426,14 +427,14 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 	timeoutKey := taskjournal.TaskTimeoutIndexKey(assignment.TaskID, assignment.RecoveryDeadline)
 	proofKey := taskjournal.TaskRecoveryProofRequiredKey(assignment.TaskID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		taskjournal.TaskStorageKey(assignment.TaskID), claimKey, indexKey, timeoutKey, proofKey, releaseRecoveryKey(assignment.TaskID),
+		taskjournal.TaskStorageKey(assignment.TaskID), claimKey, indexKey, timeoutKey, proofKey, taskassignments.ReleaseRecoveryKey(assignment.TaskID),
 	}, Revision: revision})
 	if err != nil {
 		return false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 6 || read.Values[0] == nil ||
 		read.Values[1] == nil || read.Values[2] == nil || read.Values[5] == nil {
-		return false, corruptTaskAssignment()
+		return false, taskassignments.CorruptTaskAssignment()
 	}
 	if read.Values[3] == nil {
 		if read.Values[4] != nil && bytes.Equal(read.Values[4].Value, assignmentValue) {
@@ -445,27 +446,27 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 		read.Values[1].ModRevision != read.Values[3].ModRevision ||
 		!bytes.Equal(read.Values[1].Value, assignmentValue) || !bytes.Equal(read.Values[2].Value, assignmentValue) ||
 		!bytes.Equal(read.Values[3].Value, assignmentValue) {
-		return false, corruptTaskAssignment()
+		return false, taskassignments.CorruptTaskAssignment()
 	}
 	task, err := decodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != assignment.TaskID || task.OperationID != assignment.RestorationAuthority.OperationID ||
 		task.PlanHash != assignment.RestorationAuthority.PlanHash || task.Status != taskjournal.TaskStatusRunning {
-		return false, corruptTaskAssignment()
+		return false, taskassignments.CorruptTaskAssignment()
 	}
-	recovery, err := decodeReleaseRecoveryRecord(read.Values[5].Value)
+	recovery, err := taskassignments.DecodeReleaseRecoveryRecord(read.Values[5].Value)
 	if err != nil || recovery.TaskID != task.ID || recovery.AssignmentID != assignment.AssignmentID ||
 		recovery.OperationID != task.OperationID || recovery.PlanHash != task.PlanHash ||
 		recovery.RestorationAuthoritySHA256 != assignment.RestorationAuthoritySHA256 ||
 		!recovery.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
-		return false, corruptTaskAssignment()
+		return false, taskassignments.CorruptTaskAssignment()
 	}
-	digest, err := releaseRecoveryRecordSHA256(recovery)
+	digest, err := taskassignments.ReleaseRecoveryRecordSHA256(recovery)
 	if err != nil || digest != assignment.ReleaseRecoveryRecordSHA256 {
-		return false, corruptTaskAssignment()
+		return false, taskassignments.CorruptTaskAssignment()
 	}
 	next := assignment
 	next.RecoveryExecutionDeadline = observedAt.Add(releaseRecoveryProofExecutionBudget)
-	nextValue, err := encodeTaskAssignment(next)
+	nextValue, err := taskassignments.EncodeTaskAssignment(next)
 	if err != nil {
 		return false, err
 	}
@@ -476,7 +477,7 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 		{Key: indexKey, ModRevision: read.Values[2].ModRevision},
 		{Key: timeoutKey, ModRevision: read.Values[3].ModRevision},
 		{Key: proofKey},
-		{Key: releaseRecoveryKey(task.ID), ModRevision: read.Values[5].ModRevision},
+		{Key: taskassignments.ReleaseRecoveryKey(task.ID), ModRevision: read.Values[5].ModRevision},
 	}, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: read.Values[0].Value},
 		{Type: etcdstore.MutationPut, Key: claimKey, Value: nextValue},

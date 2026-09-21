@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -105,17 +106,17 @@ func (repository *TaskRepository) claimNextTask(
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
-		assignment := TaskAssignmentRecord{
+		assignment := taskassignments.TaskAssignmentRecord{
 			AssignmentID: ids.New(ids.KindAssignment),
 			TaskID:       task.ID, Executor: executor, AgentID: agentID, AgentGeneration: agentGeneration,
 			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: claimAt, Deadline: deadline,
-			RecoveryDeadline: recoveryDeadline, ExecutionMode: TaskExecutionModeForward, ExecutionEpoch: 1,
+			RecoveryDeadline: recoveryDeadline, ExecutionMode: taskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
 		}
 		runningValue, err := encodeTaskRecord(running)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
-		assignmentValue, err := encodeTaskAssignment(assignment)
+		assignmentValue, err := taskassignments.EncodeTaskAssignment(assignment)
 		if err != nil {
 			clear(runningValue)
 			return TaskAssignment{}, false, err
@@ -199,7 +200,7 @@ func (repository *TaskRepository) claimNextTask(
 					return TaskAssignment{}, false, authorityErr
 				}
 				assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
-				updatedAssignmentValue, encodeErr := encodeTaskAssignment(assignment)
+				updatedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
 				if encodeErr != nil {
 					clearMutationValues(mutations)
 					return TaskAssignment{}, false, encodeErr
@@ -208,7 +209,7 @@ func (repository *TaskRepository) claimNextTask(
 				assignmentValue = updatedAssignmentValue
 				mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
 				conditions = append(conditions, authorityConditions...)
-				conditions = append(conditions, etcdstore.Condition{Key: releaseRecoveryKey(task.ID)})
+				conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(task.ID)})
 				epochCondition, epochMutation, claimErr :=
 					repository.prepareBlueprintCandidateClaimEpoch(
 						ctx, task, writer, candidate.readRevision, requirementEvidence.gateRevision,
@@ -232,7 +233,7 @@ func (repository *TaskRepository) claimNextTask(
 				return TaskAssignment{}, false, authorityErr
 			}
 			assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
-			updatedAssignmentValue, encodeErr := encodeTaskAssignment(assignment)
+			updatedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
 			if encodeErr != nil {
 				clearMutationValues(mutations)
 				return TaskAssignment{}, false, encodeErr
@@ -241,7 +242,7 @@ func (repository *TaskRepository) claimNextTask(
 			assignmentValue = updatedAssignmentValue
 			mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
 			conditions = append(conditions, authorityConditions...)
-			conditions = append(conditions, etcdstore.Condition{Key: releaseRecoveryKey(task.ID)})
+			conditions = append(conditions, etcdstore.Condition{Key: taskassignments.ReleaseRecoveryKey(task.ID)})
 		}
 		attachChange, err := repository.prepareAttachTaskClaim(ctx, task, candidate.readRevision)
 		if err != nil {
@@ -283,7 +284,7 @@ func (repository *TaskRepository) claimNextTask(
 			continue
 		}
 		return TaskAssignment{
-			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{
+			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
 				Record: assignment, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 			},
 			Task: etcdstore.Versioned[TaskRecord]{

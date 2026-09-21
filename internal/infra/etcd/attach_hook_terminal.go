@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -14,7 +15,7 @@ import (
 func (repository *TaskRepository) applyBackingHookTerminal(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	input AttachTaskRenderInput,
 	revision int64,
 	change *attachTaskChange,
@@ -79,7 +80,7 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 func (repository *TaskRepository) requireBackingHookResultCheckpoint(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	stepID string,
 	attachID string,
 	event backinghook.Event,

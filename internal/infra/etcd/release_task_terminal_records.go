@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -66,7 +67,7 @@ func releaseAcknowledgedRuntime(
 	marker releases.ReleasePublicationMarker,
 	serviceID string,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	effect domain.EffectEvidence,
 	result taskjournal.TaskResultRecord,
 ) ([]byte, error) {

@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
@@ -24,27 +25,27 @@ const TaskReleasePublicationParam = "release_publication_id"
 // candidate. It is staged before publication and never re-reads mutable labels,
 // Blueprint projection, image identity, or selected slot at dispatch time.
 type ReleaseRenderInput struct {
-	ReleaseID            string                             `json:"release_id"`
-	PlanID               string                             `json:"plan_id"`
-	ArtifactID           string                             `json:"artifact_id"`
-	PriorArtifactID      string                             `json:"prior_artifact_id,omitempty"`
-	PriorRuntime         *ReleaseNativePredecessorAuthority `json:"prior_runtime,omitempty"`
-	ServiceID            string                             `json:"service_id"`
-	ServiceName          string                             `json:"service_name"`
-	CandidateWorkload    domain.WorkloadSeal                `json:"candidate_workload"`
-	PriorWorkload        *domain.WorkloadSeal               `json:"prior_workload,omitempty"`
-	Strategy             domain.Strategy                    `json:"strategy"`
-	PriorStrategy        domain.Strategy                    `json:"prior_strategy"`
-	Slot                 domain.Slot                        `json:"slot,omitempty"`
-	PriorSlot            domain.Slot                        `json:"prior_slot"`
-	CandidateTarget      domain.WorkloadTarget              `json:"candidate_target"`
-	PriorTarget          domain.WorkloadTarget              `json:"prior_target"`
-	ProxyGeneration      uint64                             `json:"proxy_generation"`
-	PriorProxyGeneration uint64                             `json:"prior_proxy_generation"`
-	ProxyPorts           []uint16                           `json:"proxy_ports"`
-	ProxyConfigDigest    string                             `json:"proxy_config_digest"`
-	PriorProxyDigest     string                             `json:"prior_proxy_digest"`
-	ProxyImage           *domain.ProxyImage                 `json:"proxy_image,omitempty"`
+	ReleaseID            string                                             `json:"release_id"`
+	PlanID               string                                             `json:"plan_id"`
+	ArtifactID           string                                             `json:"artifact_id"`
+	PriorArtifactID      string                                             `json:"prior_artifact_id,omitempty"`
+	PriorRuntime         *taskassignments.ReleaseNativePredecessorAuthority `json:"prior_runtime,omitempty"`
+	ServiceID            string                                             `json:"service_id"`
+	ServiceName          string                                             `json:"service_name"`
+	CandidateWorkload    domain.WorkloadSeal                                `json:"candidate_workload"`
+	PriorWorkload        *domain.WorkloadSeal                               `json:"prior_workload,omitempty"`
+	Strategy             domain.Strategy                                    `json:"strategy"`
+	PriorStrategy        domain.Strategy                                    `json:"prior_strategy"`
+	Slot                 domain.Slot                                        `json:"slot,omitempty"`
+	PriorSlot            domain.Slot                                        `json:"prior_slot"`
+	CandidateTarget      domain.WorkloadTarget                              `json:"candidate_target"`
+	PriorTarget          domain.WorkloadTarget                              `json:"prior_target"`
+	ProxyGeneration      uint64                                             `json:"proxy_generation"`
+	PriorProxyGeneration uint64                                             `json:"prior_proxy_generation"`
+	ProxyPorts           []uint16                                           `json:"proxy_ports"`
+	ProxyConfigDigest    string                                             `json:"proxy_config_digest"`
+	PriorProxyDigest     string                                             `json:"prior_proxy_digest"`
+	ProxyImage           *domain.ProxyImage                                 `json:"proxy_image,omitempty"`
 	core.ServiceDependencyPlans
 	TenantID            string                                        `json:"tenant_id"`
 	TenantSlug          string                                        `json:"tenant_slug"`

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -12,7 +13,7 @@ import (
 func (repository *TaskRepository) prepareBackingServiceCreationHookAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	assignment TaskAssignmentRecord,
+	assignment taskassignments.TaskAssignmentRecord,
 	readRevision int64,
 ) (taskMaterializationProjectionChange, error) {
 	serviceID, hooked := task.Params[TaskBackingServiceAfterStartParam]

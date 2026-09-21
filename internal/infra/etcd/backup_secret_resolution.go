@@ -12,6 +12,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -34,7 +35,7 @@ type BackupSecretValueEvidence struct {
 type BackupSecretResolutionEvidence struct {
 	ReadRevision        int64
 	Task                TaskRecord
-	Assignment          TaskAssignmentRecord
+	Assignment          taskassignments.TaskAssignmentRecord
 	Environment         hierarchyrecord.EnvironmentRecord
 	EnvironmentRevision int64
 	Project             hierarchyrecord.ProjectRecord
@@ -121,7 +122,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 			"backup task assignment evidence is unavailable",
 		)
 	}
-	assignmentForKey, err := decodeTaskAssignment(anchor.Values[1].Value)
+	assignmentForKey, err := taskassignments.DecodeTaskAssignment(anchor.Values[1].Value)
 	clearKeyValues(anchor.Values)
 	if err != nil {
 		return BackupSecretResolutionEvidence{}, errs.New(
@@ -167,7 +168,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 			"backup task evidence is corrupt",
 		)
 	}
-	assignment, err := decodeTaskAssignment(base.Values[1].Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(base.Values[1].Value)
 	if err != nil {
 		return BackupSecretResolutionEvidence{}, errs.New(
 			errs.KindInternal,

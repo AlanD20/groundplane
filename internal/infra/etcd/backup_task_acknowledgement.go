@@ -5,6 +5,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -206,7 +207,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 		!bytes.Equal(read.Values[1].Value, read.Values[2].Value) {
 		return TaskAssignment{}, false, errs.New(errs.KindInternal, "backup Task assignment copies differ")
 	}
-	assignment, err := decodeTaskAssignment(read.Values[1].Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(read.Values[1].Value)
 	if err != nil || assignment.TaskID != taskID || assignment.Executor != taskjournal.TaskExecutorAgent ||
 		assignment.AssignmentID != assignmentID || assignment.AgentID != agentID ||
 		assignment.AgentGeneration != agentGeneration || assignment.ClaimedTaskRevision >= read.Values[1].ModRevision ||
@@ -219,7 +220,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 			"backup Task assignment identity changed",
 		)
 	}
-	current.Assignment = etcdstore.Versioned[TaskAssignmentRecord]{
+	current.Assignment = etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
 		Record: assignment, Revision: read.Values[1].ModRevision, ReadRevision: read.ReadRevision,
 	}
 	return current, true, nil

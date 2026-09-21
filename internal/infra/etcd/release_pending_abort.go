@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -34,7 +35,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 		}
 		if read == nil || read.ReadRevision != current.ReadRevision || len(read.Values) != len(keys) ||
 			read.Values[0] != nil {
-			return etcdstore.Versioned[TaskRecord]{}, corruptTaskAssignment()
+			return etcdstore.Versioned[TaskRecord]{}, taskassignments.CorruptTaskAssignment()
 		}
 		if read.Values[1] == nil {
 			return current, nil
@@ -50,7 +51,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 		processed, err := repository.finalizeReleaseTaskBatch(
 			ctx,
 			task,
-			TaskAssignmentRecord{},
+			taskassignments.TaskAssignmentRecord{},
 			taskjournal.TaskStatusAborted,
 			taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone},
 			"",

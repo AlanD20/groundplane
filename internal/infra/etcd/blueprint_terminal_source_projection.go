@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"time"
@@ -15,7 +16,7 @@ import (
 type blueprintTerminalSourceAdvance struct {
 	task                 TaskRecord
 	taskValue            *etcdstore.KeyValue
-	assignment           TaskAssignmentRecord
+	assignment           taskassignments.TaskAssignmentRecord
 	assignmentValue      *etcdstore.KeyValue
 	assignmentIndexValue *etcdstore.KeyValue
 	recovery             releaseRecoveryAcknowledgement

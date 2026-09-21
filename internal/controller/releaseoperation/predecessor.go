@@ -4,6 +4,7 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -54,7 +55,7 @@ func bindServingRuntime(
 		captured.Clear()
 		return errs.New(errs.KindStateConflict, "ordinary Release predecessor target changed")
 	}
-	render.PriorRuntime = &etcd.ReleaseNativePredecessorAuthority{
+	render.PriorRuntime = &taskassignments.ReleaseNativePredecessorAuthority{
 		ServiceID: render.ServiceID, CurrentArtifact: captured.CurrentArtifact,
 		RetainedPriorArtifact: captured.RetainedPriorArtifact,
 	}

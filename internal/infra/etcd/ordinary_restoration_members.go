@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -23,7 +24,7 @@ func validateOrdinaryPriorRuntime(render ReleaseRenderInput) error {
 			witness.CurrentArtifact, witness.RetainedPriorArtifact) != nil {
 		return releases.CorruptReleaseRecord()
 	}
-	artifact, err := openRestorationWitness(render.EnvironmentID, witness.CurrentArtifact)
+	artifact, err := taskassignments.OpenRestorationWitness(render.EnvironmentID, witness.CurrentArtifact)
 	if err != nil || artifact.ArtifactId != render.PriorArtifactID || artifact.ArtifactId == render.ArtifactID {
 		return releases.CorruptReleaseRecord()
 	}
@@ -36,7 +37,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 	manifest releases.ReleaseStagedManifest,
 	procedure *agentpb.CandidateReleaseProcedure,
 	revision int64,
-) ([]ReleaseNativePredecessorAuthority, []etcdstore.Condition, error) {
+) ([]taskassignments.ReleaseNativePredecessorAuthority, []etcdstore.Condition, error) {
 	keys := make([]string, 0, len(manifest.Members)*2)
 	selected := make(map[string]bool, len(procedure.GetMembers()))
 	for _, member := range procedure.GetMembers() {
@@ -61,12 +62,12 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 		return nil, nil, releases.CorruptReleaseRecord()
 	}
 	defer clearKeyValues(read.Values)
-	witnesses := make([]ReleaseNativePredecessorAuthority, 0, len(manifest.Members))
+	witnesses := make([]taskassignments.ReleaseNativePredecessorAuthority, 0, len(manifest.Members))
 	conditions := make([]etcdstore.Condition, 0, len(keys))
 	index := 0
 	for _, member := range manifest.Members {
 		if !selected[member.ServiceID] {
-			witnesses = append(witnesses, ReleaseNativePredecessorAuthority{ServiceID: member.ServiceID})
+			witnesses = append(witnesses, taskassignments.ReleaseNativePredecessorAuthority{ServiceID: member.ServiceID})
 			continue
 		}
 		intentValue, renderValue := read.Values[2*index], read.Values[2*index+1]
@@ -87,7 +88,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 			(intent.PriorServingReleaseID == "") != (render.PriorRuntime == nil) {
 			return nil, nil, releases.CorruptReleaseRecord()
 		}
-		witness := ReleaseNativePredecessorAuthority{ServiceID: member.ServiceID}
+		witness := taskassignments.ReleaseNativePredecessorAuthority{ServiceID: member.ServiceID}
 		if render.PriorRuntime != nil {
 			witness = *render.PriorRuntime
 			if witness.ServiceID != member.ServiceID {
@@ -95,8 +96,8 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 			}
 			witness.CurrentArtifact = slices.Clone(witness.CurrentArtifact)
 			witness.RetainedPriorArtifact = slices.Clone(witness.RetainedPriorArtifact)
-			if !recoveryRenderMatchesPredecessor(render, intent, &ReleaseRestorationAuthority{
-				NativePredecessors: []ReleaseNativePredecessorAuthority{witness},
+			if !recoveryRenderMatchesPredecessor(render, intent, &taskassignments.ReleaseRestorationAuthority{
+				NativePredecessors: []taskassignments.ReleaseNativePredecessorAuthority{witness},
 			}) {
 				return nil, nil, releases.CorruptReleaseRecord()
 			}
@@ -106,7 +107,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 			etcdstore.Condition{Key: keys[2*index+1], ModRevision: renderValue.ModRevision})
 		index++
 	}
-	slices.SortFunc(witnesses, func(a, b ReleaseNativePredecessorAuthority) int {
+	slices.SortFunc(witnesses, func(a, b taskassignments.ReleaseNativePredecessorAuthority) int {
 		return cmp.Compare(a.ServiceID, b.ServiceID)
 	})
 	return witnesses, conditions, nil

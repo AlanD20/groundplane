@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -44,7 +45,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 	if err != nil {
 		return TaskAssignment{}, err
 	}
-	assignment, err := decodeTaskAssignment(indexValue.Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(indexValue.Value)
 	if err != nil {
 		return TaskAssignment{}, err
 	}
@@ -75,13 +76,13 @@ func (repository *TaskRepository) GetTaskAssignment(
 	if err != nil {
 		return TaskAssignment{}, err
 	}
-	var recovery *ReleaseRecoveryDirective
+	var recovery *taskassignments.ReleaseRecoveryDirective
 	if task.Params[TaskReleasePublicationParam] != "" {
 		_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(ctx, task, indexed.ReadRevision)
 		if descriptorErr != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
-			return TaskAssignment{}, corruptTaskAssignment()
+			return TaskAssignment{}, taskassignments.CorruptTaskAssignment()
 		}
-		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
+		if assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			recovery, err = repository.releaseRecoveryDirectiveAtRevision(
 				ctx, task, assignment, procedure, indexed.ReadRevision,
 			)
@@ -91,7 +92,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 		}
 	}
 	return TaskAssignment{
-		Assignment: etcdstore.Versioned[TaskAssignmentRecord]{
+		Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
 			Record: assignment, Revision: claimValue.ModRevision, ReadRevision: indexed.ReadRevision,
 		},
 		Task: etcdstore.Versioned[TaskRecord]{
