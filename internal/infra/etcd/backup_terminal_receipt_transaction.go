@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -85,18 +86,18 @@ func bindBackupTerminalReceiptEpoch(
 	}
 	record := plan.record
 	record.PriorEnvironmentEpochRevision = revision
-	receiptDigest, err := backupTerminalReceiptDigest(record)
+	receiptDigest, err := backupruntime.BackupTerminalReceiptDigest(record)
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
 	record.ReceiptDigest = receiptDigest
-	value, err := encodeBackupTerminalReceiptRecord(record)
+	value, err := backupruntime.EncodeBackupTerminalReceiptRecord(record)
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
 	return backupTerminalReceiptPlan{
 		mutations: []etcdstore.Mutation{{
-			Type: etcdstore.MutationPut, Key: backupTerminalReceiptKey(record.Task.TaskID), Value: value,
+			Type: etcdstore.MutationPut, Key: backupruntime.BackupTerminalReceiptKey(record.Task.TaskID), Value: value,
 		}},
 		record: record,
 	}, nil

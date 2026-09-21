@@ -17,7 +17,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 	ctx context.Context,
 	task TaskRecord,
 	terminalRevision int64,
-	receipt BackupTerminalReceiptRecord,
+	receipt backupruntime.BackupTerminalReceiptRecord,
 ) error {
 	environmentID := receipt.Task.Owner.EnvironmentID
 	keys := []string{
@@ -139,7 +139,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 	}
 	for index, outcome := range receipt.Points {
 		values := read.Values[pointsStart+index*5 : pointsStart+index*5+5]
-		if outcome.Outcome == BackupPruneTerminalRemoved {
+		if outcome.Outcome == backupruntime.BackupPruneTerminalRemoved {
 			if !allBackupRuntimeValuesAbsent(values) {
 				return errs.New(
 					errs.KindStateConflict,
@@ -165,7 +165,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 			return err
 		}
 		if values[0].ModRevision == terminalRevision {
-			if outcome.Outcome != BackupPruneTerminalRetained || prune.Point != outcome.Point ||
+			if outcome.Outcome != backupruntime.BackupPruneTerminalRetained || prune.Point != outcome.Point ||
 				prune.OperationID != receipt.Task.OperationID || prune.State != backupruntime.BackupPrunePending ||
 				prune.TaskID != "" || prune.CreatedAt != outcome.CreatedAt ||
 				!prune.UpdatedAt.Equal(receipt.Task.FinishedAt) {
@@ -238,7 +238,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 }
 
 func backupTerminalExclusionKeys(
-	sources []BackupTerminalSourceOutcome,
+	sources []backupruntime.BackupTerminalSourceOutcome,
 ) ([]string, error) {
 	byKey := make(map[string]struct{})
 	for _, source := range sources {

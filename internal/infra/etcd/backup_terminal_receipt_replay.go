@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,7 +17,7 @@ func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 		!taskjournal.IsTerminalTaskStatus(task.Record.Status) {
 		return errs.New(errs.KindInternal, "terminal backup Task is invalid")
 	}
-	keys := []string{taskKey(task.Record.ID), backupTerminalReceiptKey(task.Record.ID)}
+	keys := []string{taskKey(task.Record.ID), backupruntime.BackupTerminalReceiptKey(task.Record.ID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err
@@ -42,7 +43,7 @@ func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 	if err != nil || callerDigest != storedDigest {
 		return errs.New(errs.KindStateConflict, "terminal backup Task changed")
 	}
-	receipt, err := decodeBackupTerminalReceiptRecord(read.Values[1].Value)
+	receipt, err := backupruntime.DecodeBackupTerminalReceiptRecord(read.Values[1].Value)
 	if err != nil {
 		return err
 	}
@@ -61,7 +62,7 @@ func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 
 func validateBackupTerminalReceiptTaskBinding(
 	task TaskRecord,
-	receipt BackupTerminalReceiptRecord,
+	receipt backupruntime.BackupTerminalReceiptRecord,
 ) error {
 	evidence, err := backupTerminalTaskEvidence(task)
 	if err != nil {

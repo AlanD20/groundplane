@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,10 +23,10 @@ func prepareBackupTerminalReceiptPruneCompanion(
 			"ordinary Task requested a Backup terminal receipt",
 		)
 	}
-	if value == nil || value.ModRevision != taskRevision || value.Key != backupTerminalReceiptKey(task.ID) {
+	if value == nil || value.ModRevision != taskRevision || value.Key != backupruntime.BackupTerminalReceiptKey(task.ID) {
 		return backupTerminalReceiptPruneCompanion{}, corruptTaskPruneIntent()
 	}
-	receipt, err := decodeBackupTerminalReceiptRecord(value.Value)
+	receipt, err := backupruntime.DecodeBackupTerminalReceiptRecord(value.Value)
 	if err != nil || receipt.PriorTaskRevision >= taskRevision ||
 		validateBackupTerminalReceiptTaskBinding(task, receipt) != nil {
 		return backupTerminalReceiptPruneCompanion{}, corruptTaskPruneIntent()
@@ -50,7 +51,7 @@ func appendBackupTerminalReceiptPruneFinalization(
 	if intent.BackupTerminalReceiptRevision <= 0 {
 		return conditions, mutations
 	}
-	key := backupTerminalReceiptKey(intent.TaskID)
+	key := backupruntime.BackupTerminalReceiptKey(intent.TaskID)
 	conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: intent.BackupTerminalReceiptRevision})
 	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	return conditions, mutations

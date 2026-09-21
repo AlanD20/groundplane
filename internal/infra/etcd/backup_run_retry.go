@@ -100,7 +100,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	ctx context.Context,
 	taskID string,
 ) (backupRunRetrySource, error) {
-	keys := []string{taskKey(taskID), backupruntime.BackupRunKey(taskID), backupTerminalReceiptKey(taskID)}
+	keys := []string{taskKey(taskID), backupruntime.BackupRunKey(taskID), backupruntime.BackupTerminalReceiptKey(taskID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return backupRunRetrySource{}, err
@@ -122,7 +122,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	}
 	task, taskErr := decodeTaskRecord(read.Values[0].Value)
 	run, runErr := backupruntime.DecodeBackupRunRecord(read.Values[1].Value)
-	receipt, receiptErr := decodeBackupTerminalReceiptRecord(read.Values[2].Value)
+	receipt, receiptErr := backupruntime.DecodeBackupTerminalReceiptRecord(read.Values[2].Value)
 	if taskErr != nil || runErr != nil || receiptErr != nil || task.ID != taskID ||
 		validateBackupRunTaskBinding(task, run) != nil ||
 		validateBackupTerminalReceiptTaskBinding(task, receipt) != nil {

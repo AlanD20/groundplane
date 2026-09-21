@@ -9,22 +9,22 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func backupTerminalTaskEvidence(task TaskRecord) (BackupTerminalTaskEvidence, error) {
+func backupTerminalTaskEvidence(task TaskRecord) (backupruntime.BackupTerminalTaskEvidence, error) {
 	if task.FinishedAt == nil || task.RetainUntil == nil {
-		return BackupTerminalTaskEvidence{}, errs.New(
+		return backupruntime.BackupTerminalTaskEvidence{}, errs.New(
 			errs.KindValidationFailed,
 			"backup terminal receipt requires terminal Task timestamps",
 		)
 	}
-	resultDigest, err := backupTerminalResultDigest(task.Result)
+	resultDigest, err := backupruntime.BackupTerminalResultDigest(task.Result)
 	if err != nil {
-		return BackupTerminalTaskEvidence{}, err
+		return backupruntime.BackupTerminalTaskEvidence{}, err
 	}
 	taskDigest, err := backupTerminalTaskDigest(task)
 	if err != nil {
-		return BackupTerminalTaskEvidence{}, err
+		return backupruntime.BackupTerminalTaskEvidence{}, err
 	}
-	evidence := BackupTerminalTaskEvidence{
+	evidence := backupruntime.BackupTerminalTaskEvidence{
 		TaskID: task.ID, TaskType: task.Type, OperationID: task.OperationID, RetryOf: task.RetryOf,
 		Owner: task.Owner, Actor: task.Actor, Executor: task.Executor, Target: task.Target,
 		PlanID: task.PlanID, PlanHash: task.PlanHash, Status: task.Status,
@@ -36,8 +36,8 @@ func backupTerminalTaskEvidence(task TaskRecord) (BackupTerminalTaskEvidence, er
 		startedAt := *task.StartedAt
 		evidence.StartedAt = &startedAt
 	}
-	if err := validateBackupTerminalTaskEvidence(evidence); err != nil {
-		return BackupTerminalTaskEvidence{}, err
+	if err := backupruntime.ValidateBackupTerminalTaskEvidence(evidence); err != nil {
+		return backupruntime.BackupTerminalTaskEvidence{}, err
 	}
 	return evidence, nil
 }
@@ -73,7 +73,7 @@ func prepareBackupRunTerminalReceipt(
 	}
 	defer clear(runValue)
 	domainDigest := sha256.Sum256(append([]byte("groundplane.backup.terminal.run.v1\x00"), runValue...))
-	receipt := BackupTerminalReceiptRecord{
+	receipt := backupruntime.BackupTerminalReceiptRecord{
 		Task: evidence, PriorTaskRevision: current.Revision,
 		DomainDigest: hex.EncodeToString(domainDigest[:]),
 		Sources:      backupTerminalRunOutcomes(run),
@@ -81,10 +81,10 @@ func prepareBackupRunTerminalReceipt(
 	return prepareBackupTerminalReceiptPlan(receipt)
 }
 
-func backupTerminalRunOutcomes(run backupruntime.BackupRunRecord) []BackupTerminalSourceOutcome {
-	outcomes := make([]BackupTerminalSourceOutcome, len(run.Sources))
+func backupTerminalRunOutcomes(run backupruntime.BackupRunRecord) []backupruntime.BackupTerminalSourceOutcome {
+	outcomes := make([]backupruntime.BackupTerminalSourceOutcome, len(run.Sources))
 	for index, source := range run.Sources {
-		outcomes[index] = BackupTerminalSourceOutcome{
+		outcomes[index] = backupruntime.BackupTerminalSourceOutcome{
 			Ordinal: source.Ordinal, SourceID: source.SourceID, Kind: source.Kind,
 			TargetID: source.TargetID, RecoveryPointID: source.RecoveryPointID,
 			RecoveryPointCreatedAt: source.RecoveryPointCreatedAt,
@@ -114,9 +114,9 @@ func prepareBackupPruneTerminalReceipt(
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
-	receipt := BackupTerminalReceiptRecord{
+	receipt := backupruntime.BackupTerminalReceiptRecord{
 		Task: evidence, PriorTaskRevision: current.Revision,
-		Points: make([]BackupPruneTerminalPointOutcome, len(prunes)),
+		Points: make([]backupruntime.BackupPruneTerminalPointOutcome, len(prunes)),
 	}
 	for index, prune := range prunes {
 		if prune.Revision <= 0 || prune.Record.Point.ID != dispatch.RecoveryPointIDs[index] ||
@@ -128,20 +128,20 @@ func prepareBackupPruneTerminalReceipt(
 				"backup prune terminal receipt point binding is invalid",
 			)
 		}
-		outcome := BackupPruneTerminalRetained
+		outcome := backupruntime.BackupPruneTerminalRetained
 		if prune.Record.State == backupruntime.BackupPruneVerifiedAbsent {
-			outcome = BackupPruneTerminalRemoved
+			outcome = backupruntime.BackupPruneTerminalRemoved
 		} else if prune.Record.State != backupruntime.BackupPruneAssigned || terminal.Status == taskjournal.TaskStatusCompleted {
 			return backupTerminalReceiptPlan{}, errs.New(
 				errs.KindValidationFailed,
 				"backup prune terminal receipt outcome is invalid",
 			)
 		}
-		receipt.Points[index] = BackupPruneTerminalPointOutcome{
+		receipt.Points[index] = backupruntime.BackupPruneTerminalPointOutcome{
 			Point: prune.Record.Point, CreatedAt: prune.Record.CreatedAt, Outcome: outcome,
 		}
 	}
-	receipt.DomainDigest, err = backupTerminalDomainDigest(receipt.Points)
+	receipt.DomainDigest, err = backupruntime.BackupTerminalDomainDigest(receipt.Points)
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
@@ -149,9 +149,9 @@ func prepareBackupPruneTerminalReceipt(
 }
 
 func prepareBackupTerminalReceiptPlan(
-	receipt BackupTerminalReceiptRecord,
+	receipt backupruntime.BackupTerminalReceiptRecord,
 ) (backupTerminalReceiptPlan, error) {
-	epochDigest, err := backupTerminalEnvironmentEpochDigest(receipt.Task.Owner.EnvironmentID)
+	epochDigest, err := backupruntime.BackupTerminalEnvironmentEpochDigest(receipt.Task.Owner.EnvironmentID)
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
@@ -159,15 +159,15 @@ func prepareBackupTerminalReceiptPlan(
 	// bound by composeBackupTerminalTransaction before persistence.
 	receipt.PriorEnvironmentEpochRevision = 1
 	receipt.EnvironmentEpochDigest = epochDigest
-	receipt.ReceiptDigest, err = backupTerminalReceiptDigest(receipt)
+	receipt.ReceiptDigest, err = backupruntime.BackupTerminalReceiptDigest(receipt)
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
-	value, err := encodeBackupTerminalReceiptRecord(receipt)
+	value, err := backupruntime.EncodeBackupTerminalReceiptRecord(receipt)
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
-	key := backupTerminalReceiptKey(receipt.Task.TaskID)
+	key := backupruntime.BackupTerminalReceiptKey(receipt.Task.TaskID)
 	// The terminal Task ModRevision compare serializes every valid receipt
 	// writer. A second receipt compare would spend the closed prune transaction's
 	// final operation without strengthening that fence.

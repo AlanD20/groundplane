@@ -58,7 +58,7 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 	keys = append(keys, ownerKeys...)
 	terminalOffset := len(keys)
 	keys = append(keys,
-		backupTerminalReceiptKey(task.ID),
+		backupruntime.BackupTerminalReceiptKey(task.ID),
 		taskRetentionIndexKey(task.ID, *task.RetainUntil),
 		markerRetentionKey,
 	)

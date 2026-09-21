@@ -13,7 +13,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 	ctx context.Context,
 	readRevision int64,
 	terminalRevision int64,
-	receipt BackupTerminalReceiptRecord,
+	receipt backupruntime.BackupTerminalReceiptRecord,
 	values []*etcdstore.KeyValue,
 ) (bool, *backupruntime.BackupOperationLockRecord, bool, error) {
 	if len(values) < 5 {

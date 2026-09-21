@@ -1,9 +1,8 @@
-package etcd
+package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
-	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,10 +12,10 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 	if record.PriorTaskRevision <= 0 || record.PriorEnvironmentEpochRevision <= 0 ||
 		!recordcodec.ValidSHA256(record.EnvironmentEpochDigest) ||
 		!recordcodec.ValidSHA256(record.DomainDigest) ||
-		!recordcodec.ValidSHA256(record.ReceiptDigest) || validateBackupTerminalTaskEvidence(record.Task) != nil {
+		!recordcodec.ValidSHA256(record.ReceiptDigest) || ValidateBackupTerminalTaskEvidence(record.Task) != nil {
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt identity is invalid")
 	}
-	epochDigest, err := backupTerminalEnvironmentEpochDigest(record.Task.Owner.EnvironmentID)
+	epochDigest, err := BackupTerminalEnvironmentEpochDigest(record.Task.Owner.EnvironmentID)
 	if err != nil || epochDigest != record.EnvironmentEpochDigest {
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt Environment epoch is invalid")
 	}
@@ -31,31 +30,31 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 				recordcodec.ValidateID(ids.KindBackupSource, source.SourceID) != nil ||
 				source.TargetID == "" ||
 				recordcodec.ValidateID(ids.KindRecoveryPoint, source.RecoveryPointID) != nil ||
-				!backupruntime.ValidBackupRuntimeInstant(source.RecoveryPointCreatedAt) ||
+				!ValidBackupRuntimeInstant(source.RecoveryPointCreatedAt) ||
 				source.RecoveryPointCreatedAt.After(record.Task.FinishedAt) ||
-				!backupruntime.ValidBackupSourceAttemptState(source.State) ||
-				!backupruntime.ValidBackupSourceAttemptPhase(source.Phase) ||
-				!backupruntime.ValidBackupFailureCodeForAttempt(source.State, source.Phase, source.FailureCode) ||
+				!ValidBackupSourceAttemptState(source.State) ||
+				!ValidBackupSourceAttemptPhase(source.Phase) ||
+				!ValidBackupFailureCodeForAttempt(source.State, source.Phase, source.FailureCode) ||
 				source.SizeBytes < 0 || (source.SHA256 != "" && !recordcodec.ValidSHA256(source.SHA256)) ||
 				((source.SizeBytes > 0) != (source.SHA256 != "")) {
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt source is invalid")
 			}
 			switch source.Kind {
-			case backupruntime.BackupRuntimeSourceAttach, backupruntime.BackupRuntimeSourceVolume, backupruntime.BackupRuntimeSourceConfig:
+			case BackupRuntimeSourceAttach, BackupRuntimeSourceVolume, BackupRuntimeSourceConfig:
 			default:
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt source kind is invalid")
 			}
 		}
 	case taskjournal.TaskBackupPrune:
 		if len(record.Sources) != 0 || len(record.Points) == 0 ||
-			len(record.Points) > backupruntime.MaximumBackupPruneDispatchPoints {
+			len(record.Points) > MaximumBackupPruneDispatchPoints {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt points are invalid")
 		}
 		seen := make(map[string]struct{}, len(record.Points))
 		for _, point := range record.Points {
-			if backupruntime.ValidateBackupRecoveryPointSnapshot(point.Point) != nil ||
+			if ValidateBackupRecoveryPointSnapshot(point.Point) != nil ||
 				point.Point.EnvironmentID != record.Task.Owner.EnvironmentID ||
-				!backupruntime.ValidBackupRuntimeInstant(point.CreatedAt) ||
+				!ValidBackupRuntimeInstant(point.CreatedAt) ||
 				point.CreatedAt.After(record.Task.FinishedAt) {
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt point is invalid")
 			}
@@ -68,14 +67,14 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt outcome is invalid")
 			}
 		}
-		domainDigest, err := backupTerminalDomainDigest(record.Points)
+		domainDigest, err := BackupTerminalDomainDigest(record.Points)
 		if err != nil || domainDigest != record.DomainDigest {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt point digest is invalid")
 		}
 	default:
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt Task type is invalid")
 	}
-	receiptDigest, err := backupTerminalReceiptDigest(record)
+	receiptDigest, err := BackupTerminalReceiptDigest(record)
 	if err != nil {
 		return err
 	}
@@ -85,7 +84,7 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 	return nil
 }
 
-func validateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) error {
+func ValidateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) error {
 	if recordcodec.ValidateID(ids.KindTask, evidence.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindOperation, evidence.OperationID) != nil ||
 		(evidence.RetryOf != "" && recordcodec.ValidateID(ids.KindTask, evidence.RetryOf) != nil) ||

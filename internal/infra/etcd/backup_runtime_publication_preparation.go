@@ -184,7 +184,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 			etcdstore.Condition{Key: taskKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
 			etcdstore.Condition{Key: backupruntime.BackupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
 			etcdstore.Condition{
-				Key:         backupTerminalReceiptKey(retrySource.task.Record.ID),
+				Key:         backupruntime.BackupTerminalReceiptKey(retrySource.task.Record.ID),
 				ModRevision: retrySource.receiptRevision,
 			},
 		)

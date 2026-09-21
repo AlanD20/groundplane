@@ -114,7 +114,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	backupTerminalReceiptIndex := -1
 	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune {
 		backupTerminalReceiptIndex = len(companionKeys)
-		companionKeys = append(companionKeys, backupTerminalReceiptKey(task.ID))
+		companionKeys = append(companionKeys, backupruntime.BackupTerminalReceiptKey(task.ID))
 	}
 	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: companionKeys, Revision: page.ReadRevision,
