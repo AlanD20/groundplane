@@ -96,7 +96,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
 	}
-	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+	mutationContext, err := environmentfence.LoadMutationContext(
 		ctx,
 		repository.store,
 		current.Record.EnvironmentID,
@@ -107,7 +107,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.VersionHierarchy(
 		tenant,
 		project,
 		environment,
@@ -225,22 +225,22 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	originalClassify := classifyServiceLifecycleStartConflict(
 		tenant, project, environment, current, renderInput, task.OperationID,
 	)
-	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
+	binding, err := mutationContext.Bind(ctx, repository.store, conditions, mutations, true)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer binding.clear()
-	defer etcdstore.ClearMutationValues(binding.mutations)
+	defer binding.Clear()
+	defer etcdstore.ClearMutationValues(binding.Mutations())
 	if err := validateBoundServiceConditions(binding, current, 4, 5); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := binding.preparedConflict(originalClassify); err != nil {
+	if err := binding.PreparedConflict(originalClassify); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
-		return binding.classify(revision, values, originalClassify)
+		return binding.ClassifyConflict(revision, values, originalClassify)
 	}
-	conditions, mutations, classify, err = publication.bind(binding.conditions, binding.mutations, classify)
+	conditions, mutations, classify, err = publication.bind(binding.Conditions(), binding.Mutations(), classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -266,19 +266,19 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 }
 
 func validateBoundServiceConditions(
-	binding *ordinaryEnvironmentMutationBinding,
+	binding *environmentfence.MutationBinding,
 	service etcdstore.Versioned[servicerecord.ServiceRecord],
 	desiredIndex int,
 	runtimeIndex int,
 ) error {
 	if binding == nil || desiredIndex < 0 || runtimeIndex < 0 ||
-		desiredIndex >= len(binding.conditions) || runtimeIndex >= len(binding.conditions) {
+		desiredIndex >= len(binding.Conditions()) || runtimeIndex >= len(binding.Conditions()) {
 		return errs.New(errs.KindInternal, "Service compare binding is incomplete")
 	}
-	if binding.conditions[desiredIndex] != servicerecord.ServiceDesiredCondition(service) {
+	if binding.Conditions()[desiredIndex] != servicerecord.ServiceDesiredCondition(service) {
 		return recordcodec.StateConflict("service", service.Record.Desired.ID)
 	}
-	if binding.conditions[runtimeIndex] != servicerecord.ServiceRuntimeCondition(service) {
+	if binding.Conditions()[runtimeIndex] != servicerecord.ServiceRuntimeCondition(service) {
 		return recordcodec.StateConflict("service runtime", service.Record.Desired.ID)
 	}
 	return nil

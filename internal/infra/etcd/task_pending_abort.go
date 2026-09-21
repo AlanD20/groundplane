@@ -518,8 +518,8 @@ func (repository *TaskRepository) AbortPendingTask(
 		}
 		var environmentEpochValue []byte
 		if environmentBinding != nil {
-			conditions = environmentBinding.conditions
-			mutations = environmentBinding.mutations
+			conditions = environmentBinding.Conditions()
+			mutations = environmentBinding.Mutations()
 			environmentEpochValue = mutations[len(mutations)-1].Value
 		}
 		transaction, err := repository.transactZoneRemovalTaskLifecycle(
@@ -542,7 +542,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		clearRunnerTaskChange(runnerChange)
 		blueprintAbortChange.clear()
 		clear(environmentEpochValue)
-		environmentBinding.clear()
+		environmentBinding.Clear()
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}

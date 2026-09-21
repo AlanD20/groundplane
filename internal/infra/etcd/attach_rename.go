@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -48,7 +49,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
 	}
-	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+	mutationContext, err := environmentfence.LoadMutationContext(
 		ctx,
 		repository.store,
 		current.Record.EnvironmentID,
@@ -64,7 +65,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 			attachrecord.AttachNameKey(current.Record.EnvironmentID, current.Record.Name),
 			attachrecord.AttachOwnerKey(current.Record.EnvironmentID, current.Record.ID),
 		},
-		Revision: mutationContext.readRevision,
+		Revision: mutationContext.ReadRevision(),
 	})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -142,16 +143,16 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 		}
 		return errs.New(errs.KindStateConflict, "Attach rename scope changed concurrently")
 	}
-	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, renaming)
+	binding, err := mutationContext.Bind(ctx, repository.store, conditions, mutations, renaming)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer binding.clear()
-	defer etcdstore.ClearMutationValues(binding.mutations)
+	defer binding.Clear()
+	defer etcdstore.ClearMutationValues(binding.Mutations())
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
-		return binding.classify(revision, values, originalClassify)
+		return binding.ClassifyConflict(revision, values, originalClassify)
 	}
-	plan, err := NewIdempotencyMutationPlan(binding.conditions, binding.mutations, classify)
+	plan, err := NewIdempotencyMutationPlan(binding.Conditions(), binding.Mutations(), classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

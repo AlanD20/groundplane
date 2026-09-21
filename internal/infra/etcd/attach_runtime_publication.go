@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -13,20 +14,20 @@ import (
 // publication as the Task, immutable preparation, Attach and Environment epoch.
 func (repository *AttachRepository) publishAttachRuntimeTask(
 	ctx context.Context, task TaskRecord, input attachrender.AttachTaskRenderInput, initiation TaskInitiation,
-	marker idempotencyrecord.IdempotencyMarker, mutationContext *ordinaryEnvironmentMutationContext,
+	marker idempotencyrecord.IdempotencyMarker, mutationContext *environmentfence.MutationContext,
 	conditions []etcdstore.Condition, mutations []etcdstore.Mutation, classifyConflict func(int64, []*etcdstore.KeyValue) error,
 ) (IdempotencyTransactionResult, error) {
 	conditions = append(conditions, attachRuntimeSourceConditions(input)...)
-	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
+	binding, err := mutationContext.Bind(ctx, repository.store, conditions, mutations, true)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer binding.clear()
-	defer etcdstore.ClearMutationValues(binding.mutations)
+	defer binding.Clear()
+	defer etcdstore.ClearMutationValues(binding.Mutations())
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
-		return binding.classify(revision, values, classifyConflict)
+		return binding.ClassifyConflict(revision, values, classifyConflict)
 	}
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, binding.conditions, binding.mutations, classify)
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, binding.Conditions(), binding.Mutations(), classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

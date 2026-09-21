@@ -7,6 +7,7 @@ import (
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -53,7 +54,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
 	}
-	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+	mutationContext, err := environmentfence.LoadMutationContext(
 		ctx,
 		repository.store,
 		record.EnvironmentID,
@@ -67,7 +68,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	if err := validateAttachRuntimeEpoch(mutationContext, record.EnvironmentID, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.VersionHierarchy(
 		&scope.Tenant,
 		scope.Project,
 		scope.Environment,

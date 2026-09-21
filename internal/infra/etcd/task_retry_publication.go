@@ -331,13 +331,13 @@ func (repository *TaskRepository) retryTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if environmentBinding != nil {
-		defer environmentBinding.clear()
-		defer clear(environmentBinding.mutations[len(environmentBinding.mutations)-1].Value)
-		conditions = environmentBinding.conditions
-		mutations = environmentBinding.mutations
+		defer environmentBinding.Clear()
+		defer clear(environmentBinding.Mutations()[len(environmentBinding.Mutations())-1].Value)
+		conditions = environmentBinding.Conditions()
+		mutations = environmentBinding.Mutations()
 		baseClassifier := retryClassifier
 		retryClassifier = func(revision int64, values []*etcdstore.KeyValue) error {
-			return environmentBinding.classify(revision, values, baseClassifier)
+			return environmentBinding.ClassifyConflict(revision, values, baseClassifier)
 		}
 	}
 	plan, err := repository.newRetryTaskIdempotencyMutationPlan(ctx,

@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -68,28 +69,29 @@ func isBlueprintCandidateTerminalTask(task TaskRecord) bool {
 		task.Params[releaserender.TaskReleasePublicationParam] != ""
 }
 
-func (mutationContext *ordinaryEnvironmentMutationContext) bindTaskLifecycle(
+func bindTaskLifecycleEnvironment(
 	ctx context.Context,
+	mutationContext *environmentfence.MutationContext,
 	store hierarchyStore,
 	task TaskRecord,
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 	advanceEpoch bool,
-) (*ordinaryEnvironmentMutationBinding, error) {
+) (*environmentfence.MutationBinding, error) {
 	if isVolumeRemovalTerminalTask(task) {
 		// Volume completion binds its held removal lock and ancestry in the
 		// terminal owner; it is not a new ordinary desired-state mutation.
 		return nil, nil
 	}
 	if !isBlueprintCandidateTerminalTask(task) {
-		return mutationContext.bind(ctx, store, conditions, mutations, advanceEpoch)
+		return mutationContext.Bind(ctx, store, conditions, mutations, advanceEpoch)
 	}
-	binding, err := mutationContext.prepareBinding(ctx, store, conditions, mutations, advanceEpoch)
+	binding, err := mutationContext.PrepareBinding(ctx, store, conditions, mutations, advanceEpoch)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := compileBlueprintTaskTerminalTransaction(task, binding.conditions, binding.mutations); err != nil {
-		binding.clear()
+	if _, err := compileBlueprintTaskTerminalTransaction(task, binding.Conditions(), binding.Mutations()); err != nil {
+		binding.Clear()
 		return nil, err
 	}
 	return binding, nil

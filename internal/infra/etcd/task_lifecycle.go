@@ -21,7 +21,7 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	entryChange bool,
 	serviceChange bool,
 	connectorChange bool,
-) (*ordinaryEnvironmentMutationBinding, error) {
+) (*environmentfence.MutationBinding, error) {
 	environmentID, applies, err := ordinaryTaskEnvironmentMutationTarget(
 		task, materializationChange, attachChange, entryChange, serviceChange, connectorChange,
 	)
@@ -47,12 +47,7 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	if err != nil {
 		return nil, err
 	}
-	mutationContext := ordinaryEnvironmentMutationContext{
-		environmentID: environmentID,
-		readRevision:  readRevision,
-		fence:         fence,
-	}
-	return mutationContext.bindTaskLifecycle(ctx, repository.store, task, conditions, mutations, advanceEpoch)
+	return bindTaskLifecycleEnvironment(ctx, fence.MutationContext(), repository.store, task, conditions, mutations, advanceEpoch)
 }
 
 func prepareTerminalTaskMarker(

@@ -550,8 +550,8 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		var environmentEpochValue []byte
 		if environmentBinding != nil {
-			conditions = environmentBinding.conditions
-			mutations = environmentBinding.mutations
+			conditions = environmentBinding.Conditions()
+			mutations = environmentBinding.Mutations()
 			environmentEpochValue = mutations[len(mutations)-1].Value
 		}
 		phase := zoneRemovalTransactionFailedAcknowledgement
@@ -579,7 +579,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		clearConnectorTaskChange(connectorChange)
 		clearRunnerTaskChange(runnerChange)
 		clear(environmentEpochValue)
-		environmentBinding.clear()
+		environmentBinding.Clear()
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}

@@ -5,6 +5,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -150,14 +151,14 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
 	}
-	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+	mutationContext, err := environmentfence.LoadMutationContext(
 		ctx, repository.store, environment.Record.ID, hierarchyrecord.EnvironmentKey(environment.Record.ID),
 		project.Record.ID, tenant.Record.ID,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.VersionHierarchy(
 		&tenant,
 		project,
 		environment,
@@ -173,7 +174,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 		serviceLifecycleActiveKey(current.Record.Desired.ID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
-	}, Revision: mutationContext.readRevision})
+	}, Revision: mutationContext.ReadRevision()})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -271,25 +272,25 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		}
 		return errs.New(errs.KindStateConflict, "Service removal state changed")
 	}
-	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
+	binding, err := mutationContext.Bind(ctx, repository.store, conditions, mutations, true)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer binding.clear()
-	defer etcdstore.ClearMutationValues(binding.mutations)
+	defer binding.Clear()
+	defer etcdstore.ClearMutationValues(binding.Mutations())
 	if err := validateBoundServiceConditions(binding, current, 4, 5); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := binding.preparedConflict(originalClassify); err != nil {
+	if err := binding.PreparedConflict(originalClassify); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	scriptConditions, err := prepareServiceScriptAbsence(
-		ctx, repository.store, current.Record.Desired.ID, mutationContext.readRevision,
+		ctx, repository.store, current.Record.Desired.ID, mutationContext.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	finalConditions := append(binding.conditions, scriptConditions...)
+	finalConditions := append(binding.Conditions(), scriptConditions...)
 	initiation, err := newEnvironmentTaskInitiation(
 		versionedTenant,
 		versionedProject,
@@ -299,15 +300,15 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, finalConditions, binding.mutations,
+	plan, err := newTaskIdempotencyMutationPlan(task, initiation, finalConditions, binding.Mutations(),
 		func(revision int64, values []*etcdstore.KeyValue) error {
 			if len(values) != len(finalConditions) {
 				return errs.New(errs.KindInternal, "Service removal Script compare evidence is incomplete")
 			}
-			if err := classifyServiceScriptReferences(current.Record.Desired.ID, values[len(binding.conditions):]); err != nil {
+			if err := classifyServiceScriptReferences(current.Record.Desired.ID, values[len(binding.Conditions()):]); err != nil {
 				return err
 			}
-			return binding.classify(revision, values[:len(binding.conditions)], originalClassify)
+			return binding.ClassifyConflict(revision, values[:len(binding.Conditions())], originalClassify)
 		})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

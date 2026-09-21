@@ -8,6 +8,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -96,7 +97,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
 	}
-	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
+	mutationContext, err := environmentfence.LoadMutationContext(
 		ctx,
 		repository.store,
 		current.Record.EnvironmentID,
@@ -110,7 +111,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	if err := validateAttachRuntimeEpoch(mutationContext, current.Record.EnvironmentID, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
+	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.VersionHierarchy(
 		&scope.Tenant,
 		scope.Project,
 		scope.Environment,
@@ -124,7 +125,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			"Attach detach combination exceeds the atomic transaction limit",
 		)
 	}
-	revision := mutationContext.readRevision
+	revision := mutationContext.ReadRevision()
 	exclusionCondition, err := attachrecord.RequireAttachBackupSourceExclusionAbsent(
 		ctx, repository.store, current.Record.ID, revision,
 	)

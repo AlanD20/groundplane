@@ -3,6 +3,7 @@ package etcd
 import (
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -46,11 +47,11 @@ func attachDesiredHeadConditions(
 }
 
 func validateAttachRuntimeEpoch(
-	mutationContext *ordinaryEnvironmentMutationContext,
+	mutationContext *environmentfence.MutationContext,
 	environmentID string,
 	input attachrender.AttachTaskRenderInput,
 ) error {
-	epoch, ok := mutationContext.revisionForKey(hierarchyrecord.EnvironmentMutationEpochKey(environmentID))
+	epoch, ok := mutationContext.RevisionForKey(hierarchyrecord.EnvironmentMutationEpochKey(environmentID))
 	if !ok || epoch != input.EnvironmentEpochRevision {
 		return errs.New(errs.KindStateConflict, "Attach captured runtime changed before publication")
 	}
