@@ -9,7 +9,7 @@ import (
 )
 
 type mutationContextStore interface {
-	Get(context.Context, string) (*etcdstore.KeyValue, error)
+	Get(context.Context, string) (*etcdstore.GetResult, error)
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
