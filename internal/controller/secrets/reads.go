@@ -130,43 +130,43 @@ func (service *secretReadService) RevealSecret(ctx context.Context, secretID str
 	return revealed, nil
 }
 
-type durableSecretReadRepository struct {
+type Repository struct {
 	hierarchy *etcd.HierarchyRepository
 	secrets   *etcd.SecretRepository
 }
 
-func NewReadRepository(
+func NewRepository(
 	hierarchy *etcd.HierarchyRepository,
 	secrets *etcd.SecretRepository,
-) (*durableSecretReadRepository, error) {
+) (*Repository, error) {
 	if hierarchy == nil || secrets == nil {
 		return nil, errs.New(errs.KindInternal, "Secret read repositories are not configured")
 	}
-	return &durableSecretReadRepository{hierarchy: hierarchy, secrets: secrets}, nil
+	return &Repository{hierarchy: hierarchy, secrets: secrets}, nil
 }
 
-func (repository *durableSecretReadRepository) GetProject(
+func (repository *Repository) GetProject(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
-func (repository *durableSecretReadRepository) GetSecret(
+func (repository *Repository) GetSecret(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[secretrecord.Record], error) {
 	return repository.secrets.GetSecret(ctx, id)
 }
 
-func (repository *durableSecretReadRepository) GetSecretValue(
+func (repository *Repository) GetSecretValue(
 	ctx context.Context,
 	current etcdstore.Versioned[secretrecord.Record],
 ) (secretrecord.EncryptedValue, error) {
 	return repository.secrets.GetSecretValue(ctx, current)
 }
 
-func (repository *durableSecretReadRepository) ListSecrets(
+func (repository *Repository) ListSecrets(
 	ctx context.Context,
 	scope core.SecretScope,
 	projectID string,
@@ -175,7 +175,7 @@ func (repository *durableSecretReadRepository) ListSecrets(
 	return repository.secrets.ListSecrets(ctx, scope, projectID, request)
 }
 
-func (repository *durableSecretReadRepository) CreateSecretIdempotent(
+func (repository *Repository) CreateSecretIdempotent(
 	ctx context.Context,
 	owner etcd.SecretOwner,
 	record secretrecord.Record,
@@ -185,7 +185,7 @@ func (repository *durableSecretReadRepository) CreateSecretIdempotent(
 	return repository.secrets.CreateSecretIdempotent(ctx, owner, record, value, marker)
 }
 
-func (repository *durableSecretReadRepository) BeginSecretDeletionWithTask(
+func (repository *Repository) BeginSecretDeletionWithTask(
 	ctx context.Context,
 	owner etcd.SecretOwner,
 	current etcdstore.Versioned[secretrecord.Record],
