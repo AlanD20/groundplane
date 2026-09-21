@@ -11,6 +11,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -28,7 +29,7 @@ const maximumBackingServiceTransactionRequestOperations = 128
 type BackingServiceCreation struct {
 	VolumeRoot   string
 	Stage        etcdstore.Versioned[BackingServiceCreationStage]
-	PoolRegistry etcdstore.Versioned[EnvironmentPoolRegistry]
+	PoolRegistry etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry]
 	Project      hierarchyrecord.ProjectRecord
 	Environment  hierarchyrecord.EnvironmentRecord
 	Components   []componentrecord.Record
@@ -127,7 +128,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(poolRegistryValue)
-	zoneRegistryValue, err := recordcodec.Encode("zone_pool_registry", zonePoolRegistry{
+	zoneRegistryValue, err := recordcodec.Encode("zone_pool_registry", networkreservations.ZonePoolRegistry{
 		Reservations: map[string]string{creation.Zone.Desired.ID: creation.Zone.Desired.Subnet},
 	})
 	if err != nil {
@@ -241,8 +242,8 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			Value: environmentCoordinationValue,
 		},
 		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
-		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
-		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
+		{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: poolRegistryValue},
+		{Type: etcdstore.MutationPut, Key: networkreservations.ZonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
 		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
 	}
 	for index, component := range creation.Components {

@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -88,7 +89,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.PoolRegistry.Record.Reservations[creation.Environment.ID] != creation.Environment.NetworkPool {
 		return errs.New(errs.KindValidationFailed, "Backing-service Environment pool reservation is invalid")
 	}
-	if err := validateEnvironmentPoolRegistry(creation.PoolRegistry.Record); err != nil {
+	if err := networkreservations.ValidateEnvironmentPoolRegistry(creation.PoolRegistry.Record); err != nil {
 		return err
 	}
 	if err := zonerecord.ValidateRecord(creation.Zone); err != nil {
@@ -99,7 +100,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Zone.Desired.OwnerID != creation.Project.ID {
 		return errs.New(errs.KindValidationFailed, "Backing-service Zone ownership is invalid")
 	}
-	if _, err := (zonePoolRegistry{Reservations: map[string]string{}}).reserve(creation.Environment, creation.Zone); err != nil {
+	if _, err := (networkreservations.ZonePoolRegistry{Reservations: map[string]string{}}).Reserve(creation.Environment, creation.Zone); err != nil {
 		return err
 	}
 	if err := servicerecord.ValidateServiceRecord(creation.Service); err != nil {

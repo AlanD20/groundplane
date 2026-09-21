@@ -6,6 +6,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -81,7 +82,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		keys = append(keys, componentrecord.RecordKey(candidate.Current.Desired.ID))
 	}
 	for _, zoneID := range zones {
-		keys = append(keys, componentAddressRegistryKey(zoneID))
+		keys = append(keys, networkreservations.ComponentAddressRegistryKey(zoneID))
 	}
 	for _, zoneID := range zones {
 		keys = append(keys, deletionTombstoneKey("zone", zoneID))
@@ -140,7 +141,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	}
 
 	zoneRecords := make(map[string]zonerecord.Record, len(zones))
-	registries := make(map[string]componentAddressRegistry, len(zones))
+	registries := make(map[string]networkreservations.ComponentAddressRegistry, len(zones))
 	registryValues := make(map[string]*etcdstore.KeyValue, len(zones))
 	registryOffset := 3 + len(intent.Candidates)
 	tombstoneOffset := registryOffset + len(zones)
@@ -151,21 +152,21 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		zone := desiredZones[zoneID]
 		registryValue := state.Values[registryOffset+index]
 		var decodeErr error
-		registry := componentAddressRegistry{Reservations: map[string]string{}}
+		registry := networkreservations.ComponentAddressRegistry{Reservations: map[string]string{}}
 		if registryValue != nil {
-			registry, decodeErr = recordcodec.Decode[componentAddressRegistry](
+			registry, decodeErr = recordcodec.Decode[networkreservations.ComponentAddressRegistry](
 				registryValue.Value,
 				"component_address_registry",
 			)
-			if decodeErr != nil || validateComponentAddressRegistry(zone, registry) != nil {
-				return componentTaskChange{}, corruptComponentAddressRegistry()
+			if decodeErr != nil || networkreservations.ValidateComponentAddressRegistry(zone, registry) != nil {
+				return componentTaskChange{}, networkreservations.CorruptComponentAddressRegistry()
 			}
 		}
 		zoneRecords[zoneID] = zone
 		registries[zoneID] = registry
 		registryValues[zoneID] = registryValue
 		change.conditions = append(change.conditions, etcdstore.Condition{Key: deletionTombstoneKey("zone", zoneID)})
-		registryCondition := etcdstore.Condition{Key: componentAddressRegistryKey(zoneID)}
+		registryCondition := etcdstore.Condition{Key: networkreservations.ComponentAddressRegistryKey(zoneID)}
 		if registryValue != nil {
 			registryCondition.ModRevision = registryValue.ModRevision
 		}
@@ -192,7 +193,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			continue
 		}
 		registry := registries[removed.zoneID]
-		replacement, address, found, releaseErr := registry.release(
+		replacement, address, found, releaseErr := registry.Release(
 			zoneRecords[removed.zoneID],
 			candidate.Current.Desired.ID,
 		)
@@ -249,14 +250,14 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		if _, changed := changedRegistries[zoneID]; !changed {
 			continue
 		}
-		value, encodeErr := encodeComponentAddressRegistry(zoneRecords[zoneID], registries[zoneID])
+		value, encodeErr := networkreservations.EncodeComponentAddressRegistry(zoneRecords[zoneID], registries[zoneID])
 		if encodeErr != nil {
 			clearComponentTaskChange(change)
 			return componentTaskChange{}, encodeErr
 		}
 		change.values = append(change.values, value)
 		change.mutations = append(change.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentAddressRegistryKey(zoneID), Value: value,
+			Type: etcdstore.MutationPut, Key: networkreservations.ComponentAddressRegistryKey(zoneID), Value: value,
 		})
 	}
 	terminalIntent, err := terminalComponentTaskIntent(intent, terminalStatus, terminalAt)

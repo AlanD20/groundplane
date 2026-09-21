@@ -1,9 +1,8 @@
-package etcd
+package runners
 
 import (
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,7 +11,7 @@ import (
 )
 
 const (
-	systemPoolRegistryKey   = "/v1/indexes/system/by-network-pool/global/-"
+	SystemPoolRegistryKey   = "/v1/indexes/system/by-network-pool/global/-"
 	runnerHostSlotPrefix    = "/v1/runtime/runner-host-slots/"
 	runnerTenantQuotaPrefix = "/v1/singletons/runner-tenant-quotas/"
 )
@@ -22,17 +21,17 @@ type RunnerHostSlotRecord struct {
 	RunnerID string `json:"runner_id"`
 }
 
-func runnerHostSlotKey(slot uint32) string {
-	return runnerHostSlotPrefix + runnerHostSlotSegment(slot)
+func RunnerHostSlotKey(slot uint32) string {
+	return runnerHostSlotPrefix + RunnerHostSlotSegment(slot)
 }
 
-func runnerHostSlotSegment(slot uint32) string {
+func RunnerHostSlotSegment(slot uint32) string {
 	return fmt.Sprintf("%010d", slot)
 }
 
-func parseRunnerHostSlotSegment(value string) (uint32, error) {
+func ParseRunnerHostSlotSegment(value string) (uint32, error) {
 	parsed, err := strconv.ParseUint(value, 10, 32)
-	if err != nil || runnerHostSlotSegment(uint32(parsed)) != value {
+	if err != nil || RunnerHostSlotSegment(uint32(parsed)) != value {
 		return 0, errs.New(errs.KindValidationFailed, "runner host slot segment is invalid")
 	}
 	return uint32(parsed), nil
@@ -45,56 +44,56 @@ func validateRunnerHostSlotRecord(record RunnerHostSlotRecord) error {
 	return nil
 }
 
-func encodeRunnerHostSlotRecord(record RunnerHostSlotRecord) ([]byte, error) {
+func EncodeRunnerHostSlotRecord(record RunnerHostSlotRecord) ([]byte, error) {
 	if err := validateRunnerHostSlotRecord(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("runner_host_slot", record)
 }
 
-func decodeRunnerHostSlotRecord(value []byte) (RunnerHostSlotRecord, error) {
-	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
-		return RunnerHostSlotRecord{}, corruptRunnerHostSlotRecord()
+func DecodeRunnerHostSlotRecord(value []byte) (RunnerHostSlotRecord, error) {
+	if len(value) > MaximumRunnerPersistenceBytes {
+		return RunnerHostSlotRecord{}, CorruptRunnerHostSlotRecord()
 	}
 	record, err := recordcodec.Decode[RunnerHostSlotRecord](value, "runner_host_slot")
 	if err != nil || validateRunnerHostSlotRecord(record) != nil {
-		return RunnerHostSlotRecord{}, corruptRunnerHostSlotRecord()
+		return RunnerHostSlotRecord{}, CorruptRunnerHostSlotRecord()
 	}
 	return record, nil
 }
 
-func decodeRunnerTenantQuota(value []byte) (runnerallocation.RunnerTenantQuota, error) {
-	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
-		return runnerallocation.RunnerTenantQuota{}, corruptRunnerTenantQuota()
+func DecodeRunnerTenantQuota(value []byte) (runnerallocation.RunnerTenantQuota, error) {
+	if len(value) > MaximumRunnerPersistenceBytes {
+		return runnerallocation.RunnerTenantQuota{}, CorruptRunnerTenantQuota()
 	}
 	quota, err := recordcodec.Decode[runnerallocation.RunnerTenantQuota](value, "runner_tenant_quota")
 	if err != nil || quota.Validate() != nil {
-		return runnerallocation.RunnerTenantQuota{}, corruptRunnerTenantQuota()
+		return runnerallocation.RunnerTenantQuota{}, CorruptRunnerTenantQuota()
 	}
 	return quota, nil
 }
 
-func corruptRunnerHostSlotRecord() error {
+func CorruptRunnerHostSlotRecord() error {
 	return errs.New(errs.KindInternal, "runner host slot record is corrupt")
 }
 
-func decodeSystemPoolRegistry(value []byte) (runnerallocation.SystemPoolRegistry, error) {
-	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
-		return runnerallocation.SystemPoolRegistry{}, corruptSystemPoolRegistry()
+func DecodeSystemPoolRegistry(value []byte) (runnerallocation.SystemPoolRegistry, error) {
+	if len(value) > MaximumRunnerPersistenceBytes {
+		return runnerallocation.SystemPoolRegistry{}, CorruptSystemPoolRegistry()
 	}
 	registry, err := recordcodec.Decode[runnerallocation.SystemPoolRegistry](value, "system_pool_registry")
 	if err != nil || registry.ValidateReservations() != nil {
-		return runnerallocation.SystemPoolRegistry{}, corruptSystemPoolRegistry()
+		return runnerallocation.SystemPoolRegistry{}, CorruptSystemPoolRegistry()
 	}
 	return registry, nil
 }
 
-func corruptSystemPoolRegistry() error {
+func CorruptSystemPoolRegistry() error {
 	return errs.New(errs.KindInternal, "system pool registry is corrupt")
 }
 
-func corruptRunnerTenantQuota() error {
+func CorruptRunnerTenantQuota() error {
 	return errs.New(errs.KindInternal, "runner tenant quota is corrupt")
 }
 
-func runnerTenantQuotaKey(tenantID string) string { return runnerTenantQuotaPrefix + tenantID }
+func RunnerTenantQuotaKey(tenantID string) string { return runnerTenantQuotaPrefix + tenantID }

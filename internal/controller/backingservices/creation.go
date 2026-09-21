@@ -14,6 +14,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -42,7 +43,7 @@ const backingServiceCreateRoute = "/backing-services"
 
 type backingServiceCreationRepository interface {
 	desiredrevision.Repository
-	GetEnvironmentPoolRegistry(context.Context) (etcdstore.Versioned[etcd.EnvironmentPoolRegistry], error)
+	GetEnvironmentPoolRegistry(context.Context) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
 	ClaimBackingServiceCreationStage(
 		context.Context,
 		etcd.BackingServiceCreationStage,

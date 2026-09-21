@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -116,7 +117,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		keys = append(keys, componentrecord.RecordKey(candidate.Current.Desired.ID))
 	}
 	for _, zoneID := range zones {
-		keys = append(keys, componentAddressRegistryKey(zoneID))
+		keys = append(keys, networkreservations.ComponentAddressRegistryKey(zoneID))
 	}
 	for _, zoneID := range zones {
 		keys = append(keys, deletionTombstoneKey("zone", zoneID))
@@ -214,7 +215,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	}
 
 	zoneRecords := make(map[string]zonerecord.Record, len(zones))
-	registries := make(map[string]componentAddressRegistry, len(zones))
+	registries := make(map[string]networkreservations.ComponentAddressRegistry, len(zones))
 	registryOffset := 4 + len(intent.Candidates)
 	tombstoneOffset := registryOffset + len(zones)
 	for index, zoneID := range zones {
@@ -223,21 +224,21 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		}
 		zone := desiredZones[zoneID]
 		registryValue := state.Values[registryOffset+index]
-		registry := componentAddressRegistry{Reservations: map[string]string{}}
+		registry := networkreservations.ComponentAddressRegistry{Reservations: map[string]string{}}
 		var decodeErr error
 		if registryValue != nil {
-			registry, decodeErr = recordcodec.Decode[componentAddressRegistry](
+			registry, decodeErr = recordcodec.Decode[networkreservations.ComponentAddressRegistry](
 				registryValue.Value,
 				"component_address_registry",
 			)
-			if decodeErr != nil || validateComponentAddressRegistry(zone, registry) != nil {
-				return componentTaskChange{}, corruptComponentAddressRegistry()
+			if decodeErr != nil || networkreservations.ValidateComponentAddressRegistry(zone, registry) != nil {
+				return componentTaskChange{}, networkreservations.CorruptComponentAddressRegistry()
 			}
 		}
 		zoneRecords[zoneID] = zone
 		registries[zoneID] = registry
 		change.conditions = append(change.conditions, etcdstore.Condition{Key: deletionTombstoneKey("zone", zoneID)})
-		registryCondition := etcdstore.Condition{Key: componentAddressRegistryKey(zoneID)}
+		registryCondition := etcdstore.Condition{Key: networkreservations.ComponentAddressRegistryKey(zoneID)}
 		if registryValue != nil {
 			registryCondition.ModRevision = registryValue.ModRevision
 		}
@@ -255,7 +256,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			continue
 		}
 		registry := registries[next.zoneID]
-		replacement, reserveErr := registry.reserveExact(
+		replacement, reserveErr := registry.ReserveExact(
 			zoneRecords[next.zoneID],
 			candidate.Candidate.Desired.ID,
 			next.address,
@@ -272,14 +273,14 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		if _, changed := changedRegistries[zoneID]; !changed {
 			continue
 		}
-		value, encodeErr := encodeComponentAddressRegistry(zoneRecords[zoneID], registries[zoneID])
+		value, encodeErr := networkreservations.EncodeComponentAddressRegistry(zoneRecords[zoneID], registries[zoneID])
 		if encodeErr != nil {
 			clearComponentTaskChange(change)
 			return componentTaskChange{}, encodeErr
 		}
 		change.values = append(change.values, value)
 		change.mutations = append(change.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentAddressRegistryKey(zoneID), Value: value,
+			Type: etcdstore.MutationPut, Key: networkreservations.ComponentAddressRegistryKey(zoneID), Value: value,
 		})
 	}
 	intentBytes, err := encodeComponentTaskIntent(retryIntent)

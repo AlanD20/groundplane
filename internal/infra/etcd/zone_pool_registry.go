@@ -2,14 +2,11 @@ package etcd
 
 import (
 	"context"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
-	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -29,110 +26,31 @@ func (r *ZoneRepository) ListZoneSubnetReservationsAtRevision(
 	return reservations, nil
 }
 
-type zonePoolRegistry struct {
-	Reservations map[string]string `json:"reservations"`
-}
-
-func zonePoolRegistryKey(environmentID string) string {
-	return "/v1/indexes/zones/by-subnet/environment/" + environmentID
-}
-
-func (r *ZoneRepository) getZonePoolRegistry(ctx context.Context, id string) (etcdstore.Versioned[zonePoolRegistry], error) {
+func (r *ZoneRepository) getZonePoolRegistry(ctx context.Context, id string) (etcdstore.Versioned[networkreservations.ZonePoolRegistry], error) {
 	return r.getZonePoolRegistryAtRevision(ctx, id, 0)
 }
 
 func (r *ZoneRepository) getZonePoolRegistryAtRevision(
 	ctx context.Context,
 	id string, revision int64,
-) (etcdstore.Versioned[zonePoolRegistry], error) {
+) (etcdstore.Versioned[networkreservations.ZonePoolRegistry], error) {
 	if r == nil || r.store == nil || ids.Validate(ids.KindEnvironment, id) != nil || revision < 0 {
-		return etcdstore.Versioned[zonePoolRegistry]{}, errs.New(errs.KindInternal, "Environment capacity read is invalid")
+		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{}, errs.New(errs.KindInternal, "Environment capacity read is invalid")
 	}
-	result, err := r.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{zonePoolRegistryKey(id)}, Revision: revision})
+	result, err := r.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{networkreservations.ZonePoolRegistryKey(id)}, Revision: revision})
 	if err != nil {
-		return etcdstore.Versioned[zonePoolRegistry]{}, err
+		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{}, err
 	}
 	if len(result.Values) != 1 || result.Values[0] == nil {
-		return etcdstore.Versioned[zonePoolRegistry]{
-			Record: zonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: result.ReadRevision,
+		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{
+			Record: networkreservations.ZonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: result.ReadRevision,
 		}, nil
 	}
-	registry, err := recordcodec.Decode[zonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
-	if err != nil || validateZonePoolRegistry(registry) != nil {
-		return etcdstore.Versioned[zonePoolRegistry]{}, corruptZonePoolRegistry()
+	registry, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
+	if err != nil || networkreservations.ValidateZonePoolRegistry(registry) != nil {
+		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{}, networkreservations.CorruptZonePoolRegistry()
 	}
-	return etcdstore.Versioned[zonePoolRegistry]{
+	return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{
 		Record: registry, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
-}
-
-func (registry zonePoolRegistry) reserve(environment hierarchyrecord.EnvironmentRecord, zone zonerecord.Record) (zonePoolRegistry, error) {
-	parent, err := ipam.ParseIPv4Prefix(environment.NetworkPool)
-	if err != nil || parent.String() != environment.NetworkPool {
-		return zonePoolRegistry{}, errs.New(errs.KindValidationFailed, "Environment network pool is invalid")
-	}
-	candidate, err := ipam.ParseIPv4Prefix(zone.Desired.Subnet)
-	if err != nil || candidate.String() != zone.Desired.Subnet {
-		return zonePoolRegistry{}, errs.New(errs.KindValidationFailed, "Zone subnet must be a canonical IPv4 CIDR")
-	}
-	if current, exists := registry.Reservations[zone.Desired.ID]; exists {
-		if current != candidate.String() {
-			return zonePoolRegistry{}, errs.New(
-				errs.KindStateConflict,
-				"Zone stable identity already reserves a different subnet",
-			)
-		}
-		next := zonePoolRegistry{Reservations: cloneStringMap(registry.Reservations)}
-		return next, nil
-	}
-	reserved, err := registry.prefixes()
-	if err != nil {
-		return zonePoolRegistry{}, err
-	}
-	if err := ipam.ValidateChild(parent, candidate, reserved); err != nil {
-		return zonePoolRegistry{}, err
-	}
-	next := zonePoolRegistry{Reservations: cloneStringMap(registry.Reservations)}
-	next.Reservations[zone.Desired.ID] = candidate.String()
-	return next, nil
-}
-
-func (registry zonePoolRegistry) release(zone zonerecord.Record) (zonePoolRegistry, error) {
-	if err := validateZonePoolRegistry(registry); err != nil {
-		return zonePoolRegistry{}, err
-	}
-	if err := zonerecord.ValidateRecord(zone); err != nil {
-		return zonePoolRegistry{}, err
-	}
-	if registry.Reservations[zone.Desired.ID] != zone.Desired.Subnet {
-		return zonePoolRegistry{}, errs.New(errs.KindStateConflict, "Zone subnet reservation changed")
-	}
-	next := zonePoolRegistry{Reservations: cloneStringMap(registry.Reservations)}
-	delete(next.Reservations, zone.Desired.ID)
-	return next, nil
-}
-
-func (registry zonePoolRegistry) prefixes() ([]netip.Prefix, error) {
-	reserved := make([]netip.Prefix, 0, len(registry.Reservations))
-	root := netip.MustParsePrefix("0.0.0.0/0")
-	for zoneID, value := range registry.Reservations {
-		if err := ids.Validate(ids.KindNetwork, zoneID); err != nil {
-			return nil, corruptZonePoolRegistry()
-		}
-		subnet, err := ipam.ParseIPv4Prefix(value)
-		if err != nil || subnet.String() != value || ipam.ValidateChild(root, subnet, reserved) != nil {
-			return nil, corruptZonePoolRegistry()
-		}
-		reserved = append(reserved, subnet)
-	}
-	return reserved, nil
-}
-
-func validateZonePoolRegistry(registry zonePoolRegistry) error {
-	_, err := registry.prefixes()
-	return err
-}
-
-func corruptZonePoolRegistry() error {
-	return errs.New(errs.KindInternal, "Zone pool registry is corrupt")
 }

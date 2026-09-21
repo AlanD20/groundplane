@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
@@ -45,25 +46,25 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRe
 		return preparedEnvironmentBlueprintPoolChange{}, err
 	}
 	registries, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentPoolRegistryKey}, Revision: revision,
+		Keys: []string{networkreservations.EnvironmentPoolRegistryKey}, Revision: revision,
 	})
 	if err != nil {
 		return preparedEnvironmentBlueprintPoolChange{}, err
 	}
 	if registries == nil || len(registries.Values) != 1 || registries.Values[0] == nil ||
-		registries.Values[0].Key != environmentPoolRegistryKey {
+		registries.Values[0].Key != networkreservations.EnvironmentPoolRegistryKey {
 		return preparedEnvironmentBlueprintPoolChange{}, errs.New(
 			errs.KindInternal,
 			"Environment pool reservation registry is missing",
 		)
 	}
 	defer etcdstore.ClearValues(registries.Values)
-	global, err := recordcodec.Decode[EnvironmentPoolRegistry](
+	global, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](
 		registries.Values[0].Value,
 		"environment_pool_registry",
 	)
-	if err != nil || validateEnvironmentPoolRegistry(global) != nil {
-		return preparedEnvironmentBlueprintPoolChange{}, corruptEnvironmentPoolRegistry()
+	if err != nil || networkreservations.ValidateEnvironmentPoolRegistry(global) != nil {
+		return preparedEnvironmentBlueprintPoolChange{}, networkreservations.CorruptEnvironmentPoolRegistry()
 	}
 	nextGlobal, canonical, err := global.Replace(
 		root,

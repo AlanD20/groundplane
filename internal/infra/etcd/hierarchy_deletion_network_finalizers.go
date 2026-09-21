@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -84,7 +85,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 	}
 	defer clear(zoneValue)
 	zone := zonerecord.Record{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired}
-	poolKey, addressesKey := zonePoolRegistryKey(evidence.EnvironmentID), componentAddressRegistryKey(action.TargetID)
+	poolKey, addressesKey := networkreservations.ZonePoolRegistryKey(evidence.EnvironmentID), networkreservations.ComponentAddressRegistryKey(action.TargetID)
 	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		poolKey, addressesKey,
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID),
@@ -101,25 +102,25 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer etcdstore.ClearValues(values.Values)
-	pool, err := recordcodec.Decode[zonePoolRegistry](values.Values[0].Value, "zone_pool_registry")
-	if err != nil || validateZonePoolRegistry(pool) != nil ||
+	pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](values.Values[0].Value, "zone_pool_registry")
+	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
 		pool.Reservations[action.TargetID] != evidence.Desired.Subnet {
-		return hierarchyDeletionControllerEffects{}, corruptZonePoolRegistry()
+		return hierarchyDeletionControllerEffects{}, networkreservations.CorruptZonePoolRegistry()
 	}
 	if values.Values[1] != nil {
-		addresses, decodeErr := recordcodec.Decode[componentAddressRegistry](
+		addresses, decodeErr := recordcodec.Decode[networkreservations.ComponentAddressRegistry](
 			values.Values[1].Value,
 			"component_address_registry",
 		)
-		if decodeErr != nil || validateComponentAddressRegistry(zone, addresses) != nil {
-			return hierarchyDeletionControllerEffects{}, corruptComponentAddressRegistry()
+		if decodeErr != nil || networkreservations.ValidateComponentAddressRegistry(zone, addresses) != nil {
+			return hierarchyDeletionControllerEffects{}, networkreservations.CorruptComponentAddressRegistry()
 		}
 		if len(addresses.Reservations) != 0 {
 			return hierarchyDeletionControllerEffects{}, errs.New(errs.KindResourceInUse,
 				"Zone gained a Component address reservation")
 		}
 	}
-	nextPool, err := pool.release(zone)
+	nextPool, err := pool.Release(zone)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}

@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"net/netip"
@@ -35,12 +36,12 @@ const (
 
 type environmentCreationRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironmentPoolRegistry(context.Context) (etcdstore.Versioned[etcd.EnvironmentPoolRegistry], error)
+	GetEnvironmentPoolRegistry(context.Context) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
 	CreateEnvironmentWithTask(
 		context.Context,
 		string,
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[etcd.EnvironmentPoolRegistry],
+		etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry],
 		hierarchyrecord.EnvironmentRecord,
 		[]componentrecord.Record,
 		etcd.TaskRecord,

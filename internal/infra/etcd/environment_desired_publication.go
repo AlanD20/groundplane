@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
@@ -379,7 +380,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
-		{Key: zonePoolRegistryKey(revision.EnvironmentID), ModRevision: zonePool.currentRevision},
+		{Key: networkreservations.ZonePoolRegistryKey(revision.EnvironmentID), ModRevision: zonePool.currentRevision},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
@@ -389,18 +390,18 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(revision.EnvironmentID), Value: zonePool.value},
+		{Type: etcdstore.MutationPut, Key: networkreservations.ZonePoolRegistryKey(revision.EnvironmentID), Value: zonePool.value},
 	}
 	zonePoolConditionIndex := len(conditions) - 1
 	poolRegistryConditionIndex := -1
 	if poolChange.changed() {
 		poolRegistryConditionIndex = len(conditions)
 		conditions = append(conditions, etcdstore.Condition{
-			Key: environmentPoolRegistryKey, ModRevision: poolChange.registryRevision,
+			Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: poolChange.registryRevision,
 		})
 		mutations = append(mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), Value: poolChange.environmentValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolChange.registryValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: poolChange.registryValue},
 		)
 	}
 	removalLockConditionIndex := -1

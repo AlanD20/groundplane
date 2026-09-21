@@ -19,7 +19,7 @@ func (repository *RunnerRepository) EnsureRunnerNetworkPool(
 	if _, err := config.Validate(); err != nil {
 		return err
 	}
-	result, err := repository.store.Get(ctx, systemPoolRegistryKey)
+	result, err := repository.store.Get(ctx, runnerrecord.SystemPoolRegistryKey)
 	if err != nil {
 		return err
 	}
@@ -38,8 +38,8 @@ func (repository *RunnerRepository) EnsureRunnerNetworkPool(
 	}
 	defer clear(value)
 	transaction, err := repository.store.Transact(ctx,
-		[]etcdstore.Condition{{Key: systemPoolRegistryKey}},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: systemPoolRegistryKey, Value: value}},
+		[]etcdstore.Condition{{Key: runnerrecord.SystemPoolRegistryKey}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: value}},
 	)
 	if err != nil {
 		return err
@@ -55,11 +55,11 @@ func (repository *RunnerRepository) EnsureRunnerNetworkPool(
 
 func validateReservedRunnerNetworkPool(config runnerallocation.RunnerAllocationConfig, value []byte) error {
 	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
-		return corruptSystemPoolRegistry()
+		return runnerrecord.CorruptSystemPoolRegistry()
 	}
-	registry, err := decodeSystemPoolRegistry(value)
+	registry, err := runnerrecord.DecodeSystemPoolRegistry(value)
 	if err != nil || registry.Validate(config.SystemPool) != nil {
-		return corruptSystemPoolRegistry()
+		return runnerrecord.CorruptSystemPoolRegistry()
 	}
 	if registry.RunnerNetworkPool != config.RunnerPool.String() {
 		return errs.New(

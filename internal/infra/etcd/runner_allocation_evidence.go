@@ -25,9 +25,9 @@ func (repository *RunnerRepository) readRunnerAllocationEvidence(
 		Keys: []string{
 			runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
 			runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
-			runnerTenantQuotaKey(record.Desired.TenantID),
-			runnerHostSlotKey(record.Allocation.Slot),
-			systemPoolRegistryKey,
+			runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID),
+			runnerrecord.RunnerHostSlotKey(record.Allocation.Slot),
+			runnerrecord.SystemPoolRegistryKey,
 		},
 		Revision: revision,
 	})
@@ -56,22 +56,22 @@ func runnerAllocationEvidenceOwns(record runnerrecord.RunnerRecord, evidence run
 		evidence.quota == nil || evidence.host == nil || evidence.system == nil {
 		return errs.New(errs.KindInternal, "runner allocation evidence is incomplete")
 	}
-	quota, err := decodeRunnerTenantQuota(evidence.quota.Value)
+	quota, err := runnerrecord.DecodeRunnerTenantQuota(evidence.quota.Value)
 	if err != nil || quota.Validate() != nil {
-		return corruptRunnerTenantQuota()
+		return runnerrecord.CorruptRunnerTenantQuota()
 	}
 	index := sortSearchRunnerID(quota.RunnerIDs, record.Desired.ID)
 	if index >= len(quota.RunnerIDs) || quota.RunnerIDs[index] != record.Desired.ID {
 		return errs.New(errs.KindInternal, "runner tenant quota lost its owner")
 	}
-	host, err := decodeRunnerHostSlotRecord(evidence.host.Value)
+	host, err := runnerrecord.DecodeRunnerHostSlotRecord(evidence.host.Value)
 	if err != nil || host.Slot != record.Allocation.Slot || host.RunnerID != record.Desired.ID {
-		return corruptRunnerHostSlotRecord()
+		return runnerrecord.CorruptRunnerHostSlotRecord()
 	}
-	system, err := decodeSystemPoolRegistry(evidence.system.Value)
+	system, err := runnerrecord.DecodeSystemPoolRegistry(evidence.system.Value)
 	if err != nil ||
 		system.Reservations[runnerallocation.RunnerReservationOwner(record.Desired.ID)] != record.Allocation.NetworkCIDR {
-		return corruptSystemPoolRegistry()
+		return runnerrecord.CorruptSystemPoolRegistry()
 	}
 	return nil
 }

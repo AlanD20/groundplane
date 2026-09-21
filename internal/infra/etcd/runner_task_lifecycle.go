@@ -38,7 +38,7 @@ func RunnerRemovalTaskParams(record runnerrecord.RunnerRecord) map[string]string
 		RunnerTenantIDParam:               record.Desired.TenantID,
 		RunnerOwnerKindParam:              string(record.Desired.OwnerKind),
 		RunnerOwnerIDParam:                record.Desired.OwnerID,
-		RunnerHostSlotParam:               runnerHostSlotSegment(record.Allocation.Slot),
+		RunnerHostSlotParam:               runnerrecord.RunnerHostSlotSegment(record.Allocation.Slot),
 		RunnerNetworkCIDRParam:            record.Allocation.NetworkCIDR,
 	}
 }
@@ -64,7 +64,7 @@ func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence
 	if err != nil || task.Owner != expectedOwner {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid owner")
 	}
-	hostSlot, err := parseRunnerHostSlotSegment(task.Params[RunnerHostSlotParam])
+	hostSlot, err := runnerrecord.ParseRunnerHostSlotSegment(task.Params[RunnerHostSlotParam])
 	if err != nil {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
 	}

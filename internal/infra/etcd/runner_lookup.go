@@ -168,7 +168,7 @@ func (repository *RunnerRepository) listTenantRunners(
 		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{runnerTenantQuotaKey(tenantID)}, Revision: revision,
+		Keys: []string{runnerrecord.RunnerTenantQuotaKey(tenantID)}, Revision: revision,
 	})
 	if err != nil {
 		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
@@ -178,9 +178,9 @@ func (repository *RunnerRepository) listTenantRunners(
 	}
 	quota := runnerallocation.RunnerTenantQuota{RunnerIDs: []string{}}
 	if read.Values[0] != nil {
-		quota, err = decodeRunnerTenantQuota(read.Values[0].Value)
+		quota, err = runnerrecord.DecodeRunnerTenantQuota(read.Values[0].Value)
 		if err != nil || quota.Validate() != nil {
-			return etcdstore.Page[runnerrecord.RunnerRecord]{}, corruptRunnerTenantQuota()
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, runnerrecord.CorruptRunnerTenantQuota()
 		}
 	}
 	startID := strings.TrimPrefix(startKey, prefix)

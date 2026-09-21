@@ -8,6 +8,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -25,7 +26,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	ctx context.Context,
 	volumeRoot string,
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	poolRegistry etcdstore.Versioned[EnvironmentPoolRegistry],
+	poolRegistry etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry],
 	record hierarchyrecord.EnvironmentRecord,
 	components []componentrecord.Record,
 	task TaskRecord,
@@ -57,7 +58,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 			"Environment pool reservation does not match its provisioning record",
 		)
 	}
-	if err := validateEnvironmentPoolRegistry(poolRegistry.Record); err != nil {
+	if err := networkreservations.ValidateEnvironmentPoolRegistry(poolRegistry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningProvisioning ||
@@ -151,7 +152,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Key: deletionTombstoneKey("environment", record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
 		{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
-		{Key: environmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
+		{Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID)},
 		{Key: coordinationKey},
 		{Key: scriptSetKey},
@@ -171,7 +172,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(record.ID), Value: environmentValue},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
-		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
+		{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID), Value: epochValue},
 		{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 		{Type: etcdstore.MutationPut, Key: scriptSetKey, Value: scriptSetValue},
@@ -259,7 +260,7 @@ func validateInitialEnvironmentComponents(environmentID string, components []com
 
 func classifyEnvironmentCreateConflict(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	poolRegistry etcdstore.Versioned[EnvironmentPoolRegistry],
+	poolRegistry etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry],
 	components []componentrecord.Record,
 	operationID string,
 ) idempotencyPlanClassifier {

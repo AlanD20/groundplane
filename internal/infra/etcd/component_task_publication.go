@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"reflect"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -76,7 +77,7 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	}
 	for _, address := range preparation.addresses {
 		publication.conditions = append(publication.conditions, etcdstore.Condition{
-			Key:         componentAddressRegistryKey(address.Zone.Record.Desired.ID),
+			Key:         networkreservations.ComponentAddressRegistryKey(address.Zone.Record.Desired.ID),
 			ModRevision: address.Current.Revision,
 		})
 	}
@@ -97,14 +98,14 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 		if !address.Mutates {
 			continue
 		}
-		value, encodeErr := encodeComponentAddressRegistry(address.Zone.Record, address.Next)
+		value, encodeErr := networkreservations.EncodeComponentAddressRegistry(address.Zone.Record, address.Next)
 		if encodeErr != nil {
 			clearPreparedComponentTaskPublication(publication)
 			return preparedComponentTaskPublication{}, encodeErr
 		}
 		publication.values = append(publication.values, value)
 		publication.mutations = append(publication.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentAddressRegistryKey(address.Zone.Record.Desired.ID), Value: value,
+			Type: etcdstore.MutationPut, Key: networkreservations.ComponentAddressRegistryKey(address.Zone.Record.Desired.ID), Value: value,
 		})
 	}
 	return publication, nil

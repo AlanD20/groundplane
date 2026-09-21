@@ -83,9 +83,9 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 			runnerRemovalIntentKey(task.Target),
 			runnerObservationKey(task.Target),
 			runnerOwnerKey(evidence.ownerKind, evidence.ownerID, task.Target),
-			runnerTenantQuotaKey(evidence.tenantID),
-			runnerHostSlotKey(evidence.hostSlot),
-			systemPoolRegistryKey,
+			runnerrecord.RunnerTenantQuotaKey(evidence.tenantID),
+			runnerrecord.RunnerHostSlotKey(evidence.hostSlot),
+			runnerrecord.SystemPoolRegistryKey,
 			runnerRuntimeOwnershipKey(task.Target),
 		},
 		Revision: revision,
@@ -102,13 +102,13 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 	if stored.Values[6] == nil || stored.Values[8] == nil {
 		return errs.New(errs.KindStateConflict, "runner removal replay lost allocation registries")
 	}
-	quota, err := decodeRunnerTenantQuota(stored.Values[6].Value)
+	quota, err := runnerrecord.DecodeRunnerTenantQuota(stored.Values[6].Value)
 	if err != nil || quota.Validate() != nil {
-		return corruptRunnerTenantQuota()
+		return runnerrecord.CorruptRunnerTenantQuota()
 	}
-	system, err := decodeSystemPoolRegistry(stored.Values[8].Value)
+	system, err := runnerrecord.DecodeSystemPoolRegistry(stored.Values[8].Value)
 	if err != nil || system.Reservations == nil {
-		return corruptSystemPoolRegistry()
+		return runnerrecord.CorruptSystemPoolRegistry()
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if stored.Values[0] != nil || stored.Values[1] != nil || stored.Values[4] != nil || stored.Values[5] != nil ||

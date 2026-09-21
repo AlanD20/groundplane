@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 
@@ -91,8 +92,8 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 	}
 
 	registryKeys := []string{
-		environmentPoolRegistryKey,
-		zonePoolRegistryKey(current.Record.ID),
+		networkreservations.EnvironmentPoolRegistryKey,
+		networkreservations.ZonePoolRegistryKey(current.Record.ID),
 	}
 	registries, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: registryKeys, Revision: current.ReadRevision,
@@ -121,12 +122,12 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 			"Environment pool reservation registry is missing",
 		)
 	}
-	global, err := recordcodec.Decode[EnvironmentPoolRegistry](
+	global, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](
 		registries.Values[0].Value,
 		"environment_pool_registry",
 	)
-	if err != nil || validateEnvironmentPoolRegistry(global) != nil {
-		return IdempotencyTransactionResult{}, corruptEnvironmentPoolRegistry()
+	if err != nil || networkreservations.ValidateEnvironmentPoolRegistry(global) != nil {
+		return IdempotencyTransactionResult{}, networkreservations.CorruptEnvironmentPoolRegistry()
 	}
 	nextGlobal, canonical, err := global.Replace(
 		root,
@@ -144,15 +145,15 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 		)
 	}
 
-	zones := zonePoolRegistry{Reservations: map[string]string{}}
+	zones := networkreservations.ZonePoolRegistry{Reservations: map[string]string{}}
 	zoneRevision := int64(0)
 	if registries.Values[1] != nil {
-		zones, err = recordcodec.Decode[zonePoolRegistry](
+		zones, err = recordcodec.Decode[networkreservations.ZonePoolRegistry](
 			registries.Values[1].Value,
 			"zone_pool_registry",
 		)
-		if err != nil || validateZonePoolRegistry(zones) != nil {
-			return IdempotencyTransactionResult{}, corruptZonePoolRegistry()
+		if err != nil || networkreservations.ValidateZonePoolRegistry(zones) != nil {
+			return IdempotencyTransactionResult{}, networkreservations.CorruptZonePoolRegistry()
 		}
 		zoneRevision = registries.Values[1].ModRevision
 	}
@@ -163,7 +164,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 			"environment network_pool must be a canonical IPv4 CIDR",
 		)
 	}
-	zonePrefixes, err := zones.prefixes()
+	zonePrefixes, err := zones.Prefixes()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -194,12 +195,12 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 
 	conditions := append([]etcdstore.Condition(nil), fenceConditions...)
 	conditions = append(conditions,
-		etcdstore.Condition{Key: environmentPoolRegistryKey, ModRevision: registries.Values[0].ModRevision},
-		etcdstore.Condition{Key: zonePoolRegistryKey(current.Record.ID), ModRevision: zoneRevision},
+		etcdstore.Condition{Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: registries.Values[0].ModRevision},
+		etcdstore.Condition{Key: networkreservations.ZonePoolRegistryKey(current.Record.ID), ModRevision: zoneRevision},
 	)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(current.Record.ID), Value: environmentValue},
-		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: globalValue},
+		{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: globalValue},
 		epochMutation,
 	}
 	fenceCount := len(fenceConditions)

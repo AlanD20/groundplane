@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -24,7 +25,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			blueprints.EnvironmentBlueprintHeadKey(task.Target),
 			projectionrecord.EnvironmentComposeProjectionStorageKey(task.Target),
-			environmentPoolRegistryKey,
+			networkreservations.EnvironmentPoolRegistryKey,
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 			releaseGroupCollectionEpochKey(task.Target),
@@ -58,11 +59,11 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			return err
 		}
 		if stored.Values[4] != nil {
-			poolRegistry, err := recordcodec.Decode[EnvironmentPoolRegistry](
+			poolRegistry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](
 				stored.Values[4].Value,
 				"environment_pool_registry",
 			)
-			if err != nil || validateEnvironmentPoolRegistry(poolRegistry) != nil {
+			if err != nil || networkreservations.ValidateEnvironmentPoolRegistry(poolRegistry) != nil {
 				return errs.New(errs.KindInternal, "environment pool registry is inconsistent")
 			}
 			if _, retained := poolRegistry.Reservations[task.Target]; retained {
@@ -111,11 +112,11 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	if stored.Values[4] == nil {
 		return errs.New(errs.KindStateConflict, "environment deletion lost its pool")
 	}
-	poolRegistry, err := recordcodec.Decode[EnvironmentPoolRegistry](
+	poolRegistry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](
 		stored.Values[4].Value,
 		"environment_pool_registry",
 	)
-	if err != nil || validateEnvironmentPoolRegistry(poolRegistry) != nil ||
+	if err != nil || networkreservations.ValidateEnvironmentPoolRegistry(poolRegistry) != nil ||
 		poolRegistry.Reservations[environment.ID] != environment.NetworkPool {
 		return errs.New(errs.KindStateConflict, "environment deletion changed its pool")
 	}

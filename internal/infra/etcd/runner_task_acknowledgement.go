@@ -104,9 +104,9 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 			Key:         runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
 			ModRevision: allocation.slug.ModRevision,
 		},
-		{Key: runnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
-		{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
-		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
+		{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
+		{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
+		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(task.Target), Value: value}}
 	if proofValue != nil {
@@ -186,9 +186,9 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 				Key:         runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
 				ModRevision: allocation.slug.ModRevision,
 			},
-			{Key: runnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
-			{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
-			{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
+			{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
+			{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
+			{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
@@ -201,17 +201,17 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	if base.Values[5] != nil {
 		return runnerTaskChange{}, errs.New(errs.KindResourceInUse, "runner runtime cleanup proof is required")
 	}
-	quota, err := decodeRunnerTenantQuota(allocation.quota.Value)
+	quota, err := runnerrecord.DecodeRunnerTenantQuota(allocation.quota.Value)
 	if err != nil {
-		return runnerTaskChange{}, corruptRunnerTenantQuota()
+		return runnerTaskChange{}, runnerrecord.CorruptRunnerTenantQuota()
 	}
 	quota, err = quota.Release(task.Target)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	system, err := decodeSystemPoolRegistry(allocation.system.Value)
+	system, err := runnerrecord.DecodeSystemPoolRegistry(allocation.system.Value)
 	if err != nil {
-		return runnerTaskChange{}, corruptSystemPoolRegistry()
+		return runnerTaskChange{}, runnerrecord.CorruptSystemPoolRegistry()
 	}
 	system, err = system.ReleaseRunner(task.Target, record.Allocation.NetworkCIDR)
 	if err != nil {
@@ -234,9 +234,9 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			Key:  runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, task.Target),
 		},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: runnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerHostSlotKey(record.Allocation.Slot)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: systemPoolRegistryKey, Value: systemValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot)},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: systemValue},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerObservationKey(task.Target)},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerLifecycleKey(task.Target)},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerKey(task.Target)},

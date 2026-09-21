@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -103,7 +104,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	if pool.Revision <= 0 || pool.Record.Reservations[zone.Record.Desired.ID] != zone.Record.Desired.Subnet {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Zone subnet reservation is inconsistent")
 	}
-	addresses, err := getComponentAddressRegistry(ctx, repository.store, zone.Record)
+	addresses, err := networkreservations.GetComponentAddressRegistry(ctx, repository.store, zone.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -167,8 +168,8 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
-		{Key: zonePoolRegistryKey(zone.Record.EnvironmentID), ModRevision: pool.Revision},
-		{Key: componentAddressRegistryKey(zone.Record.Desired.ID), ModRevision: addresses.Revision},
+		{Key: networkreservations.ZonePoolRegistryKey(zone.Record.EnvironmentID), ModRevision: pool.Revision},
+		{Key: networkreservations.ComponentAddressRegistryKey(zone.Record.Desired.ID), ModRevision: addresses.Revision},
 		{Key: tombstoneKey},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
@@ -253,8 +254,8 @@ func selectedByEnabledComponent(components []componentrecord.Record, zoneID stri
 func classifyZoneDeletionStartConflict(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	pool etcdstore.Versioned[zonePoolRegistry],
-	addresses etcdstore.Versioned[componentAddressRegistry],
+	pool etcdstore.Versioned[networkreservations.ZonePoolRegistry],
+	addresses etcdstore.Versioned[networkreservations.ComponentAddressRegistry],
 	operationID string,
 	expectedHeadRevision int64,
 	projectionRevision int64,
@@ -378,7 +379,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	if pool.Revision <= 0 || pool.Record.Reservations[zone.Record.Desired.ID] != zone.Record.Desired.Subnet {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Zone subnet reservation is inconsistent")
 	}
-	addresses, err := getComponentAddressRegistry(ctx, repository.store, zone.Record)
+	addresses, err := networkreservations.GetComponentAddressRegistry(ctx, repository.store, zone.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -480,9 +481,9 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 			ModRevision: tombstone.Revision,
 		},
 		{Key: taskjournal.TaskStorageKey(parentTaskID), ModRevision: parentResult.Values[0].ModRevision},
-		{Key: zonePoolRegistryKey(intent.EnvironmentID), ModRevision: pool.Revision},
+		{Key: networkreservations.ZonePoolRegistryKey(intent.EnvironmentID), ModRevision: pool.Revision},
 		{
-			Key:         componentAddressRegistryKey(zone.Record.Desired.ID),
+			Key:         networkreservations.ComponentAddressRegistryKey(zone.Record.Desired.ID),
 			ModRevision: addresses.Revision,
 		},
 		{Key: zoneRemovalIntentKey(intent.OperationID), ModRevision: parentResult.Values[1].ModRevision},

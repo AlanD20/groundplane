@@ -100,9 +100,9 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 			Type: etcdstore.MutationPut, Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
 			Value: []byte(desired.ID),
 		},
-		{Type: etcdstore.MutationPut, Key: runnerTenantQuotaKey(desired.TenantID), Value: values.quota},
-		{Type: etcdstore.MutationPut, Key: runnerHostSlotKey(allocationState.host.slot), Value: values.host},
-		{Type: etcdstore.MutationPut, Key: systemPoolRegistryKey, Value: values.system},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), Value: values.quota},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerHostSlotKey(allocationState.host.slot), Value: values.host},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: values.system},
 	}
 	initiation, err := newRunnerTaskInitiation(desired, parents, taskjournal.TaskActorOperator)
 	if err != nil {
@@ -122,7 +122,7 @@ type runnerCreateValues struct {
 func encodeRunnerCreateValues(
 	record runnerrecord.RunnerRecord,
 	quota runnerallocation.RunnerTenantQuota,
-	host RunnerHostSlotRecord,
+	host runnerrecord.RunnerHostSlotRecord,
 	system runnerallocation.SystemPoolRegistry,
 	task TaskRecord,
 ) (runnerCreateValues, error) {
@@ -142,7 +142,7 @@ func encodeRunnerCreateValues(
 		result.clear()
 		return runnerCreateValues{}, err
 	}
-	result.host, err = encodeRunnerHostSlotRecord(host)
+	result.host, err = runnerrecord.EncodeRunnerHostSlotRecord(host)
 	if err != nil {
 		result.clear()
 		return runnerCreateValues{}, err
@@ -222,8 +222,8 @@ func newRunnerCreateEvidence(
 	evidence.lifecycle = add(etcdstore.Condition{Key: runnerLifecycleKey(desired.ID)})
 	evidence.slug = add(etcdstore.Condition{Key: runnerTenantSlugKey(desired.TenantID, desired.Slug)})
 	evidence.owner = add(etcdstore.Condition{Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
-	evidence.quota = add(etcdstore.Condition{Key: runnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
-	evidence.system = add(etcdstore.Condition{Key: systemPoolRegistryKey, ModRevision: allocation.system.Revision})
+	evidence.quota = add(etcdstore.Condition{Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
+	evidence.system = add(etcdstore.Condition{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.Revision})
 	evidence.tenant = add(etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})
 	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)})
 	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), desired.TenantID)})

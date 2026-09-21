@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -33,7 +34,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			blueprints.EnvironmentBlueprintHeadKey(task.Target),
 			projectionrecord.EnvironmentComposeProjectionStorageKey(task.Target),
-			environmentPoolRegistryKey,
+			networkreservations.EnvironmentPoolRegistryKey,
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 			releaseGroupCollectionEpochKey(task.Target),
@@ -95,11 +96,11 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	if err != nil {
 		return nil, nil, err
 	}
-	poolRegistry, err := recordcodec.Decode[EnvironmentPoolRegistry](
+	poolRegistry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](
 		stored.Values[4].Value,
 		"environment_pool_registry",
 	)
-	if err != nil || validateEnvironmentPoolRegistry(poolRegistry) != nil ||
+	if err != nil || networkreservations.ValidateEnvironmentPoolRegistry(poolRegistry) != nil ||
 		poolRegistry.Reservations[environment.ID] != environment.NetworkPool {
 		return nil, nil, errs.New(errs.KindInternal, "environment pool reservation is inconsistent")
 	}
@@ -186,12 +187,12 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			return nil, nil, err
 		}
 		conditions = append(conditions, etcdstore.Condition{
-			Key: environmentPoolRegistryKey, ModRevision: stored.Values[4].ModRevision,
+			Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: stored.Values[4].ModRevision,
 		})
 		if len(nextPoolRegistry.Reservations) == 0 {
 			mutations = append(
 				mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentPoolRegistryKey},
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: networkreservations.EnvironmentPoolRegistryKey},
 			)
 		} else {
 			poolRegistryValue, err := recordcodec.Encode("environment_pool_registry", nextPoolRegistry)
@@ -199,7 +200,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				return nil, nil, err
 			}
 			mutations = append(mutations, etcdstore.Mutation{
-				Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue,
+				Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: poolRegistryValue,
 			})
 		}
 		remaining, err := repository.store.Range(ctx, etcdstore.RangeRequest{

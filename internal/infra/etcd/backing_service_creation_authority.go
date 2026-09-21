@@ -9,6 +9,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -46,9 +47,9 @@ func backingServiceCreationConditions(
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID)},
 		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
 		{Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID)},
-		{Key: environmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
+		{Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
 		{Key: deletionTombstoneKey("zone", creation.Zone.Desired.ID)},
-		{Key: zonePoolRegistryKey(creation.Environment.ID)},
+		{Key: networkreservations.ZonePoolRegistryKey(creation.Environment.ID)},
 		{Key: servicerecord.ServiceRuntimeKey(creation.Service.Desired.ID)},
 		{Key: deletionTombstoneKey("service", creation.Service.Desired.ID)},
 	}

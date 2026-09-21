@@ -6,6 +6,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"reflect"
@@ -41,8 +42,8 @@ type ComponentTaskPreparation struct {
 
 type componentTaskAddressPreparation struct {
 	Zone    etcdstore.Versioned[zonerecord.Record]
-	Current etcdstore.Versioned[componentAddressRegistry]
-	Next    componentAddressRegistry
+	Current etcdstore.Versioned[networkreservations.ComponentAddressRegistry]
+	Next    networkreservations.ComponentAddressRegistry
 	Mutates bool
 }
 
@@ -241,7 +242,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		keys = append(keys, componentrecord.RecordKey(input.Current.Record.Desired.ID))
 	}
 	for _, zoneID := range zones {
-		keys = append(keys, componentAddressRegistryKey(zoneID))
+		keys = append(keys, networkreservations.ComponentAddressRegistryKey(zoneID))
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
@@ -277,7 +278,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	}
 
 	addresses := make([]componentTaskAddressPreparation, len(zones))
-	registries := make(map[string]componentAddressRegistry, len(zones))
+	registries := make(map[string]networkreservations.ComponentAddressRegistry, len(zones))
 	registryOffset := 1 + len(ordered)
 	for index, zoneID := range zones {
 		zoneChange := preparedZones[zoneID]
@@ -286,33 +287,33 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 			zoneRevision = zoneChange.Current.Revision
 		}
 		registryValue := state.Values[registryOffset+index]
-		currentRegistry := componentAddressRegistry{Reservations: map[string]string{}}
+		currentRegistry := networkreservations.ComponentAddressRegistry{Reservations: map[string]string{}}
 		registryRevision := int64(0)
 		if zoneChange.Current == nil && registryValue != nil {
-			return ComponentTaskPreparation{}, corruptComponentAddressRegistry()
+			return ComponentTaskPreparation{}, networkreservations.CorruptComponentAddressRegistry()
 		}
 		if registryValue != nil {
-			decoded, decodeErr := recordcodec.Decode[componentAddressRegistry](
+			decoded, decodeErr := recordcodec.Decode[networkreservations.ComponentAddressRegistry](
 				registryValue.Value,
 				"component_address_registry",
 			)
-			if decodeErr != nil || validateComponentAddressRegistry(zoneChange.Record, decoded) != nil {
-				return ComponentTaskPreparation{}, corruptComponentAddressRegistry()
+			if decodeErr != nil || networkreservations.ValidateComponentAddressRegistry(zoneChange.Record, decoded) != nil {
+				return ComponentTaskPreparation{}, networkreservations.CorruptComponentAddressRegistry()
 			}
 			currentRegistry = decoded
 			registryRevision = registryValue.ModRevision
 		}
-		registries[zoneID] = cloneComponentAddressRegistry(currentRegistry)
+		registries[zoneID] = networkreservations.CloneComponentAddressRegistry(currentRegistry)
 		addresses[index] = componentTaskAddressPreparation{
 			Zone: etcdstore.Versioned[zonerecord.Record]{
 				Record: zoneChange.Record, Revision: zoneRevision, ReadRevision: fixedRevision,
 			},
-			Current: etcdstore.Versioned[componentAddressRegistry]{
-				Record:       cloneComponentAddressRegistry(currentRegistry),
+			Current: etcdstore.Versioned[networkreservations.ComponentAddressRegistry]{
+				Record:       networkreservations.CloneComponentAddressRegistry(currentRegistry),
 				Revision:     registryRevision,
 				ReadRevision: state.ReadRevision,
 			},
-			Next: cloneComponentAddressRegistry(currentRegistry),
+			Next: networkreservations.CloneComponentAddressRegistry(currentRegistry),
 		}
 	}
 	if err := validatePreparedCurrentComponentReservations(ordered, registries); err != nil {
@@ -329,7 +330,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 				projected.PinnedIPv4 = currentBinding.address
 			} else {
 				addressIndex := sort.SearchStrings(zones, candidateZoneID)
-				registry, address, reserveErr := addresses[addressIndex].Next.reserve(
+				registry, address, reserveErr := addresses[addressIndex].Next.Reserve(
 					addresses[addressIndex].Zone.Record,
 					input.Current.Record.Desired.ID,
 				)
@@ -430,7 +431,7 @@ func projectedComponentCandidateZone(component core.Component) (string, bool, er
 
 func validatePreparedCurrentComponentReservations(
 	inputs []EnvironmentComponentCandidateInput,
-	registries map[string]componentAddressRegistry,
+	registries map[string]networkreservations.ComponentAddressRegistry,
 ) error {
 	for _, input := range inputs {
 		binding, present, err := componentTaskAddress(input.Current.Record)
@@ -470,7 +471,7 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 	if len(preparation.addresses) != len(wantZones) {
 		return errs.New(errs.KindValidationFailed, "Component candidate address evidence is incomplete")
 	}
-	registries := make(map[string]componentAddressRegistry, len(preparation.addresses))
+	registries := make(map[string]networkreservations.ComponentAddressRegistry, len(preparation.addresses))
 	previousZoneID := ""
 	for _, address := range preparation.addresses {
 		zoneID := address.Zone.Record.Desired.ID
@@ -478,8 +479,8 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 			address.Zone.ReadRevision < address.Zone.Revision || address.Current.Revision < 0 ||
 			address.Current.ReadRevision < address.Current.Revision ||
 			zonerecord.ValidateRecord(address.Zone.Record) != nil ||
-			validateComponentAddressRegistry(address.Zone.Record, address.Current.Record) != nil ||
-			validateComponentAddressRegistry(address.Zone.Record, address.Next) != nil {
+			networkreservations.ValidateComponentAddressRegistry(address.Zone.Record, address.Current.Record) != nil ||
+			networkreservations.ValidateComponentAddressRegistry(address.Zone.Record, address.Next) != nil {
 			return errs.New(errs.KindValidationFailed, "Component candidate address evidence is invalid")
 		}
 		if _, wanted := wantZones[zoneID]; !wanted ||
@@ -504,8 +505,8 @@ func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) Compone
 	}
 	for index, address := range preparation.addresses {
 		clone.addresses[index] = address
-		clone.addresses[index].Current.Record = cloneComponentAddressRegistry(address.Current.Record)
-		clone.addresses[index].Next = cloneComponentAddressRegistry(address.Next)
+		clone.addresses[index].Current.Record = networkreservations.CloneComponentAddressRegistry(address.Current.Record)
+		clone.addresses[index].Next = networkreservations.CloneComponentAddressRegistry(address.Next)
 	}
 	return clone
 }

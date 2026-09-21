@@ -9,6 +9,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
@@ -98,7 +99,7 @@ func environmentDeletionLiveAuthorityConditions(
 
 func environmentDeletionLiveAuthorityKeys(environmentID string) []string {
 	return []string{
-		zonePoolRegistryKey(environmentID),
+		networkreservations.ZonePoolRegistryKey(environmentID),
 		coordinationrecord.Key(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),
 		removalrecord.EnvironmentLockKey(environmentID),

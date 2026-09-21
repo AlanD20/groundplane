@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -78,7 +79,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	nextRegistry, err := registry.Record.reserve(input.Environment.Record, input.Zone)
+	nextRegistry, err := registry.Record.Reserve(input.Environment.Record, input.Zone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -114,7 +115,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
-		{Key: zonePoolRegistryKey(input.Environment.Record.ID), ModRevision: registry.Revision},
+		{Key: networkreservations.ZonePoolRegistryKey(input.Environment.Record.ID), ModRevision: registry.Revision},
 	}
 	removalLockIndex := len(conditions)
 	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
@@ -124,7 +125,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
-		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(input.Environment.Record.ID), Value: registryValue},
+		{Type: etcdstore.MutationPut, Key: networkreservations.ZonePoolRegistryKey(input.Environment.Record.ID), Value: registryValue},
 		epochMutation,
 	}
 	classifier := func(_ int64, values []*etcdstore.KeyValue) error {

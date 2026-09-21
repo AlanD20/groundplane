@@ -7,6 +7,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -81,7 +82,7 @@ func componentTaskDesiredProjectionZones(
 
 func validateComponentTaskReservations(
 	intent ComponentTaskIntent,
-	registries map[string]componentAddressRegistry,
+	registries map[string]networkreservations.ComponentAddressRegistry,
 ) error {
 	for _, candidate := range intent.Candidates {
 		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
