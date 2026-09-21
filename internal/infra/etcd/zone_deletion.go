@@ -42,7 +42,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	if err := environmentchanges.ValidateZoneRemovalIntent(intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	selected, err := selectedZoneDeletionRecord(authorities.Desired, zone, intent.ZoneID)
+	selected, err := environmentqueries.SelectZoneForDeletion(authorities.Desired, zone, intent.ZoneID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -344,7 +344,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	projection := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: zone.ReadRevision,
 	}
-	selected, err := selectedZoneDeletionRecord(projection, zone, intent.ZoneID)
+	selected, err := environmentqueries.SelectZoneForDeletion(projection, zone, intent.ZoneID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -543,38 +543,6 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, err
 	}
 	return idempotency.Apply(ctx, marker, plan)
-}
-
-func selectedZoneDeletionRecord(
-	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	supplied etcdstore.Versioned[zonerecord.Record],
-	zoneID string,
-) (etcdstore.Versioned[zonerecord.Record], error) {
-	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
-		supplied.Revision != projection.Revision || supplied.ReadRevision < supplied.Revision {
-		return etcdstore.Versioned[zonerecord.Record]{}, errs.New(errs.KindValidationFailed, "Zone deletion projection is invalid")
-	}
-	var selected *etcdstore.Versioned[zonerecord.Record]
-	for _, desired := range projection.Record.DesiredZones {
-		if desired.Desired.ID != zoneID {
-			continue
-		}
-		if selected != nil {
-			return etcdstore.Versioned[zonerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
-		}
-		joined, err := environmentqueries.JoinZone(projection, desired)
-		if err != nil {
-			return etcdstore.Versioned[zonerecord.Record]{}, err
-		}
-		selected = &joined
-	}
-	if selected == nil || selected.Record != supplied.Record {
-		return etcdstore.Versioned[zonerecord.Record]{}, errs.New(
-			errs.KindValidationFailed,
-			"Zone does not match the selected projection",
-		)
-	}
-	return *selected, nil
 }
 
 func validateZoneDeletionHierarchy(

@@ -20,77 +20,25 @@ import {
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { CopyButton } from "@/components/common/copy-button";
 import { cn } from "@/lib/utils";
+import type { Environment } from "@/lib/types";
 import type {
   BackupPolicyReplacement,
   BackupPolicySourceInput,
-  Environment,
-} from "@/lib/types";
+} from "@/features/backup/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   backupPolicyConfigured,
   deriveStrategy,
   backupSourceLabel,
 } from "@/features/backup/environment-backup-projection";
-
-export const BACKUP_FREQUENCY =
-  /^(?:\*-\*-\*|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \*-\*-\*) (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
-
-export const MAX_BACKUP_POLICY_SOURCES = 12;
-
-export function validateBackupPolicy(
-  input: BackupPolicyReplacement,
-  connectorAvailable: boolean,
-  sourcesAvailable: boolean,
-): string | null {
-  if (input.sources.length > MAX_BACKUP_POLICY_SOURCES)
-    return "Select at most 12 sources.";
-  const sourceKeys = input.sources.map(
-    (source) => `${source.kind}:${source.targetId}`,
-  );
-  if (new Set(sourceKeys).size !== sourceKeys.length)
-    return "Each source can be selected only once.";
-  if (
-    input.frequency !== undefined &&
-    !BACKUP_FREQUENCY.test(input.frequency)
-  ) {
-    return "Enter a valid daily or weekly UTC frequency.";
-  }
-  if (input.keep !== undefined && !isValidBackupPolicyKeep(input.keep)) {
-    return `Retention must be an integer between 1 and ${MAXIMUM_BACKUP_POLICY_KEEP}.`;
-  }
-  if (
-    input.sources.some((source) => source.kind === "config") &&
-    input.encryption !== "age"
-  ) {
-    return "Environment config contains secret values and requires age encryption.";
-  }
-  const configured =
-    input.frequency !== undefined ||
-    input.keep !== undefined ||
-    input.encryption !== undefined ||
-    input.connectorId !== undefined ||
-    input.sources.length > 0;
-  if (configured) {
-    if (input.frequency === undefined)
-      return "A configured policy requires a daily or weekly UTC frequency.";
-    if (input.keep === undefined)
-      return "A configured policy requires a positive retention count.";
-    if (input.encryption === undefined)
-      return "A configured policy requires an encryption choice.";
-    if (input.connectorId === undefined)
-      return "A configured policy requires a Connector.";
-    if (input.sources.length === 0)
-      return "A configured policy requires at least one source.";
-  }
-  if (!input.enabled) return null;
-  if (!configured) return "Configure the policy before enabling backups.";
-  if (!sourcesAvailable)
-    return "Every selected source must still exist in this Environment.";
-  if (!connectorAvailable)
-    return "Select a Connector owned by this Environment.";
-  return null;
-}
-
+import {
+  MAX_BACKUP_POLICY_SOURCES,
+  validateBackupPolicy,
+} from "./backup-policy-form-model";
+import {
+  backupPolicySourceOptions,
+  backupSourceInputLabel,
+} from "./backup-policy-source-options";
 export function BackupPolicyDialog({
   env,
   open,
@@ -118,43 +66,12 @@ export function BackupPolicyDialog({
   const selectedConnector = connectorOptions.find(
     (candidate) => candidate.id === connector,
   );
-  // Sources: one per attach (never per service — a shared attach is never
-  // backed up twice), any subset of volumes, and the environment's CONFIG
-  // (env entries: vars, files, secrets — values included, age-encrypted).
-  const attachOptions = policyState.attaches.filter((attach) => {
-    const backing = store.getBackingProject(attach.backingProjectId);
-    return (
-      backing?.environments?.[0]?.services.find(
-        (service) => service.id === attach.backingServiceId,
-      )?.adapter === "postgres:16"
-    );
-  });
-  const selectedRetainedAttachSources = backup.sources.filter(
-    (source) =>
-      source.kind === "attach" &&
-      sources.some(
-        (selected) =>
-          selected.kind === "attach" && selected.targetId === source.targetId,
-      ),
-  );
-  const unsupportedAttachSources = selectedRetainedAttachSources.filter(
-    (source) =>
-      policyState.attaches.some((attach) => attach.id === source.targetId) &&
-      !attachOptions.some((attach) => attach.id === source.targetId),
-  );
-  const missingAttachSources = selectedRetainedAttachSources.filter(
-    (source) =>
-      !policyState.attaches.some((attach) => attach.id === source.targetId),
-  );
-  const missingVolumeSources = backup.sources.filter(
-    (source) =>
-      source.kind === "volume" &&
-      sources.some(
-        (selected) =>
-          selected.kind === "volume" && selected.targetId === source.targetId,
-      ) &&
-      !policyState.volumes.some((volume) => volume.id === source.targetId),
-  );
+  const {
+    attachOptions,
+    unsupportedAttachSources,
+    missingAttachSources,
+    missingVolumeSources,
+  } = backupPolicySourceOptions(store, policyState, sources);
   useEffect(() => {
     if (!open) return;
     setEnabled(backup.enabled);
@@ -654,12 +571,4 @@ export function BackupPolicyDialog({
       </DrawerContent>
     </Drawer>
   );
-}
-
-export function backupSourceInputLabel(
-  store: ReturnType<typeof useStore>,
-  env: Environment,
-  source: BackupPolicySourceInput,
-) {
-  return backupSourceLabel(store, env, { id: "", ...source });
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useStore } from "@/lib/store";
-import type { BackupPolicySourceRecord, Environment } from "@/lib/types";
+import type { Environment } from "@/lib/types";
+import type { BackupPolicySourceRecord } from "@/features/backup/types";
 
 export function deriveStrategy(
   store: ReturnType<typeof useStore>,

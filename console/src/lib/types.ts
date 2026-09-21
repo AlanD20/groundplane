@@ -2,13 +2,19 @@ import type { EnvironmentNetworkCapacity } from "@/features/environment/types";
 import type { EnvironmentEntry } from "./entry-types";
 import type { ServiceObservation } from "@/features/service/service-observation";
 import type { BackingHooks } from "@/features/backing-service/api";
+import type { Script } from "@/features/script/types";
+import type { Volume } from "@/features/volume/types";
+import type { BackupPolicy } from "@/features/backup/types";
 export type { EnvironmentEntry, EnvironmentEntrySource } from "./entry-types";
 
 // Groundplane desired-state model (prototype). Mirrors the Blueprint contract.
 export type HealthState =
   "healthy" | "degraded" | "failed" | "stopped" | "pending" | "unknown";
+
 export type ServiceStrategy = "blue-green" | "recreate" | "rolling";
+
 export type ServiceRuntimeIntent = "running" | "stopped" | "absent";
+
 export type ValkeyAuthentication = "username_password" | "password" | "none";
 
 export type Slot = "blue" | "green";
@@ -145,6 +151,7 @@ export type CloudflareTunnelComponent = EnvironmentComponentBase & {
 export type EnvironmentComponent = CaddyComponent | CloudflareTunnelComponent;
 
 export type SecretKind = "env" | "file";
+
 export type ReusableSecretBase = {
   id: string;
   key: string;
@@ -166,114 +173,6 @@ export type PlatformReusableSecret = ReusableSecretBase & {
 export type ReusableSecret = ProjectReusableSecret | PlatformReusableSecret;
 
 export type { Script, ScriptHook } from "@/features/script/types";
-import type { Script } from "@/features/script/types";
-
-// A backup source is an ATTACH's database, a VOLUME, or the environment's
-// CONFIG (env entries: vars, files, secrets — values included, age-encrypted).
-// One source per attach, never per service, so a shared attach (api + worker +
-// scheduler) is backed up once, not three times. Config backs up THIS
-// environment's entries only — never backing environments, never
-// platform state.
-export type BackupSource = {
-  id: string;
-  kind: "attach" | "volume" | "config";
-  ref?: string; // attach id or volume name; omitted for config
-  name: string;
-  target: string;
-};
-
-export type BackupPolicy = {
-  enabled: boolean;
-  frequency: string; // Controller-evaluated bounded UTC frequency
-  keep: number;
-  encryption: "age" | "none";
-  ageRecipientRef?: string;
-  connector?: string;
-  sources: BackupSource[];
-  nextRun: string;
-  lastRun: string;
-  lastStatus: HealthState;
-};
-
-export type BackupPolicySourceRecord = {
-  id: string;
-  kind: BackupSource["kind"];
-  targetId: string;
-};
-
-export type BackupPolicySourceInput = Pick<
-  BackupPolicySourceRecord,
-  "kind" | "targetId"
->;
-
-// Authoritative Controller projection for the one Backup Policy singleton
-// owned by a tenant Environment. An unconfigured policy is represented by an
-// effective disabled document with optional configuration omitted and sources empty.
-export type BackupPolicyDocument = {
-  enabled: boolean;
-  nextRunAt: string | null;
-  frequency?: string;
-  keep?: number;
-  encryption?: "age" | "none";
-  connectorId?: string;
-  sources: BackupPolicySourceRecord[];
-  ageRecipient?: string;
-  keyEra?: number;
-  keyCreatedAt?: string;
-  keyRotatedAt?: string;
-};
-
-export type BackupPolicyReplacement = Omit<
-  BackupPolicyDocument,
-  | "sources"
-  | "ageRecipient"
-  | "keyEra"
-  | "keyCreatedAt"
-  | "keyRotatedAt"
-  | "nextRunAt"
-> & {
-  sources: BackupPolicySourceInput[];
-};
-
-export type BackupPolicyState = {
-  policy: BackupPolicyDocument;
-  attaches: {
-    id: string;
-    name: string;
-    backingProjectId: string;
-    backingServiceId: string;
-  }[];
-  volumes: { id: string; slug: string; key: string }[];
-  loaded: boolean;
-  loading: boolean;
-  saving: boolean;
-  loadError: string | null;
-  saveError: string | null;
-  recoveryPoints: RecoveryPointState;
-};
-
-export type RecoveryPointState = {
-  items: RecoveryPoint[];
-  nextCursor: string | null;
-  loaded: boolean;
-  loading: boolean;
-  loadingMore: boolean;
-  loadError: string | null;
-  failedCursor: string | null;
-};
-
-type RecoveryPointBase = {
-  id: string;
-  sourceId: string;
-  sourceKind: BackupSource["kind"];
-  targetId: string;
-  createdAt: string;
-  sizeBytes: number;
-  status: "verified";
-};
-
-export type RecoveryPoint = RecoveryPointBase &
-  ({ encrypted: true; keyEra: number } | { encrypted: false; keyEra?: never });
 
 export type DeployRecord = {
   id: string; // stable id — deploy history and rollback reference deployments by id
@@ -444,6 +343,7 @@ export type Runner = {
 // baked into the connector (stored encrypted).
 export type ConnectorCredentialInput =
   { kind: "ref"; name: string } | { kind: "value"; value: string };
+
 export type ConnectorCredential =
   { kind: "ref"; name: string } | { kind: "direct" };
 
@@ -510,6 +410,7 @@ export type TaskStatus =
   "pending" | "running" | "completed" | "failed" | "timed_out" | "aborted";
 
 export type TaskWorkspaceType = "platform" | "tenant";
+
 export type TaskActor = "operator" | "system";
 
 export type TaskJournalScope =
@@ -617,7 +518,6 @@ export type PlatformInfra = {
     reloaded?: string;
   };
 };
-import type { Volume } from "@/features/volume/types";
 
 export type {
   Volume,

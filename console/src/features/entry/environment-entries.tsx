@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRequiredParams } from "@/lib/router";
-import { Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Plus, ShieldCheck } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,9 @@ import {
 } from "@/components/ui/dialog";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
-import { RevealValue } from "@/components/common/reveal-value";
 import type { Environment, EnvironmentEntry } from "@/lib/types";
-
+import { EntryRow } from "./entry-row";
+import { BulkEntryDrawer } from "./bulk-entry-drawer";
 // ---- Variables (env vars + env files) ----
 
 export function EnvVarsCard({ env }: { env: Environment }) {
@@ -48,11 +48,6 @@ export function EnvVarsCard({ env }: { env: Environment }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkText, setBulkText] = useState("");
-  const [bulkExposure, setBulkExposure] = useState<string[]>(["all"]);
-  const [bulkStorage, setBulkStorage] = useState<"plain" | "secret">("plain");
-  const [bulkSaving, setBulkSaving] = useState(false);
-  const [bulkError, setBulkError] = useState<string | null>(null);
   const serviceScoped = env.services.filter((service) =>
     entries.some((entry) => entry.exposure.includes(service.name)),
   );
@@ -111,51 +106,6 @@ export function EnvVarsCard({ env }: { env: Environment }) {
       }
       return [...services, serviceName];
     });
-  }
-
-  function toggleBulkServiceExposure(serviceName: string) {
-    setBulkExposure((current) => {
-      const services = current.filter((candidate) => candidate !== "all");
-      if (services.includes(serviceName)) {
-        return services.filter((candidate) => candidate !== serviceName);
-      }
-      return [...services, serviceName];
-    });
-  }
-
-  async function saveBulkEntries() {
-    if (bulkExposure.length === 0) {
-      setBulkError("Select all services or at least one service.");
-      return;
-    }
-    let entries: { key: string; value: string }[];
-    try {
-      entries = parseBulkEnvironmentEntries(bulkText);
-    } catch (error) {
-      setBulkError(
-        error instanceof Error ? error.message : "Invalid bulk Entry input",
-      );
-      return;
-    }
-    setBulkSaving(true);
-    setBulkError(null);
-    try {
-      await store.bulkUpsertEntries(env.id, {
-        entries,
-        exposure: bulkExposure,
-        secret: bulkStorage === "secret",
-      });
-      setBulkOpen(false);
-      setBulkText("");
-      setBulkExposure(["all"]);
-      setBulkStorage("plain");
-    } catch (error) {
-      setBulkError(
-        error instanceof Error ? error.message : "Unable to bulk edit Entries",
-      );
-    } finally {
-      setBulkSaving(false);
-    }
   }
 
   async function saveEntry() {
@@ -527,106 +477,11 @@ export function EnvVarsCard({ env }: { env: Environment }) {
           </DialogFooter>
         </DrawerContent>
       </Drawer>
-      <Drawer
-        open={bulkOpen}
-        onOpenChange={(next) => {
-          setBulkOpen(next);
-          if (!next) setBulkError(null);
-        }}
-      >
-        <DrawerContent>
-          <DialogHeader>
-            <DialogTitle>
-              Bulk edit environment variables · {env.name}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="entry-bulk-values">Variables</Label>
-              <Textarea
-                id="entry-bulk-values"
-                value={bulkText}
-                onChange={(event) => setBulkText(event.target.value)}
-                rows={12}
-                spellCheck={false}
-                className="font-mono text-xs"
-                placeholder={
-                  "APP_ENV=production\nDATABASE_URL=postgres://app:pass@db/app\nEMPTY_VALUE="
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                One KEY=value per line. Values may contain =. Blank lines and
-                lines beginning with # are ignored. Matching keys are updated
-                and omitted keys remain unchanged.
-              </p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Storage</Label>
-              <div className="flex gap-2">
-                {(["plain", "secret"] as const).map((candidate) => (
-                  <Button
-                    key={candidate}
-                    variant={bulkStorage === candidate ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setBulkStorage(candidate)}
-                  >
-                    {candidate === "plain" ? "Plain values" : "Secret values"}
-                  </Button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Existing keys must already use the selected storage class.
-              </p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Exposure</Label>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={bulkExposure.includes("all") ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setBulkExposure(["all"])}
-                >
-                  All services
-                </Button>
-                {env.services.map((service) => (
-                  <Button
-                    key={service.id}
-                    variant={
-                      bulkExposure.includes(service.name)
-                        ? "default"
-                        : "outline"
-                    }
-                    size="sm"
-                    onClick={() => toggleBulkServiceExposure(service.name)}
-                  >
-                    {service.name}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            {bulkError && (
-              <p className="text-sm text-destructive">{bulkError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setBulkOpen(false)}
-              disabled={bulkSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                bulkSaving || !bulkText.trim() || bulkExposure.length === 0
-              }
-              onClick={() => void saveBulkEntries()}
-            >
-              {bulkSaving ? "Applying…" : "Apply bulk edit"}
-            </Button>
-          </DialogFooter>
-        </DrawerContent>
-      </Drawer>
+      <BulkEntryDrawer
+        env={env}
+        bulkOpen={bulkOpen}
+        setBulkOpen={setBulkOpen}
+      />
       <TaskRunnerDialog
         open={!!removing}
         onOpenChange={(next) => !next && setRemoving(null)}
@@ -655,100 +510,5 @@ export function EnvVarsCard({ env }: { env: Environment }) {
         }}
       />
     </>
-  );
-}
-
-export function parseBulkEnvironmentEntries(
-  input: string,
-): { key: string; value: string }[] {
-  const entries: { key: string; value: string }[] = [];
-  const seen = new Set<string>();
-  input
-    .replaceAll("\r\n", "\n")
-    .split("\n")
-    .forEach((rawLine, index) => {
-      const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith("#")) return;
-      const separator = line.indexOf("=");
-      if (separator < 0)
-        throw new Error(`Line ${index + 1} must use KEY=value.`);
-      const key = line.slice(0, separator).trim();
-      if (!key) throw new Error(`Line ${index + 1} has an empty key.`);
-      if (seen.has(key))
-        throw new Error(`Line ${index + 1} duplicates ${key}.`);
-      seen.add(key);
-      entries.push({ key, value: line.slice(separator + 1) });
-    });
-  if (entries.length === 0)
-    throw new Error("Enter at least one KEY=value line.");
-  if (entries.length > 200)
-    throw new Error("Bulk edit accepts at most 200 variables.");
-  return entries;
-}
-
-export function EntryRow({
-  label,
-  value,
-  path,
-  file,
-  secret,
-  loadValue,
-  onEdit,
-  onRemove,
-}: {
-  label: string;
-  value?: string;
-  path?: string;
-  file?: boolean;
-  secret?: boolean;
-  loadValue?: () => Promise<string>;
-  onEdit?: () => void;
-  onRemove?: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="truncate font-mono text-sm">{label}</span>
-        {file && <Badge variant="muted">file</Badge>}
-        {secret && <Badge variant="warning">secret</Badge>}
-      </span>
-      <span className="flex items-center gap-2">
-        {path && (
-          <span className="truncate font-mono text-xs text-muted-foreground">
-            {path}
-          </span>
-        )}
-        {secret && loadValue ? (
-          <RevealValue loadValue={loadValue} label={label} />
-        ) : !path ? (
-          <span className="truncate font-mono text-xs text-muted-foreground">
-            {value}
-          </span>
-        ) : null}
-        {onEdit && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground hover:text-primary"
-            onClick={onEdit}
-            title={`Edit ${label}`}
-          >
-            <Pencil className="size-3.5" />
-          </Button>
-        )}
-        {onRemove && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={onRemove}
-            title={`Remove ${label}`}
-          >
-            <Trash2 className="size-3.5" />
-          </Button>
-        )}
-      </span>
-    </div>
   );
 }

@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import type { operations } from "@/lib/api.generated";
 import type { Environment } from "@/lib/types";
-import type { EnvironmentLifecycle } from "@/features/environment/use-environment-lifecycle";
+import type { EnvironmentLifecycle } from "@/features/environment/lifecycle-types";
 import {
   findEnvironment,
   type EnvironmentRemovalDraft,
