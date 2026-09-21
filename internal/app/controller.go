@@ -750,55 +750,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret creation service: %w", err)
 	}
-	connectorCreationRepository, err := connectors.NewCreationRepository(
-		hierarchyRecords,
-		secretRecords,
-		connectorRecords,
+	connectorComposition, err := newControllerConnectorComposition(
+		store, hierarchyRecords, secretRecords, connectorRecords, intentCoordinator, idempotency, intentProtector,
 	)
 	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Connector creation repositories: %w", err)
-	}
-	connectorCreationIdempotency, err := connectors.NewCreationIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Connector creation idempotency: %w", err)
-	}
-	connectorMutations, err := connectors.NewCreationService(
-		connectorCreationRepository,
-		intentProtector,
-		connectorCreationIdempotency,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Connector creation service: %w", err)
-	}
-	connectorDeletionRepository, err := connectors.NewDeletionRepository(hierarchyRecords, connectorRecords)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize Connector deletion repositories", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	connectorDeletionIdempotency, err := connectors.NewDeletionIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize Connector deletion idempotency", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	connectorDeletions, err := connectors.NewDeletionService(
-		connectorDeletionRepository,
-		connectorDeletionIdempotency,
-	)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize Connector deletion service", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
+		return nil, err
 	}
 	secretDeletionIdempotency, err := secrets.NewDeletionIdempotency(intentCoordinator, idempotency)
 	if err != nil {
@@ -1063,8 +1019,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		SecretMutations:       secretMutations,
 		SecretDeletions:       secretDeletions,
 		Connectors:            connectorReads,
-		ConnectorMutations:    connectorMutations,
-		ConnectorDeletions:    connectorDeletions,
+		ConnectorMutations:    connectorComposition.mutations,
+		ConnectorDeletions:    connectorComposition.deletions,
 		Runners:               runnerRecords,
 		RunnerProvisioning:    runnerComposition.provisioning,
 		RunnerMutations:       runnerComposition.mutations,
