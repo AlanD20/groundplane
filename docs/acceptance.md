@@ -2,8 +2,8 @@
 
 The [QA matrix](qa-matrix.md) owns the case catalogue. This register records
 what earlier runs established, failed to establish, or left blocked. It does
-not change feature requirements and does not qualify the current unverified
-production refactor.
+not change feature requirements and does not establish current live-runtime
+qualification. Local delivery checks and operator-journey evidence are separate.
 
 The detailed pre-consolidation reports remain available in Git at `08ccb78b4`.
 That history is an archive, not current host state, an executable recipe, or

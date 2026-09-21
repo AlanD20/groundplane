@@ -7,33 +7,16 @@ acting. Completed fix narratives belong in Git history or the
 
 ## Architecture and tests
 
-Production restructuring through `08ccb78b4` was explicitly implementation-only.
-Tests, generated clients and gate/baseline metadata were not migrated or run.
-Their compatibility with the new module boundaries is unverified. Source
-organization alone cannot establish a passing build or architecture gate.
+Tests and generated clients have been reconciled with the new module owners.
+The release architecture gate passes with 83 previously approved findings
+deferred for 0.0.1; this is not strict architecture compliance. Production totals
+remain below the approved ceilings, and renamed test-import entries retain their
+original dependency layers and expiry.
 
-The historical 0.0.1 structural exceptions remain in the unchanged machine-readable
-baseline/deferral files. Their old finding counts are not current measurements.
-The owner later authorized production cleanup; the earlier prose saying cleanup
-was forbidden is superseded. No exception permits ignoring a demonstrated safety,
-security, compilation or runtime defect.
-
-Closure: when authorized, reconcile the excluded test/generation/gate surfaces
-with the actual production structure and complete the required delivery gate.
-Do not add compatibility shims, relax bounds or manufacture green results.
-
-## Proxy-probe cancellation
-
-The 2026-09-20 release gate reproduced a failure in
-`TestProxyProbeCancellationUnblocksAttachedRead`. Its fake attachment returns both
-a connection and cancellation error; the adapter returns before arranging that
-connection's close. This is a reproduced local sequence, not proof of the real
-Docker client's error-response ownership contract. No closure is recorded here.
-
-Closure: establish who owns an attachment returned with an error, correct the
-responsible adapter or fixture and prove cancellation releases owned connections.
-Do not remove the regression merely to pass CI. Reproduction details remain in
-the pre-migration version of this file at `08ccb78b4`.
+Closure of the remaining architecture debt requires removing those findings, not
+extending exceptions automatically. No exception permits ignoring a demonstrated
+safety, security, compilation or runtime defect. Local delivery checks do not
+replace the live qualification below.
 
 ## Live logs and observations
 

@@ -1,10 +1,9 @@
 # Capability status and limits
 
-**GP is not fully qualified for production.** The production architecture cleanup
-ending at `08ccb78b4` preserved intended behavior but deliberately ran no builds,
-tests, generation, architecture gates or runtime QA. This documentation migration
-does not change that boundary. Earlier passes apply only to their recorded builds
-and cases, not automatically to the restructured source.
+**GP is not fully qualified for production.** The architecture cleanup and test
+migration are integrated; local delivery checks do not qualify live hosting,
+upgrades or recovery. Earlier operator-journey passes apply only to their recorded
+builds and cases, not automatically to the restructured source.
 
 The [QA matrix](qa-matrix.md) owns behavioral cases and variants.
 [Acceptance](acceptance.md#historical-evidence-register) owns historical results. This page summarizes gaps;

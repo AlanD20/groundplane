@@ -73,15 +73,17 @@ an unrun privileged check is not a pass.
 
 ### Approved architecture debt for 0.0.1
 
-The unchanged [deferred snapshot](../architecture-deferred.json) and
+The [deferred snapshot](../architecture-deferred.json) and
 [baseline](../architecture-baseline.json) record the exact previously approved
 0.0.1 structural exceptions, including Custom hooks and the 92-line deletion guard.
 The release checker permits only matching historical findings; it does not accept
 new debt. Do not regenerate allowances without approval.
 
-The production restructuring is integrated, but tests, gate metadata and generated
-artifacts were excluded and no gate ran afterward. Old finding totals are not
-current results. Strict compliance and release qualification remain unproved.
+The production restructuring and test migration are integrated. Approved totals
+were re-anchored below the previous ceilings; per-file limits were not raised.
+Existing test-import deferrals now name the replacement child modules, preserving
+the same test files, dependency layers and 0.0.1 expiry. These changes do not
+authorize new exceptions. Strict compliance and live qualification remain unproved.
 See [remaining qualification](issues/runtime-qualification.md#architecture-and-tests).
 The 0.0.1 exception does not automatically extend to later releases or waive
 security, data safety, builds, races or generated-artifact parity.
