@@ -30,7 +30,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	current *etcdstore.Versioned[servicerecord.ServiceRecord],
 	record servicerecord.ServiceRecord,
-	references etcd.ServiceMutationReferences,
+	references servicerecord.ServiceMutationReferences,
 	request blueprints.EnvironmentServiceMutationRequest,
 	action blueprints.EnvironmentServiceMutationAction,
 	status int,
@@ -199,7 +199,7 @@ func buildServiceDesiredProjection(
 	current projectionrecord.EnvironmentComposeProjection,
 	hasCurrent bool,
 	record servicerecord.ServiceRecord,
-	references etcd.ServiceMutationReferences,
+	references servicerecord.ServiceMutationReferences,
 	create bool,
 	revisionID string,
 	generation uint64,
@@ -294,7 +294,7 @@ func buildServiceDesiredProjection(
 	return candidate, nil
 }
 
-func serviceArtifactZones(references etcd.ServiceMutationReferences) []composerender.ServiceArtifactZone {
+func serviceArtifactZones(references servicerecord.ServiceMutationReferences) []composerender.ServiceArtifactZone {
 	zones := make([]composerender.ServiceArtifactZone, len(references.Zones))
 	for index, zone := range references.Zones {
 		zones[index] = composerender.ServiceArtifactZone{

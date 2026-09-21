@@ -26,7 +26,7 @@ func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) error {
-	if err := validateServiceVersion(current); err != nil {
+	if err := servicerecord.ValidateServiceVersion(current); err != nil {
 		return err
 	}
 	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||

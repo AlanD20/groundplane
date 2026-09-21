@@ -25,7 +25,7 @@ type EnvironmentServiceDesiredPublication struct {
 	Revision             blueprints.EnvironmentDesiredRevisionIdentity
 	Projection           projectionrecord.EnvironmentComposeProjection
 	Change               blueprints.EnvironmentBlueprintServiceChange
-	References           ServiceMutationReferences
+	References           servicerecord.ServiceMutationReferences
 	Marker               idempotencyrecord.IdempotencyMarker
 }
 
@@ -56,7 +56,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 			errs.KindValidationFailed, "direct Service desired publication identity is invalid",
 		)
 	}
-	if err := validateServiceMutationMarker(input.Marker, input.Environment.Record.ID); err != nil {
+	if err := servicerecord.ValidateServiceMutationMarker(input.Marker, input.Environment.Record.ID); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if input.Marker.Locator != input.Claim.Locator ||
@@ -93,7 +93,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err := validateDirectEnvironmentServiceChange(input); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	referenceConditions, err := serviceMutationReferenceConditions(input.Change.Record, input.References)
+	referenceConditions, err := servicerecord.ServiceMutationReferenceConditions(input.Change.Record, input.References)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -174,7 +174,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		if input.Change.Current == nil && values[5] != nil {
 			return errs.New(errs.KindStateConflict, "Service runtime identity is already in use")
 		}
-		if err := classifyServiceMutationReferenceConflict(values[referenceOffset:fenceOffset], input.References); err != nil {
+		if err := servicerecord.ClassifyServiceMutationReferenceConflict(values[referenceOffset:fenceOffset], input.References); err != nil {
 			return err
 		}
 		if conflict := fence.ClassifyConflict(values[fenceOffset:]); conflict != nil {
@@ -258,7 +258,7 @@ func validateDirectEnvironmentServiceChange(input EnvironmentServiceDesiredPubli
 	if change.Current == nil {
 		return nil
 	}
-	if err := validateServiceVersion(*change.Current); err != nil {
+	if err := servicerecord.ValidateServiceVersion(*change.Current); err != nil {
 		return err
 	}
 	if change.Current.Revision != input.ExpectedHeadRevision ||

@@ -87,7 +87,7 @@ func validateScriptHierarchy(
 	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
-	if err := validateServiceVersion(target); err != nil {
+	if err := servicerecord.ValidateServiceVersion(target); err != nil {
 		return err
 	}
 	if target.Record.Desired.Replicas < 1 {

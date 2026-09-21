@@ -111,7 +111,7 @@ func (service *serviceMutationService) createServiceOnce(
 	return service.publishServiceDesiredMutation(
 		ctx, environment, project, nil,
 		servicerecord.ServiceRecord{EnvironmentID: input.EnvironmentID, Desired: desired},
-		etcd.ServiceMutationReferences{},
+		servicerecord.ServiceMutationReferences{},
 		serviceMutationAuditFromCreate(input), blueprints.EnvironmentServiceMutationCreate,
 		http.StatusCreated, locator, evidence,
 	)
@@ -234,22 +234,22 @@ func (service *serviceMutationService) serviceHierarchy(
 func (service *serviceMutationService) resolveServiceReferences(
 	ctx context.Context,
 	record servicerecord.ServiceRecord,
-) (etcd.ServiceMutationReferences, error) {
+) (servicerecord.ServiceMutationReferences, error) {
 	zones, err := service.listAllZones(ctx, record.EnvironmentID)
 	if err != nil {
-		return etcd.ServiceMutationReferences{}, err
+		return servicerecord.ServiceMutationReferences{}, err
 	}
 	zoneByName := make(map[string]etcdstore.Versioned[zonerecord.Record], len(zones))
 	for _, zone := range zones {
 		zoneByName[zone.Record.Desired.Name] = zone
 	}
-	references := etcd.ServiceMutationReferences{
+	references := servicerecord.ServiceMutationReferences{
 		Zones: make([]etcdstore.Versioned[zonerecord.Record], 0, len(record.Desired.Zones)),
 	}
 	for _, name := range record.Desired.Zones {
 		zone, ok := zoneByName[name]
 		if !ok {
-			return etcd.ServiceMutationReferences{}, errs.Newf(
+			return servicerecord.ServiceMutationReferences{}, errs.Newf(
 				errs.KindValidationFailed,
 				"Service Zone %q was not found",
 				name,
@@ -259,7 +259,7 @@ func (service *serviceMutationService) resolveServiceReferences(
 	}
 	services, err := service.listAllServices(ctx, record.EnvironmentID)
 	if err != nil {
-		return etcd.ServiceMutationReferences{}, err
+		return servicerecord.ServiceMutationReferences{}, err
 	}
 	serviceByName := make(map[string]etcdstore.Versioned[servicerecord.ServiceRecord], len(services))
 	for _, candidate := range services {
@@ -273,7 +273,7 @@ func (service *serviceMutationService) resolveServiceReferences(
 	for _, name := range dependencyNames {
 		dependency, ok := serviceByName[name]
 		if !ok || dependency.Record.Desired.ID == record.Desired.ID {
-			return etcd.ServiceMutationReferences{}, errs.Newf(
+			return servicerecord.ServiceMutationReferences{}, errs.Newf(
 				errs.KindValidationFailed,
 				"Service dependency %q was not found",
 				name,
