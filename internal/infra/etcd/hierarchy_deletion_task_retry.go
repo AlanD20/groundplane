@@ -176,7 +176,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	}
 	nextTombstone := operation.Tombstone
 	nextTombstone.CurrentTaskID = retry.ID
-	nextTombstone.AttemptDeadline = retry.CreatedAt.Add(hierarchyDeletionAttemptTimeout)
+	nextTombstone.AttemptDeadline = retry.CreatedAt.Add(hierarchydeletion.AttemptTimeout)
 	nextTombstone.Terminal = nil
 	nextFence := operation.Fence
 	nextFence.CurrentTaskID = retry.ID

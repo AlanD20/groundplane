@@ -1,7 +1,6 @@
-package etcd
+package hierarchydeletionplanning
 
 import (
-	"crypto/sha256"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
@@ -15,30 +14,9 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/oklog/ulid/v2"
 )
-
-func hierarchyDeletionStablePrivateID(prefix string, values ...string) string {
-	digest := hierarchyDeletionFoldDigest("groundplane-deletion-private-id-v1", values...)
-	return prefix + "_" + digest[:32]
-}
-
-func hierarchyDeletionStableOperationID(values ...string) string {
-	digest := sha256.New()
-	_, _ = digest.Write([]byte("groundplane-deletion-child-operation-v1"))
-	for _, value := range values {
-		_, _ = digest.Write([]byte{0})
-		_, _ = digest.Write([]byte(value))
-	}
-	value := digest.Sum(nil)
-	var identifier ulid.ULID
-	copy(identifier[:], value[:len(identifier)])
-	clear(value)
-	return string(ids.KindOperation) + "_" + identifier.String()
-}
 
 func terminalHierarchyDeletionNodes(nodes []HierarchyDeletionMembershipNode) []string {
 	if len(nodes) == 0 {
@@ -71,7 +49,7 @@ func hierarchyDeletionAgentProcedure(action hierarchydeletion.HierarchyDeletionA
 	}[action]
 }
 
-func hierarchyDeletionControllerFinalizer(action hierarchydeletion.HierarchyDeletionActionKind) string {
+func HierarchyDeletionControllerFinalizer(action hierarchydeletion.HierarchyDeletionActionKind) string {
 	return map[hierarchydeletion.HierarchyDeletionActionKind]string{
 		hierarchydeletion.HierarchyDeletionServiceRemove:   "service.remove",
 		hierarchydeletion.HierarchyDeletionEntryRemove:     "entry.remove",

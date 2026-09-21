@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionplanning
 
 import (
 	"context"
@@ -63,9 +63,9 @@ func decodeHierarchyDeletionZoneEvidence(value []byte) (hierarchyDeletionZoneEvi
 	return evidence, nil
 }
 
-func hierarchyDeletionZoneEvidenceAtRevision(
+func HierarchyDeletionZoneEvidenceAtRevision(
 	ctx context.Context,
-	store hierarchyStore,
+	store membershipStore,
 	zoneID string,
 	snapshotRevision int64,
 	projectionRevision int64,

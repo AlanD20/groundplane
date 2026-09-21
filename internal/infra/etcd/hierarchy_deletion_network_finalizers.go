@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -27,7 +28,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 	}
 	conditions := []etcdstore.Condition{{Key: routerecord.ObservationKey(action.TargetID)}}
 	mutations := []etcdstore.Mutation{}
-	digest := hierarchyDeletionBytesDigest([]byte(action.TargetID))
+	digest := hierarchydeletion.HierarchyDeletionBytesDigest([]byte(action.TargetID))
 	if result.Entry != nil {
 		if result.Entry.Key != routerecord.ObservationKey(action.TargetID) {
 			clear(result.Entry.Value)
@@ -38,7 +39,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 			return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		conditions[0].ModRevision = result.Entry.ModRevision
-		digest = hierarchyDeletionBytesDigest(result.Entry.Value)
+		digest = hierarchydeletion.HierarchyDeletionBytesDigest(result.Entry.Value)
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routerecord.ObservationKey(action.TargetID)})
 		clear(result.Entry.Value)
 	}
@@ -78,7 +79,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 	operation HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	evidence, zoneValue, err := hierarchyDeletionZoneEvidenceAtRevision(
+	evidence, zoneValue, err := hierarchydeletionplanning.HierarchyDeletionZoneEvidenceAtRevision(
 		ctx, repository.store, action.TargetID, operation.Tombstone.SnapshotRevision, action.TargetRevision,
 	)
 	if err != nil {
@@ -126,7 +127,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	effects := hierarchyDeletionControllerEffects{
-		fixedInputDigest: hierarchyDeletionBytesDigest(zoneValue),
+		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(zoneValue),
 		conditions: []etcdstore.Condition{
 			{Key: poolKey, ModRevision: values.Values[0].ModRevision},
 			{Key: addressesKey, ModRevision: etcdstore.RevisionOf(values.Values[1])},

@@ -77,7 +77,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDe
 	if len(indexKeys) == 0 {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: primary.Key})
 		return hierarchyDeletionControllerEffects{
-			fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value),
+			fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value),
 			conditions:       conditions,
 			mutations:        mutations,
 		}, nil
@@ -103,7 +103,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDe
 	}
 	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: primary.Key})
 	return hierarchyDeletionControllerEffects{
-		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
+		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
 	}, nil
 }
 

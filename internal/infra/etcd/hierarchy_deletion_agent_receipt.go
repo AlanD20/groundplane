@@ -79,7 +79,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 		receipt.ParentOperationID != operation.Tombstone.OperationID || receipt.ActionOrdinal != action.Ordinal ||
 		receipt.ChildOperationID != entry.ChildOperationID || receipt.AttemptID != entry.CurrentAttemptID ||
 		progress.ReceiptRevision != evidence.Values[0].ModRevision ||
-		progress.ReceiptDigest != hierarchyDeletionBytesDigest(evidence.Values[0].Value) {
+		progress.ReceiptDigest != hierarchydeletion.HierarchyDeletionBytesDigest(evidence.Values[0].Value) {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return &HierarchyDeletionAgentTerminalProof{
@@ -87,7 +87,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 		TaskID: receipt.TaskID, AssignmentID: receipt.AssignmentID,
 		AttemptGeneration: receipt.AttemptGeneration, ReceiptRevision: evidence.Values[0].ModRevision,
 		ReceiptDigest: progress.ReceiptDigest, ProgressKey: progressKey,
-		ProgressDigest:     hierarchyDeletionBytesDigest(evidence.Values[1].Value),
+		ProgressDigest:     hierarchydeletion.HierarchyDeletionBytesDigest(evidence.Values[1].Value),
 		TerminalTaskDigest: receipt.TerminalTaskDigest, Terminal: receipt.Terminal,
 		ResultDigest: receipt.ResultDigest, ErrorDigest: receipt.ErrorDigest,
 		CheckpointDigest: receipt.CheckpointDigest,
@@ -124,7 +124,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 			return getErr
 		}
 		if receiptRead.Entry == nil ||
-			hierarchyDeletionBytesDigest(receiptRead.Entry.Value) != entry.RetrySharedOwner.ReceiptDigest {
+			hierarchydeletion.HierarchyDeletionBytesDigest(receiptRead.Entry.Value) != entry.RetrySharedOwner.ReceiptDigest {
 			return hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		var receipt hierarchydeletion.HierarchyDeletionTerminalAttemptReceipt
@@ -155,8 +155,8 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 	if err != nil {
 		return err
 	}
-	terminalTaskDigest := hierarchyDeletionBytesDigest(taskValue)
-	checkpointDigest := hierarchyDeletionFoldDigest(
+	terminalTaskDigest := hierarchydeletion.HierarchyDeletionBytesDigest(taskValue)
+	checkpointDigest := hierarchydeletion.HierarchyDeletionFoldDigest(
 		"gp-deletion-terminal-checkpoint-v1", entry.CheckpointDigest, terminalTaskDigest,
 		resultDigest, errorDigest, string(terminal), strconv.FormatInt(taskRevision, 10),
 	)
@@ -174,7 +174,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 		return err
 	}
 	defer clear(receiptValue)
-	receiptDigest := hierarchyDeletionBytesDigest(receiptValue)
+	receiptDigest := hierarchydeletion.HierarchyDeletionBytesDigest(receiptValue)
 	receiptKey, _ := hierarchydeletion.HierarchyDeletionReceiptKey(
 		operation.Tombstone.OperationID,
 		entry.ChildOperationID,
@@ -281,7 +281,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionProgress(
 	if err != nil {
 		return err
 	}
-	if receiptRead.Entry == nil || hierarchyDeletionBytesDigest(receiptRead.Entry.Value) != receiptDigest {
+	if receiptRead.Entry == nil || hierarchydeletion.HierarchyDeletionBytesDigest(receiptRead.Entry.Value) != receiptDigest {
 		if receiptRead.Entry != nil {
 			clear(receiptRead.Entry.Value)
 		}
@@ -340,7 +340,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionProgress(
 		return getErr
 	}
 	if existing.Entry == nil ||
-		hierarchyDeletionBytesDigest(existing.Entry.Value) != hierarchyDeletionBytesDigest(progressValue) {
+		hierarchydeletion.HierarchyDeletionBytesDigest(existing.Entry.Value) != hierarchydeletion.HierarchyDeletionBytesDigest(progressValue) {
 		if existing.Entry != nil {
 			clear(existing.Entry.Value)
 		}

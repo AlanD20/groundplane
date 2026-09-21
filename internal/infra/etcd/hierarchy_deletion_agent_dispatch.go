@@ -212,7 +212,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
 	defer clear(taskReference)
-	checkpointDigest := hierarchyDeletionFoldDigest(
+	checkpointDigest := hierarchydeletion.HierarchyDeletionFoldDigest(
 		"gp-deletion-child-checkpoint-v1", operation.Tombstone.OperationID,
 		action.AgentProcedure.ChildOperationID, attemptID, taskID, strconv.FormatInt(action.Ordinal, 10),
 	)
@@ -220,7 +220,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		Schema: 1, ParentOperationID: operation.Tombstone.OperationID,
 		ChildOperationID: action.AgentProcedure.ChildOperationID,
 		CurrentAttemptID: attemptID, CurrentTaskID: taskID,
-		CurrentTaskIdentityDigest: hierarchyDeletionBytesDigest(taskValue),
+		CurrentTaskIdentityDigest: hierarchydeletion.HierarchyDeletionBytesDigest(taskValue),
 		DispatchState:             hierarchydeletion.HierarchyDeletionChildDispatchVisible,
 		CheckpointDigest:          checkpointDigest, RetryInputDigest: action.AgentProcedure.InputDigest,
 		RetrySharedOwner: hierarchydeletion.HierarchyDeletionRetrySharedOwner{
@@ -356,7 +356,7 @@ func hierarchyDeletionStableRawID(prefix string, values ...string) string {
 }
 
 func hierarchyDeletionStableULID(domain string, values ...string) string {
-	operation := hierarchyDeletionStableOperationID(append([]string{domain}, values...)...)
+	operation := hierarchydeletion.HierarchyDeletionStableOperationID(append([]string{domain}, values...)...)
 	return operation[len(string(ids.KindOperation))+1:]
 }
 
@@ -369,11 +369,11 @@ func hierarchyDeletionTaskResultDigest(result *taskjournal.TaskResultRecord, ter
 		return "", "", errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(value)
-	digest := hierarchyDeletionBytesDigest(value)
+	digest := hierarchydeletion.HierarchyDeletionBytesDigest(value)
 	if terminal == taskjournal.TaskStatusCompleted {
 		return digest, "", nil
 	}
-	return "", hierarchyDeletionFoldDigest("gp-deletion-child-error-v1", string(terminal), digest), nil
+	return "", hierarchydeletion.HierarchyDeletionFoldDigest("gp-deletion-child-error-v1", string(terminal), digest), nil
 }
 
 func hierarchyDeletionAgentTerminalFromTask(status taskjournal.TaskStatus) (hierarchydeletion.HierarchyDeletionAgentTerminal, error) {

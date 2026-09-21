@@ -2,8 +2,6 @@ package etcd
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -70,7 +68,7 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 	if receiptSnapshot == nil || receiptSnapshot.ReadRevision != proof.ReceiptRevision ||
 		len(receiptSnapshot.Values) != 1 || receiptSnapshot.Values[0] == nil ||
 		receiptSnapshot.Values[0].ModRevision != proof.ReceiptRevision ||
-		hierarchyDeletionBytesDigest(receiptSnapshot.Values[0].Value) != proof.ReceiptDigest {
+		hierarchydeletion.HierarchyDeletionBytesDigest(receiptSnapshot.Values[0].Value) != proof.ReceiptDigest {
 		return HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion terminal evidence changed",
@@ -82,7 +80,7 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
-	if progressRead.Entry == nil || hierarchyDeletionBytesDigest(progressRead.Entry.Value) != proof.ProgressDigest {
+	if progressRead.Entry == nil || hierarchydeletion.HierarchyDeletionBytesDigest(progressRead.Entry.Value) != proof.ProgressDigest {
 		return HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion terminal progress changed",
@@ -157,7 +155,7 @@ func (repository *HierarchyDeletionRepository) completeAgentAction(
 	completion := hierarchydeletion.HierarchyDeletionActionCompletion{
 		Schema: 1, ParentOperationID: current.Tombstone.OperationID,
 		DeletionEpoch: current.Tombstone.DeletionEpoch, Ordinal: action.Ordinal,
-		ActionDigest: hierarchyDeletionBytesDigest(actionValue), TargetKind: action.TargetKind,
+		ActionDigest: hierarchydeletion.HierarchyDeletionBytesDigest(actionValue), TargetKind: action.TargetKind,
 		TargetID: action.TargetID, TargetRevision: action.TargetRevision,
 		Executor: hierarchydeletion.HierarchyDeletionProcedureAgent,
 		AgentProof: &hierarchydeletion.HierarchyDeletionAgentCompletionProof{
@@ -305,7 +303,7 @@ func advanceHierarchyDeletionCheckpoint(
 	nextTombstone := current.Tombstone
 	nextTombstone.Checkpoint.NextOrdinal++
 	nextTombstone.Checkpoint.CompletedCount++
-	nextTombstone.Checkpoint.CompletedPrefixDigest = hierarchyDeletionFoldDigest(
+	nextTombstone.Checkpoint.CompletedPrefixDigest = hierarchydeletion.HierarchyDeletionFoldDigest(
 		"groundplane-deletion-completion-prefix-v1", nextTombstone.Checkpoint.CompletedPrefixDigest,
 		actionDigest, proofDigest,
 	)
@@ -364,19 +362,4 @@ func validateHierarchyDeletionAgentTerminal(
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion terminal is invalid")
 	}
 	return nil
-}
-
-func hierarchyDeletionBytesDigest(value []byte) string {
-	digest := sha256.Sum256(value)
-	return hex.EncodeToString(digest[:])
-}
-
-func hierarchyDeletionFoldDigest(domain string, values ...string) string {
-	digest := sha256.New()
-	_, _ = digest.Write([]byte(domain))
-	for _, value := range values {
-		_, _ = digest.Write([]byte{0})
-		_, _ = digest.Write([]byte(value))
-	}
-	return hex.EncodeToString(digest.Sum(nil))
 }

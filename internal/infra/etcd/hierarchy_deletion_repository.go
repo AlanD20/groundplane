@@ -19,8 +19,7 @@ import (
 )
 
 const (
-	hierarchyDeletionAttemptTimeout = 6 * time.Hour
-	hierarchyDeletionPlanBatchSize  = 47
+	hierarchyDeletionPlanBatchSize = 47
 )
 
 type hierarchyDeletionStore interface {
@@ -342,7 +341,7 @@ func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
 		!hierarchydeletion.ValidHierarchyDeletionTarget(begin.TargetKind, begin.TargetID) ||
 		ids.Validate(ids.KindTask, begin.TaskID) != nil || !hierarchydeletion.ValidHierarchyDeletionDigest(begin.IdempotencyHash) ||
 		!hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.CreatedAt) || !hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.DeadlineAt) ||
-		!begin.DeadlineAt.Equal(begin.CreatedAt.Add(hierarchyDeletionAttemptTimeout)) {
+		!begin.DeadlineAt.Equal(begin.CreatedAt.Add(hierarchydeletion.AttemptTimeout)) {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion publication is invalid")
 	}
 	if begin.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || begin.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
@@ -380,7 +379,7 @@ func hierarchyDeletionTask(
 		},
 		Steps: []taskjournal.TaskStepRecord{
 			{Kind: taskjournal.TaskStepOperation, ID: "step_" + suffix},
-		}, TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout / time.Second),
+		}, TimeoutSeconds: int64(hierarchydeletion.AttemptTimeout / time.Second),
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
 	}
 	if err := ValidateTaskRecord(task); err != nil {

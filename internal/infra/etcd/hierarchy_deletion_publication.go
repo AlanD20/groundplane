@@ -256,7 +256,7 @@ func prepareHierarchyDeletionPublication(
 		TaskOperationID: begin.TaskOperationID, DeletionEpoch: deletionEpoch,
 		TargetKind: begin.TargetKind, TargetID: begin.TargetID, TargetRevision: root.targetRevision,
 		Workspace: root.workspace, RootSlug: root.rootSlug, SnapshotRevision: snapshotRevision,
-		TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout / time.Second), CreatedAt: begin.CreatedAt,
+		TimeoutSeconds: int64(hierarchydeletion.AttemptTimeout / time.Second), CreatedAt: begin.CreatedAt,
 	}
 	lock := hierarchydeletion.HierarchyDeletionLock{
 		Schema: 1, TargetKind: begin.TargetKind, TargetID: begin.TargetID,

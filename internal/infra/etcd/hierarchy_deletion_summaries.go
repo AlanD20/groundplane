@@ -18,8 +18,8 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 	revision int64,
 ) (hierarchyDeletionRootAckChange, error) {
 	count := *operation.Tombstone.PlanCount
-	completionDigest := hierarchyDeletionFoldDigest("gp-deletion-completion-set-v1", operation.Tombstone.OperationID)
-	receiptDigest := hierarchyDeletionFoldDigest("gp-deletion-receipt-set-v1", operation.Tombstone.OperationID)
+	completionDigest := hierarchydeletion.HierarchyDeletionFoldDigest("gp-deletion-completion-set-v1", operation.Tombstone.OperationID)
+	receiptDigest := hierarchydeletion.HierarchyDeletionFoldDigest("gp-deletion-receipt-set-v1", operation.Tombstone.OperationID)
 	childCount := int64(0)
 	for begin := int64(0); begin < count-1; begin += hierarchyDeletionPlanBatchSize {
 		end := min(begin+hierarchyDeletionPlanBatchSize, count-1)
@@ -45,8 +45,8 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 				completion.DeletionEpoch != operation.Tombstone.DeletionEpoch || completion.Ordinal != ordinal {
 				return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 			}
-			valueDigest := hierarchyDeletionBytesDigest(value.Value)
-			completionDigest = hierarchyDeletionFoldDigest(
+			valueDigest := hierarchydeletion.HierarchyDeletionBytesDigest(value.Value)
+			completionDigest = hierarchydeletion.HierarchyDeletionFoldDigest(
 				"gp-deletion-completion-set-item-v1",
 				completionDigest,
 				strconv.FormatInt(ordinal, 10),
@@ -54,7 +54,7 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 			)
 			if completion.AgentProof != nil {
 				childCount++
-				receiptDigest = hierarchyDeletionFoldDigest(
+				receiptDigest = hierarchydeletion.HierarchyDeletionFoldDigest(
 					"gp-deletion-receipt-set-item-v1",
 					receiptDigest,
 					strconv.FormatInt(ordinal, 10),
@@ -63,11 +63,11 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 			}
 		}
 	}
-	completionDigest = hierarchyDeletionFoldDigest(
+	completionDigest = hierarchydeletion.HierarchyDeletionFoldDigest(
 		"gp-deletion-completion-set-item-v1",
 		completionDigest,
 		strconv.FormatInt(count-1, 10),
-		hierarchyDeletionBytesDigest(rootCompletion),
+		hierarchydeletion.HierarchyDeletionBytesDigest(rootCompletion),
 	)
 	receiptSummary := hierarchydeletion.HierarchyDeletionReceiptSummary{
 		Schema: 1, ParentOperationID: operation.Tombstone.OperationID,
@@ -82,7 +82,7 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 		Schema: 1, ParentOperationID: operation.Tombstone.OperationID,
 		DeletionEpoch: operation.Tombstone.DeletionEpoch, PlanCount: count, PlanDigest: *operation.Tombstone.PlanDigest,
 		OrderedCompletionSetDigest: completionDigest,
-		AgentReceiptSummaryDigest:  hierarchyDeletionBytesDigest(receiptSummaryValue),
+		AgentReceiptSummaryDigest:  hierarchydeletion.HierarchyDeletionBytesDigest(receiptSummaryValue),
 		FinalCheckpointDigest:      finalCheckpoint, CompletedAt: completedAt, RetainUntil: completedAt.Add(taskjournal.TaskRetention),
 	}
 	completionSummaryValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completionSummary, hierarchydeletion.HierarchyDeletionSmallRecordBytes)

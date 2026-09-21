@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionplanning
 
 import (
 	"context"
@@ -11,14 +11,14 @@ import (
 	"strings"
 )
 
-func (repository *HierarchyDeletionRepository) freezeIndexedResource(
+func (repository *Planner) freezeIndexedResource(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionTombstone,
 	ownerID string,
 	descriptor hierarchyDeletionIndexedResource,
 ) ([]HierarchyDeletionMembershipNode, error) {
 	targets, err := repository.hierarchyDeletionIndexedTargets(
-		ctx, operation.Tombstone.SnapshotRevision, descriptor.ownerPrefix(ownerID), descriptor.primaryKey,
+		ctx, operation.SnapshotRevision, descriptor.ownerPrefix(ownerID), descriptor.primaryKey,
 		descriptor.stableIDKind, descriptor.validateOwner, ownerID,
 	)
 	if err != nil {
@@ -30,12 +30,12 @@ func (repository *HierarchyDeletionRepository) freezeIndexedResource(
 		if descriptor.controller {
 			nodes = append(nodes, hierarchyDeletionControllerNode(
 				nodeID, descriptor.targetKind, target.id, descriptor.actionKind,
-				target.revision, nil, hierarchyDeletionControllerFinalizer(descriptor.actionKind), target.digest,
+				target.revision, nil, HierarchyDeletionControllerFinalizer(descriptor.actionKind), target.digest,
 			))
 		} else {
 			node := hierarchyDeletionAgentNode(
 				nodeID, descriptor.targetKind, target.id, descriptor.actionKind,
-				target.revision, nil, operation.Tombstone.OperationID,
+				target.revision, nil, operation.OperationID,
 			)
 			node.fixedInputDigest = target.digest
 			nodes = append(nodes, node)
@@ -50,7 +50,7 @@ type hierarchyDeletionIndexedTarget struct {
 	digest   string
 }
 
-func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
+func (repository *Planner) hierarchyDeletionIndexedTargets(
 	ctx context.Context,
 	revision int64,
 	prefix string,
@@ -121,7 +121,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 				return nil, validateErr
 			}
 			targets = append(targets, hierarchyDeletionIndexedTarget{
-				id: id, revision: value.ModRevision, digest: hierarchyDeletionBytesDigest(value.Value),
+				id: id, revision: value.ModRevision, digest: hierarchydeletion.HierarchyDeletionBytesDigest(value.Value),
 			})
 		}
 		etcdstore.ClearValues(read.Values)

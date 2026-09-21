@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionplanning
 
 import (
 	"context"
@@ -18,9 +18,9 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
-func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
+func (repository *Planner) freezeEnvironmentMembership(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionTombstone,
 	environmentID string,
 	environmentRevision int64,
 	environmentDigest string,
@@ -29,18 +29,18 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		ctx,
 		repository.store,
 		environmentID,
-		operation.Tombstone.SnapshotRevision,
+		operation.SnapshotRevision,
 	)
 	if err != nil {
 		return nil, err
 	}
 	projection, found, err := blueprints.ReadCurrentProjection(
-		ctx, repository.store, environmentID, operation.Tombstone.SnapshotRevision,
+		ctx, repository.store, environmentID, operation.SnapshotRevision,
 	)
 	if err != nil {
 		return nil, err
 	}
-	if found && (projection.ReadRevision != operation.Tombstone.SnapshotRevision ||
+	if found && (projection.ReadRevision != operation.SnapshotRevision ||
 		projection.Record.EnvironmentID != environmentID) {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
@@ -100,7 +100,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	}
 	cleanup := hierarchyDeletionAgentNode(
 		"environment:"+environmentID+":cleanup", "environment", environmentID,
-		hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup, environmentRevision, nil, operation.Tombstone.OperationID,
+		hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup, environmentRevision, nil, operation.OperationID,
 	)
 	cleanup.fixedInputDigest = environmentDigest
 	nodes := []HierarchyDeletionMembershipNode{cleanup}
@@ -127,7 +127,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 					hierarchydeletion.HierarchyDeletionAttachDetach,
 					grant.TargetRevision,
 					[]string{grant.NodeID},
-					operation.Tombstone.OperationID,
+					operation.OperationID,
 				)
 				detach.fixedInputDigest = grant.fixedInputDigest
 				nodes = append(nodes, detach)
@@ -156,7 +156,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		nodes = append(nodes, hierarchyDeletionControllerNode(
 			"zone:"+evidence.ZoneID+":remove", "zone", evidence.ZoneID,
 			hierarchydeletion.HierarchyDeletionZoneRemove, projection.Revision, prerequisites,
-			"zone.remove", hierarchyDeletionBytesDigest(value),
+			"zone.remove", hierarchydeletion.HierarchyDeletionBytesDigest(value),
 		))
 		clear(value)
 	}
@@ -187,9 +187,9 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	nodes = append(nodes, reservation)
 	return nodes, nil
 }
-func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMembership(
+func (repository *Planner) freezeEnvironmentServiceRuntimeMembership(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionTombstone,
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) ([]HierarchyDeletionMembershipNode, error) {
 	if projection.Revision == 0 {
@@ -204,12 +204,12 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 			keys[index] = servicerecord.ServiceRuntimeKey(desired.Desired.ID)
 		}
 		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: keys, Revision: operation.Tombstone.SnapshotRevision,
+			Keys: keys, Revision: operation.SnapshotRevision,
 		})
 		if readErr != nil {
 			return nil, readErr
 		}
-		if read == nil || read.ReadRevision != operation.Tombstone.SnapshotRevision ||
+		if read == nil || read.ReadRevision != operation.SnapshotRevision ||
 			len(read.Values) != len(keys) {
 			if read != nil {
 				etcdstore.ClearValues(read.Values)
@@ -235,7 +235,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 				value.ModRevision,
 				nil,
 				"service.remove",
-				hierarchyDeletionBytesDigest(value.Value),
+				hierarchydeletion.HierarchyDeletionBytesDigest(value.Value),
 			))
 		}
 		etcdstore.ClearValues(read.Values)

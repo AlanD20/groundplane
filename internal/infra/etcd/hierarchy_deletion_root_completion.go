@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -66,7 +67,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 			ActionKind: action.ActionKind, TargetKind: action.TargetKind, TargetID: action.TargetID,
 			TargetRevision: action.TargetRevision,
 		},
-		HierarchyDeletionControllerFinalizerInput{
+		hierarchydeletionplanning.HierarchyDeletionControllerFinalizerInput{
 			Finalizer: action.ControllerProcedure.Finalizer, TargetKind: action.TargetKind,
 			TargetID: action.TargetID, FixedInputRevision: action.TargetRevision,
 			FixedInputDigest: effects.fixedInputDigest, BatchOrdinal: 0, BatchCount: 1,
@@ -88,7 +89,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	completion := hierarchydeletion.HierarchyDeletionActionCompletion{
 		Schema: 1, ParentOperationID: operation.Tombstone.OperationID,
 		DeletionEpoch: operation.Tombstone.DeletionEpoch, Ordinal: action.Ordinal,
-		ActionDigest: hierarchyDeletionBytesDigest(actionValue), TargetKind: action.TargetKind,
+		ActionDigest: hierarchydeletion.HierarchyDeletionBytesDigest(actionValue), TargetKind: action.TargetKind,
 		TargetID: action.TargetID, TargetRevision: action.TargetRevision,
 		Executor: hierarchydeletion.HierarchyDeletionProcedureController,
 		ControllerProof: &hierarchydeletion.HierarchyDeletionControllerCompletionProof{

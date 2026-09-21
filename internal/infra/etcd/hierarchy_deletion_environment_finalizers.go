@@ -115,6 +115,6 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
 	}
 	return hierarchyDeletionControllerEffects{
-		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
+		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
 	}, nil
 }

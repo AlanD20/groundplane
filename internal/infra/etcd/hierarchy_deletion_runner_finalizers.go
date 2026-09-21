@@ -35,7 +35,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	if err != nil || environment.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	fixedInputDigest := hierarchyDeletionBytesDigest(result.Values[0].Value)
+	fixedInputDigest := hierarchydeletion.HierarchyDeletionBytesDigest(result.Values[0].Value)
 	if result.Values[0].ModRevision != action.TargetRevision {
 		if environment.DeletionTaskID == "" {
 			return hierarchyDeletionControllerEffects{}, errs.New(
@@ -49,7 +49,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 		if encodeErr != nil {
 			return hierarchyDeletionControllerEffects{}, encodeErr
 		}
-		fixedInputDigest = hierarchyDeletionBytesDigest(frozenValue)
+		fixedInputDigest = hierarchydeletion.HierarchyDeletionBytesDigest(frozenValue)
 		clear(frozenValue)
 	}
 	registry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](result.Values[1].Value, "environment_pool_registry")
@@ -164,7 +164,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerKey(action.TargetID)},
 	}
 	return hierarchyDeletionControllerEffects{
-		fixedInputDigest: hierarchyDeletionBytesDigest(base.Values[0].Value), conditions: conditions,
+		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(base.Values[0].Value), conditions: conditions,
 		mutations: mutations, values: [][]byte{quotaValue, systemValue},
 	}, nil
 }

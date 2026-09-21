@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionplanning
 
 import (
 	"context"
@@ -10,19 +10,19 @@ import (
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
 
-func (repository *HierarchyDeletionRepository) freezeTenantMembership(
+func (repository *Planner) freezeTenantMembership(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionTombstone,
 ) ([]HierarchyDeletionMembershipNode, error) {
 	projects, err := repository.hierarchyDeletionIndexedTargets(
-		ctx, operation.Tombstone.SnapshotRevision, hierarchyrecord.ProjectTenantOwnerPrefix(operation.Tombstone.TargetID),
+		ctx, operation.SnapshotRevision, hierarchyrecord.ProjectTenantOwnerPrefix(operation.TargetID),
 		hierarchyrecord.ProjectKey, ids.KindProject, func(value []byte, id, owner string) error {
 			record, decodeErr := hierarchyrecord.DecodeProject(value)
 			if decodeErr != nil || record.ID != id || record.TenantID != owner || record.Kind != hierarchyrecord.ProjectKindTenant {
 				return hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			return nil
-		}, operation.Tombstone.TargetID,
+		}, operation.TargetID,
 	)
 	if err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func (repository *HierarchyDeletionRepository) freezeTenantMembership(
 			terminalHierarchyDeletionNodes(children), "project.finalize", project.digest,
 		))
 	}
-	runners, err := repository.freezeIndexedResource(ctx, operation, operation.Tombstone.TargetID,
+	runners, err := repository.freezeIndexedResource(ctx, operation, operation.TargetID,
 		hierarchyDeletionIndexedResource{
 			targetKind: "runner", actionKind: hierarchydeletion.HierarchyDeletionRunnerLocalRemove,
 			ownerPrefix: func(owner string) string {
@@ -55,14 +55,14 @@ func (repository *HierarchyDeletionRepository) freezeTenantMembership(
 	return append(nodes, runners...), nil
 }
 
-func (repository *HierarchyDeletionRepository) freezeProjectMembership(
+func (repository *Planner) freezeProjectMembership(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionTombstone,
 	projectID string,
 	root bool,
 ) ([]HierarchyDeletionMembershipNode, error) {
 	environments, err := repository.hierarchyDeletionIndexedTargets(
-		ctx, operation.Tombstone.SnapshotRevision, hierarchyrecord.EnvironmentOwnerPrefix(projectID), hierarchyrecord.EnvironmentKey,
+		ctx, operation.SnapshotRevision, hierarchyrecord.EnvironmentOwnerPrefix(projectID), hierarchyrecord.EnvironmentKey,
 		ids.KindEnvironment, func(value []byte, id, owner string) error {
 			record, decodeErr := hierarchyrecord.DecodeEnvironment(value)
 			if decodeErr != nil || record.ID != id || record.ProjectID != owner {
@@ -93,7 +93,7 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 			terminalHierarchyDeletionNodes(children), "environment.finalize", environment.digest,
 		))
 	}
-	if operation.Tombstone.OperationKind != hierarchydeletion.HierarchyDeletionOperationBacking || !root {
+	if operation.OperationKind != hierarchydeletion.HierarchyDeletionOperationBacking || !root {
 		runners, freezeErr := repository.freezeIndexedResource(ctx, operation, projectID,
 			hierarchyDeletionIndexedResource{
 				targetKind: "runner", actionKind: hierarchydeletion.HierarchyDeletionRunnerLocalRemove,

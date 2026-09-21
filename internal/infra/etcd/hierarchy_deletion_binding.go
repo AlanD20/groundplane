@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
@@ -22,7 +23,7 @@ type HierarchyDeletionPlannedAction struct {
 	TargetID             string
 	TargetRevision       int64
 	PrerequisiteOrdinals []int64
-	ProcedureInput       HierarchyDeletionProcedureInput
+	ProcedureInput       hierarchydeletionplanning.HierarchyDeletionProcedureInput
 }
 
 func (repository *HierarchyDeletionRepository) BindActions(
@@ -80,7 +81,7 @@ func bindHierarchyDeletionAction(
 			)
 		}
 		action.AgentProcedure = &hierarchydeletion.HierarchyDeletionAgentProcedure{
-			ChildOperationID: hierarchyDeletionStableOperationID(planned.ParentOperationID, planned.NodeID),
+			ChildOperationID: hierarchydeletion.HierarchyDeletionStableOperationID(planned.ParentOperationID, planned.NodeID),
 			TaskType:         input.TaskType, TypedProcedure: input.TypedProcedure,
 			InputDigest: input.InputDigest, TimeoutSeconds: input.TimeoutSeconds,
 		}
@@ -132,9 +133,9 @@ type hierarchyDeletionTemplate struct {
 
 func bindHierarchyDeletionControllerProcedure(
 	planned HierarchyDeletionPlannedAction,
-	input HierarchyDeletionControllerFinalizerInput,
+	input hierarchydeletionplanning.HierarchyDeletionControllerFinalizerInput,
 ) (hierarchydeletion.HierarchyDeletionControllerProcedure, error) {
-	if hierarchyDeletionControllerFinalizer(planned.ActionKind) != input.Finalizer {
+	if hierarchydeletionplanning.HierarchyDeletionControllerFinalizer(planned.ActionKind) != input.Finalizer {
 		return hierarchydeletion.HierarchyDeletionControllerProcedure{}, errs.Newf(
 			errs.KindValidationFailed, "hierarchy deletion finalizer %q is unsupported for %q",
 			input.Finalizer, planned.ActionKind,
@@ -168,7 +169,7 @@ func bindHierarchyDeletionControllerProcedure(
 
 func hierarchyDeletionTemplateDigest(
 	planned HierarchyDeletionPlannedAction,
-	input HierarchyDeletionControllerFinalizerInput,
+	input hierarchydeletionplanning.HierarchyDeletionControllerFinalizerInput,
 	domain string,
 	slots []string,
 ) (string, error) {

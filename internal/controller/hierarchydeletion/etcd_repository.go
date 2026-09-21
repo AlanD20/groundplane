@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -448,7 +449,7 @@ func procedureFromEtcd(
 	return procedure
 }
 
-func procedureInputFromEtcd(value etcdinfra.HierarchyDeletionProcedureInput) ProcedureInput {
+func procedureInputFromEtcd(value hierarchydeletionplanning.HierarchyDeletionProcedureInput) ProcedureInput {
 	input := ProcedureInput{Kind: ProcedureKind(value.Kind)}
 	if value.AgentChild != nil {
 		input.AgentChild = &AgentChildInput{
@@ -469,17 +470,17 @@ func procedureInputFromEtcd(value etcdinfra.HierarchyDeletionProcedureInput) Pro
 	return input
 }
 
-func procedureInputToEtcd(value ProcedureInput) etcdinfra.HierarchyDeletionProcedureInput {
-	input := etcdinfra.HierarchyDeletionProcedureInput{Kind: hierarchydeletion.HierarchyDeletionProcedureKind(value.Kind)}
+func procedureInputToEtcd(value ProcedureInput) hierarchydeletionplanning.HierarchyDeletionProcedureInput {
+	input := hierarchydeletionplanning.HierarchyDeletionProcedureInput{Kind: hierarchydeletion.HierarchyDeletionProcedureKind(value.Kind)}
 	if value.AgentChild != nil {
-		input.AgentChild = &etcdinfra.HierarchyDeletionAgentInput{
+		input.AgentChild = &hierarchydeletionplanning.HierarchyDeletionAgentInput{
 			TaskType: taskjournal.TaskType(value.AgentChild.TaskType), TypedProcedure: value.AgentChild.TypedProcedure,
 			InputDigest: value.AgentChild.InputDigest, TimeoutSeconds: int64(value.AgentChild.Timeout.Seconds()),
 		}
 	}
 	if value.ControllerFinalizer != nil {
 		controller := value.ControllerFinalizer
-		input.ControllerFinalizer = &etcdinfra.HierarchyDeletionControllerFinalizerInput{
+		input.ControllerFinalizer = &hierarchydeletionplanning.HierarchyDeletionControllerFinalizerInput{
 			Finalizer: controller.Finalizer, TargetKind: hierarchydeletion.HierarchyDeletionActionTargetKind(controller.TargetKind),
 			TargetID: controller.TargetID, FixedInputRevision: controller.FixedInputRevision,
 			FixedInputDigest: controller.FixedInputDigest,

@@ -49,7 +49,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFin
 		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
 	return hierarchyDeletionControllerEffects{
-		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions,
+		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value), conditions: conditions,
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationDelete, Key: slugKey},
 			{Type: etcdstore.MutationDelete, Key: hierarchyrecord.TenantKey(record.ID)},
@@ -101,7 +101,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
 	return hierarchyDeletionControllerEffects{
-		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions,
+		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value), conditions: conditions,
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationDelete, Key: hierarchyrecord.ProjectSlugKey(record)},
 			{Type: etcdstore.MutationDelete, Key: hierarchyrecord.ProjectOwnerKey(record)},

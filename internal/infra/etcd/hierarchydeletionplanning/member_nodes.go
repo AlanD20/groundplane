@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionplanning
 
 import (
 	"context"
@@ -35,11 +35,11 @@ func hierarchyDeletionAgentNode(
 			AgentChild: &HierarchyDeletionAgentInput{
 				TaskType:       taskType,
 				TypedProcedure: hierarchyDeletionAgentProcedure(action),
-				InputDigest: hierarchyDeletionFoldDigest(
+				InputDigest: hierarchydeletion.HierarchyDeletionFoldDigest(
 					"groundplane-deletion-agent-input-v1", parentOperationID, nodeID,
 					string(action), string(targetKind), targetID, fmt.Sprint(targetRevision),
 				),
-				TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout.Seconds()),
+				TimeoutSeconds: int64(hierarchydeletion.AttemptTimeout.Seconds()),
 			},
 		},
 	}
@@ -87,7 +87,7 @@ func ptrHierarchyDeletionControllerInput(
 	return &value
 }
 
-func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
+func (repository *Planner) hierarchyDeletionTargetDigest(
 	ctx context.Context,
 	revision int64,
 	targetKind hierarchydeletion.HierarchyDeletionActionTargetKind,
@@ -111,7 +111,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 		if encodeErr != nil {
 			return "", encodeErr
 		}
-		digest := hierarchyDeletionBytesDigest(encoded)
+		digest := hierarchydeletion.HierarchyDeletionBytesDigest(encoded)
 		clear(encoded)
 		return digest, nil
 	case "connector":
@@ -135,7 +135,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 		stored.Values[0] == nil || stored.Values[0].Key != key || stored.Values[0].ModRevision != targetRevision {
 		return "", hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	digest := hierarchyDeletionBytesDigest(stored.Values[0].Value)
+	digest := hierarchydeletion.HierarchyDeletionBytesDigest(stored.Values[0].Value)
 	etcdstore.ClearValues(stored.Values)
 	return digest, nil
 }
