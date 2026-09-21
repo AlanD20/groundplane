@@ -75,7 +75,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 	}
 	change := ScriptSourceReleaseFragment{conditions: []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
 	if task.Type == taskjournal.TaskScript {
-		execution, value, err := (&ScriptRepository{store: repository.store}).manualScriptExecutionAtRevision(
+		execution, value, err := (composeScriptRepository(repository.store)).manualScriptExecutionAtRevision(
 			ctx,
 			task,
 			revision,

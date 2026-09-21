@@ -62,7 +62,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		len(source.Steps) != 1 || len(retry.Steps) != 1 || retry.Steps[0].ID != source.Steps[0].ID {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script retry authority is unavailable")
 	}
-	execution, executionValue, err := (&ScriptRepository{store: repository.store}).manualScriptExecutionAtRevision(
+	execution, executionValue, err := (composeScriptRepository(repository.store)).manualScriptExecutionAtRevision(
 		ctx,
 		source,
 		revision,

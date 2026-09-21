@@ -33,7 +33,7 @@ func (repository *ScriptRepository) CreateScript(
 	if err != nil {
 		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
-	return repository.hydrateScriptBody(ctx, created.Script)
+	return repository.HydrateScriptBody(ctx, created.Script)
 }
 
 func (repository *ScriptRepository) CreateScriptIdempotent(

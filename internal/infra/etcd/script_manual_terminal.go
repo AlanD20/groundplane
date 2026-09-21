@@ -30,7 +30,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	revision int64,
 	result taskjournal.TaskResultRecord,
 ) (scriptTerminalSourceRelease, bool, error) {
-	scripts := &ScriptRepository{store: repository.store}
+	scripts := composeScriptRepository(repository.store)
 	execution, executionValue, err := scripts.manualScriptExecutionAtRevision(ctx, task, revision)
 	if err != nil {
 		return scriptTerminalSourceRelease{}, false, err

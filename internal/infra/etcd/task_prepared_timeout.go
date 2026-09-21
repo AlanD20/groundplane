@@ -21,7 +21,7 @@ func (repository *TaskRepository) preparedTaskTimeoutResult(
 	if assignment.Task.Record.Type != taskjournal.TaskScript {
 		return repository.candidateReleaseTimeoutResult(ctx, assignment)
 	}
-	scripts := &ScriptRepository{store: repository.store}
+	scripts := composeScriptRepository(repository.store)
 	execution, _, err := scripts.manualScriptExecutionAtRevision(
 		ctx, assignment.Task.Record, assignment.Task.ReadRevision,
 	)
