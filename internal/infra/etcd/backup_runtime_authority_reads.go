@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -122,7 +123,7 @@ func (repository *BackupRuntimeRepository) loadManualBackupPolicyFence(
 	if record.Initiator != backupruntime.BackupRunInitiatorOperator {
 		return nil, nil
 	}
-	key := environmentCoordinationKey(record.EnvironmentID)
+	key := coordinationrecord.Key(record.EnvironmentID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{key}, Revision: fixedRevision,
 	})
@@ -134,7 +135,7 @@ func (repository *BackupRuntimeRepository) loadManualBackupPolicyFence(
 		return nil, errs.New(errs.KindStateConflict, "backup policy schedule coordination changed")
 	}
 	defer clearKeyValues(read.Values)
-	coordination, err := decodeEnvironmentCoordinationRecord(read.Values[0].Value)
+	coordination, err := coordinationrecord.Decode(read.Values[0].Value)
 	if err != nil || coordination.EnvironmentID != record.EnvironmentID ||
 		coordination.CurrentBackupScheduleState == nil {
 		return nil, errs.New(errs.KindStateConflict, "backup policy schedule coordination is invalid")

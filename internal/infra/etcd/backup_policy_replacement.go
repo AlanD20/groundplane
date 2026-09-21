@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -44,8 +45,8 @@ type backupPolicyReplacementCandidate struct {
 	Environment         etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	Project             etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	MutationEpoch       etcdstore.Versioned[backupruntime.EnvironmentMutationEpochRecord]
-	Coordination        etcdstore.Versioned[EnvironmentCoordinationRecord]
-	NextCoordination    EnvironmentCoordinationRecord
+	Coordination        etcdstore.Versioned[coordinationrecord.EnvironmentCoordinationRecord]
+	NextCoordination    coordinationrecord.EnvironmentCoordinationRecord
 	NextRunAt           time.Time
 	ScheduleSealed      bool
 	Current             *etcdstore.Versioned[backuppolicy.BackupPolicyRecord]

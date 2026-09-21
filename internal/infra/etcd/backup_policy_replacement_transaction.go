@@ -5,6 +5,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -12,12 +13,12 @@ import (
 
 func mustBackupPolicyScheduleTransition(
 	candidate backupPolicyReplacementCandidate,
-) EnvironmentCoordinationRecord {
-	next, _, err := replaceEnvironmentCoordinationSchedule(
+) coordinationrecord.EnvironmentCoordinationRecord {
+	next, _, err := coordinationrecord.ReplaceSchedule(
 		candidate.Coordination.Record, candidate.Replacement, candidate.Replacement.UpdatedAt,
 	)
 	if err != nil {
-		return EnvironmentCoordinationRecord{}
+		return coordinationrecord.EnvironmentCoordinationRecord{}
 	}
 	return next
 }
@@ -29,7 +30,7 @@ func prepareBackupPolicyReplacement(
 	if err != nil {
 		return backupPolicyReplacementPlan{}, err
 	}
-	coordinationValue, err := encodeEnvironmentCoordinationRecord(candidate.NextCoordination)
+	coordinationValue, err := coordinationrecord.Encode(candidate.NextCoordination)
 	if err != nil {
 		clear(policyValue)
 		return backupPolicyReplacementPlan{}, err
@@ -41,7 +42,7 @@ func prepareBackupPolicyReplacement(
 				Type: etcdstore.MutationPut, Key: backuppolicy.BackupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
 			},
 			{
-				Type: etcdstore.MutationPut, Key: environmentCoordinationKey(candidate.Replacement.EnvironmentID),
+				Type: etcdstore.MutationPut, Key: coordinationrecord.Key(candidate.Replacement.EnvironmentID),
 				Value: coordinationValue,
 			},
 		},
@@ -72,7 +73,7 @@ func prepareBackupPolicyReplacement(
 	plan.compare(
 		backupPolicyCompareCoordination,
 		candidate.Replacement.EnvironmentID,
-		environmentCoordinationKey(candidate.Replacement.EnvironmentID),
+		coordinationrecord.Key(candidate.Replacement.EnvironmentID),
 		candidate.Coordination.Revision,
 	)
 	plan.compare(

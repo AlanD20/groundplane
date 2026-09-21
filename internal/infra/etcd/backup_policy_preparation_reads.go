@@ -5,6 +5,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -30,7 +31,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), input.EnvironmentID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), projectID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), tenantID),
-		environmentCoordinationKey(input.EnvironmentID),
+		coordinationrecord.Key(input.EnvironmentID),
 	}})
 	if err != nil {
 		return backupPolicyReplacementCandidate{}, false, err
@@ -123,36 +124,36 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 			Record: current, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
-	coordination := EnvironmentCoordinationRecord{
+	coordination := coordinationrecord.EnvironmentCoordinationRecord{
 		EnvironmentID: input.EnvironmentID, ScheduleClockFloor: now,
 	}
 	coordinationRevision := int64(0)
 	if result.Values[10] != nil {
-		decoded, coordinationErr := decodeEnvironmentCoordinationRecord(result.Values[10].Value)
+		decoded, coordinationErr := coordinationrecord.Decode(result.Values[10].Value)
 		if coordinationErr != nil || decoded.EnvironmentID != input.EnvironmentID {
-			return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+			return backupPolicyReplacementCandidate{}, false, coordinationrecord.CorruptRecord()
 		}
 		coordination = decoded
 		coordinationRevision = result.Values[10].ModRevision
 	} else if candidate.Current != nil {
-		return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+		return backupPolicyReplacementCandidate{}, false, coordinationrecord.CorruptRecord()
 	}
-	candidate.Coordination = etcdstore.Versioned[EnvironmentCoordinationRecord]{
+	candidate.Coordination = etcdstore.Versioned[coordinationrecord.EnvironmentCoordinationRecord]{
 		Record: coordination, Revision: coordinationRevision, ReadRevision: result.ReadRevision,
 	}
 	if candidate.Current == nil {
 		if coordination.CurrentBackupScheduleState != nil {
-			return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+			return backupPolicyReplacementCandidate{}, false, coordinationrecord.CorruptRecord()
 		}
 	} else if candidate.Current.Record.Enabled {
-		digest, digestErr := backupPolicyScheduleDigest(candidate.Current.Record)
+		digest, digestErr := coordinationrecord.PolicyScheduleDigest(candidate.Current.Record)
 		state := coordination.CurrentBackupScheduleState
 		if digestErr != nil || state == nil || state.PolicyDigest != digest ||
 			state.Frequency != candidate.Current.Record.Frequency {
-			return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+			return backupPolicyReplacementCandidate{}, false, coordinationrecord.CorruptRecord()
 		}
 	} else if coordination.CurrentBackupScheduleState != nil {
-		return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
+		return backupPolicyReplacementCandidate{}, false, coordinationrecord.CorruptRecord()
 	}
 	if (result.Values[5] == nil) != (result.Values[6] == nil) {
 		return backupPolicyReplacementCandidate{}, false, corruptBackupKey()

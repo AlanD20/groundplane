@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -21,16 +22,16 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 	environmentID string,
 	revision int64,
 	createdAt time.Time,
-) (*etcdstore.Versioned[backuppolicy.BackupPolicyRecord], etcdstore.Versioned[EnvironmentCoordinationRecord], *backuppolicy.VersionedBackupKey, error) {
+) (*etcdstore.Versioned[backuppolicy.BackupPolicyRecord], etcdstore.Versioned[coordinationrecord.EnvironmentCoordinationRecord], *backuppolicy.VersionedBackupKey, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		backuppolicy.BackupPolicyKey(environmentID), environmentCoordinationKey(environmentID),
+		backuppolicy.BackupPolicyKey(environmentID), coordinationrecord.Key(environmentID),
 		backuppolicy.BackupKeyKey(environmentID), backuppolicy.BackupKeyValueKey(environmentID),
 	}, Revision: revision})
 	if err != nil {
-		return nil, etcdstore.Versioned[EnvironmentCoordinationRecord]{}, nil, err
+		return nil, etcdstore.Versioned[coordinationrecord.EnvironmentCoordinationRecord]{}, nil, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != 4 {
-		return nil, etcdstore.Versioned[EnvironmentCoordinationRecord]{}, nil, errs.New(
+		return nil, etcdstore.Versioned[coordinationrecord.EnvironmentCoordinationRecord]{}, nil, errs.New(
 			errs.KindInternal, "Blueprint Backup base read is incomplete",
 		)
 	}
@@ -39,38 +40,38 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 	if result.Values[0] != nil {
 		record, decodeErr := backuppolicy.DecodeBackupPolicyRecord(result.Values[0].Value)
 		if decodeErr != nil || record.EnvironmentID != environmentID {
-			return nil, etcdstore.Versioned[EnvironmentCoordinationRecord]{}, nil, recordcodec.CorruptRecord()
+			return nil, etcdstore.Versioned[coordinationrecord.EnvironmentCoordinationRecord]{}, nil, recordcodec.CorruptRecord()
 		}
 		value := etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{
 			Record: record, Revision: result.Values[0].ModRevision, ReadRevision: revision,
 		}
 		current = &value
 	}
-	coordination := etcdstore.Versioned[EnvironmentCoordinationRecord]{
-		Record: EnvironmentCoordinationRecord{
+	coordination := etcdstore.Versioned[coordinationrecord.EnvironmentCoordinationRecord]{
+		Record: coordinationrecord.EnvironmentCoordinationRecord{
 			EnvironmentID: environmentID, ScheduleClockFloor: createdAt,
 		},
 		ReadRevision: revision,
 	}
 	if result.Values[1] != nil {
-		coordination.Record, err = decodeEnvironmentCoordinationRecord(result.Values[1].Value)
+		coordination.Record, err = coordinationrecord.Decode(result.Values[1].Value)
 		if err != nil || coordination.Record.EnvironmentID != environmentID {
-			return nil, coordination, nil, corruptEnvironmentCoordination()
+			return nil, coordination, nil, coordinationrecord.CorruptRecord()
 		}
 		coordination.Revision = result.Values[1].ModRevision
 	}
 	if current == nil {
 		if coordination.Record.CurrentBackupScheduleState != nil {
-			return nil, coordination, nil, corruptEnvironmentCoordination()
+			return nil, coordination, nil, coordinationrecord.CorruptRecord()
 		}
 	} else if current.Record.Enabled {
-		digest, digestErr := backupPolicyScheduleDigest(current.Record)
+		digest, digestErr := coordinationrecord.PolicyScheduleDigest(current.Record)
 		state := coordination.Record.CurrentBackupScheduleState
 		if digestErr != nil || state == nil || state.PolicyDigest != digest || state.Frequency != current.Record.Frequency {
-			return nil, coordination, nil, corruptEnvironmentCoordination()
+			return nil, coordination, nil, coordinationrecord.CorruptRecord()
 		}
 	} else if coordination.Record.CurrentBackupScheduleState != nil {
-		return nil, coordination, nil, corruptEnvironmentCoordination()
+		return nil, coordination, nil, coordinationrecord.CorruptRecord()
 	}
 	if (result.Values[2] == nil) != (result.Values[3] == nil) {
 		return nil, coordination, nil, recordcodec.CorruptRecord()

@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -49,14 +50,14 @@ func prepareBlueprintBackupPolicyPublication(
 		if err != nil {
 			return preparedBlueprintBackupPolicyPublication{}, err
 		}
-		coordinationValue, err := encodeEnvironmentCoordinationRecord(state.candidate.NextCoordination)
+		coordinationValue, err := coordinationrecord.Encode(state.candidate.NextCoordination)
 		if err != nil {
 			clear(policyValue)
 			return preparedBlueprintBackupPolicyPublication{}, err
 		}
 		publication.mutations = append(publication.mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupPolicyKey(state.environmentID), Value: policyValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentCoordinationKey(state.environmentID), Value: coordinationValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: coordinationrecord.Key(state.environmentID), Value: coordinationValue},
 		)
 	}
 	compare := func(kind backupPolicyReplacementCompareKind, id, key string, revision int64) {
@@ -73,7 +74,7 @@ func prepareBlueprintBackupPolicyPublication(
 	compare(
 		backupPolicyCompareCoordination,
 		state.environmentID,
-		environmentCoordinationKey(state.environmentID),
+		coordinationrecord.Key(state.environmentID),
 		state.candidate.Coordination.Revision,
 	)
 	for _, source := range state.sources {

@@ -1,4 +1,4 @@
-package etcd
+package environmentcoordination
 
 import (
 	"crypto/sha256"
@@ -44,13 +44,13 @@ type environmentCoordinationEvidence struct {
 	Value  []byte
 }
 
-func environmentCoordinationKey(environmentID string) string {
+func Key(environmentID string) string {
 	return environmentCoordinationPrefix + environmentID
 }
 
-func validateEnvironmentCoordinationRecord(record EnvironmentCoordinationRecord) error {
+func Validate(record EnvironmentCoordinationRecord) error {
 	if ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		!validEnvironmentCoordinationInstant(record.ScheduleClockFloor) {
+		!ValidInstant(record.ScheduleClockFloor) {
 		return errs.New(errs.KindValidationFailed, "environment coordination is invalid")
 	}
 	state := record.CurrentBackupScheduleState
@@ -59,9 +59,9 @@ func validateEnvironmentCoordinationRecord(record EnvironmentCoordinationRecord)
 	}
 	if !validEnvironmentCoordinationDigest(state.PolicyDigest) ||
 		!validEnvironmentCoordinationFrequency(state.Frequency) ||
-		!validEnvironmentCoordinationInstant(state.EnabledAt) ||
-		!validEnvironmentCoordinationInstant(state.LastEvaluatedAt) ||
-		!validEnvironmentCoordinationInstant(state.UpdatedAt) ||
+		!ValidInstant(state.EnabledAt) ||
+		!ValidInstant(state.LastEvaluatedAt) ||
+		!ValidInstant(state.UpdatedAt) ||
 		state.LastEvaluatedAt.Before(state.EnabledAt) ||
 		state.UpdatedAt.Before(state.LastEvaluatedAt) ||
 		record.ScheduleClockFloor.Before(state.UpdatedAt) {
@@ -70,8 +70,8 @@ func validateEnvironmentCoordinationRecord(record EnvironmentCoordinationRecord)
 	return nil
 }
 
-func encodeEnvironmentCoordinationRecord(record EnvironmentCoordinationRecord) ([]byte, error) {
-	if err := validateEnvironmentCoordinationRecord(record); err != nil {
+func Encode(record EnvironmentCoordinationRecord) ([]byte, error) {
+	if err := Validate(record); err != nil {
 		return nil, err
 	}
 	value, err := recordcodec.Encode("environment-coordination", record)
@@ -85,30 +85,30 @@ func encodeEnvironmentCoordinationRecord(record EnvironmentCoordinationRecord) (
 	return value, nil
 }
 
-func decodeEnvironmentCoordinationRecord(value []byte) (EnvironmentCoordinationRecord, error) {
+func Decode(value []byte) (EnvironmentCoordinationRecord, error) {
 	if len(value) == 0 || len(value) > maximumEnvironmentCoordinationRecordBytes {
-		return EnvironmentCoordinationRecord{}, corruptEnvironmentCoordination()
+		return EnvironmentCoordinationRecord{}, CorruptRecord()
 	}
 	record, err := recordcodec.Decode[EnvironmentCoordinationRecord](value, "environment-coordination")
-	if err != nil || validateEnvironmentCoordinationRecord(record) != nil {
-		return EnvironmentCoordinationRecord{}, corruptEnvironmentCoordination()
+	if err != nil || Validate(record) != nil {
+		return EnvironmentCoordinationRecord{}, CorruptRecord()
 	}
 	return record, nil
 }
 
 func (evidence environmentCoordinationEvidence) rewriteMutation() (etcdstore.Mutation, error) {
-	decoded, err := decodeEnvironmentCoordinationRecord(evidence.Value)
-	if err != nil || !equalEnvironmentCoordinationRecord(decoded, evidence.Record) {
-		return etcdstore.Mutation{}, corruptEnvironmentCoordination()
+	decoded, err := Decode(evidence.Value)
+	if err != nil || !Equal(decoded, evidence.Record) {
+		return etcdstore.Mutation{}, CorruptRecord()
 	}
 	return etcdstore.Mutation{
 		Type:  etcdstore.MutationPut,
-		Key:   environmentCoordinationKey(evidence.Record.EnvironmentID),
+		Key:   Key(evidence.Record.EnvironmentID),
 		Value: append([]byte(nil), evidence.Value...),
 	}, nil
 }
 
-func equalEnvironmentCoordinationRecord(left, right EnvironmentCoordinationRecord) bool {
+func Equal(left, right EnvironmentCoordinationRecord) bool {
 	if left.EnvironmentID != right.EnvironmentID ||
 		!left.ScheduleClockFloor.Equal(right.ScheduleClockFloor) ||
 		(left.CurrentBackupScheduleState == nil) != (right.CurrentBackupScheduleState == nil) {
@@ -126,11 +126,11 @@ func equalEnvironmentCoordinationRecord(left, right EnvironmentCoordinationRecor
 		leftState.UpdatedAt.Equal(rightState.UpdatedAt)
 }
 
-func backupPolicyScheduleDigest(policy backuppolicy.BackupPolicyRecord) (string, error) {
+func PolicyScheduleDigest(policy backuppolicy.BackupPolicyRecord) (string, error) {
 	if err := backuppolicy.ValidateBackupPolicyRecord(policy); err != nil {
 		return "", err
 	}
-	if !validEnvironmentCoordinationInstant(policy.UpdatedAt) {
+	if !ValidInstant(policy.UpdatedAt) {
 		return "", errs.New(errs.KindValidationFailed, "backup policy schedule digest time is invalid")
 	}
 	if policy.Frequency != "" && !validEnvironmentCoordinationFrequency(policy.Frequency) {
@@ -147,22 +147,22 @@ func backupPolicyScheduleDigest(policy backuppolicy.BackupPolicyRecord) (string,
 	return hex.EncodeToString(digest[:]), nil
 }
 
-// replaceEnvironmentCoordinationSchedule applies the complete policy
+// ReplaceSchedule applies the complete policy
 // replacement transition at one monotonic logical boundary. A disabled policy
 // removes schedule state while retaining the boundary. Enable and frequency
 // changes seed a new cadence; same-frequency replacement carries EnabledAt.
-func replaceEnvironmentCoordinationSchedule(
+func ReplaceSchedule(
 	current EnvironmentCoordinationRecord,
 	replacement backuppolicy.BackupPolicyRecord,
 	now time.Time,
 ) (EnvironmentCoordinationRecord, time.Time, error) {
-	if err := validateEnvironmentCoordinationRecord(current); err != nil {
+	if err := Validate(current); err != nil {
 		return EnvironmentCoordinationRecord{}, time.Time{}, err
 	}
 	if err := backuppolicy.ValidateBackupPolicyRecord(replacement); err != nil {
 		return EnvironmentCoordinationRecord{}, time.Time{}, err
 	}
-	if replacement.EnvironmentID != current.EnvironmentID || !validEnvironmentCoordinationInstant(now.UTC()) {
+	if replacement.EnvironmentID != current.EnvironmentID || !ValidInstant(now.UTC()) {
 		return EnvironmentCoordinationRecord{}, time.Time{}, errs.New(
 			errs.KindValidationFailed,
 			"environment coordination replacement boundary is invalid",
@@ -191,7 +191,7 @@ func replaceEnvironmentCoordinationSchedule(
 	if !replacement.Enabled {
 		return next, time.Time{}, nil
 	}
-	digest, err := backupPolicyScheduleDigest(replacement)
+	digest, err := PolicyScheduleDigest(replacement)
 	if err != nil {
 		return EnvironmentCoordinationRecord{}, time.Time{}, err
 	}
@@ -227,7 +227,7 @@ func validEnvironmentCoordinationFrequency(value string) bool {
 	return err == nil
 }
 
-func validEnvironmentCoordinationInstant(value time.Time) bool {
+func ValidInstant(value time.Time) bool {
 	if value.IsZero() || value.Location() != time.UTC {
 		return false
 	}
@@ -235,6 +235,6 @@ func validEnvironmentCoordinationInstant(value time.Time) bool {
 	return nanoseconds > 0 && time.Unix(0, nanoseconds).UTC().Equal(value)
 }
 
-func corruptEnvironmentCoordination() error {
+func CorruptRecord() error {
 	return errs.New(errs.KindInternal, "environment coordination is corrupt")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
@@ -105,7 +106,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 	}
 	keys := []string{
 		backuppolicy.BackupPolicyKey(environmentID),
-		environmentCoordinationKey(environmentID),
+		coordinationrecord.Key(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
@@ -120,11 +121,11 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 	if err != nil || !policy.Enabled {
 		return BackupScheduleEvaluation{}, errs.New(errs.KindStateConflict, "backup policy is disabled or invalid")
 	}
-	coord, err := decodeEnvironmentCoordinationRecord(read.Values[1].Value)
+	coord, err := coordinationrecord.Decode(read.Values[1].Value)
 	if err != nil || coord.CurrentBackupScheduleState == nil {
 		return BackupScheduleEvaluation{}, errs.New(errs.KindStateConflict, "backup schedule is not initialized")
 	}
-	digest, err := backupPolicyScheduleDigest(policy)
+	digest, err := coordinationrecord.PolicyScheduleDigest(policy)
 	if err != nil {
 		return BackupScheduleEvaluation{}, err
 	}
@@ -158,7 +159,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 			if coord.ScheduleClockFloor.Before(now) {
 				coord.ScheduleClockFloor = now
 			}
-			value, encodeErr := encodeEnvironmentCoordinationRecord(coord)
+			value, encodeErr := coordinationrecord.Encode(coord)
 			if encodeErr != nil {
 				return BackupScheduleEvaluation{}, encodeErr
 			}
@@ -200,7 +201,7 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 	}
 	keys := []string{
 		backuppolicy.BackupPolicyKey(evaluation.EnvironmentID),
-		environmentCoordinationKey(evaluation.EnvironmentID),
+		coordinationrecord.Key(evaluation.EnvironmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(evaluation.EnvironmentID),
 	}
 	dueKey, err := backupruntime.BackupDueOutcomeKey(evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt)
@@ -232,7 +233,7 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 	if read.Values[3] != nil {
 		return nil
 	}
-	coord, err := decodeEnvironmentCoordinationRecord(read.Values[1].Value)
+	coord, err := coordinationrecord.Decode(read.Values[1].Value)
 	if err != nil || coord.CurrentBackupScheduleState == nil {
 		return errs.New(errs.KindStateConflict, "backup schedule changed")
 	}
@@ -244,7 +245,7 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 			coord.ScheduleClockFloor = now.UTC()
 		}
 	}
-	coordValue, err := encodeEnvironmentCoordinationRecord(coord)
+	coordValue, err := coordinationrecord.Encode(coord)
 	if err != nil {
 		return err
 	}
@@ -288,7 +289,7 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	if record.ScheduledAt == nil || record.Initiator != backupruntime.BackupRunInitiatorSchedule {
 		return nil, nil, errs.New(errs.KindValidationFailed, "scheduled backup publication metadata is missing")
 	}
-	keys := []string{backuppolicy.BackupPolicyKey(record.EnvironmentID), environmentCoordinationKey(record.EnvironmentID)}
+	keys := []string{backuppolicy.BackupPolicyKey(record.EnvironmentID), coordinationrecord.Key(record.EnvironmentID)}
 	dueKey, err := backupruntime.BackupDueOutcomeKey(record.EnvironmentID, record.PolicyRevision, *record.ScheduledAt)
 	if err != nil {
 		return nil, nil, err
@@ -320,11 +321,11 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 		read.Values[0].ModRevision != record.PolicyRevision {
 		return nil, nil, errs.New(errs.KindStateConflict, "backup scheduled policy changed")
 	}
-	coord, err := decodeEnvironmentCoordinationRecord(read.Values[1].Value)
+	coord, err := coordinationrecord.Decode(read.Values[1].Value)
 	if err != nil || coord.CurrentBackupScheduleState == nil {
 		return nil, nil, errs.New(errs.KindStateConflict, "backup schedule coordination is invalid")
 	}
-	digest, err := backupPolicyScheduleDigest(policy)
+	digest, err := coordinationrecord.PolicyScheduleDigest(policy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -338,7 +339,7 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	if coord.ScheduleClockFloor.Before(record.CreatedAt.UTC()) {
 		coord.ScheduleClockFloor = record.CreatedAt.UTC()
 	}
-	coordValue, err := encodeEnvironmentCoordinationRecord(coord)
+	coordValue, err := coordinationrecord.Encode(coord)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -383,7 +384,7 @@ func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
 		return false
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentCoordinationKey(run.EnvironmentID), dueKey, retentionKey}, Revision: readRevision,
+		Keys: []string{coordinationrecord.Key(run.EnvironmentID), dueKey, retentionKey}, Revision: readRevision,
 	})
 	if err != nil || read == nil || read.ReadRevision != readRevision || len(read.Values) != 3 {
 		return false
@@ -394,7 +395,7 @@ func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
 			return false
 		}
 	}
-	coord, err := decodeEnvironmentCoordinationRecord(read.Values[0].Value)
+	coord, err := coordinationrecord.Decode(read.Values[0].Value)
 	if err != nil || coord.CurrentBackupScheduleState == nil ||
 		!coord.CurrentBackupScheduleState.LastEvaluatedAt.Equal(run.CreatedAt) {
 		return false

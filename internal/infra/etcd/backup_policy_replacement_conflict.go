@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -34,7 +35,7 @@ func classifyBackupPolicyReplacementConflict(
 			if value == nil {
 				return errs.New(errs.KindInternal, "environment coordination is missing")
 			}
-			coordination, err := decodeEnvironmentCoordinationRecord(value.Value)
+			coordination, err := coordinationrecord.Decode(value.Value)
 			if err != nil || coordination.EnvironmentID != comparison.ID {
 				return errs.New(errs.KindInternal, "environment coordination is corrupt")
 			}

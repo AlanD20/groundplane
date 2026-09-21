@@ -7,6 +7,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -83,7 +84,7 @@ func validatebackupPolicyReplacementCandidate(
 	if candidate.Environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return errs.New(errs.KindStateConflict, "environment is not ready for backup policy replacement")
 	}
-	if !equalEnvironmentCoordinationRecord(candidate.NextCoordination, mustBackupPolicyScheduleTransition(candidate)) {
+	if !coordinationrecord.Equal(candidate.NextCoordination, mustBackupPolicyScheduleTransition(candidate)) {
 		return errs.New(errs.KindValidationFailed, "backup policy schedule transition is invalid")
 	}
 	if candidate.Replacement.Enabled {

@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -9,11 +10,11 @@ func sealBackupPolicyCandidateSchedule(
 	candidate *backupPolicyReplacementCandidate,
 	now time.Time,
 ) error {
-	if candidate == nil || !validEnvironmentCoordinationInstant(now.UTC()) {
+	if candidate == nil || !coordinationrecord.ValidInstant(now.UTC()) {
 		return errs.New(errs.KindValidationFailed, "backup policy schedule boundary is invalid")
 	}
 	candidate.Replacement.UpdatedAt = now.UTC()
-	next, nextRunAt, err := replaceEnvironmentCoordinationSchedule(
+	next, nextRunAt, err := coordinationrecord.ReplaceSchedule(
 		candidate.Coordination.Record, candidate.Replacement, now.UTC(),
 	)
 	if err != nil {

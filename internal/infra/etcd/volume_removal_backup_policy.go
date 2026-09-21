@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -26,7 +27,7 @@ type volumeRemovalBackupPolicyState struct {
 	environmentID string
 	volumeID      string
 	policy        *backuppolicy.BackupPolicyRecord
-	coordination  EnvironmentCoordinationRecord
+	coordination  coordinationrecord.EnvironmentCoordinationRecord
 	sources       []backuppolicy.BackupSourceRecord
 	conditions    []etcdstore.Condition
 }
@@ -58,7 +59,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 	}
 	keys := []string{
 		backuppolicy.BackupPolicyKey(environmentID),
-		environmentCoordinationKey(environmentID),
+		coordinationrecord.Key(environmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
@@ -79,7 +80,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
 	}
 	if read.Values[1] != nil {
-		state.coordination, err = decodeEnvironmentCoordinationRecord(read.Values[1].Value)
+		state.coordination, err = coordinationrecord.Decode(read.Values[1].Value)
 		if err != nil || state.coordination.EnvironmentID != environmentID {
 			return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
@@ -126,7 +127,7 @@ func prepareVolumeRemovalBackupPolicyPublication(
 	}
 	replacement, projection := volumeRemovalPolicyReplacement(state)
 	replacement.UpdatedAt = policyNow
-	coordination, _, err := replaceEnvironmentCoordinationSchedule(state.coordination, replacement, policyNow)
+	coordination, _, err := coordinationrecord.ReplaceSchedule(state.coordination, replacement, policyNow)
 	if err != nil {
 		return volumeRemovalBackupPolicyPublication{}, err
 	}
@@ -134,7 +135,7 @@ func prepareVolumeRemovalBackupPolicyPublication(
 	if err != nil {
 		return volumeRemovalBackupPolicyPublication{}, err
 	}
-	coordinationValue, err := encodeEnvironmentCoordinationRecord(coordination)
+	coordinationValue, err := coordinationrecord.Encode(coordination)
 	if err != nil {
 		clear(policyValue)
 		return volumeRemovalBackupPolicyPublication{}, err
@@ -142,7 +143,7 @@ func prepareVolumeRemovalBackupPolicyPublication(
 	publication.projection = projection
 	publication.mutations = []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: backuppolicy.BackupPolicyKey(state.environmentID), Value: policyValue},
-		{Type: etcdstore.MutationPut, Key: environmentCoordinationKey(state.environmentID), Value: coordinationValue},
+		{Type: etcdstore.MutationPut, Key: coordinationrecord.Key(state.environmentID), Value: coordinationValue},
 	}
 	if state.policy.Enabled && !replacement.Enabled {
 		publication.mutations = append(publication.mutations, etcdstore.Mutation{
