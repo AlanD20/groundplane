@@ -12,7 +12,7 @@ type backupTerminalReceiptPlan struct {
 }
 
 func (plan *backupTerminalReceiptPlan) clear() {
-	clearBackupRuntimeMutations(plan.mutations)
+	etcdstore.ClearMutationValues(plan.mutations)
 	plan.conditions = nil
 	plan.mutations = nil
 	plan.record = backupruntime.BackupTerminalReceiptRecord{}

@@ -111,7 +111,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 		pending.UpdatedAt = terminalAt
 		value, encodeErr := backupruntime.EncodeBackupRecoveryPointPruneRecord(pending)
 		if encodeErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return backupPruneTransactionPlan{}, encodeErr
 		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
@@ -124,12 +124,12 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return backupPruneTransactionPlan{}, err
 	}
 	mutations = append(mutations, epoch)
-	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
-		clearBackupRuntimeMutations(mutations)
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+		etcdstore.ClearMutationValues(mutations)
 		return backupPruneTransactionPlan{}, err
 	}
 	return backupPruneTransactionPlan{conditions: conditions, mutations: mutations}, nil

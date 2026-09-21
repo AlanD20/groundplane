@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
@@ -31,16 +32,16 @@ func (plan backupCheckpointPlan) composeTransaction(
 		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
 		composedMutations = append(composedMutations, copyOfMutation)
 	}
-	if err := validateBackupRuntimeTransactionBounds(
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(
 		composedConditions,
 		composedMutations,
 	); err != nil {
-		clearBackupRuntimeMutations(composedMutations)
+		etcdstore.ClearMutationValues(composedMutations)
 		return nil, nil, err
 	}
 	return composedConditions, composedMutations, nil
 }
 
 func (plan *backupCheckpointPlan) clear() {
-	clearBackupRuntimeMutations(plan.mutations)
+	etcdstore.ClearMutationValues(plan.mutations)
 }

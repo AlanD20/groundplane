@@ -123,7 +123,7 @@ func (plan *backupKeyRotationPublicationPlan) clear() {
 	if plan == nil {
 		return
 	}
-	clearBackupRuntimeMutations(plan.mutations)
+	etcdstore.ClearMutationValues(plan.mutations)
 	clear(plan.record.NextEncryptedIdentity)
 	plan.mutations = nil
 }

@@ -133,7 +133,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		transaction, err := runtime.transact(ctx, conditions, mutations)
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}

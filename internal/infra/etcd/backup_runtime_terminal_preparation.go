@@ -209,7 +209,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	if transitionMode == backupruntime.BackupRunTransitionOrphanCreate {
 		ordinal, changed := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 		if !changed {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return backupRunPublicationPlan{}, errs.New(
 				errs.KindValidationFailed,
 				"terminal backup orphan transition is invalid",
@@ -218,7 +218,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		orphan := backupruntime.BackupOrphanRecordFromRun(next, ordinal)
 		orphanValue, encodeErr := backupruntime.EncodeBackupOrphanRecord(orphan)
 		if encodeErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return backupRunPublicationPlan{}, encodeErr
 		}
 		connectorIndex, keyErr := backupruntime.BackupOrphanConnectorIndexKey(
@@ -227,7 +227,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		)
 		if keyErr != nil {
 			clear(orphanValue)
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return backupRunPublicationPlan{}, keyErr
 		}
 		environmentIndex, keyErr := backupruntime.BackupOrphanEnvironmentIndexKey(
@@ -236,7 +236,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		)
 		if keyErr != nil {
 			clear(orphanValue)
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return backupRunPublicationPlan{}, keyErr
 		}
 		orphanKey := backupruntime.BackupOrphanKey(orphan.Point.ID)
@@ -260,7 +260,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	})
 	epoch, err := evidence.fence.EpochRewriteMutation()
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return backupRunPublicationPlan{}, err
 	}
 	mutations = append(mutations, epoch)
@@ -269,8 +269,8 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 			Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...),
 		})
 	}
-	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
-		clearBackupRuntimeMutations(mutations)
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+		etcdstore.ClearMutationValues(mutations)
 		return backupRunPublicationPlan{}, err
 	}
 	return backupRunPublicationPlan{conditions: conditions, mutations: mutations, record: next}, nil

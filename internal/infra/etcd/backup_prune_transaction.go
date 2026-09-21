@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"bytes"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -32,18 +33,18 @@ func (plan backupPruneTransactionPlan) composeTransaction(
 		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
 		composedMutations = append(composedMutations, copyOfMutation)
 	}
-	if err := validateBackupRuntimeTransactionBounds(
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(
 		composedConditions,
 		composedMutations,
 	); err != nil {
-		clearBackupRuntimeMutations(composedMutations)
+		etcdstore.ClearMutationValues(composedMutations)
 		return nil, nil, err
 	}
 	return composedConditions, composedMutations, nil
 }
 
 func (plan *backupPruneTransactionPlan) clear() {
-	clearBackupRuntimeMutations(plan.mutations)
+	etcdstore.ClearMutationValues(plan.mutations)
 	plan.authority = nil
 	plan.readRevision = 0
 }

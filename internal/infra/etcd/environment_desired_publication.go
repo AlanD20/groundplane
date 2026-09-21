@@ -233,7 +233,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearBackupRuntimeMutations(entryPublication.mutations)
+	defer etcdstore.ClearMutationValues(entryPublication.mutations)
 	zonePool, err := repository.prepareEnvironmentBlueprintZonePoolAtRevision(
 		ctx, effectiveEnvironment.Record, projection.DesiredZones, fence.ReadRevision(),
 	)
@@ -349,7 +349,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		defer clearBackupRuntimeMutations(volumeRuntimePublication.mutations)
+		defer etcdstore.ClearMutationValues(volumeRuntimePublication.mutations)
 	}
 
 	var volumePolicyPublication volumeRemovalBackupPolicyPublication
@@ -366,7 +366,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		defer clearBackupRuntimeMutations(volumePolicyPublication.mutations)
+		defer etcdstore.ClearMutationValues(volumePolicyPublication.mutations)
 	}
 
 	conditions := []etcdstore.Condition{

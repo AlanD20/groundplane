@@ -7,10 +7,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const maximumBackupRuntimeTransactionBytes = 768 << 10
-
 type BackupRuntimeRepository struct {
-	*backupruntime.Reader
+	*backupruntime.Writer
 	store hierarchyStore
 }
 
@@ -26,5 +24,5 @@ func newBackupRuntimeRepository(store hierarchyStore) (*BackupRuntimeRepository,
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "backup runtime store is required")
 	}
-	return &BackupRuntimeRepository{store: store, Reader: backupruntime.NewReader(store)}, nil
+	return &BackupRuntimeRepository{store: store, Writer: backupruntime.NewWriter(store)}, nil
 }

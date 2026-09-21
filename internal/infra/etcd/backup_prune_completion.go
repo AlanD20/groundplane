@@ -149,7 +149,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
 		mutations = append(mutations, copyOfMutation)
 	}
-	result, err := repository.transact(ctx, conditions, mutations)
+	result, err := repository.TransactRuntime(ctx, conditions, mutations)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
@@ -254,8 +254,8 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 		return backupPruneTransactionPlan{}, err
 	}
 	mutations = append(mutations, epoch)
-	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
-		clearBackupRuntimeMutations(mutations)
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+		etcdstore.ClearMutationValues(mutations)
 		return backupPruneTransactionPlan{}, err
 	}
 	return backupPruneTransactionPlan{conditions: conditions, mutations: mutations}, nil

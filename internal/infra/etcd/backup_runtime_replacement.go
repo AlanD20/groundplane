@@ -177,7 +177,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
 		mutations = append(mutations, copyOfMutation)
 	}
-	result, err := repository.transact(ctx, conditions, mutations)
+	result, err := repository.TransactRuntime(ctx, conditions, mutations)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}

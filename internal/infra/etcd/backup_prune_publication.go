@@ -159,12 +159,12 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 	)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return backupPruneTransactionPlan{}, err
 	}
 	mutations = append(mutations, epoch)
-	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
-		clearBackupRuntimeMutations(mutations)
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+		etcdstore.ClearMutationValues(mutations)
 		return backupPruneTransactionPlan{}, err
 	}
 	return backupPruneTransactionPlan{

@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"context"
@@ -6,18 +6,18 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *BackupRuntimeRepository) transact(
+func (repository *Writer) TransactRuntime(
 	ctx context.Context,
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) (etcdstore.TransactionResult, error) {
-	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+	if err := ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	return repository.store.Transact(ctx, conditions, mutations)
 }
 
-func validateBackupRuntimeTransactionBounds(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
+func ValidateBackupRuntimeTransactionBounds(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
 	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return errs.Newf(
 			errs.KindInternal,
@@ -39,11 +39,4 @@ func validateBackupRuntimeTransactionBounds(conditions []etcdstore.Condition, mu
 		)
 	}
 	return nil
-}
-
-func clearBackupRuntimeMutations(mutations []etcdstore.Mutation) {
-	for index := range mutations {
-		clear(mutations[index].Value)
-		mutations[index].Value = nil
-	}
 }

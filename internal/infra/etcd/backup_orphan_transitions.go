@@ -116,7 +116,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	defer clear(epoch.Value)
-	result, err := repository.transact(ctx, conditions, []etcdstore.Mutation{
+	result, err := repository.TransactRuntime(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: backupruntime.BackupOrphanKey(next.Point.ID), Value: value},
 		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(next.Point.ID)},
 		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(next.Point.ID)},

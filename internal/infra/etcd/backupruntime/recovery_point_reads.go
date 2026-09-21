@@ -272,7 +272,7 @@ func (repository *Reader) listBackupRecoveryPoints(
 	if len(keys) == 0 {
 		return page, nil
 	}
-	points, err := repository.readBackupRecoveryPointPageChunks(ctx, keys, index.ReadRevision)
+	points, err := repository.ReadRecoveryPointPageChunks(ctx, keys, index.ReadRevision)
 	if err != nil {
 		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
 	}
@@ -326,7 +326,7 @@ func (repository *Reader) listBackupRecoveryPoints(
 		}
 		visible[position] = true
 	}
-	companions, err := repository.readBackupRecoveryPointPageChunks(
+	companions, err := repository.ReadRecoveryPointPageChunks(
 		ctx,
 		companionKeys,
 		index.ReadRevision,
@@ -365,7 +365,7 @@ func (repository *Reader) listBackupRecoveryPoints(
 	return page, nil
 }
 
-func (repository *Reader) readBackupRecoveryPointPageChunks(
+func (repository *Reader) ReadRecoveryPointPageChunks(
 	ctx context.Context,
 	keys []string,
 	revision int64,

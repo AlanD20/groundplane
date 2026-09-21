@@ -53,8 +53,8 @@ func composeBackupTerminalTransaction(
 			mutations = append(mutations, copyOfMutation)
 		}
 	}
-	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
-		clearBackupRuntimeMutations(mutations)
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+		etcdstore.ClearMutationValues(mutations)
 		return nil, nil, err
 	}
 	return conditions, mutations, nil

@@ -37,11 +37,11 @@ func (plan backupRunPublicationPlan) composeTransaction(
 		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
 		composedMutations = append(composedMutations, copyOfMutation)
 	}
-	if err := validateBackupRuntimeTransactionBounds(
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(
 		composedConditions,
 		composedMutations,
 	); err != nil {
-		clearBackupRuntimeMutations(composedMutations)
+		etcdstore.ClearMutationValues(composedMutations)
 		return nil, nil, err
 	}
 	return composedConditions, composedMutations, nil
@@ -167,7 +167,7 @@ func prepareBackupTaskIdempotencyPlan(
 	if err != nil {
 		return nil, err
 	}
-	defer clearBackupRuntimeMutations(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	taskClassifier := classifyTaskCreateConflict(record.OperationID)
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
@@ -189,7 +189,7 @@ func prepareBackupTaskIdempotencyPlan(
 		return nil, err
 	}
 	if err := idempotencyPlan.enforceTransactionBounds(
-		validateBackupRuntimeTransactionBounds,
+		backupruntime.ValidateBackupRuntimeTransactionBounds,
 	); err != nil {
 		return nil, err
 	}

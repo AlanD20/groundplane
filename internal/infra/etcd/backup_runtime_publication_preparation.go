@@ -78,13 +78,13 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	for _, exclusion := range exclusions {
 		key, keyErr := backupruntime.BackupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
 		if keyErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			clear(lockValue)
 			return backupRunPublicationPlan{}, keyErr
 		}
 		value, encodeErr := backupruntime.EncodeBackupSourceTargetExclusionRecord(exclusion)
 		if encodeErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			clear(lockValue)
 			return backupRunPublicationPlan{}, encodeErr
 		}
@@ -93,7 +93,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	}
 	anchor, err := repository.ReadFixedKeys(ctx, keys, fixedRevision)
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
@@ -105,13 +105,13 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		Revision: fixedRevision,
 	})
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
 	if connectorEvidence == nil || connectorEvidence.ReadRevision != anchor.ReadRevision ||
 		len(connectorEvidence.Values) != 2 {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		clear(lockValue)
 		return backupRunPublicationPlan{}, errs.New(
 			errs.KindInternal,
@@ -123,7 +123,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		connectorEvidence.Values,
 		record,
 	); err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
@@ -134,7 +134,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		fixedRevision,
 	)
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
@@ -143,7 +143,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 			continue
 		}
 		if value != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			clear(lockValue)
 			return backupRunPublicationPlan{}, errs.New(
 				errs.KindStateConflict,
@@ -158,7 +158,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		anchor.ReadRevision,
 	)
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
@@ -166,7 +166,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	if retrySource == nil {
 		policyFence, err = repository.loadManualBackupPolicyFence(ctx, record, fixedRevision)
 		if err != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			clear(lockValue)
 			return backupRunPublicationPlan{}, err
 		}
@@ -198,7 +198,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	mutations = append(mutations, snapshotMutations...)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return backupRunPublicationPlan{}, err
 	}
 	mutations = append(mutations, epoch)
@@ -207,14 +207,14 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 			ctx, record, fixedRevision,
 		)
 		if scheduleErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return backupRunPublicationPlan{}, scheduleErr
 		}
 		conditions = append(conditions, scheduleConditions...)
 		mutations = append(mutations, scheduleMutations...)
 	}
-	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
-		clearBackupRuntimeMutations(mutations)
+	if err := backupruntime.ValidateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
+		etcdstore.ClearMutationValues(mutations)
 		return backupRunPublicationPlan{}, err
 	}
 	return backupRunPublicationPlan{

@@ -115,13 +115,13 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			fixedRevision,
 		)
 		if readErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return nil, nil, readErr
 		}
 		if sourceRead.Values[0] == nil ||
 			sourceRead.Values[0].ModRevision != source.SourceRevision {
 			etcdstore.ClearValues(sourceRead.Values)
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return nil, nil, errs.New(errs.KindStateConflict, "backup source snapshot changed")
 		}
 		storedSource, decodeErr := backuppolicy.DecodeBackupSourceRecord(sourceRead.Values[0].Value)
@@ -133,14 +133,14 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			) != string(
 				source.Kind,
 			) || storedSource.TargetID != source.TargetID {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return nil, nil, errs.New(errs.KindStateConflict, "backup source snapshot changed")
 		}
 		if err := addCondition(
 			backuppolicy.BackupSourceKey(source.SourceID),
 			source.SourceRevision,
 		); err != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return nil, nil, err
 		}
 		switch source.Kind {
@@ -156,7 +156,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				blueprints.EnvironmentBlueprintHeadKey(snapshot.BackingEnvironmentID),
 			}, fixedRevision)
 			if readErr != nil {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, readErr
 			}
 			if err := validateBackupPostgresPublicationEvidence(
@@ -165,7 +165,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				*snapshot,
 			); err != nil {
 				etcdstore.ClearValues(read.Values)
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, err
 			}
 			etcdstore.ClearValues(read.Values)
@@ -180,7 +180,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				{blueprints.EnvironmentBlueprintHeadKey(snapshot.BackingEnvironmentID), snapshot.BackingServiceRevision},
 			} {
 				if err := addCondition(fact.key, fact.revision); err != nil {
-					clearBackupRuntimeMutations(mutations)
+					etcdstore.ClearMutationValues(mutations)
 					return nil, nil, err
 				}
 			}
@@ -196,7 +196,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}
 			read, readErr := repository.ReadFixedKeys(ctx, keys, fixedRevision)
 			if readErr != nil {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, readErr
 			}
 			if err := validateBackupVolumePublicationEvidence(
@@ -205,23 +205,23 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				*snapshot,
 			); err != nil {
 				etcdstore.ClearValues(read.Values)
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, err
 			}
 			etcdstore.ClearValues(read.Values)
 			if err := addCondition(hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID), snapshot.EnvironmentRevision); err != nil {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, err
 			}
 			if err := addCondition(blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID), source.TargetRevision); err != nil {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, err
 			}
 			if err := addCondition(
 				blueprints.EnvironmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
 				snapshot.ProjectionRoot,
 			); err != nil {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, err
 			}
 			for _, service := range snapshot.Services {
@@ -229,7 +229,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 					servicerecord.ServiceRuntimeKey(service.ServiceID),
 					service.ServiceRevision,
 				); err != nil {
-					clearBackupRuntimeMutations(mutations)
+					etcdstore.ClearMutationValues(mutations)
 					return nil, nil, err
 				}
 			}
@@ -240,13 +240,13 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 					ctx, run, source, retrySource.run.Record, fixedRevision,
 				)
 				if retryErr != nil {
-					clearBackupRuntimeMutations(mutations)
+					etcdstore.ClearMutationValues(mutations)
 					return nil, nil, retryErr
 				}
 				for _, condition := range configConditions {
 					if err := addCondition(condition.Key, condition.ModRevision); err != nil {
-						clearBackupRuntimeMutations(configMutations)
-						clearBackupRuntimeMutations(mutations)
+						etcdstore.ClearMutationValues(configMutations)
+						etcdstore.ClearMutationValues(mutations)
 						return nil, nil, err
 					}
 				}
@@ -254,7 +254,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				continue
 			}
 			if snapshot.ConfigSnapshotID != run.TaskID || snapshot.ReadRevision != fixedRevision {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, errs.New(
 					errs.KindStateConflict,
 					"backup config snapshot revision changed",
@@ -266,19 +266,19 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				fixedRevision,
 			)
 			if readErr != nil {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, readErr
 			}
 			if targetRead.Values[0] == nil ||
 				targetRead.Values[0].ModRevision != source.TargetRevision {
 				etcdstore.ClearValues(targetRead.Values)
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, errs.New(errs.KindStateConflict, "backup config target changed")
 			}
 			environment, decodeErr := hierarchyrecord.DecodeEnvironment(targetRead.Values[0].Value)
 			etcdstore.ClearValues(targetRead.Values)
 			if decodeErr != nil || environment.ID != run.EnvironmentID {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
 			config := backupconfigrecord.BackupConfigSnapshotRecord{
@@ -292,7 +292,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}
 			value, encodeErr := backupconfigrecord.EncodeBackupConfigSnapshotRecord(config)
 			if encodeErr != nil {
-				clearBackupRuntimeMutations(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return nil, nil, encodeErr
 			}
 			mutations = append(

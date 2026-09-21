@@ -98,7 +98,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 			backupruntime.BackupRecoveryPointPruneKey(pointID),
 		)
 	}
-	authority, err := repository.readBackupRecoveryPointPageChunks(
+	authority, err := repository.ReadRecoveryPointPageChunks(
 		ctx,
 		authorityKeys,
 		selectionRevision,
@@ -143,7 +143,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		points[position] = point
 		companionKeys = append(companionKeys, environmentIndex, sourceIndex, connectorIndex)
 	}
-	companions, err := repository.readBackupRecoveryPointPageChunks(
+	companions, err := repository.ReadRecoveryPointPageChunks(
 		ctx,
 		companionKeys,
 		selectionRevision,
@@ -217,7 +217,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		}
 		encoded, encodeErr := backupruntime.EncodeBackupRecoveryPointPruneRecord(prune)
 		if encodeErr != nil {
-			clearBackupRuntimeMutations(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, encodeErr
 		}
 		mutations = append(mutations, etcdstore.Mutation{
@@ -231,7 +231,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	}
 	nextValue, err := backupruntime.EncodeBackupRetentionSweepRecord(next)
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	mutations = append(
@@ -239,18 +239,18 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		mutations...)
 	evidence, err := repository.loadOwnedEvidence(ctx, run.Record, anchor.ReadRevision)
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	conditions = append(conditions, evidence.fence.TransactionConditions()...)
 	epoch, err := evidence.fence.EpochRewriteMutation()
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	mutations = append(mutations, epoch)
-	result, err := repository.transact(ctx, conditions, mutations)
-	clearBackupRuntimeMutations(mutations)
+	result, err := repository.TransactRuntime(ctx, conditions, mutations)
+	etcdstore.ClearMutationValues(mutations)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}

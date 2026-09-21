@@ -22,7 +22,7 @@ type backupTaskTerminalPlan struct {
 }
 
 func (plan *backupTaskTerminalPlan) clear() {
-	clearBackupRuntimeMutations(plan.mutations)
+	etcdstore.ClearMutationValues(plan.mutations)
 	plan.conditions = nil
 	plan.mutations = nil
 	plan.record = TaskRecord{}

@@ -133,7 +133,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	}
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		clearBackupRuntimeMutations(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		clear(record.NextEncryptedIdentity)
 		return PreparedBackupKeyRotation{}, err
 	}

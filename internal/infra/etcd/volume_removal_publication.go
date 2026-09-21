@@ -131,7 +131,7 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 				ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, readRevision,
 					hierarchydeletion.MutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
 				if err != nil {
-					clearBackupRuntimeMutations(publication.mutations)
+					etcdstore.ClearMutationValues(publication.mutations)
 					return volumeRemovalInitialPublication{}, err
 				}
 				// The combined desired publisher owns and clears these epoch values.
