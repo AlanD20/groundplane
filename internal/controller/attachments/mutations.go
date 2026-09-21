@@ -12,6 +12,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"io"
@@ -33,13 +34,13 @@ type attachMutationFacts interface {
 		string,
 		string,
 		backinghook.Configuration,
-	) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, *etcd.BackingHookEncryptedInputs, error)
+	) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, *taskconfiguration.BackingHookEncryptedInputs, error)
 	SealBackingHookTaskInputs(
 		context.Context,
 		string,
 		string,
 		backinghook.Configuration,
-	) (*etcd.BackingHookEncryptedInputs, error)
+	) (*taskconfiguration.BackingHookEncryptedInputs, error)
 	SealFactSets(
 		context.Context,
 		string,
@@ -68,7 +69,7 @@ type attachDraftPlanSealer interface {
 		etcd.TaskRecord,
 		*taskplanning.AttachPlanIdentity,
 		*attachrecord.EncryptedFacts,
-		*etcd.BackingHookEncryptedInputs,
+		*taskconfiguration.BackingHookEncryptedInputs,
 	) (serviceruntimerecord.AttachPreparation, error)
 }
 

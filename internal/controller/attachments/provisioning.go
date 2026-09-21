@@ -10,6 +10,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 )
 
 func (service *MutationService) prepareAttachFacts(
@@ -18,7 +19,7 @@ func (service *MutationService) prepareAttachFacts(
 	scope etcd.AttachCreateScope,
 	adapter adapters.Adapter,
 ) (*taskplanning.AttachPlanIdentity, []attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts,
-	*etcd.BackingHookEncryptedInputs, error,
+	*taskconfiguration.BackingHookEncryptedInputs, error,
 ) {
 	if adapter.Custom() {
 		hooks := scope.BackingService.Record.Desired.Hooks

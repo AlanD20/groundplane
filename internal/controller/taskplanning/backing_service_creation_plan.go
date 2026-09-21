@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -35,7 +36,7 @@ func resolveBackingServiceCreationPlan(
 	serviceID, enabled := task.Params[taskjournal.TaskBackingServiceCreationParam]
 	volumeDirectory, hasVolumeDirectory := task.Params[taskjournal.TaskBackingServiceVolumeDirectoryParam]
 	healthServiceID, hasHealth := task.Params[taskjournal.TaskBackingServiceHealthParam]
-	afterStartID, hasAfterStart := task.Params[etcd.TaskBackingServiceAfterStartParam]
+	afterStartID, hasAfterStart := task.Params[taskconfiguration.TaskBackingServiceAfterStartParam]
 	if enabled != hasVolumeDirectory ||
 		enabled && procedure != taskcontract.BlueprintComposeProcedureFullReconcile ||
 		enabled && (ids.Validate(ids.KindService, serviceID) != nil || volumeDirectory == "") ||
@@ -116,7 +117,7 @@ func (resolver *TaskPlanResolver) PrepareBackingServiceCreationTask(
 	artifact *agentpb.ComposeArtifact,
 	steps []*agentpb.ExecutionStep,
 	configuration *backinghook.Configuration,
-	inputs *etcd.BackingHookEncryptedInputs,
+	inputs *taskconfiguration.BackingHookEncryptedInputs,
 ) (etcd.TaskRecord, error) {
 	preparedSteps, err := resolver.appendBackingServiceCreationAfterStart(
 		ctx, task, steps, configuration, inputs,
@@ -145,7 +146,7 @@ func (resolver *TaskPlanResolver) appendBackingServiceCreationAfterStart(
 	task etcd.TaskRecord,
 	steps []*agentpb.ExecutionStep,
 	configuration *backinghook.Configuration,
-	inputs *etcd.BackingHookEncryptedInputs,
+	inputs *taskconfiguration.BackingHookEncryptedInputs,
 ) ([]*agentpb.ExecutionStep, error) {
 	wantsHook := configuration != nil && configuration.AfterStart != nil
 	if !wantsHook {
@@ -154,7 +155,7 @@ func (resolver *TaskPlanResolver) appendBackingServiceCreationAfterStart(
 		}
 		return steps, nil
 	}
-	serviceID, declared := task.Params[etcd.TaskBackingServiceAfterStartParam]
+	serviceID, declared := task.Params[taskconfiguration.TaskBackingServiceAfterStartParam]
 	if !declared || serviceID == "" || len(steps) == 0 || len(task.Steps) != len(steps)+1 {
 		return nil, errs.New(errs.KindInternal, "Backing-service after-start Task is incomplete")
 	}

@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -21,7 +22,7 @@ type serviceLifecycleHookInputs interface {
 		string,
 		string,
 		backinghook.Configuration,
-	) (*etcd.BackingHookEncryptedInputs, error)
+	) (*taskconfiguration.BackingHookEncryptedInputs, error)
 }
 
 func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
@@ -33,7 +34,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	task etcd.TaskRecord,
-) (etcd.TaskRecord, etcd.ServiceLifecycleRenderInput, *etcd.BackingHookEncryptedInputs, error) {
+) (etcd.TaskRecord, etcd.ServiceLifecycleRenderInput, *taskconfiguration.BackingHookEncryptedInputs, error) {
 	releaseAuthority, err := controllerlifecycle.CaptureRelease(
 		ctx, service.repository, projection, environment.Record.ID, current.Record.Desired.ID,
 	)
@@ -53,7 +54,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	if tenant != nil {
 		input.TenantID, input.TenantSlug = tenant.Record.ID, tenant.Record.Slug
 	}
-	var sealed *etcd.BackingHookEncryptedInputs
+	var sealed *taskconfiguration.BackingHookEncryptedInputs
 	definition := serviceLifecycleHookDefinition(taskType, current.Record.Desired.Hooks)
 	if definition != nil {
 		if current.Record.Desired.Adapter != "custom" {

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -40,7 +41,7 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 func taskSourcePruneConditions(task TaskRecord) []etcdstore.Condition {
 	pins := recoverySecretPinPruneConditions(task)
 	if task.Configuration != nil && task.Configuration.BackingHookInputs != nil {
-		pins = append(pins, etcdstore.Condition{Key: backingHookTaskInputKey(task.OperationID)})
+		pins = append(pins, etcdstore.Condition{Key: taskconfiguration.BackingHookTaskInputKey(task.OperationID)})
 	}
 	if task.Type != taskjournal.TaskScript {
 		return pins

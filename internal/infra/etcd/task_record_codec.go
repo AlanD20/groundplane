@@ -5,6 +5,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -28,7 +29,7 @@ type taskRecordData struct {
 	Steps              []taskjournal.TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record            `json:"materializations,omitempty"`
 	EntryRuntime       *EntryTaskRuntime                         `json:"entry_runtime,omitempty"`
-	Configuration      *TaskConfiguration                        `json:"configuration,omitempty"`
+	Configuration      *taskconfiguration.TaskConfiguration      `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
 	Status             taskjournal.TaskStatus                    `json:"status"`
 	Result             *taskjournal.TaskResultData               `json:"result,omitempty"`
@@ -96,7 +97,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources),
 		Materializations:                materializationrecord.Clone(record.Materializations),
 		EntryRuntime:                    cloneEntryTaskRuntime(record.EntryRuntime),
-		Configuration:                   cloneTaskConfiguration(record.Configuration),
+		Configuration:                   taskconfiguration.CloneTaskConfiguration(record.Configuration),
 		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
 		EventCheckpoints:   append([]TaskEventCheckpoint(nil), record.EventCheckpoints...),
 		Result:             taskjournal.TaskResultToData(record.Result),
@@ -165,7 +166,7 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned.Steps = cloneTaskSteps(record.Steps)
 	cloned.Materializations = materializationrecord.Clone(record.Materializations)
 	cloned.EntryRuntime = cloneEntryTaskRuntime(record.EntryRuntime)
-	cloned.Configuration = cloneTaskConfiguration(record.Configuration)
+	cloned.Configuration = taskconfiguration.CloneTaskConfiguration(record.Configuration)
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)
 	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)
 	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)

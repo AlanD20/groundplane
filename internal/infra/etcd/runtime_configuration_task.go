@@ -5,46 +5,15 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
-	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-// TaskConfiguration binds a candidate source set to its exact acknowledged
-// predecessor. A nil Prior with revision zero records acknowledged absence.
-type TaskConfiguration struct {
-	Current           runtimeconfiguration.Reference  `json:"current,omitempty"`
-	Prior             *runtimeconfiguration.Reference `json:"prior"`
-	PriorRevision     int64                           `json:"prior_revision"`
-	SecretPins        *TaskSecretPinSet               `json:"secret_pins,omitempty"`
-	BackingHookInputs *TaskBackingHookInputSet        `json:"backing_hook_inputs,omitempty"`
-}
-
-func cloneTaskConfiguration(configuration *TaskConfiguration) *TaskConfiguration {
-	if configuration == nil {
-		return nil
-	}
-	cloned := *configuration
-	if configuration.SecretPins != nil {
-		pins := *configuration.SecretPins
-		cloned.SecretPins = &pins
-	}
-	if configuration.BackingHookInputs != nil {
-		inputs := *configuration.BackingHookInputs
-		inputs.SecretSources = append([]tasksecretpinrecord.Record(nil), inputs.SecretSources...)
-		cloned.BackingHookInputs = &inputs
-	}
-	if configuration.Prior != nil {
-		prior := *configuration.Prior
-		cloned.Prior = &prior
-	}
-	return &cloned
-}
 
 func runtimeConfigurationHeadKey(environmentID string) string {
 	return "/v1/runtime/environment-configurations/" + environmentID
@@ -171,7 +140,7 @@ func prepareRuntimeConfigurationTask(
 		return TaskRecord{}, errs.New(errs.KindStateConflict, "prepared configuration source set changed")
 	}
 	prepared := cloneTaskRecord(task)
-	prepared.Configuration = &TaskConfiguration{Current: reference, Prior: prior, PriorRevision: headRevision}
+	prepared.Configuration = &taskconfiguration.TaskConfiguration{Current: reference, Prior: prior, PriorRevision: headRevision}
 	return prepared, nil
 }
 
@@ -179,7 +148,7 @@ func taskRuntimeConfiguration(task TaskRecord) (*runtimeconfiguration.Reference,
 	if task.Configuration == nil {
 		return nil, nil
 	}
-	if err := validateTaskSecretPinSet(task.Configuration.SecretPins); err != nil {
+	if err := taskconfiguration.ValidateTaskSecretPinSet(task.Configuration.SecretPins); err != nil {
 		return nil, err
 	}
 	if err := validateTaskBackingHookInputSet(task); err != nil {

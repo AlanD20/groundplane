@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -48,7 +49,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 	}
 	change := taskMaterializationProjectionChange{}
 	if task.Configuration.BackingHookInputs != nil {
-		key := backingHookTaskInputKey(task.OperationID)
+		key := taskconfiguration.BackingHookTaskInputKey(task.OperationID)
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 		if err != nil {
 			return taskMaterializationProjectionChange{}, err
@@ -63,7 +64,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 			)
 		}
 		defer clearKeyValues(read.Values)
-		stored, err := decodeBackingHookEncryptedInputs(read.Values[0].Value)
+		stored, err := taskconfiguration.DecodeBackingHookEncryptedInputs(read.Values[0].Value)
 		if err != nil {
 			return taskMaterializationProjectionChange{}, err
 		}
@@ -157,7 +158,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	hookInputIndex := -1
 	if task.Configuration.BackingHookInputs != nil {
 		hookInputIndex = len(keys)
-		keys = append(keys, backingHookTaskInputKey(task.OperationID))
+		keys = append(keys, taskconfiguration.BackingHookTaskInputKey(task.OperationID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
@@ -181,13 +182,13 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	}
 	if hookInputIndex >= 0 {
 		if read.Values[hookInputIndex] == nil || latest.Configuration.BackingHookInputs == nil ||
-			!sameTaskBackingHookInputSet(
+			!taskconfiguration.SameTaskBackingHookInputSet(
 				latest.Configuration.BackingHookInputs,
 				task.Configuration.BackingHookInputs,
 			) {
 			return true, corruptTaskPruneIntent()
 		}
-		stored, decodeErr := decodeBackingHookEncryptedInputs(read.Values[hookInputIndex].Value)
+		stored, decodeErr := taskconfiguration.DecodeBackingHookEncryptedInputs(read.Values[hookInputIndex].Value)
 		if decodeErr != nil {
 			return true, decodeErr
 		}
@@ -230,7 +231,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	}
 	if hookInputIndex >= 0 {
 		change.mutations = append(change.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationDelete, Key: backingHookTaskInputKey(task.OperationID),
+			Type: etcdstore.MutationDelete, Key: taskconfiguration.BackingHookTaskInputKey(task.OperationID),
 		})
 	}
 	commit, err := repository.store.Transact(ctx, change.conditions, change.mutations)
@@ -260,7 +261,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 	}
 	keys := []string{
 		taskjournal.TaskActiveOperationKey(task.OperationID), taskjournal.TaskAssignmentIndexKey(task.ID),
-		backingHookTaskInputKey(task.OperationID),
+		taskconfiguration.BackingHookTaskInputKey(task.OperationID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
@@ -276,7 +277,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 	if read.Values[2] == nil {
 		return false, nil
 	}
-	stored, err := decodeBackingHookEncryptedInputs(read.Values[2].Value)
+	stored, err := taskconfiguration.DecodeBackingHookEncryptedInputs(read.Values[2].Value)
 	if err != nil {
 		return true, err
 	}

@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -51,7 +52,7 @@ type attachMutationRepository interface {
 		etcd.AttachCreateScope,
 		attachrecord.Record,
 		*attachrecord.EncryptedFacts,
-		*etcd.BackingHookEncryptedInputs,
+		*taskconfiguration.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -60,7 +61,7 @@ type attachMutationRepository interface {
 		context.Context,
 		etcd.AttachCreateScope,
 		etcdstore.Versioned[attachrecord.Record],
-		*etcd.BackingHookEncryptedInputs,
+		*taskconfiguration.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -69,7 +70,7 @@ type attachMutationRepository interface {
 		context.Context,
 		etcd.AttachCreateScope,
 		etcdstore.Versioned[attachrecord.Record],
-		*etcd.BackingHookEncryptedInputs,
+		*taskconfiguration.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -190,7 +191,7 @@ func (repository *durableAttachMutationRepository) CreateAttachWithTaskHookInput
 	scope etcd.AttachCreateScope,
 	record attachrecord.Record,
 	facts *attachrecord.EncryptedFacts,
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -204,7 +205,7 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskHook
 	ctx context.Context,
 	scope etcd.AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -218,7 +219,7 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskInit
 	ctx context.Context,
 	scope etcd.AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,

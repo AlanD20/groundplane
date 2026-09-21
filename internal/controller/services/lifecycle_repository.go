@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 )
 
 type serviceLifecycleRepository interface {
@@ -30,7 +31,7 @@ type serviceLifecycleRepository interface {
 		servicerecord.ServiceRecord,
 		*etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 		*etcd.ServiceLifecycleRenderInput,
-		*etcd.BackingHookEncryptedInputs,
+		*taskconfiguration.BackingHookEncryptedInputs,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -83,7 +84,7 @@ func (repository *MutationRepository) BeginServiceLifecycleWithTaskHookInputs(
 	replacement servicerecord.ServiceRecord,
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	renderInput *etcd.ServiceLifecycleRenderInput,
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

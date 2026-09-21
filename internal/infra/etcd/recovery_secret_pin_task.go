@@ -3,41 +3,19 @@ package etcd
 import (
 	"cmp"
 	"context"
-	"encoding/hex"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-// TaskSecretPinSet binds the operation's original owning Task and exact member
-// identity through restart and Retry. It never contains Secret value bytes.
-type TaskSecretPinSet struct {
-	TaskID string `json:"task_id"`
-	Count  uint64 `json:"count"`
-	SHA256 string `json:"sha256"`
-}
-
-func validateTaskSecretPinSet(binding *TaskSecretPinSet) error {
-	if binding == nil {
-		return nil
-	}
-	digest, err := hex.DecodeString(binding.SHA256)
-	if ids.Validate(ids.KindTask, binding.TaskID) != nil || binding.Count == 0 ||
-		binding.Count > tasksecretpins.MaximumPins || err != nil || len(digest) != 32 ||
-		hex.EncodeToString(digest) != binding.SHA256 {
-		return errs.New(errs.KindValidationFailed, "Task Secret pin set identity is invalid")
-	}
-	return nil
-}
 
 func prepareRecoverySecretPins(
 	ctx context.Context, store hierarchyStore, task TaskRecord,
@@ -132,7 +110,7 @@ func prepareRecoverySecretPinSet(
 		return TaskRecord{}, tasksecretpins.Prepared{}, finishRecoverySecretPreparation(ctx, store, task, err)
 	}
 	task = cloneTaskRecord(task)
-	task.Configuration.SecretPins = &TaskSecretPinSet{
+	task.Configuration.SecretPins = &taskconfiguration.TaskSecretPinSet{
 		TaskID: prepared.TaskID(), Count: prepared.MembershipCount(), SHA256: prepared.MembershipSHA256(),
 	}
 	return task, prepared, nil

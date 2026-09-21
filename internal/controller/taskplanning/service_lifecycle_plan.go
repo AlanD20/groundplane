@@ -10,6 +10,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sort"
 
@@ -44,7 +45,7 @@ type serviceLifecycleHookInputResolver interface {
 	ResolveDraftLifecycleHookInput(
 		context.Context,
 		etcd.TaskRecord,
-		*etcd.BackingHookEncryptedInputs,
+		*taskconfiguration.BackingHookEncryptedInputs,
 		string,
 		backinghook.Event,
 		BackingHookInputConsumer,
@@ -64,7 +65,7 @@ func (resolver *TaskPlanResolver) PrepareServiceLifecycleHookTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	input etcd.ServiceLifecycleRenderInput,
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	stepIDs []string,
 ) (etcd.TaskRecord, error) {
 	return resolver.prepareServiceLifecycleTask(ctx, task, input, hookInputs, stepIDs)
@@ -74,7 +75,7 @@ func (resolver *TaskPlanResolver) prepareServiceLifecycleTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	input etcd.ServiceLifecycleRenderInput,
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	stepIDs []string,
 ) (etcd.TaskRecord, error) {
 	wantSteps := 1
@@ -145,7 +146,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	input etcd.ServiceLifecycleRenderInput,
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 ) (*agentpb.ExecutionPlan, error) {
 	event, definition := serviceLifecycleHook(input, task.Type)
 	wantSteps := 1

@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -30,7 +31,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	scope AttachCreateScope,
 	record attachrecord.Record,
 	facts *attachrecord.EncryptedFacts,
-	hookInputs *BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,

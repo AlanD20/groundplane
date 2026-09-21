@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -159,7 +160,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	healthServiceID, hasHealthStep := creation.Task.Params[taskjournal.TaskBackingServiceHealthParam]
 	desiredHealth := creation.Service.Desired.Healthcheck
 	hasDesiredHealth := desiredHealth.HTTP != "" || desiredHealth.TCP != "" || desiredHealth.Pgrep != ""
-	afterStartServiceID, hasAfterStartStep := creation.Task.Params[TaskBackingServiceAfterStartParam]
+	afterStartServiceID, hasAfterStartStep := creation.Task.Params[taskconfiguration.TaskBackingServiceAfterStartParam]
 	hasDesiredAfterStart := creation.Service.Desired.Hooks != nil &&
 		creation.Service.Desired.Hooks.AfterStart != nil
 	if creation.Task.Owner != wantOwner || creation.Task.Actor != taskjournal.TaskActorOperator ||

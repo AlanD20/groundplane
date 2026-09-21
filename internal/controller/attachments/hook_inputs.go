@@ -6,6 +6,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"strings"
@@ -22,7 +23,7 @@ import (
 )
 
 type backingHookTaskInputRepository interface {
-	GetBackingHookTaskInputs(context.Context, etcd.TaskRecord) (etcd.BackingHookEncryptedInputs, error)
+	GetBackingHookTaskInputs(context.Context, etcd.TaskRecord) (taskconfiguration.BackingHookEncryptedInputs, error)
 }
 
 type backingHookSecretRepository interface {
@@ -46,7 +47,7 @@ func (service *FactService) SealCustomHookBundle(
 	projectID string,
 	operationID string,
 	configuration backinghook.Configuration,
-) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, *etcd.BackingHookEncryptedInputs, error) {
+) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, *taskconfiguration.BackingHookEncryptedInputs, error) {
 	if ctx == nil || ids.Validate(ids.KindAttach, attachID) != nil ||
 		ids.Validate(ids.KindProject, projectID) != nil || ids.Validate(ids.KindOperation, operationID) != nil ||
 		service.secrets == nil || service.random == nil {
@@ -100,7 +101,7 @@ func (service *FactService) SealBackingHookTaskInputs(
 	operationID string,
 	projectID string,
 	configuration backinghook.Configuration,
-) (*etcd.BackingHookEncryptedInputs, error) {
+) (*taskconfiguration.BackingHookEncryptedInputs, error) {
 	if ctx == nil || ids.Validate(ids.KindOperation, operationID) != nil ||
 		ids.Validate(ids.KindProject, projectID) != nil || service.secrets == nil {
 		return nil, errs.New(errs.KindInternal, "Backing hook Task input resolver is not configured")
@@ -144,7 +145,7 @@ func (service *FactService) SealBackingHookTaskInputs(
 	ciphertext := envelope.Ciphertext()
 	defer clearAttachBytes(ciphertext)
 	metadata := envelope.Metadata()
-	sealed, err := etcd.NewBackingHookEncryptedInputs(
+	sealed, err := taskconfiguration.NewBackingHookEncryptedInputs(
 		operationID, uint8(metadata.Version), string(metadata.Cipher),
 		string(metadata.Digest.Algorithm), ciphertext, bundle.SecretSources,
 	)
@@ -233,7 +234,7 @@ func (service *FactService) ResolveDraftHookInput(
 	current etcdstore.Versioned[attachrecord.Record],
 	stored *attachrecord.EncryptedFacts,
 	task etcd.TaskRecord,
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	hookContext backinghook.Context,
 	consume taskplanning.BackingHookInputConsumer,
 ) error {
@@ -262,7 +263,7 @@ func (service *FactService) ResolveLifecycleHookInput(
 func (service *FactService) ResolveDraftLifecycleHookInput(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	stored *etcd.BackingHookEncryptedInputs,
+	stored *taskconfiguration.BackingHookEncryptedInputs,
 	serviceID string,
 	event backinghook.Event,
 	consume taskplanning.BackingHookInputConsumer,
@@ -273,7 +274,7 @@ func (service *FactService) ResolveDraftLifecycleHookInput(
 func (service *FactService) resolveLifecycleHookInput(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	draft *etcd.BackingHookEncryptedInputs,
+	draft *taskconfiguration.BackingHookEncryptedInputs,
 	serviceID string,
 	event backinghook.Event,
 	consume taskplanning.BackingHookInputConsumer,
@@ -305,7 +306,7 @@ func (service *FactService) consumeHookInput(
 	ctx context.Context,
 	record attachrecord.Record,
 	task etcd.TaskRecord,
-	draft *etcd.BackingHookEncryptedInputs,
+	draft *taskconfiguration.BackingHookEncryptedInputs,
 	hookContext backinghook.Context,
 	bundle *attachFactBundle,
 	consume taskplanning.BackingHookInputConsumer,
@@ -336,7 +337,7 @@ func (service *FactService) consumeHookInput(
 func (service *FactService) appendBackingHookTaskInputs(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	draft *etcd.BackingHookEncryptedInputs,
+	draft *taskconfiguration.BackingHookEncryptedInputs,
 	input *backinghook.Input,
 ) error {
 	if task.Configuration == nil || task.Configuration.BackingHookInputs == nil {
@@ -439,7 +440,7 @@ func (service *FactService) sealHookBundle(
 func (service *FactService) openBackingHookTaskInputs(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	stored etcd.BackingHookEncryptedInputs,
+	stored taskconfiguration.BackingHookEncryptedInputs,
 	consume func(*backingHookTaskInputBundle) error,
 ) error {
 	if task.Configuration == nil || task.Configuration.BackingHookInputs == nil ||

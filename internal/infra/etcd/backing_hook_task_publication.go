@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,7 +11,7 @@ import (
 
 type backingHookTaskPublication struct {
 	task        TaskRecord
-	input       *BackingHookEncryptedInputs
+	input       *taskconfiguration.BackingHookEncryptedInputs
 	pins        taskMaterializationProjectionChange
 	cleanupPins bool
 }
@@ -19,7 +20,7 @@ func prepareBackingHookTaskPublication(
 	ctx context.Context,
 	store hierarchyStore,
 	task TaskRecord,
-	input *BackingHookEncryptedInputs,
+	input *taskconfiguration.BackingHookEncryptedInputs,
 ) (backingHookTaskPublication, error) {
 	configured := task.Configuration != nil && task.Configuration.BackingHookInputs != nil
 	if !configured {
@@ -38,7 +39,7 @@ func prepareBackingHookTaskPublication(
 			"Backing hook encrypted inputs do not match their Task",
 		)
 	}
-	if err := validateBackingHookEncryptedInputs(*input); err != nil {
+	if err := taskconfiguration.ValidateBackingHookEncryptedInputs(*input); err != nil {
 		return backingHookTaskPublication{}, err
 	}
 	prepared, secretPins, err := prepareRecoverySecretPins(ctx, store, task)
@@ -87,11 +88,11 @@ func (publication backingHookTaskPublication) bind(
 	if publication.input == nil {
 		return conditions, mutations, classify, nil
 	}
-	value, err := encodeBackingHookEncryptedInputs(*publication.input)
+	value, err := taskconfiguration.EncodeBackingHookEncryptedInputs(*publication.input)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	key := backingHookTaskInputKey(publication.task.OperationID)
+	key := taskconfiguration.BackingHookTaskInputKey(publication.task.OperationID)
 	conditions = append(conditions, etcdstore.Condition{Key: key})
 	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	conditions, mutations, classify = bindRecoverySecretPinPublication(

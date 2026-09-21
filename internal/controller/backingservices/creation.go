@@ -14,6 +14,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
@@ -52,7 +53,7 @@ type backingServiceCreationRepository interface {
 }
 
 type backingServiceHookInputs interface {
-	SealBackingHookTaskInputs(context.Context, string, string, backinghook.Configuration) (*etcd.BackingHookEncryptedInputs, error)
+	SealBackingHookTaskInputs(context.Context, string, string, backinghook.Configuration) (*taskconfiguration.BackingHookEncryptedInputs, error)
 }
 
 type CreationService struct {
@@ -365,7 +366,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		TimeoutSeconds:   desiredrevision.TaskTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: stage.Record.CreatedAt, UpdatedAt: stage.Record.CreatedAt,
 	}
-	var hookInputs *etcd.BackingHookEncryptedInputs
+	var hookInputs *taskconfiguration.BackingHookEncryptedInputs
 	if desiredService.Hooks != nil && desiredService.Hooks.AfterStart != nil {
 		if service.plans == nil || service.hookInputs == nil {
 			return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -386,7 +387,7 @@ func (service *CreationService) createBackingServiceFromStage(
 				return idempotencyrecord.IdempotencyResponse{}, err
 			}
 		}
-		task.Params[etcd.TaskBackingServiceAfterStartParam] = serviceID
+		task.Params[taskconfiguration.TaskBackingServiceAfterStartParam] = serviceID
 		task.Steps = append(task.Steps, taskjournal.TaskStepRecord{
 			Kind: taskjournal.TaskStepOperation, ID: allocator.Named(ids.KindStep, "backing-after-start"),
 		})

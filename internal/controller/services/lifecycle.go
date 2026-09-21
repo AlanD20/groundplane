@@ -12,6 +12,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -33,7 +34,7 @@ type serviceLifecyclePlanResolver interface {
 		context.Context,
 		etcd.TaskRecord,
 		etcd.ServiceLifecycleRenderInput,
-		*etcd.BackingHookEncryptedInputs,
+		*taskconfiguration.BackingHookEncryptedInputs,
 		[]string,
 	) (etcd.TaskRecord, error)
 	PrepareServiceRemovalTask(
@@ -246,7 +247,7 @@ func (service *serviceLifecycleService) runOnce(
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	var renderInput *etcd.ServiceLifecycleRenderInput
-	var sealedHookInputs *etcd.BackingHookEncryptedInputs
+	var sealedHookInputs *taskconfiguration.BackingHookEncryptedInputs
 	defer func() {
 		if sealedHookInputs != nil {
 			clear(sealedHookInputs.Ciphertext)

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -16,7 +17,7 @@ func (repository *TaskRepository) prepareBackingServiceCreationHookAcknowledgeme
 	assignment taskassignments.TaskAssignmentRecord,
 	readRevision int64,
 ) (taskMaterializationProjectionChange, error) {
-	serviceID, hooked := task.Params[TaskBackingServiceAfterStartParam]
+	serviceID, hooked := task.Params[taskconfiguration.TaskBackingServiceAfterStartParam]
 	if !hooked || task.Status != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}

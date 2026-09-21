@@ -14,6 +14,7 @@ import (
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 )
@@ -40,7 +41,7 @@ type BackingServiceCreation struct {
 	Revision     EnvironmentDesiredRevisionIdentity
 	Projection   projectionrecord.EnvironmentComposeProjection
 	Task         TaskRecord
-	HookInputs   *BackingHookEncryptedInputs
+	HookInputs   *taskconfiguration.BackingHookEncryptedInputs
 	Marker       idempotencyrecord.IdempotencyMarker
 }
 

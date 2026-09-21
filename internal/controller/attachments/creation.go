@@ -9,6 +9,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -127,7 +128,7 @@ func (service *MutationService) createAttachOnce(
 	var identity *taskplanning.AttachPlanIdentity
 	var metadata []attachrecord.FactSetMetadata
 	var encryptedFacts *attachrecord.EncryptedFacts
-	var hookInputs *etcd.BackingHookEncryptedInputs
+	var hookInputs *taskconfiguration.BackingHookEncryptedInputs
 	if ownsCredential {
 		identity, metadata, encryptedFacts, hookInputs, err = service.prepareAttachFacts(
 			ctx, attachID, task.OperationID, consumer, scope, adapter,

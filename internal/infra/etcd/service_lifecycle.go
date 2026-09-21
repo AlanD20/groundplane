@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -51,7 +52,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	replacement servicerecord.ServiceRecord,
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	renderInput *ServiceLifecycleRenderInput,
-	hookInputs *BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, returnErr error) {

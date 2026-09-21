@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -28,7 +29,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskHookInputs(
 	ctx context.Context,
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
-	hookInputs *BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -54,7 +55,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskInitiationHookInput
 	ctx context.Context,
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
-	hookInputs *BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -67,7 +68,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	ctx context.Context,
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
-	hookInputs *BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,

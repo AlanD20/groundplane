@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -149,7 +150,7 @@ func (service *MutationService) detachAttachOnce(
 			int64(scope.BackingService.Record.Desired.Hooks.Detach.TimeoutSeconds)+15,
 		)
 	}
-	var hookInputs *etcd.BackingHookEncryptedInputs
+	var hookInputs *taskconfiguration.BackingHookEncryptedInputs
 	if detachHook {
 		hookInputs, err = service.facts.SealBackingHookTaskInputs(
 			ctx, task.OperationID, scope.BackingProject.Record.ID, *scope.BackingService.Record.Desired.Hooks,

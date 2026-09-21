@@ -11,6 +11,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -62,7 +63,7 @@ type Facts interface {
 		etcdstore.Versioned[attachrecord.Record],
 		*attachrecord.EncryptedFacts,
 		etcd.TaskRecord,
-		*etcd.BackingHookEncryptedInputs,
+		*taskconfiguration.BackingHookEncryptedInputs,
 		backinghook.Context,
 		taskplanning.BackingHookInputConsumer,
 	) error
@@ -102,7 +103,7 @@ func (sealer *Sealer) SealDraft(
 	task etcd.TaskRecord,
 	identity *taskplanning.AttachPlanIdentity,
 	hookBundle *attachrecord.EncryptedFacts,
-	hookInputs *etcd.BackingHookEncryptedInputs,
+	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 ) (serviceruntimerecord.AttachPreparation, error) {
 	state := &draftAttachPlanState{
 		repository: sealer.repository, facts: sealer.facts, current: current,
@@ -130,7 +131,7 @@ type draftAttachPlanState struct {
 	renderInput etcd.AttachTaskRenderInput
 	identity    *taskplanning.AttachPlanIdentity
 	hookBundle  *attachrecord.EncryptedFacts
-	hookInputs  *etcd.BackingHookEncryptedInputs
+	hookInputs  *taskconfiguration.BackingHookEncryptedInputs
 }
 
 func (state *draftAttachPlanState) ResolveHookInput(
