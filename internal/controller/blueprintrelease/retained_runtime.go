@@ -8,6 +8,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 
@@ -34,7 +35,7 @@ func (service *Service) captureRetainedRuntime(
 	for _, candidate := range candidates {
 		selected[candidate.Record.Desired.ID] = true
 	}
-	var scope *etcd.ReleasePlanningScope
+	var scope *releasequeries.ReleasePlanningScope
 	var result *retainedRuntime
 	for _, change := range changes {
 		if change.Current == nil || selected[change.Record.Desired.ID] {

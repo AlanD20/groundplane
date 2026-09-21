@@ -2,6 +2,7 @@ package blueprintrelease
 
 import (
 	"context"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"sort"
 
@@ -14,7 +15,7 @@ import (
 
 func (service *Service) captureNativePredecessor(
 	ctx context.Context,
-	scope etcd.ReleasePlanningScope,
+	scope releasequeries.ReleasePlanningScope,
 	captured predecessorSnapshot,
 ) (predecessorSnapshot, error) {
 	return captureNativePredecessor(ctx, service.ledger, scope, captured)
@@ -23,7 +24,7 @@ func (service *Service) captureNativePredecessor(
 func captureNativePredecessor(
 	ctx context.Context,
 	reader servicelifecycle.AcknowledgedRuntimeReader,
-	scope etcd.ReleasePlanningScope,
+	scope releasequeries.ReleasePlanningScope,
 	captured predecessorSnapshot,
 ) (predecessorSnapshot, error) {
 	captured.native = etcd.BlueprintNativePredecessorCapture{

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
@@ -27,7 +28,7 @@ import (
 
 func (service *Service) publish(
 	ctx context.Context,
-	scope etcd.ReleasePlanningScope,
+	scope releasequeries.ReleasePlanningScope,
 	desiredKind etcd.ReleaseDesiredKind,
 	desiredID string,
 	desiredRevision int64,

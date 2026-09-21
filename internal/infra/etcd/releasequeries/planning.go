@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"bytes"
@@ -11,7 +11,6 @@ import (
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -48,14 +47,14 @@ func (scope ReleasePlanningScope) Clone() ReleasePlanningScope {
 	return clone
 }
 
-func (ledger *ReleaseLedger) LoadPlanningScope(
+func (ledger *Reader) LoadPlanningScope(
 	ctx context.Context,
 	environmentID string,
 ) (ReleasePlanningScope, error) {
 	return ledger.loadPlanningScope(ctx, environmentID, 0)
 }
 
-func (ledger *ReleaseLedger) LoadPlanningScopeAtRevision(
+func (ledger *Reader) LoadPlanningScopeAtRevision(
 	ctx context.Context,
 	environmentID string,
 	revision int64,
@@ -66,7 +65,7 @@ func (ledger *ReleaseLedger) LoadPlanningScopeAtRevision(
 	return ledger.loadPlanningScope(ctx, environmentID, revision)
 }
 
-func (ledger *ReleaseLedger) loadPlanningScope(
+func (ledger *Reader) loadPlanningScope(
 	ctx context.Context,
 	environmentID string,
 	revision int64,
@@ -115,11 +114,7 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
-	hierarchy, err := newHierarchyRepository(ledger.store)
-	if err != nil {
-		return ReleasePlanningScope{}, err
-	}
-	compose, found, err := blueprints.ReadProjectionAtRevision(ctx, hierarchy.store, environmentID, initial.ReadRevision)
+	compose, found, err := blueprints.ReadProjectionAtRevision(ctx, ledger.store, environmentID, initial.ReadRevision)
 	if err != nil {
 		return ReleasePlanningScope{}, err
 	}
@@ -187,7 +182,7 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	}, nil
 }
 
-func (ledger *ReleaseLedger) LoadPlanningServices(
+func (ledger *Reader) LoadPlanningServices(
 	ctx context.Context,
 	scope ReleasePlanningScope,
 	serviceIDs []string,
@@ -265,7 +260,7 @@ func releasePlanningTargetsGeneratedService(components []componentrecord.Record,
 	return false
 }
 
-func (ledger *ReleaseLedger) GetPlanningServingIntent(
+func (ledger *Reader) GetPlanningServingIntent(
 	ctx context.Context,
 	scope ReleasePlanningScope,
 	service ReleasePlanningService,
@@ -286,7 +281,7 @@ func (ledger *ReleaseLedger) GetPlanningServingIntent(
 	if index == nil || index.ReadRevision != scope.ReadRevision || len(index.Values) != 1 || index.Values[0] == nil {
 		return domain.Intent{}, false, releases.CorruptReleaseRecord()
 	}
-	publicationID, err := releasequeries.DecodeReleaseIndex(index.Values[0].Value, service.Service.Record.Desired.ID)
+	publicationID, err := DecodeReleaseIndex(index.Values[0].Value, service.Service.Record.Desired.ID)
 	if err != nil {
 		return domain.Intent{}, false, err
 	}
@@ -297,7 +292,7 @@ func (ledger *ReleaseLedger) GetPlanningServingIntent(
 	return view.Intent, true, nil
 }
 
-func (ledger *ReleaseLedger) rejectSelectedHooks(
+func (ledger *Reader) rejectSelectedHooks(
 	ctx context.Context,
 	scope ReleasePlanningScope,
 	services map[string]struct{},

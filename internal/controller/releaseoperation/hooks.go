@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
@@ -23,7 +24,7 @@ type preparedReleaseHooks struct {
 
 func (service *Service) prepareReleaseHooks(
 	ctx context.Context,
-	scope etcd.ReleasePlanningScope,
+	scope releasequeries.ReleasePlanningScope,
 	revision int64,
 	operation domain.OperationKind,
 	task etcd.TaskRecord,

@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"slices"
 	"strconv"
@@ -45,7 +46,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 			"Blueprint retained runtime source is invalid",
 		)
 	}
-	scope := ReleasePlanningScope{
+	scope := releasequeries.ReleasePlanningScope{
 		ReadRevision: captured.ReadRevision,
 		Environment:  etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{Record: hierarchyrecord.EnvironmentRecord{ID: environmentID}},
 	}
@@ -64,7 +65,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 	if err != nil {
 		return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, err)
 	}
-	planning := make([]ReleasePlanningService, len(sources))
+	planning := make([]releasequeries.ReleasePlanningService, len(sources))
 	for index, source := range sources {
 		planning[index] = source.Planning
 	}
@@ -132,7 +133,7 @@ func (ledger *ReleaseLedger) blueprintRuntimePlanningConditions(
 	ctx context.Context,
 	environmentID string,
 	readRevision int64,
-	captured []ReleasePlanningService,
+	captured []releasequeries.ReleasePlanningService,
 ) ([]etcdstore.Condition, bool, error) {
 	scope, err := ledger.LoadPlanningScopeAtRevision(ctx, environmentID, readRevision)
 	if err != nil {

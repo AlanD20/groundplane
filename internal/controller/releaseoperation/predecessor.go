@@ -4,11 +4,12 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -17,7 +18,7 @@ import (
 // deliberately not used as evidence that this Service is (or is not) serving.
 func (service *Service) captureServingRuntime(
 	ctx context.Context,
-	scope etcd.ReleasePlanningScope,
+	scope releasequeries.ReleasePlanningScope,
 	render *releaserender.ReleaseRenderInput,
 	priorReleaseID string,
 ) error {
@@ -27,7 +28,7 @@ func (service *Service) captureServingRuntime(
 func captureServingRuntime(
 	ctx context.Context,
 	reader servicelifecycle.AcknowledgedRuntimeReader,
-	scope etcd.ReleasePlanningScope,
+	scope releasequeries.ReleasePlanningScope,
 	render *releaserender.ReleaseRenderInput,
 	priorReleaseID string,
 ) error {

@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 // GetPlanningAppliedProjection reads the acknowledged artifact, not the desired
 // Blueprint head, at the same captured revision as the Release planning scope.
-func (ledger *ReleaseLedger) GetPlanningAppliedProjection(
+func (ledger *Reader) GetPlanningAppliedProjection(
 	ctx context.Context,
 	scope ReleasePlanningScope,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {

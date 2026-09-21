@@ -11,7 +11,8 @@ type readStore interface {
 	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
 }
 
-// Reader owns Release history, serving state, rollback selection and log targets.
+// Reader owns Release planning snapshots, history, serving state, rollback
+// selection and log targets.
 type Reader struct {
 	store readStore
 }

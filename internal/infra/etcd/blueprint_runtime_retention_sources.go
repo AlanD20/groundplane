@@ -16,7 +16,7 @@ import (
 // BlueprintRetainedRuntimeSource binds a planning projection to the exact
 // immutable native sources used by the sealed lifecycle renderer.
 type BlueprintRetainedRuntimeSource struct {
-	Planning ReleasePlanningService
+	Planning releasequeries.ReleasePlanningService
 	Release  *releaserender.ServiceLifecycleRelease
 	Intent   *releasequeries.ServingRelease
 }

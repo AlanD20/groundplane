@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 // LoadPlanningAttaches reads the complete binding set at the runtime capture's
 // fixed revision. The caller's Environment epoch fences its later publication.
-func (ledger *ReleaseLedger) LoadPlanningAttaches(
+func (ledger *Reader) LoadPlanningAttaches(
 	ctx context.Context,
 	scope ReleasePlanningScope,
 ) ([]etcdstore.Versioned[attachrecord.Record], error) {

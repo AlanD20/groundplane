@@ -4,11 +4,12 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -50,7 +51,7 @@ func (service *Service) Preflight(
 		return result, nil
 	}
 	selections := make([]workloadseal.Selection, len(candidates))
-	var scope *etcd.ReleasePlanningScope
+	var scope *releasequeries.ReleasePlanningScope
 	for index, candidate := range candidates {
 		desired := candidate.Record.Desired
 		if desired.Replicas < 1 || uint64(desired.Replicas) > uint64(^uint32(0)) {

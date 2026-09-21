@@ -6,6 +6,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"slices"
@@ -18,7 +19,7 @@ import (
 )
 
 type predecessorSnapshot struct {
-	planning       etcd.ReleasePlanningService
+	planning       releasequeries.ReleasePlanningService
 	serving        *domain.Intent
 	historical     etcdstore.Versioned[releaserender.ReleaseRenderInput]
 	applied        etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
@@ -82,8 +83,8 @@ func (service *Service) preparePredecessor(
 
 func (service *Service) capturePredecessor(
 	ctx context.Context,
-	scope etcd.ReleasePlanningScope,
-	planning etcd.ReleasePlanningService,
+	scope releasequeries.ReleasePlanningScope,
+	planning releasequeries.ReleasePlanningService,
 ) (predecessorSnapshot, error) {
 	captured := predecessorSnapshot{planning: planning}
 	serving, exists, err := service.ledger.GetPlanningServingIntent(ctx, scope, planning)
@@ -111,7 +112,7 @@ func (service *Service) capturePredecessor(
 }
 
 func (captured predecessorSnapshot) matches(
-	planning etcd.ReleasePlanningService,
+	planning releasequeries.ReleasePlanningService,
 	applied etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	present bool,
 ) error {

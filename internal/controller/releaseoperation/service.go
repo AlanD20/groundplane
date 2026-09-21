@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	"net/http"
 	"strconv"
 	"strings"
@@ -48,7 +49,7 @@ type Service struct {
 }
 
 type releaseCandidateInput struct {
-	planning       etcd.ReleasePlanningService
+	planning       releasequeries.ReleasePlanningService
 	selection      workloadseal.Selection
 	workload       domain.WorkloadSeal
 	tag            string
@@ -310,7 +311,7 @@ func (service *Service) PreviewReleaseGroupRollback(
 }
 
 type groupRollbackSelection struct {
-	scope      etcd.ReleasePlanningScope
+	scope      releasequeries.ReleasePlanningScope
 	group      etcdrg.Versioned
 	candidates []releaseCandidateInput
 }
@@ -321,7 +322,7 @@ func (service *Service) selectGroupRollback(
 	tag *string,
 	revision *int64,
 ) (groupRollbackSelection, error) {
-	var scope etcd.ReleasePlanningScope
+	var scope releasequeries.ReleasePlanningScope
 	var err error
 	if revision == nil {
 		scope, err = service.ledger.LoadPlanningScope(ctx, environmentID)
@@ -435,8 +436,8 @@ func (service *Service) begin(
 
 func (service *Service) deployCandidate(
 	ctx context.Context,
-	scope etcd.ReleasePlanningScope,
-	planning etcd.ReleasePlanningService,
+	scope releasequeries.ReleasePlanningScope,
+	planning releasequeries.ReleasePlanningService,
 	requestedTag string,
 	requestedStrategy string,
 	requestedFailure domain.OnFailure,
@@ -490,8 +491,8 @@ func (service *Service) deployCandidate(
 
 func (service *Service) rollbackCandidate(
 	ctx context.Context,
-	scope etcd.ReleasePlanningScope,
-	planning etcd.ReleasePlanningService,
+	scope releasequeries.ReleasePlanningScope,
+	planning releasequeries.ReleasePlanningService,
 	explicitTag string,
 	overrideFailure domain.OnFailure,
 ) (releaseCandidateInput, error) {

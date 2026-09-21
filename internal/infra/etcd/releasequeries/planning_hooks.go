@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 
 // ListPlanningHookScriptIDs returns the fixed-revision hook selection for one
 // release member in deterministic numeric order then scoped slug.
-func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
+func (ledger *Reader) ListPlanningHookScriptIDs(
 	ctx context.Context,
 	scope ReleasePlanningScope,
 	serviceID string,

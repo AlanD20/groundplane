@@ -389,37 +389,6 @@ func (ledger *ReleaseLedger) Publish(
 	}, nil
 }
 
-func (ledger *ReleaseLedger) GetIntent(
-	ctx context.Context,
-	publicationID, releaseID string,
-) (etcdstore.Versioned[domain.Intent], error) {
-	if ctx == nil || ledger == nil || releases.ValidatePublicationID(publicationID) != nil ||
-		ids.Validate(ids.KindDeployment, releaseID) != nil {
-		return etcdstore.Versioned[domain.Intent]{}, errs.New(errs.KindValidationFailed, "release read identity is invalid")
-	}
-	result, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		releases.ReleaseIntentStagingKey(publicationID, releaseID), releases.ReleasePublicationKey(publicationID),
-	}})
-	if err != nil {
-		return etcdstore.Versioned[domain.Intent]{}, err
-	}
-	if result == nil || len(result.Values) != 2 || result.Values[1] == nil {
-		return etcdstore.Versioned[domain.Intent]{}, errs.New(errs.KindReleaseNotFound, "release was not found")
-	}
-	if result.Values[0] == nil {
-		return etcdstore.Versioned[domain.Intent]{}, releases.CorruptReleaseRecord()
-	}
-	intent, err := releases.DecodeReleaseRecord[domain.Intent](result.Values[0].Value, "release-intent")
-	if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != releaseID {
-		return etcdstore.Versioned[domain.Intent]{}, releases.CorruptReleaseRecord()
-	}
-	return etcdstore.Versioned[domain.Intent]{
-		Record:       intent,
-		Revision:     result.Values[0].ModRevision,
-		ReadRevision: result.ReadRevision,
-	}, nil
-}
-
 func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error {
 	manifest := value.Manifest.Record
 	if releases.ValidatePublicationID(manifest.PublicationID) != nil ||

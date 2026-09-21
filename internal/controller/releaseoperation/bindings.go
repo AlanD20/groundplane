@@ -3,9 +3,10 @@ package releaseoperation
 import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -16,7 +17,7 @@ import (
 // older artifact cannot select the next Release's network memberships. Historical
 // recovery remains separately captured; this does not rewrite either source.
 func (service *Service) captureDesiredProjection(
-	ctx context.Context, scope etcd.ReleasePlanningScope,
+	ctx context.Context, scope releasequeries.ReleasePlanningScope,
 ) (projectionrecord.EnvironmentComposeProjection, error) {
 	attaches, err := service.ledger.LoadPlanningAttaches(ctx, scope)
 	if err != nil {
