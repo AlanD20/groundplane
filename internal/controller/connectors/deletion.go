@@ -39,7 +39,7 @@ type connectorDeletionRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[connectorrecord.Record],
 		deletionrecord.DeletionTombstoneRecord,
-		etcd.ConnectorRemovalIntent,
+		connectorrecord.RemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -276,7 +276,7 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 		TargetRevision: current.Revision, TaskID: task.ID, Phase: deletionrecord.DeletionPhaseFinalizing,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	intent, err := etcd.NewConnectorRemovalIntent(
+	intent, err := connectorrecord.NewRemovalIntent(
 		task.ID, environment.Record.ID, connectorID, current.Revision, now,
 	)
 	if err != nil {
@@ -424,7 +424,7 @@ func (repository *durableConnectorDeletionRepository) BeginConnectorDeletionWith
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	current etcdstore.Versioned[connectorrecord.Record],
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent etcd.ConnectorRemovalIntent,
+	intent connectorrecord.RemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

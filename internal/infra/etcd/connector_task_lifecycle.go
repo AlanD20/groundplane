@@ -51,7 +51,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		Keys: []string{
 			connectorrecord.RecordKey(source.Target),
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), source.Target),
-			connectorRemovalIntentKey(retry.ID),
+			connectorrecord.RemovalIntentKey(retry.ID),
 		},
 		Revision: revision,
 	})
@@ -151,7 +151,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		conditions: []etcdstore.Condition{
 			{Key: connectorrecord.RecordKey(connector.ID), ModRevision: stored.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
-			{Key: connectorRemovalIntentKey(retry.ID)},
+			{Key: connectorrecord.RemovalIntentKey(retry.ID)},
 			{
 				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 				ModRevision: dependencies.Values[0].ModRevision,
@@ -191,7 +191,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		TargetRevision: stored.Values[0].ModRevision, TaskID: retry.ID,
 		Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
 	}
-	intent, err := NewConnectorRemovalIntent(
+	intent, err := connectorrecord.NewRemovalIntent(
 		retry.ID, connector.EnvironmentID, connector.ID, stored.Values[0].ModRevision, retry.CreatedAt,
 	)
 	if err != nil {
@@ -201,7 +201,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if err != nil {
 		return connectorTaskChange{}, err
 	}
-	intentValue, err := encodeConnectorRemovalIntent(intent)
+	intentValue, err := connectorrecord.EncodeRemovalIntent(intent)
 	if err != nil {
 		clear(tombstoneValue)
 		return connectorTaskChange{}, err
@@ -213,7 +213,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 			Value: tombstoneValue,
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: connectorRemovalIntentKey(retry.ID), Value: intentValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: connectorrecord.RemovalIntentKey(retry.ID), Value: intentValue},
 	)
 	return change, nil
 }
@@ -232,7 +232,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		Keys: []string{
 			connectorrecord.RecordKey(task.Target),
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
-			connectorRemovalIntentKey(task.ID),
+			connectorrecord.RemovalIntentKey(task.ID),
 		},
 		Revision: revision,
 	})
@@ -264,7 +264,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 			"connector deletion tombstone does not match its task",
 		)
 	}
-	intent, err := decodeConnectorRemovalIntent(stored.Values[2].Value)
+	intent, err := connectorrecord.DecodeRemovalIntent(stored.Values[2].Value)
 	if err != nil || intent.TaskID != task.ID || intent.EnvironmentID != connector.EnvironmentID ||
 		intent.ConnectorID != task.Target || intent.ConnectorRevision != stored.Values[0].ModRevision ||
 		!intent.CreatedAt.Equal(task.CreatedAt) {
@@ -319,7 +319,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 				Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
 				ModRevision: stored.Values[1].ModRevision,
 			},
-			{Key: connectorRemovalIntentKey(task.ID), ModRevision: stored.Values[2].ModRevision},
+			{Key: connectorrecord.RemovalIntentKey(task.ID), ModRevision: stored.Values[2].ModRevision},
 			{
 				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 				ModRevision: dependencies.Values[0].ModRevision,
@@ -332,7 +332,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target)},
-			{Type: etcdstore.MutationDelete, Key: connectorRemovalIntentKey(task.ID)},
+			{Type: etcdstore.MutationDelete, Key: connectorrecord.RemovalIntentKey(task.ID)},
 		},
 	}
 	change.conditions = append(change.conditions, referenceConditions...)
@@ -365,7 +365,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 		connectorNameKey(environmentID, name),
 		connectorrecord.CredentialValueKey(task.Target),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
-		connectorRemovalIntentKey(task.ID),
+		connectorrecord.RemovalIntentKey(task.ID),
 	}
 	markerKey := ""
 	if task.RetryOf == "" {

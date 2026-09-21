@@ -28,7 +28,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	current etcdstore.Versioned[connectorrecord.Record],
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent ConnectorRemovalIntent,
+	intent connectorrecord.RemovalIntent,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -66,7 +66,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		connectorNameKey(connector.EnvironmentID, connector.Name),
 		connectorrecord.CredentialValueKey(connector.ID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
-		connectorRemovalIntentKey(task.ID),
+		connectorrecord.RemovalIntentKey(task.ID),
 		backuppolicy.BackupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID),
 	}
 	fence, fixed, err := repository.loadConnectorMutationFence(
@@ -124,7 +124,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstoneValue)
-	intentValue, err := encodeConnectorRemovalIntent(intent)
+	intentValue, err := connectorrecord.EncodeRemovalIntent(intent)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -160,7 +160,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 			Value: tombstoneValue,
 		},
-		{Type: etcdstore.MutationPut, Key: connectorRemovalIntentKey(task.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: connectorrecord.RemovalIntentKey(task.ID), Value: intentValue},
 		epochMutation,
 	}
 	taskTenant, err := loadConnectorTaskInitiationTenantAtRevision(
@@ -201,14 +201,14 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 func validateConnectorDeletionEnvelope(
 	current etcdstore.Versioned[connectorrecord.Record],
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent ConnectorRemovalIntent,
+	intent connectorrecord.RemovalIntent,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return err
 	}
-	if err := validateConnectorRemovalIntent(intent); err != nil {
+	if err := connectorrecord.ValidateRemovalIntent(intent); err != nil {
 		return err
 	}
 	connector := current.Record.Connector
@@ -366,7 +366,7 @@ func newConnectorDeletionEvidence(
 				ModRevision: dependencies.Values[7].ModRevision,
 			},
 			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
-			{Key: connectorRemovalIntentKey(task.ID)},
+			{Key: connectorrecord.RemovalIntentKey(task.ID)},
 			{Key: backuppolicy.BackupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
 		},
 	}
