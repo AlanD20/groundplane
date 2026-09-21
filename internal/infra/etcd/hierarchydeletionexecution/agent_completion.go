@@ -69,8 +69,10 @@ func (repository *Executor) ConsumeAgentTerminal(
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	if receiptSnapshot == nil || receiptSnapshot.ReadRevision != proof.ReceiptRevision ||
-		len(receiptSnapshot.Values) != 1 || receiptSnapshot.Values[0] == nil ||
+	if receiptSnapshot == nil ||
+		receiptSnapshot.ReadRevision != proof.ReceiptRevision ||
+		len(receiptSnapshot.Values) != 1 ||
+		receiptSnapshot.Values[0] == nil ||
 		receiptSnapshot.Values[0].ModRevision != proof.ReceiptRevision ||
 		hierarchydeletion.HierarchyDeletionBytesDigest(receiptSnapshot.Values[0].Value) != proof.ReceiptDigest {
 		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
@@ -93,10 +95,15 @@ func (repository *Executor) ConsumeAgentTerminal(
 	}
 	defer clear(progressRead.Entry.Value)
 	var receipt hierarchydeletion.HierarchyDeletionTerminalAttemptReceipt
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(receiptRead.Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &receipt) != nil ||
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		receiptRead.Value,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		&receipt,
+	) != nil ||
 		receipt.ParentOperationID != current.Tombstone.OperationID ||
 		receipt.ActionOrdinal != action.Ordinal ||
-		receipt.ChildOperationID != proof.ChildOperationID || receipt.AttemptID != proof.AttemptID ||
+		receipt.ChildOperationID != proof.ChildOperationID ||
+		receipt.AttemptID != proof.AttemptID ||
 		receipt.TaskID != proof.TaskID ||
 		receipt.AssignmentID != proof.AssignmentID ||
 		receipt.AttemptGeneration != proof.AttemptGeneration ||
@@ -115,10 +122,16 @@ func (repository *Executor) ConsumeAgentTerminal(
 	if proof.Terminal == hierarchydeletion.HierarchyDeletionAgentCompleted {
 		wantConsumed = hierarchydeletion.HierarchyDeletionConsumedAdvance
 	}
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(progressRead.Entry.Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &progress) != nil ||
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		progressRead.Entry.Value,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		&progress,
+	) != nil ||
 		progress.ParentOperationID != current.Tombstone.OperationID ||
-		progress.ChildOperationID != proof.ChildOperationID || progress.ActionOrdinal != action.Ordinal ||
-		progress.TaskID != proof.TaskID || progress.AssignmentID != proof.AssignmentID ||
+		progress.ChildOperationID != proof.ChildOperationID ||
+		progress.ActionOrdinal != action.Ordinal ||
+		progress.TaskID != proof.TaskID ||
+		progress.AssignmentID != proof.AssignmentID ||
 		progress.AttemptGeneration != proof.AttemptGeneration ||
 		progress.Terminal != proof.Terminal ||
 		progress.TerminalTaskDigest != proof.TerminalTaskDigest ||
@@ -372,27 +385,36 @@ func validateHierarchyDeletionAgentTerminal(
 	completedAt time.Time,
 ) error {
 	if recordcodec.ValidateTimestamp("hierarchy deletion completion", completedAt) != nil ||
-		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureAgent || action.AgentProcedure == nil ||
-		proof.ChildOperationID != action.AgentProcedure.ChildOperationID || proof.AttemptID == "" ||
-		proof.TaskID == "" || proof.AssignmentID == "" || proof.AttemptGeneration <= 0 ||
-		proof.ReceiptRevision <= 0 || proof.ProgressKey == "" ||
+		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureAgent ||
+		action.AgentProcedure == nil ||
+		proof.ChildOperationID != action.AgentProcedure.ChildOperationID ||
+		proof.AttemptID == "" ||
+		proof.TaskID == "" ||
+		proof.AssignmentID == "" ||
+		proof.AttemptGeneration <= 0 ||
+		proof.ReceiptRevision <= 0 ||
+		proof.ProgressKey == "" ||
 		!hierarchydeletion.ValidHierarchyDeletionDigest(
 			proof.ReceiptDigest,
-		) || !hierarchydeletion.ValidHierarchyDeletionDigest(proof.ProgressDigest) ||
+		) ||
+		!hierarchydeletion.ValidHierarchyDeletionDigest(proof.ProgressDigest) ||
 		!hierarchydeletion.ValidHierarchyDeletionDigest(
 			proof.TerminalTaskDigest,
-		) || !hierarchydeletion.ValidHierarchyDeletionDigest(proof.CheckpointDigest) {
+		) ||
+		!hierarchydeletion.ValidHierarchyDeletionDigest(proof.CheckpointDigest) {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion Agent terminal proof is invalid")
 	}
 	switch proof.Terminal {
 	case hierarchydeletion.HierarchyDeletionAgentCompleted:
-		if !hierarchydeletion.ValidHierarchyDeletionDigest(proof.ResultDigest) || proof.ErrorDigest != "" {
+		if !hierarchydeletion.ValidHierarchyDeletionDigest(proof.ResultDigest) ||
+			proof.ErrorDigest != "" {
 			return errs.New(errs.KindValidationFailed, "completed hierarchy deletion proof is invalid")
 		}
 	case hierarchydeletion.HierarchyDeletionAgentFailed,
 		hierarchydeletion.HierarchyDeletionAgentAborted,
 		hierarchydeletion.HierarchyDeletionAgentTimedOut:
-		if !hierarchydeletion.ValidHierarchyDeletionDigest(proof.ErrorDigest) || proof.ResultDigest != "" {
+		if !hierarchydeletion.ValidHierarchyDeletionDigest(proof.ErrorDigest) ||
+			proof.ResultDigest != "" {
 			return errs.New(errs.KindValidationFailed, "failed hierarchy deletion proof is invalid")
 		}
 	default:

@@ -174,7 +174,8 @@ func expireManualScriptExecution(
 }
 
 func manualScriptExpiryExecutionMatches(execution scriptexecutions.ScriptExecutionRecord, deadline time.Time) bool {
-	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+		execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
 		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualRetryExpiry ||
 		execution.ActiveReference ||
 		execution.Outcome == nil ||

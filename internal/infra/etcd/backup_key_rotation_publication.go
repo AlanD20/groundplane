@@ -58,7 +58,8 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	publication.state.plan = backupKeyRotationPublicationPlan{}
 	publication.state.mu.Unlock()
 	defer plan.clear()
-	if task.Type != taskjournal.TaskRotate || task.Executor != taskjournal.TaskExecutorController || task.Status != taskjournal.TaskStatusPending ||
+	if task.Type != taskjournal.TaskRotate || task.Executor != taskjournal.TaskExecutorController ||
+		task.Status != taskjournal.TaskStatusPending ||
 		task.Target != plan.record.EnvironmentID ||
 		task.ID != plan.record.TaskID ||
 		task.OperationID != plan.record.OperationID ||

@@ -20,14 +20,17 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	ctx context.Context, task TaskRecord, execution scriptexecutions.ScriptExecutionRecord,
 	executionValue, rootValue *etcdstore.KeyValue, status taskjournal.TaskStatus, terminalAt *time.Time,
 ) (scriptTerminalSourceRelease, error) {
-	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized ||
+	if execution.State != scriptexecutions.ScriptExecutionNotStarted ||
+		execution.StartAuthorized ||
 		execution.AssignmentID != "" ||
 		!execution.ActiveReference ||
 		execution.ReconciliationRequired {
 		return scriptTerminalSourceRelease{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
 	}
 	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusRunning, status, *terminalAt)
-	if err != nil || terminal.RetainUntil == nil || terminal.FinishedAt == nil {
+	if err != nil ||
+		terminal.RetainUntil == nil ||
+		terminal.FinishedAt == nil {
 		return scriptTerminalSourceRelease{}, taskassignments.CorruptTaskAssignment()
 	}
 	*terminalAt = *terminal.FinishedAt
@@ -56,10 +59,14 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 func (repository *TaskRepository) prepareManualScriptRetry(
 	ctx context.Context, source, retry TaskRecord, revision int64,
 ) (scriptTaskChange, error) {
-	if (source.Status != taskjournal.TaskStatusFailed && source.Status != taskjournal.TaskStatusTimedOut) || source.RetainUntil == nil ||
+	if (source.Status != taskjournal.TaskStatusFailed &&
+		source.Status != taskjournal.TaskStatusTimedOut) ||
+		source.RetainUntil == nil ||
 		!retry.CreatedAt.Before(
 			*source.RetainUntil,
-		) || retry.Type != taskjournal.TaskScript || retry.OperationID != source.OperationID ||
+		) ||
+		retry.Type != taskjournal.TaskScript ||
+		retry.OperationID != source.OperationID ||
 		retry.PlanID != source.PlanID ||
 		retry.PlanHash != source.PlanHash ||
 		retry.Target != source.Target ||
@@ -77,7 +84,8 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
-	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized ||
+	if execution.State != scriptexecutions.ScriptExecutionNotStarted ||
+		execution.StartAuthorized ||
 		execution.AssignmentID != "" ||
 		!execution.ActiveReference ||
 		!retry.CreatedAt.After(execution.UpdatedAt) {
@@ -94,12 +102,17 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 || read.Values[0] == nil ||
-		read.Values[1] == nil || !bytes.Equal(read.Values[1].Value, retentionValue) {
+	if read == nil ||
+		read.ReadRevision != revision ||
+		len(read.Values) != 2 ||
+		read.Values[0] == nil ||
+		read.Values[1] == nil ||
+		!bytes.Equal(read.Values[1].Value, retentionValue) {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script retry retention authority is unavailable")
 	}
 	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
-	if err != nil || !manualScriptRootMatches(execution, root) ||
+	if err != nil ||
+		!manualScriptRootMatches(execution, root) ||
 		root.RetryDisposition != sourceref.RetryDispositionAvailable ||
 		root.RetryExpiresAt == nil ||
 		!root.RetryExpiresAt.Equal(*source.RetainUntil) {

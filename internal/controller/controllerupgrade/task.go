@@ -27,7 +27,8 @@ type Input struct {
 }
 
 func (input Input) Validate() error {
-	if !input.Release.Valid() || !input.PreviousController.Valid() ||
+	if !input.Release.Valid() ||
+		!input.PreviousController.Valid() ||
 		input.Manifest.ControllerSHA256 == input.PreviousController {
 		return errs.New(errs.KindValidationFailed, "controller update identities are invalid or unchanged")
 	}
@@ -64,10 +65,17 @@ func NewTask(now time.Time, idempotencyKey string, input Input) (etcd.TaskRecord
 }
 
 func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Journal, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskUpdate || task.Target != Target ||
-		task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorOperator || ids.Validate(ids.KindTask, task.ID) != nil ||
-		ids.Validate(ids.KindOperation, task.OperationID) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
-		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds || task.RenderGeneration != 1 || task.RetryOf != "" ||
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Type != taskjournal.TaskUpdate ||
+		task.Target != Target ||
+		task.Owner != taskjournal.PlatformTaskOwner() ||
+		task.Actor != taskjournal.TaskActorOperator ||
+		ids.Validate(ids.KindTask, task.ID) != nil ||
+		ids.Validate(ids.KindOperation, task.OperationID) != nil ||
+		ids.Validate(ids.KindPlan, task.PlanID) != nil ||
+		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds ||
+		task.RenderGeneration != 1 ||
+		task.RetryOf != "" ||
 		len(task.Steps) != 0 ||
 		len(task.Materializations) != 0 ||
 		len(task.Params) != 2 ||
@@ -76,7 +84,9 @@ func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Jour
 		return upgrade.Journal{}, errs.New(errs.KindValidationFailed, "controller update Task authority is invalid")
 	}
 	raw := []byte(task.Params[InputParam])
-	if len(raw) == 0 || len(raw) > 8192 || string(upgrade.Hash(raw))[7:] != task.PlanHash {
+	if len(raw) == 0 ||
+		len(raw) > 8192 ||
+		string(upgrade.Hash(raw))[7:] != task.PlanHash {
 		return upgrade.Journal{}, errs.New(errs.KindValidationFailed, "controller update Task input hash is invalid")
 	}
 	input, err := jcs.Decode[Input](raw)

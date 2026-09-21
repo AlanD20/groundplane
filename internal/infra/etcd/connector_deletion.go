@@ -83,13 +83,15 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	}
 	defer etcdstore.ClearValues(fixed.Values)
 	dependencies := fixed.Values[5:8]
-	if dependencies[0] == nil || string(dependencies[0].Value) != connector.ID {
+	if dependencies[0] == nil ||
+		string(dependencies[0].Value) != connector.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
 			"connector environment index is missing or corrupt",
 		)
 	}
-	if dependencies[1] == nil || string(dependencies[1].Value) != connector.ID {
+	if dependencies[1] == nil ||
+		string(dependencies[1].Value) != connector.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
 			"connector name index is missing or corrupt",
@@ -102,7 +104,8 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		)
 	}
 	credentials, err := connectorrecord.DecodeEncryptedCredentials(dependencies[2].Value)
-	if err != nil || credentials.ConnectorID != connector.ID {
+	if err != nil ||
+		credentials.ConnectorID != connector.ID {
 		clear(credentials.Ciphertext)
 		return IdempotencyTransactionResult{}, connectorrecord.CorruptRecord()
 	}
@@ -215,15 +218,26 @@ func validateConnectorDeletionEnvelope(
 		return err
 	}
 	connector := current.Record.Connector
-	if tombstone.TargetKind != deletionrecord.DeletionTargetConnector || tombstone.TargetID != connector.ID ||
-		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
-		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
-		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || intent.TaskID != task.ID ||
-		intent.EnvironmentID != connector.EnvironmentID || intent.ConnectorID != connector.ID ||
-		intent.ConnectorRevision != current.Revision || !intent.CreatedAt.Equal(task.CreatedAt) ||
-		task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove || task.Target != connector.ID ||
-		task.Status != taskjournal.TaskStatusPending || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
-		task.IdempotencyKey == "" || task.IdempotencyKey != marker.Locator.Key || len(task.Params) != 3 ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetConnector ||
+		tombstone.TargetID != connector.ID ||
+		tombstone.TargetRevision != current.Revision ||
+		tombstone.TaskID != task.ID ||
+		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing ||
+		!tombstone.CreatedAt.Equal(task.CreatedAt) ||
+		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
+		intent.TaskID != task.ID ||
+		intent.EnvironmentID != connector.EnvironmentID ||
+		intent.ConnectorID != connector.ID ||
+		intent.ConnectorRevision != current.Revision ||
+		!intent.CreatedAt.Equal(task.CreatedAt) ||
+		task.Executor != taskjournal.TaskExecutorController ||
+		task.Type != taskjournal.TaskRemove ||
+		task.Target != connector.ID ||
+		task.Status != taskjournal.TaskStatusPending ||
+		task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
+		task.IdempotencyKey == "" ||
+		task.IdempotencyKey != marker.Locator.Key ||
+		len(task.Params) != 3 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceConnector ||
 		task.Params[TaskConnectorEnvironmentParam] != connector.EnvironmentID ||
 		task.Params[TaskConnectorNameParam] != connector.Name {
@@ -236,9 +250,12 @@ func validateConnectorDeletionEnvelope(
 		Kind: idempotencyrecord.IdempotencyReplayTargetConnector,
 		ID:   connector.ID,
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != connector.EnvironmentID || marker.Locator.Method != http.MethodDelete ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != connector.EnvironmentID ||
+		marker.Locator.Method != http.MethodDelete ||
 		marker.Locator.Route != connectorDeletionRoute ||
 		marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget ||
@@ -279,7 +296,9 @@ func requireConnectorReferencePrefixesEmpty(
 		if err != nil {
 			return nil, err
 		}
-		if result == nil || result.ReadRevision != revision || len(result.Values) > 1 {
+		if result == nil ||
+			result.ReadRevision != revision ||
+			len(result.Values) > 1 {
 			return nil, errs.New(errs.KindInternal, "connector reference prefix read is incomplete")
 		}
 		if len(result.Values) != 0 {
@@ -299,21 +318,24 @@ func classifyConnectorReference(
 	switch index {
 	case 0:
 		expectedKey := backuppolicy.BackupPolicyConnectorReferenceKey(connectorID, environmentID)
-		if value.Key != expectedKey || string(value.Value) != environmentID {
+		if value.Key != expectedKey ||
+			string(value.Value) != environmentID {
 			return errs.New(errs.KindInternal, "connector reference prefix is corrupt")
 		}
 		return errs.New(errs.KindResourceInUse, "connector is referenced by an enabled backup policy")
 	case 1:
 		recoveryPointID := string(value.Value)
 		expectedKey, err := backupruntime.BackupRecoveryPointConnectorIndexKey(connectorID, recoveryPointID)
-		if err != nil || value.Key != expectedKey {
+		if err != nil ||
+			value.Key != expectedKey {
 			return errs.New(errs.KindInternal, "connector recovery point reference is corrupt")
 		}
 		return errs.New(errs.KindResourceInUse, "connector is referenced by a recovery point")
 	case 2:
 		recoveryPointID := string(value.Value)
 		expectedKey, err := backupruntime.BackupOrphanConnectorIndexKey(connectorID, recoveryPointID)
-		if err != nil || value.Key != expectedKey {
+		if err != nil ||
+			value.Key != expectedKey {
 			return errs.New(errs.KindInternal, "connector orphan reference is corrupt")
 		}
 		return errs.New(errs.KindResourceInUse, "connector is referenced by a backup orphan")
@@ -432,7 +454,8 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 			)
 		}
 		credentials, err := connectorrecord.DecodeEncryptedCredentials(values[evidence.credentials].Value)
-		if err != nil || credentials.ConnectorID != connector.ID ||
+		if err != nil ||
+			credentials.ConnectorID != connector.ID ||
 			values[evidence.credentials].ModRevision != evidence.conditions[evidence.credentials].ModRevision {
 			clear(credentials.Ciphertext)
 			return errs.New(
@@ -441,7 +464,8 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 			)
 		}
 		clear(credentials.Ciphertext)
-		if values[evidence.tombstone] != nil || values[evidence.intent] != nil {
+		if values[evidence.tombstone] != nil ||
+			values[evidence.intent] != nil {
 			return errs.New(errs.KindResourceInUse, "connector deletion is already in progress")
 		}
 		if values[evidence.reference] != nil {
@@ -481,13 +505,16 @@ func loadConnectorTaskInitiationTenantAtRevision(
 	if err != nil {
 		return nil, err
 	}
-	if result == nil || result.ReadRevision != readRevision || len(result.Values) != 1 ||
+	if result == nil ||
+		result.ReadRevision != readRevision ||
+		len(result.Values) != 1 ||
 		result.Values[0] == nil {
 		return nil, errs.New(errs.KindStateConflict, "task initiation tenant is missing")
 	}
 	defer etcdstore.ClearValues(result.Values)
 	tenant, err := hierarchyrecord.DecodeTenant(result.Values[0].Value)
-	if err != nil || tenant.ID != project.Record.TenantID {
+	if err != nil ||
+		tenant.ID != project.Record.TenantID {
 		return nil, errs.New(errs.KindInternal, "task initiation tenant is corrupt")
 	}
 	return &etcdstore.Versioned[hierarchyrecord.TenantRecord]{

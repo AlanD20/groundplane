@@ -38,14 +38,17 @@ func TestTenantCreationServicePersistsEffectiveInputAndExactResponse(t *testing.
 	if err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	if response.Status != http.StatusCreated || response.ContentKind != "application/json" {
+	if response.Status != http.StatusCreated ||
+		response.ContentKind != "application/json" {
 		t.Fatalf("CreateTenant() response = %#v", response)
 	}
 	var tenant apiTypes.Tenant
 	if err := json.Unmarshal(response.Body, &tenant); err != nil {
 		t.Fatalf("CreateTenant() body = %s, %v", response.Body, err)
 	}
-	if tenant.ID == "" || tenant.Slug != "acme" || tenant.Name != "acme" ||
+	if tenant.ID == "" ||
+		tenant.Slug != "acme" ||
+		tenant.Name != "acme" ||
 		tenant.Description != "Production workloads" {
 		t.Fatalf("CreateTenant() Tenant = %#v", tenant)
 	}
@@ -54,12 +57,15 @@ func TestTenantCreationServicePersistsEffectiveInputAndExactResponse(t *testing.
 	}) {
 		t.Fatalf("persisted Tenant = %#v", repository.record)
 	}
-	if idempotency.tenant.ID != tenant.ID || idempotency.tenant.Name != "acme" {
+	if idempotency.tenant.ID != tenant.ID ||
+		idempotency.tenant.Name != "acme" {
 		t.Fatalf("canonical Tenant = %#v", idempotency.tenant)
 	}
 	marker := repository.marker
-	if marker.Kind != testidempotency.IdempotencyMarkerDirect || marker.State != testidempotency.IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != testidempotency.IdempotencyScopePlatform || marker.Locator.ScopeID != "-" ||
+	if marker.Kind != testidempotency.IdempotencyMarkerDirect ||
+		marker.State != testidempotency.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != testidempotency.IdempotencyScopePlatform ||
+		marker.Locator.ScopeID != "-" ||
 		marker.Locator.Method != http.MethodPost ||
 		marker.Locator.Route != tenantCreationRoute ||
 		marker.Locator.Key != "tenant-create-key-0001" ||
@@ -95,7 +101,8 @@ func TestTenantCreationServiceReturnsExactReplay(t *testing.T) {
 		CreateTenantInput{Slug: "acme"},
 		"tenant-create-key-0002",
 	)
-	if err != nil || !reflect.DeepEqual(got, want) {
+	if err != nil ||
+		!reflect.DeepEqual(got, want) {
 		t.Fatalf("CreateTenant(replay) = %#v, %v", got, err)
 	}
 }

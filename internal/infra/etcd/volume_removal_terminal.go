@@ -265,7 +265,8 @@ func volumeRemovalTerminalTaskMatches(task TaskRecord, runtime removalrecord.Run
 }
 
 func volumeRemovalTaskMatchesRuntime(task TaskRecord, runtime removalrecord.Runtime) bool {
-	if task.Actor != taskjournal.TaskActorOperator || task.Executor != taskjournal.TaskExecutorAgent || task.FinishedAt == nil ||
+	if task.Actor != taskjournal.TaskActorOperator || task.Executor != taskjournal.TaskExecutorAgent ||
+		task.FinishedAt == nil ||
 		task.FinishedAt.Before(
 			runtime.UpdatedAt,
 		) ||

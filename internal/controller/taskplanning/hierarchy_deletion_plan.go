@@ -16,13 +16,17 @@ func (resolver *TaskPlanResolver) resolveHierarchyDeletionPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
-	if resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
-		ids.Validate(ids.KindEnvironment, task.Target) != nil || task.RenderGeneration != 1 ||
+	if resolver.blueprints == nil ||
+		task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskRemove ||
+		ids.Validate(ids.KindEnvironment, task.Target) != nil ||
+		task.RenderGeneration != 1 ||
 		task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 ||
 		len(task.Params) != 9 ||
 		task.Params[taskjournal.TaskHierarchyDeletionProcedureParam] != "environment.cleanup" ||
-		(len(task.Steps) != 1 && len(task.Steps) != 2) {
+		(len(task.Steps) != 1 &&
+			len(task.Steps) != 2) {
 		return nil, errs.New(errs.KindInternal, "durable hierarchy Environment cleanup Task is invalid")
 	}
 	for _, step := range task.Steps {

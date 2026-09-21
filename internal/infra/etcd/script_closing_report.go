@@ -55,21 +55,29 @@ func scriptClosingReportEnvelope(task TaskRecord) string {
 
 func taskHasScriptClosingReport(task TaskRecord) bool {
 	return task.Type == taskjournal.TaskScript ||
-		(task.Type == taskjournal.TaskUpdate && task.Params[releaserender.TaskReleasePublicationParam] != "")
+		(task.Type == taskjournal.TaskUpdate &&
+			task.Params[releaserender.TaskReleasePublicationParam] != "")
 }
 
 func (report scriptClosingReport) matches(status taskjournal.TaskStatus, result taskjournal.TaskResultRecord) bool {
-	return report.Status == status && taskjournal.TaskResultsEqual(report.Result, result) &&
-		report.ExecutionEpoch == result.ExecutionEpoch && report.RecoveryRecordSHA256 == result.ReleaseRecoveryRecordSHA256
+	return report.Status == status &&
+		taskjournal.TaskResultsEqual(report.Result, result) &&
+		report.ExecutionEpoch == result.ExecutionEpoch &&
+		report.RecoveryRecordSHA256 == result.ReleaseRecoveryRecordSHA256
 }
 
 func (report scriptClosingReport) validate(current TaskAssignment) error {
 	task, assignment := current.Task.Record, current.Assignment.Record
-	if !taskHasScriptClosingReport(task) || task.Status != taskjournal.TaskStatusRunning || task.Executor != taskjournal.TaskExecutorAgent ||
+	if !taskHasScriptClosingReport(task) ||
+		task.Status != taskjournal.TaskStatusRunning ||
+		task.Executor != taskjournal.TaskExecutorAgent ||
 		report.TaskID != task.ID ||
-		report.OperationID != task.OperationID || report.PlanHash != task.PlanHash ||
-		report.AssignmentID != assignment.AssignmentID || report.AgentID != assignment.AgentID ||
-		report.AgentGeneration != assignment.AgentGeneration || report.ExecutionEpoch != assignment.ExecutionEpoch ||
+		report.OperationID != task.OperationID ||
+		report.PlanHash != task.PlanHash ||
+		report.AssignmentID != assignment.AssignmentID ||
+		report.AgentID != assignment.AgentID ||
+		report.AgentGeneration != assignment.AgentGeneration ||
+		report.ExecutionEpoch != assignment.ExecutionEpoch ||
 		report.TaskRevision <= 0 ||
 		report.TaskRevision != current.Task.Revision ||
 		report.AssignmentRevision <= 0 ||
@@ -98,7 +106,9 @@ func (repository *TaskRepository) readScriptClosingReport(
 	if err != nil {
 		return scriptClosingReport{}, nil, err
 	}
-	if read == nil || read.ReadRevision != current.Task.ReadRevision || len(read.Values) != 1 {
+	if read == nil ||
+		read.ReadRevision != current.Task.ReadRevision ||
+		len(read.Values) != 1 {
 		return scriptClosingReport{}, nil, taskassignments.CorruptTaskAssignment()
 	}
 	value := read.Values[0]
@@ -130,7 +140,8 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 	}
 	key := scriptClosingReportKey(current.Task.Record)
 	if !starting {
-		if value == nil || !report.matches(status, result) {
+		if value == nil ||
+			!report.matches(status, result) {
 			return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, errs.New(
 				errs.KindStateConflict, "Blueprint closing report changed",
 			)
@@ -175,7 +186,8 @@ func (repository *TaskRepository) resumeScriptClosingReport(
 		return current, false, nil
 	}
 	report, value, err := repository.readScriptClosingReport(ctx, current)
-	if err != nil || value == nil {
+	if err != nil ||
+		value == nil {
 		return current, false, err
 	}
 	terminal, err := repository.AcknowledgeTask(ctx, report.AgentID, report.AgentGeneration,

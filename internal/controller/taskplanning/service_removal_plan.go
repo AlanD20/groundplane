@@ -29,9 +29,14 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 	artifactID string,
 	stepID string,
 ) (etcd.TaskRecord, error) {
-	if resolver == nil || ctx == nil || ids.Validate(ids.KindConfig, artifactID) != nil ||
-		ids.Validate(ids.KindStep, stepID) != nil || task.Executor != taskjournal.TaskExecutorAgent ||
-		task.Type != taskjournal.TaskRemove || task.Target != intent.ServiceID || task.PlanID == "" {
+	if resolver == nil ||
+		ctx == nil ||
+		ids.Validate(ids.KindConfig, artifactID) != nil ||
+		ids.Validate(ids.KindStep, stepID) != nil ||
+		task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskRemove ||
+		task.Target != intent.ServiceID ||
+		task.PlanID == "" {
 		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Service removal Task preparation is invalid")
 	}
 	prepared := task
@@ -56,7 +61,8 @@ func (resolver *TaskPlanResolver) resolveServiceRemovalPlan(
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
 	reader, ok := resolver.services.(serviceRemovalPlanReader)
-	if !ok || reader == nil {
+	if !ok ||
+		reader == nil {
 		return nil, errs.New(errs.KindInternal, "Service removal intent reader is not configured")
 	}
 	stored, found, err := reader.GetServiceRemovalIntent(ctx, task.ID)
@@ -117,8 +123,11 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 }
 
 func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent environmentchanges.ServiceRemovalIntent) error {
-	if task.ID != intent.TaskID || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
-		task.Target != intent.ServiceID || len(task.Params) != 4 ||
+	if task.ID != intent.TaskID ||
+		task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskRemove ||
+		task.Target != intent.ServiceID ||
+		len(task.Params) != 4 ||
 		len(task.Steps) != 1 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||

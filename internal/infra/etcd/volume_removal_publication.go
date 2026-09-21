@@ -293,7 +293,8 @@ func validateVolumeRemovalInitialBinding(
 		), ScopeID: runtime.RootLocator.ScopeID,
 		Method: runtime.RootLocator.Method, Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key,
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != runtime.OriginTaskID ||
 		marker.Locator != locator ||
 		marker.ReplayTarget == nil ||

@@ -107,7 +107,8 @@ func prepareEntryRuntimeUpdates(
 			}
 			source = &sources[index]
 		}
-		if source == nil || source.Revision <= 0 {
+		if source == nil ||
+			source.Revision <= 0 {
 			return nil, errs.New(errs.KindStateConflict, "selected Entry runtime source is unavailable")
 		}
 		update := taskjournal.EntryRuntimeUpdate{ServiceID: serviceID, PreviousRevision: source.Revision,
@@ -172,8 +173,12 @@ func (resolver *TaskPlanResolver) resolveEntryMutationPlan(
 func buildEntryMutationPlan(
 	volumeRoot string, task etcd.TaskRecord, baseline, candidate projectionrecord.EnvironmentComposeProjection,
 ) (*agentpb.ExecutionPlan, error) {
-	if task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent || task.RenderGeneration <= 0 ||
-		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 6 ||
+	if task.Type != taskjournal.TaskUpdate ||
+		task.Executor != taskjournal.TaskExecutorAgent ||
+		task.RenderGeneration <= 0 ||
+		task.TimeoutSeconds <= 0 ||
+		task.TimeoutSeconds > math.MaxUint32 ||
+		len(task.Params) != 6 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry ||
 		task.Target != candidate.EnvironmentID ||
 		baseline.EnvironmentID != candidate.EnvironmentID ||
@@ -215,7 +220,8 @@ func buildEntryMutationPlan(
 	if len(selected) != 0 {
 		expectedSteps++
 	}
-	if len(task.Materializations) == 0 || len(task.Steps) != expectedSteps {
+	if len(task.Materializations) == 0 ||
+		len(task.Steps) != expectedSteps {
 		return nil, errs.New(errs.KindInternal, "Entry mutation Task step count is invalid")
 	}
 	references := make(map[string]materializationrecord.Record, len(task.Materializations))
@@ -293,7 +299,8 @@ func entryMutationConsumerIDs(
 	for _, entry := range candidate.Entries {
 		prior, exists := previous[entry.Entry.ID]
 		delete(previous, entry.Entry.ID)
-		if exists && prior.CurrentValueGenerationID == entry.CurrentValueGenerationID &&
+		if exists &&
+			prior.CurrentValueGenerationID == entry.CurrentValueGenerationID &&
 			slices.Equal(prior.Entry.Exposure, entry.Entry.Exposure) {
 			continue
 		}
@@ -313,7 +320,9 @@ func entryMutationConsumerIDs(
 	}
 	selected := make(map[string]bool)
 	for _, identity := range identities.Services {
-		if !running[identity.ID] || !exposed["all"] && !exposed[identity.Name] {
+		if !running[identity.ID] ||
+			!exposed["all"] &&
+				!exposed[identity.Name] {
 			continue
 		}
 		for _, service := range artifact.Services {
