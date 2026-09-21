@@ -11,6 +11,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -33,7 +34,7 @@ type serviceLifecyclePlanResolver interface {
 	PrepareServiceLifecycleHookTask(
 		context.Context,
 		etcd.TaskRecord,
-		etcd.ServiceLifecycleRenderInput,
+		releaserender.ServiceLifecycleRenderInput,
 		*taskconfiguration.BackingHookEncryptedInputs,
 		[]string,
 	) (etcd.TaskRecord, error)
@@ -246,7 +247,7 @@ func (service *serviceLifecycleService) runOnce(
 		PlanID: ids.New(ids.KindPlan), Type: taskType, Target: serviceID,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
-	var renderInput *etcd.ServiceLifecycleRenderInput
+	var renderInput *releaserender.ServiceLifecycleRenderInput
 	var sealedHookInputs *taskconfiguration.BackingHookEncryptedInputs
 	defer func() {
 		if sealedHookInputs != nil {
@@ -255,7 +256,7 @@ func (service *serviceLifecycleService) runOnce(
 	}()
 	if applied {
 		projectionInput = &projection
-		var input etcd.ServiceLifecycleRenderInput
+		var input releaserender.ServiceLifecycleRenderInput
 		task, input, sealedHookInputs, err = service.prepareAppliedServiceLifecycle(
 			ctx, taskType, current, tenant, project, environment, projection, task,
 		)

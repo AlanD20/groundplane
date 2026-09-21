@@ -24,24 +24,24 @@ func CaptureRelease(
 	applied etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	environmentID string,
 	serviceID string,
-) (etcd.ServiceLifecycleRelease, error) {
+) (releaserender.ServiceLifecycleRelease, error) {
 	serving, err := reader.ResolveServing(ctx, environmentID, serviceID, applied.ReadRevision)
 	if err != nil {
-		return etcd.ServiceLifecycleRelease{}, err
+		return releaserender.ServiceLifecycleRelease{}, err
 	}
 	current, err := reader.GetReleaseRenderInputAt(ctx, serving.Intent.ID, applied.ReadRevision)
 	if err != nil {
-		return etcd.ServiceLifecycleRelease{}, err
+		return releaserender.ServiceLifecycleRelease{}, err
 	}
 	if serving.Revision != applied.ReadRevision || current.ReadRevision != applied.ReadRevision ||
 		current.Record.ReleaseID != serving.Intent.ID || current.Record.ServiceID != serviceID ||
 		current.Record.EnvironmentID != environmentID {
-		return etcd.ServiceLifecycleRelease{}, errs.New(
+		return releaserender.ServiceLifecycleRelease{}, errs.New(
 			errs.KindStateConflict,
 			"Service lifecycle serving authority changed",
 		)
 	}
-	authority := etcd.ServiceLifecycleRelease{
+	authority := releaserender.ServiceLifecycleRelease{
 		ServingReleaseID: serving.Intent.ID, PriorServingReleaseID: serving.Intent.PriorServingReleaseID,
 		ProjectionRevision: serving.ProjectionRevision, IntentRevision: serving.IntentRevision,
 		RenderRevision: current.Revision, Current: current.Record,
@@ -55,11 +55,11 @@ func CaptureRelease(
 			applied.ReadRevision,
 		)
 		if priorErr != nil {
-			return etcd.ServiceLifecycleRelease{}, priorErr
+			return releaserender.ServiceLifecycleRelease{}, priorErr
 		}
 		if prior.ReadRevision != applied.ReadRevision || prior.Record.ServiceID != serviceID ||
 			prior.Record.EnvironmentID != environmentID || prior.Record.CandidateTarget != current.Record.PriorTarget {
-			return etcd.ServiceLifecycleRelease{}, errs.New(
+			return releaserender.ServiceLifecycleRelease{}, errs.New(
 				errs.KindStateConflict,
 				"Service lifecycle retained authority changed",
 			)

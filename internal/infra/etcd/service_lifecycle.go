@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -34,7 +35,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	replacement servicerecord.ServiceRecord,
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	renderInput *ServiceLifecycleRenderInput,
+	renderInput *releaserender.ServiceLifecycleRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -51,7 +52,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	replacement servicerecord.ServiceRecord,
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	renderInput *ServiceLifecycleRenderInput,
+	renderInput *releaserender.ServiceLifecycleRenderInput,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -174,14 +175,14 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
 	}
 	if renderInput != nil {
-		inputValue, encodeErr := encodeServiceLifecycleRenderInput(*renderInput)
+		inputValue, encodeErr := releaserender.EncodeServiceLifecycleRenderInput(*renderInput)
 		if encodeErr != nil {
 			return IdempotencyTransactionResult{}, encodeErr
 		}
 		defer clear(inputValue)
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: serviceLifecycleRenderInputKey(task.ID)},
+			etcdstore.Condition{Key: releaserender.ServiceLifecycleRenderInputKey(task.ID)},
 			etcdstore.Condition{
 				Key:         serviceLifecycleProjectionFenceKey(renderInput.EnvironmentID),
 				ModRevision: renderInput.AppliedProjectionRevision,
@@ -206,7 +207,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 			})
 		}
 		mutations = append(mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: serviceLifecycleRenderInputKey(task.ID), Value: inputValue,
+			Type: etcdstore.MutationPut, Key: releaserender.ServiceLifecycleRenderInputKey(task.ID), Value: inputValue,
 		})
 	}
 	initiation, err := newEnvironmentTaskInitiation(
@@ -341,7 +342,7 @@ func validateServiceLifecycleReplacement(current servicerecord.ServiceRecord, re
 
 func validateServiceLifecycleProjection(
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	input *ServiceLifecycleRenderInput,
+	input *releaserender.ServiceLifecycleRenderInput,
 	task TaskRecord,
 ) error {
 	if projection == nil && input == nil {
@@ -373,7 +374,7 @@ func validateServiceLifecycleProjection(
 	if len(task.Steps) != wantSteps {
 		return errs.New(errs.KindValidationFailed, "applied Service lifecycle Task steps are invalid")
 	}
-	return validateServiceLifecycleRenderInput(*input)
+	return releaserender.ValidateServiceLifecycleRenderInput(*input)
 }
 
 func serviceLifecycleHooks(configuration *backinghook.Configuration, taskType taskjournal.TaskType) *backinghook.Configuration {
@@ -388,7 +389,7 @@ func serviceLifecycleHooks(configuration *backinghook.Configuration, taskType ta
 	return configuration
 }
 
-func serviceLifecycleHookConfigured(input ServiceLifecycleRenderInput, taskType taskjournal.TaskType) bool {
+func serviceLifecycleHookConfigured(input releaserender.ServiceLifecycleRenderInput, taskType taskjournal.TaskType) bool {
 	return serviceLifecycleHooks(input.HookConfiguration, taskType) != nil
 }
 
@@ -397,7 +398,7 @@ func classifyServiceLifecycleStartConflict(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	service etcdstore.Versioned[servicerecord.ServiceRecord],
-	input *ServiceLifecycleRenderInput,
+	input *releaserender.ServiceLifecycleRenderInput,
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {

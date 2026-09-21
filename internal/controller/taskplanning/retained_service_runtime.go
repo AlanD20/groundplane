@@ -3,8 +3,8 @@ package taskplanning
 import (
 	"context"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -15,9 +15,9 @@ import (
 // its stable proxy, and any captured inactive blue/green workload.
 func (resolver *TaskPlanResolver) RenderRetainedServiceRuntime(
 	ctx context.Context,
-	source etcd.ServiceLifecycleRelease,
+	source releaserender.ServiceLifecycleRelease,
 ) ([]*agentpb.ComposeArtifact, error) {
-	return resolver.renderServiceLifecycleArtifacts(ctx, etcd.ServiceLifecycleRenderInput{Release: source}, "")
+	return resolver.renderServiceLifecycleArtifacts(ctx, releaserender.ServiceLifecycleRenderInput{Release: source}, "")
 }
 
 // RetainBlueprintNativeRuntimeSources merges all physical members before

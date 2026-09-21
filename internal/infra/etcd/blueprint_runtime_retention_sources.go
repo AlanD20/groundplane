@@ -16,7 +16,7 @@ import (
 // immutable native sources used by the sealed lifecycle renderer.
 type BlueprintRetainedRuntimeSource struct {
 	Planning ReleasePlanningService
-	Release  *ServiceLifecycleRelease
+	Release  *releaserender.ServiceLifecycleRelease
 	Intent   *ServingRelease
 }
 
@@ -36,9 +36,9 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 		}
 		serviceID := source.Planning.Service.Record.Desired.ID
 		if source.Release == nil || source.Intent == nil ||
-			validateServiceLifecycleRelease(
+			releaserender.ValidateServiceLifecycleRelease(
 				*source.Release,
-				ServiceLifecycleRenderInput{ServiceID: serviceID, EnvironmentID: environmentID},
+				releaserender.ServiceLifecycleRenderInput{ServiceID: serviceID, EnvironmentID: environmentID},
 			) != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Blueprint retained native authority is invalid")
 		}

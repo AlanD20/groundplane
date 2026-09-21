@@ -5,6 +5,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -34,14 +35,14 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	task etcd.TaskRecord,
-) (etcd.TaskRecord, etcd.ServiceLifecycleRenderInput, *taskconfiguration.BackingHookEncryptedInputs, error) {
+) (etcd.TaskRecord, releaserender.ServiceLifecycleRenderInput, *taskconfiguration.BackingHookEncryptedInputs, error) {
 	releaseAuthority, err := controllerlifecycle.CaptureRelease(
 		ctx, service.repository, projection, environment.Record.ID, current.Record.Desired.ID,
 	)
 	if err != nil {
-		return etcd.TaskRecord{}, etcd.ServiceLifecycleRenderInput{}, nil, err
+		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
 	}
-	input := etcd.ServiceLifecycleRenderInput{
+	input := releaserender.ServiceLifecycleRenderInput{
 		PlanID: task.PlanID, ServiceID: current.Record.Desired.ID,
 		ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
 		EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
@@ -58,7 +59,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	definition := serviceLifecycleHookDefinition(taskType, current.Record.Desired.Hooks)
 	if definition != nil {
 		if current.Record.Desired.Adapter != "custom" {
-			return etcd.TaskRecord{}, etcd.ServiceLifecycleRenderInput{}, nil, errs.New(
+			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, errs.New(
 				errs.KindStateConflict,
 				"Service lifecycle hooks require a Custom backing Service",
 			)
@@ -69,13 +70,13 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 			ctx, task.OperationID, project.Record.ID, *input.HookConfiguration,
 		)
 		if err != nil {
-			return etcd.TaskRecord{}, etcd.ServiceLifecycleRenderInput{}, nil, err
+			return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
 		}
 		if sealed != nil {
 			task, err = etcd.BindBackingHookTaskInputs(task, project.Record.ID, *sealed)
 			if err != nil {
 				clear(sealed.Ciphertext)
-				return etcd.TaskRecord{}, etcd.ServiceLifecycleRenderInput{}, nil, err
+				return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
 			}
 		}
 		minimumTimeout := int64(definition.TimeoutSeconds) + serviceLifecycleControlTimeoutSeconds
@@ -104,7 +105,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 		if sealed != nil {
 			clear(sealed.Ciphertext)
 		}
-		return etcd.TaskRecord{}, etcd.ServiceLifecycleRenderInput{}, nil, err
+		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
 	}
 	return prepared, input, sealed, nil
 }

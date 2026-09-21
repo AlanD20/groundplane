@@ -4,10 +4,11 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -27,7 +28,7 @@ type AcknowledgedRuntimeReader interface {
 // AcknowledgedRuntimeCapture is exact per-Service applied runtime evidence at
 // one fixed planning revision. Artifact identity is the only rewritten field.
 type AcknowledgedRuntimeCapture struct {
-	Release                etcd.ServiceLifecycleRelease
+	Release                releaserender.ServiceLifecycleRelease
 	RuntimeRevision        int64
 	CurrentArtifact        []byte
 	RetainedPriorArtifact  []byte

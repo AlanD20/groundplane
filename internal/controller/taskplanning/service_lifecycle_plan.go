@@ -32,7 +32,7 @@ type serviceLifecyclePlanReader interface {
 	GetServiceLifecycleRenderInput(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.ServiceLifecycleRenderInput], bool, error)
+	) (etcdstore.Versioned[releaserender.ServiceLifecycleRenderInput], bool, error)
 }
 
 type serviceLifecycleHookInputResolver interface {
@@ -56,7 +56,7 @@ type serviceLifecycleHookInputResolver interface {
 func (resolver *TaskPlanResolver) PrepareServiceLifecycleTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	input etcd.ServiceLifecycleRenderInput,
+	input releaserender.ServiceLifecycleRenderInput,
 	stepIDs []string,
 ) (etcd.TaskRecord, error) {
 	return resolver.prepareServiceLifecycleTask(ctx, task, input, nil, stepIDs)
@@ -65,7 +65,7 @@ func (resolver *TaskPlanResolver) PrepareServiceLifecycleTask(
 func (resolver *TaskPlanResolver) PrepareServiceLifecycleHookTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	input etcd.ServiceLifecycleRenderInput,
+	input releaserender.ServiceLifecycleRenderInput,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	stepIDs []string,
 ) (etcd.TaskRecord, error) {
@@ -75,7 +75,7 @@ func (resolver *TaskPlanResolver) PrepareServiceLifecycleHookTask(
 func (resolver *TaskPlanResolver) prepareServiceLifecycleTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	input etcd.ServiceLifecycleRenderInput,
+	input releaserender.ServiceLifecycleRenderInput,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 	stepIDs []string,
 ) (etcd.TaskRecord, error) {
@@ -138,7 +138,7 @@ func (resolver *TaskPlanResolver) resolveServiceLifecyclePlan(
 func (resolver *TaskPlanResolver) buildServiceLifecyclePlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	input etcd.ServiceLifecycleRenderInput,
+	input releaserender.ServiceLifecycleRenderInput,
 ) (*agentpb.ExecutionPlan, error) {
 	return resolver.buildServiceLifecyclePlanWithHookInputs(ctx, task, input, nil)
 }
@@ -146,7 +146,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlan(
 func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	input etcd.ServiceLifecycleRenderInput,
+	input releaserender.ServiceLifecycleRenderInput,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
 ) (*agentpb.ExecutionPlan, error) {
 	event, definition := serviceLifecycleHook(input, task.Type)
@@ -247,7 +247,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 }
 
 func serviceLifecycleHook(
-	input etcd.ServiceLifecycleRenderInput,
+	input releaserender.ServiceLifecycleRenderInput,
 	taskType taskjournal.TaskType,
 ) (backinghook.Event, *backinghook.Definition) {
 	if input.HookConfiguration == nil {
@@ -265,7 +265,7 @@ func serviceLifecycleHook(
 
 func (resolver *TaskPlanResolver) renderServiceLifecycleArtifacts(
 	ctx context.Context,
-	input etcd.ServiceLifecycleRenderInput,
+	input releaserender.ServiceLifecycleRenderInput,
 	phase core.ServiceLifecyclePhase,
 ) ([]*agentpb.ComposeArtifact, error) {
 	current, err := resolver.renderServiceLifecycleArtifact(ctx, input.Release.Current, phase, true)

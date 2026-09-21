@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -27,14 +28,14 @@ import (
 // BlueprintNativePredecessorCapture is transient fixed-revision publication
 // evidence. Historical render inputs are not duplicated in the marker.
 type BlueprintNativePredecessorCapture struct {
-	ServiceID              string                   `json:"service_id"`
-	FixedReadRevision      int64                    `json:"fixed_read_revision"`
-	ProjectionRevision     int64                    `json:"projection_revision"`
-	RuntimeRevision        int64                    `json:"runtime_revision,omitempty"`
-	Serving                *ServiceLifecycleRelease `json:"serving,omitempty"`
-	RetainedPriorReleaseID string                   `json:"retained_prior_release_id,omitempty"`
-	CurrentArtifact        []byte                   `json:"current_artifact,omitempty"`
-	RetainedPriorArtifact  []byte                   `json:"retained_prior_artifact,omitempty"`
+	ServiceID              string                                 `json:"service_id"`
+	FixedReadRevision      int64                                  `json:"fixed_read_revision"`
+	ProjectionRevision     int64                                  `json:"projection_revision"`
+	RuntimeRevision        int64                                  `json:"runtime_revision,omitempty"`
+	Serving                *releaserender.ServiceLifecycleRelease `json:"serving,omitempty"`
+	RetainedPriorReleaseID string                                 `json:"retained_prior_release_id,omitempty"`
+	CurrentArtifact        []byte                                 `json:"current_artifact,omitempty"`
+	RetainedPriorArtifact  []byte                                 `json:"retained_prior_artifact,omitempty"`
 }
 
 // BlueprintNativePredecessor is the immutable runtime view reconstructed from
@@ -236,8 +237,8 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 		if capture.Serving == nil && capture.RetainedPriorReleaseID != "" {
 			return nil, releases.CorruptReleaseRecord()
 		}
-		if capture.Serving != nil && (validateServiceLifecycleRelease(*capture.Serving,
-			ServiceLifecycleRenderInput{ServiceID: capture.ServiceID, EnvironmentID: evidence.EnvironmentID}) != nil ||
+		if capture.Serving != nil && (releaserender.ValidateServiceLifecycleRelease(*capture.Serving,
+			releaserender.ServiceLifecycleRenderInput{ServiceID: capture.ServiceID, EnvironmentID: evidence.EnvironmentID}) != nil ||
 			capture.Serving.ProjectionRevision != capture.ProjectionRevision) {
 			return nil, releases.CorruptReleaseRecord()
 		}

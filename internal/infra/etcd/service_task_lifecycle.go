@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -34,8 +35,8 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	}
 	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		serviceLifecycleActiveKey(source.Target),
-		serviceLifecycleRenderInputKey(source.ID),
-		serviceLifecycleRenderInputKey(retry.ID),
+		releaserender.ServiceLifecycleRenderInputKey(source.ID),
+		releaserender.ServiceLifecycleRenderInputKey(retry.ID),
 	}, Revision: readRevision})
 	if err != nil {
 		return serviceTaskChange{}, err
@@ -69,16 +70,16 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 		if values.Values[1] == nil {
 			return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input was not found")
 		}
-		input, decodeErr := decodeServiceLifecycleRenderInput(values.Values[1].Value)
+		input, decodeErr := releaserender.DecodeServiceLifecycleRenderInput(values.Values[1].Value)
 		if decodeErr != nil || input.PlanID != source.PlanID || source.PlanID != retry.PlanID {
 			return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input changed")
 		}
 		change.conditions = append(change.conditions,
-			etcdstore.Condition{Key: serviceLifecycleRenderInputKey(source.ID), ModRevision: values.Values[1].ModRevision},
-			etcdstore.Condition{Key: serviceLifecycleRenderInputKey(retry.ID)},
+			etcdstore.Condition{Key: releaserender.ServiceLifecycleRenderInputKey(source.ID), ModRevision: values.Values[1].ModRevision},
+			etcdstore.Condition{Key: releaserender.ServiceLifecycleRenderInputKey(retry.ID)},
 		)
 		change.mutations = append(change.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: serviceLifecycleRenderInputKey(retry.ID), Value: values.Values[1].Value,
+			Type: etcdstore.MutationPut, Key: releaserender.ServiceLifecycleRenderInputKey(retry.ID), Value: values.Values[1].Value,
 		})
 	} else if values.Values[1] != nil {
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Controller Service Task has a render input")
@@ -131,7 +132,7 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 		return change, err
 	}
 	inputRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{serviceLifecycleRenderInputKey(task.ID)}, Revision: readRevision,
+		Keys: []string{releaserender.ServiceLifecycleRenderInputKey(task.ID)}, Revision: readRevision,
 	})
 	if err != nil {
 		return serviceTaskChange{}, err
@@ -144,7 +145,7 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input is missing")
 	}
 	defer etcdstore.ClearValues(inputRead.Values)
-	input, err := decodeServiceLifecycleRenderInput(inputRead.Values[0].Value)
+	input, err := releaserender.DecodeServiceLifecycleRenderInput(inputRead.Values[0].Value)
 	if err != nil || input.PlanID != task.PlanID || input.ServiceID != task.Target {
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input changed")
 	}

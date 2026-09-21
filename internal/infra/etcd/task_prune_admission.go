@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -300,7 +301,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	conditions = backupReceiptCompanion.appendStartCondition(conditions)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskPruneIntentKey(task.ID), Value: intentValue},
-		{Type: etcdstore.MutationDelete, Key: serviceLifecycleRenderInputKey(task.ID)},
+		{Type: etcdstore.MutationDelete, Key: releaserender.ServiceLifecycleRenderInputKey(task.ID)},
 		{Type: etcdstore.MutationDelete, Key: backinghooks.CheckpointTaskPrefix(task.ID), Prefix: true},
 		{Type: etcdstore.MutationDelete, Key: retentionEntry.Key},
 		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
