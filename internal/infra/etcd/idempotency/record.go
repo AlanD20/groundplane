@@ -146,11 +146,6 @@ func (marker IdempotencyMarker) String() string {
 }
 func (marker IdempotencyMarker) GoString() string { return marker.String() }
 
-type IdempotencyEvidence struct {
-	marker      IdempotencyMarker
-	modRevision int64
-}
-
 func CloneIdempotencyMarker(marker IdempotencyMarker) IdempotencyMarker {
 	marker.ReplayTarget = CloneIdempotencyReplayTarget(marker.ReplayTarget)
 	marker.Intent.Ciphertext = append([]byte(nil), marker.Intent.Ciphertext...)

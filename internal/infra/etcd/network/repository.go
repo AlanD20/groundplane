@@ -107,7 +107,7 @@ func NewRepository(
 func (repository *Repository) Read(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
-) (*idempotencyrecord.IdempotencyEvidence, error) {
+) (*etcd.IdempotencyEvidence, error) {
 	return repository.idempotency.Read(ctx, locator)
 }
 

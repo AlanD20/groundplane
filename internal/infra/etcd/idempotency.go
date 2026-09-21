@@ -279,7 +279,7 @@ type idempotencyRepositoryStore interface {
 type IdempotencyRepository struct{ store idempotencyRepositoryStore }
 
 type idempotencyPruneCandidate struct {
-	Marker                  idempotencyrecord.IdempotencyEvidence
+	Marker                  IdempotencyEvidence
 	RetentionKey            string
 	RetentionValue          []byte
 	RetentionModRevision    int64
@@ -450,7 +450,7 @@ func clearKeyValues(values []*etcdstore.KeyValue) {
 	}
 }
 
-func (evidence *idempotencyrecord.IdempotencyEvidence) Marker() (idempotencyrecord.IdempotencyMarker, error) {
+func (evidence *IdempotencyEvidence) Marker() (idempotencyrecord.IdempotencyMarker, error) {
 	if evidence == nil || evidence.modRevision <= 0 || idempotencyrecord.ValidateIdempotencyMarker(evidence.marker) != nil {
 		return idempotencyrecord.IdempotencyMarker{}, idempotencyrecord.CorruptIdempotencyMarker()
 	}

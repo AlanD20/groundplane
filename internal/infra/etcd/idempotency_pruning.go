@@ -138,7 +138,7 @@ func (repository *IdempotencyRepository) collectExpired(
 			return nil, scan, err
 		}
 		candidates = append(candidates, idempotencyPruneCandidate{
-			Marker:               idempotencyrecord.IdempotencyEvidence{marker: marker, modRevision: markerEntry.ModRevision},
+			Marker:               IdempotencyEvidence{marker: marker, modRevision: markerEntry.ModRevision},
 			RetentionKey:         retentionEntries[index].Key,
 			RetentionValue:       append([]byte(nil), retentionEntries[index].Value...),
 			RetentionModRevision: retentionEntries[index].ModRevision,

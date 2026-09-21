@@ -14,7 +14,7 @@ import (
 func (repository *IdempotencyRepository) Read(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
-) (*idempotencyrecord.IdempotencyEvidence, error) {
+) (*IdempotencyEvidence, error) {
 	evidence, _, err := repository.ReadWithRevision(ctx, locator)
 	return evidence, err
 }
@@ -25,7 +25,7 @@ func (repository *IdempotencyRepository) Read(
 func (repository *IdempotencyRepository) ReadWithRevision(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
-) (*idempotencyrecord.IdempotencyEvidence, int64, error) {
+) (*IdempotencyEvidence, int64, error) {
 	if ctx == nil {
 		return nil, 0, errs.New(errs.KindInternal, "idempotency context is required")
 	}
@@ -54,7 +54,7 @@ func (repository *IdempotencyRepository) ReadAtRevision(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
 	revision int64,
-) (*idempotencyrecord.IdempotencyEvidence, error) {
+) (*IdempotencyEvidence, error) {
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "idempotency context is required")
 	}
@@ -68,7 +68,7 @@ func (repository *IdempotencyRepository) readEvidenceAtRevision(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
 	revision int64,
-) (*idempotencyrecord.IdempotencyEvidence, error) {
+) (*IdempotencyEvidence, error) {
 	if err := idempotencyrecord.ValidateIdempotencyLocator(locator); err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (repository *IdempotencyRepository) readEvidenceAtRevision(
 	if result.Values[0].ModRevision <= 0 {
 		return nil, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	return &idempotencyrecord.IdempotencyEvidence{marker: marker, modRevision: result.Values[0].ModRevision}, nil
+	return &IdempotencyEvidence{marker: marker, modRevision: result.Values[0].ModRevision}, nil
 }
 
 func (repository *IdempotencyRepository) ResolveReplayLocator(
@@ -248,7 +248,7 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtSnapshot(
 }
 
 // Revision is the marker's durable MVCC revision.
-func (evidence *idempotencyrecord.IdempotencyEvidence) Revision() int64 {
+func (evidence *IdempotencyEvidence) Revision() int64 {
 	if evidence == nil {
 		return 0
 	}
