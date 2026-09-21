@@ -176,7 +176,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		taskTenant,
 		project,
 		environment,
-		TaskActorOperator,
+		taskjournal.TaskActorOperator,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

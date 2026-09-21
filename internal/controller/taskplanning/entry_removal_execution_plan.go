@@ -110,10 +110,10 @@ func pinnedEntryRemovalIdentity(
 		EnvironmentName:     task.Params[etcd.TaskEntryEnvironmentNameParam],
 		AuthorizedVolumeDir: task.Params[etcd.TaskEntryAuthorizedVolumeDirParam],
 	}
-	validWorkspace := task.Owner.WorkspaceType == etcd.TaskWorkspaceTenant &&
+	validWorkspace := task.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant &&
 		ids.Validate(ids.KindTenant, identity.TenantID) == nil && identity.TenantSlug != ""
 	if identity.TenantID == "" {
-		validWorkspace = task.Owner.WorkspaceType == etcd.TaskWorkspacePlatform && identity.TenantSlug == ""
+		validWorkspace = task.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform && identity.TenantSlug == ""
 	}
 	if !validWorkspace || ids.Validate(ids.KindProject, identity.ProjectID) != nil ||
 		ids.Validate(

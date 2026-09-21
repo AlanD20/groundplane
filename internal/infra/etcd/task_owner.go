@@ -6,50 +6,25 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// TaskWorkspaceType is the immutable workspace catalog stored with every Task.
-type TaskWorkspaceType string
-
-const (
-	TaskWorkspacePlatform TaskWorkspaceType = "platform"
-	TaskWorkspaceTenant   TaskWorkspaceType = "tenant"
-)
-
-// TaskActor records whether an authenticated operator or the Controller
-// initiated one Task attempt. It deliberately contains no token identity.
-type TaskActor string
-
-const (
-	TaskActorOperator TaskActor = "operator"
-	TaskActorSystem   TaskActor = "system"
-)
-
-// TaskOwner freezes the initiating product scope. Empty descendant ids are
-// meaningful and therefore remain explicit strings rather than pointers.
-type TaskOwner struct {
-	WorkspaceType TaskWorkspaceType `json:"workspace_type"`
-	TenantID      string            `json:"tenant_id,omitempty"`
-	ProjectID     string            `json:"project_id,omitempty"`
-	EnvironmentID string            `json:"environment_id,omitempty"`
-}
-
 // TaskInitiation is opaque proof of the durable context that initiated one
 // Task publication. Repositories construct it from records they already fence;
 // app services can only receive system initiation through TaskRepository.
 type TaskInitiation struct {
-	owner  TaskOwner
-	actor  TaskActor
+	owner  taskjournal.TaskOwner
+	actor  taskjournal.TaskActor
 	fences []etcdstore.Condition
 }
 
-func (initiation TaskInitiation) Owner() TaskOwner { return initiation.owner }
+func (initiation TaskInitiation) Owner() taskjournal.TaskOwner { return initiation.owner }
 
-func (initiation TaskInitiation) Actor() TaskActor { return initiation.actor }
+func (initiation TaskInitiation) Actor() taskjournal.TaskActor { return initiation.actor }
 
 func (initiation TaskInitiation) RetryScope() (TaskRetryScope, error) {
 	record := TaskRecord{Owner: initiation.owner, Actor: initiation.actor}
@@ -59,8 +34,8 @@ func (initiation TaskInitiation) RetryScope() (TaskRetryScope, error) {
 	return taskOwnerRetryScope(initiation.owner)
 }
 
-func taskOwnerRetryScope(owner TaskOwner) (TaskRetryScope, error) {
-	if err := validateTaskOwner(owner); err != nil {
+func taskOwnerRetryScope(owner taskjournal.TaskOwner) (TaskRetryScope, error) {
+	if err := taskjournal.ValidateOwner(owner); err != nil {
 		return TaskRetryScope{}, err
 	}
 	switch {
@@ -75,100 +50,11 @@ func taskOwnerRetryScope(owner TaskOwner) (TaskRetryScope, error) {
 	}
 }
 
-func PlatformTaskOwner() TaskOwner {
-	return TaskOwner{WorkspaceType: TaskWorkspacePlatform}
-}
-
-func TenantTaskOwner(tenantID string) (TaskOwner, error) {
-	owner := TaskOwner{WorkspaceType: TaskWorkspaceTenant, TenantID: tenantID}
-	if err := validateTaskOwner(owner); err != nil {
-		return TaskOwner{}, err
-	}
-	return owner, nil
-}
-
-func TenantProjectTaskOwner(tenantID string, projectID string) (TaskOwner, error) {
-	owner := TaskOwner{
-		WorkspaceType: TaskWorkspaceTenant,
-		TenantID:      tenantID,
-		ProjectID:     projectID,
-	}
-	if err := validateTaskOwner(owner); err != nil {
-		return TaskOwner{}, err
-	}
-	return owner, nil
-}
-
-func ProjectTaskOwner(project hierarchyrecord.ProjectRecord) (TaskOwner, error) {
-	if ids.Validate(ids.KindProject, project.ID) != nil {
-		return TaskOwner{}, errs.New(errs.KindValidationFailed, "task owner Project is invalid")
-	}
-	var owner TaskOwner
-	switch project.Kind {
-	case hierarchyrecord.ProjectKindTenant:
-		owner = TaskOwner{
-			WorkspaceType: TaskWorkspaceTenant,
-			TenantID:      project.TenantID,
-			ProjectID:     project.ID,
-		}
-	case hierarchyrecord.ProjectKindBacking:
-		if project.TenantID != "" {
-			return TaskOwner{}, errs.New(errs.KindValidationFailed, "backing Project task owner has a Tenant")
-		}
-		owner = TaskOwner{WorkspaceType: TaskWorkspacePlatform, ProjectID: project.ID}
-	default:
-		return TaskOwner{}, errs.New(errs.KindValidationFailed, "task owner Project kind is invalid")
-	}
-	if err := validateTaskOwner(owner); err != nil {
-		return TaskOwner{}, err
-	}
-	return owner, nil
-}
-
-func EnvironmentTaskOwner(project hierarchyrecord.ProjectRecord, environment hierarchyrecord.EnvironmentRecord) (TaskOwner, error) {
-	if ids.Validate(ids.KindEnvironment, environment.ID) != nil || environment.ProjectID != project.ID {
-		return TaskOwner{}, errs.New(errs.KindValidationFailed, "task owner Environment hierarchy is invalid")
-	}
-	owner, err := ProjectTaskOwner(project)
-	if err != nil {
-		return TaskOwner{}, err
-	}
-	owner.EnvironmentID = environment.ID
-	if err := validateTaskOwner(owner); err != nil {
-		return TaskOwner{}, err
-	}
-	return owner, nil
-}
-
-func validateTaskOwner(owner TaskOwner) error {
-	switch owner.WorkspaceType {
-	case TaskWorkspacePlatform:
-		if owner.TenantID != "" {
-			return errs.New(errs.KindValidationFailed, "platform task owner cannot contain a Tenant")
-		}
-	case TaskWorkspaceTenant:
-		if ids.Validate(ids.KindTenant, owner.TenantID) != nil {
-			return errs.New(errs.KindValidationFailed, "tenant task owner requires a valid Tenant")
-		}
-	default:
-		return errs.New(errs.KindValidationFailed, "task workspace_type is invalid")
-	}
-	if owner.ProjectID != "" && ids.Validate(ids.KindProject, owner.ProjectID) != nil {
-		return errs.New(errs.KindValidationFailed, "task owner Project is invalid")
-	}
-	if owner.EnvironmentID != "" {
-		if owner.ProjectID == "" || ids.Validate(ids.KindEnvironment, owner.EnvironmentID) != nil {
-			return errs.New(errs.KindValidationFailed, "task owner Environment requires a valid Project")
-		}
-	}
-	return nil
-}
-
-func newTaskInitiation(owner TaskOwner, actor TaskActor, fences ...etcdstore.Condition) (TaskInitiation, error) {
-	if err := validateTaskOwner(owner); err != nil {
+func newTaskInitiation(owner taskjournal.TaskOwner, actor taskjournal.TaskActor, fences ...etcdstore.Condition) (TaskInitiation, error) {
+	if err := taskjournal.ValidateOwner(owner); err != nil {
 		return TaskInitiation{}, err
 	}
-	if !validTaskActor(actor) {
+	if !taskjournal.ValidActor(actor) {
 		return TaskInitiation{}, errs.New(errs.KindValidationFailed, "task initiation actor is invalid")
 	}
 	for _, fence := range fences {
@@ -179,16 +65,16 @@ func newTaskInitiation(owner TaskOwner, actor TaskActor, fences ...etcdstore.Con
 	return TaskInitiation{owner: owner, actor: actor, fences: slices.Clone(fences)}, nil
 }
 
-func newPlatformTaskInitiation(actor TaskActor) (TaskInitiation, error) {
-	return newTaskInitiation(PlatformTaskOwner(), actor)
+func newPlatformTaskInitiation(actor taskjournal.TaskActor) (TaskInitiation, error) {
+	return newTaskInitiation(taskjournal.PlatformTaskOwner(), actor)
 }
 
 func newProjectTaskInitiation(
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 ) (TaskInitiation, error) {
-	owner, err := ProjectTaskOwner(project.Record)
+	owner, err := taskjournal.ProjectTaskOwner(project.Record)
 	if err != nil {
 		return TaskInitiation{}, err
 	}
@@ -207,9 +93,9 @@ func newEnvironmentTaskInitiation(
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 ) (TaskInitiation, error) {
-	owner, err := EnvironmentTaskOwner(project.Record, environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return TaskInitiation{}, err
 	}
@@ -232,9 +118,9 @@ func newEnvironmentCreationTaskInitiation(
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment hierarchyrecord.EnvironmentRecord,
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 ) (TaskInitiation, error) {
-	owner, err := EnvironmentTaskOwner(project.Record, environment)
+	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment)
 	if err != nil {
 		return TaskInitiation{}, err
 	}
@@ -306,7 +192,7 @@ func taskInitiationTenantFence(
 
 func newInheritedTaskInitiation(
 	parent etcdstore.Versioned[TaskRecord],
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 ) (TaskInitiation, error) {
 	if err := validateTaskRecord(parent.Record); err != nil {
 		return TaskInitiation{}, err
@@ -322,7 +208,7 @@ func newInheritedTaskInitiation(
 }
 
 func validateTaskInitiation(record TaskRecord, initiation TaskInitiation, requireRecord bool) error {
-	if err := validateTaskOwner(initiation.owner); err != nil || !validTaskActor(initiation.actor) {
+	if err := taskjournal.ValidateOwner(initiation.owner); err != nil || !taskjournal.ValidActor(initiation.actor) {
 		return errs.New(errs.KindInternal, "task initiation is invalid")
 	}
 	if requireRecord && (record.Owner != initiation.owner || record.Actor != initiation.actor) {
@@ -373,19 +259,15 @@ func prepareTaskInitiationFences(
 	return conditions, wrapped, nil
 }
 
-func validTaskActor(actor TaskActor) bool {
-	return actor == TaskActorOperator || actor == TaskActorSystem
-}
-
-func taskOwnerIndexKeys(owner TaskOwner, taskID string) ([]string, error) {
-	if err := validateTaskOwner(owner); err != nil {
+func taskOwnerIndexKeys(owner taskjournal.TaskOwner, taskID string) ([]string, error) {
+	if err := taskjournal.ValidateOwner(owner); err != nil {
 		return nil, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "task owner index task id is invalid")
 	}
 	workspaceKey := taskWorkspacePlatformIndexKey(taskID)
-	if owner.WorkspaceType == TaskWorkspaceTenant {
+	if owner.WorkspaceType == taskjournal.TaskWorkspaceTenant {
 		workspaceKey = taskWorkspaceTenantIndexKey(owner.TenantID, taskID)
 	}
 	keys := []string{workspaceKey}

@@ -324,7 +324,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -419,7 +419,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 	}
 	task := etcd.TaskRecord{
 		ID: claim.RevisionID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator,
+		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: zoneStableIDFromRevision(ids.KindPlan, claim.RevisionID),
 		Type: taskjournal.TaskRemove, Target: zoneID,
 		TimeoutSeconds: zoneDeletionTimeoutSeconds,

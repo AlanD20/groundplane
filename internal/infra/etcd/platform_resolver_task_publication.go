@@ -28,7 +28,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if err := validatePlatformComponentRecord(current.Record); err != nil {
 		return err
 	}
-	if task.Owner != PlatformTaskOwner() || task.Actor != TaskActorSystem || task.Executor != taskjournal.TaskExecutorAgent ||
+	if task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorSystem || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskUpdate || task.Status != taskjournal.TaskStatusPending || task.Target != current.Record.Desired.ID ||
 		task.Params[TaskResourceKindParam] != TaskResourceComponent ||
 		task.Params[TaskAutomaticReconcileParam] != "true" || len(task.Params) != 2 {
@@ -116,7 +116,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(task.Target), Value: []byte(task.ID)},
 		{Type: etcdstore.MutationDelete, Key: platformComponentBootstrapKey(task.Target)},
 	}
-	initiation, err := newPlatformTaskInitiation(TaskActorSystem)
+	initiation, err := newPlatformTaskInitiation(taskjournal.TaskActorSystem)
 	if err != nil {
 		return err
 	}

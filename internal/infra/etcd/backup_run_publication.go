@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"sync"
@@ -47,7 +48,7 @@ type BackupPostgresIdentityResolver func(
 
 type PreparedManualBackupRun struct {
 	Run         backupruntime.BackupRunRecord
-	Owner       TaskOwner
+	Owner       taskjournal.TaskOwner
 	Publication *PreparedBackupRunPublication
 }
 
@@ -96,7 +97,7 @@ func (publication *PreparedBackupRunPublication) Publish(
 	publication.state.plan = backupRunPublicationPlan{}
 	publication.state.mu.Unlock()
 	defer plan.clear()
-	if task.Actor != TaskActorOperator && task.Actor != TaskActorSystem {
+	if task.Actor != taskjournal.TaskActorOperator && task.Actor != taskjournal.TaskActorSystem {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "backup run task actor must be operator or system",
 		)

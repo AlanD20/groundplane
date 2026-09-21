@@ -15,7 +15,7 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 	ctx context.Context,
 	source etcdstore.Versioned[TaskRecord],
 	retryTaskID string,
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 	provided *TaskInitiation,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -35,14 +35,14 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 	}
 	if provided != nil {
 		if err := validateTaskInitiation(TaskRecord{}, *provided, false); err != nil ||
-			provided.actor != TaskActorSystem {
+			provided.actor != taskjournal.TaskActorSystem {
 			return IdempotencyTransactionResult{}, errs.New(
 				errs.KindValidationFailed,
 				"system hierarchy Task retry initiation is invalid",
 			)
 		}
 		fences := append(append([]etcdstore.Condition(nil), initiation.fences...), provided.fences...)
-		initiation, err = newTaskInitiation(source.Record.Owner, TaskActorSystem, fences...)
+		initiation, err = newTaskInitiation(source.Record.Owner, taskjournal.TaskActorSystem, fences...)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}

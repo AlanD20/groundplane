@@ -224,7 +224,7 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -330,7 +330,7 @@ func (service *connectorDeletionService) replayConnectorDeletion(
 }
 
 func newConnectorDeletionTask(
-	owner etcd.TaskOwner,
+	owner taskjournal.TaskOwner,
 	connector core.Connector,
 	idempotencyKey string,
 	createdAt time.Time,
@@ -341,7 +341,7 @@ func newConnectorDeletionTask(
 	}
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator,
+		Owner: owner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: connector.ID,
 		Params: map[string]string{

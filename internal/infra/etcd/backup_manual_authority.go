@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -13,22 +14,22 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	ctx context.Context,
 	environment hierarchyrecord.EnvironmentRecord,
 	fixedRevision int64,
-) (TaskOwner, error) {
+) (taskjournal.TaskOwner, error) {
 	read, err := repository.readFixedKeys(
 		ctx,
 		[]string{hierarchyrecord.ProjectKey(environment.ProjectID)},
 		fixedRevision,
 	)
 	if err != nil {
-		return TaskOwner{}, err
+		return taskjournal.TaskOwner{}, err
 	}
 	defer clearKeyValues(read.Values)
 	if read.Values[0] == nil {
-		return TaskOwner{}, errs.New(errs.KindStateConflict, "backup Project is unavailable")
+		return taskjournal.TaskOwner{}, errs.New(errs.KindStateConflict, "backup Project is unavailable")
 	}
 	project, err := hierarchyrecord.DecodeProject(read.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
-		return TaskOwner{}, errs.New(
+		return taskjournal.TaskOwner{}, errs.New(
 			errs.KindStateConflict,
 			"backing Environments cannot run consumer backups",
 		)
@@ -39,17 +40,17 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 		fixedRevision,
 	)
 	if err != nil {
-		return TaskOwner{}, err
+		return taskjournal.TaskOwner{}, err
 	}
 	defer clearKeyValues(tenantRead.Values)
 	if tenantRead.Values[0] == nil {
-		return TaskOwner{}, errs.New(errs.KindStateConflict, "backup Tenant is unavailable")
+		return taskjournal.TaskOwner{}, errs.New(errs.KindStateConflict, "backup Tenant is unavailable")
 	}
 	tenant, err := hierarchyrecord.DecodeTenant(tenantRead.Values[0].Value)
 	if err != nil || tenant.ID != project.TenantID {
-		return TaskOwner{}, backupruntime.CorruptBackupRuntimeRecord()
+		return taskjournal.TaskOwner{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	return EnvironmentTaskOwner(project, environment)
+	return taskjournal.EnvironmentTaskOwner(project, environment)
 }
 
 func (repository *BackupRuntimeRepository) manualBackupConnector(

@@ -171,7 +171,7 @@ func (service *backingZoneCascadeService) advanceAttach(
 	if err != nil {
 		return err
 	}
-	if initiation.Owner() != parent.Owner || initiation.Actor() != etcd.TaskActorSystem {
+	if initiation.Owner() != parent.Owner || initiation.Actor() != taskjournal.TaskActorSystem {
 		return errs.New(errs.KindStateConflict, "backing Zone cascade initiation changed")
 	}
 	switch {
@@ -274,7 +274,7 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 		ID:                ids.New(ids.KindTask),
 		OperationID:       ids.New(ids.KindOperation),
 		Owner:             parent.Owner,
-		Actor:             etcd.TaskActorSystem,
+		Actor:             taskjournal.TaskActorSystem,
 		Executor:          taskjournal.TaskExecutorAgent,
 		PlanID:            parent.PlanID,
 		Type:              taskjournal.TaskRemove,

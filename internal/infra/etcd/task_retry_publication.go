@@ -19,16 +19,16 @@ func (repository *TaskRepository) RetryTask(
 	ctx context.Context,
 	sourceTaskID string,
 	retryTaskID string,
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if actor != TaskActorOperator {
+	if actor != taskjournal.TaskActorOperator {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"ordinary task retry actor must be operator",
 		)
 	}
-	return repository.retryTask(ctx, sourceTaskID, retryTaskID, TaskActorOperator, nil, marker)
+	return repository.retryTask(ctx, sourceTaskID, retryTaskID, taskjournal.TaskActorOperator, nil, marker)
 }
 
 func (repository *TaskRepository) RetryTaskWithInitiation(
@@ -45,7 +45,7 @@ func (repository *TaskRepository) retryTask(
 	ctx context.Context,
 	sourceTaskID string,
 	retryTaskID string,
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 	provided *TaskInitiation,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -87,14 +87,14 @@ func (repository *TaskRepository) retryTask(
 			*provided,
 			false,
 		); err != nil ||
-			provided.actor != TaskActorSystem {
+			provided.actor != taskjournal.TaskActorSystem {
 			return IdempotencyTransactionResult{}, errs.New(
 				errs.KindValidationFailed,
 				"system task retry initiation is invalid",
 			)
 		}
 		fences := append(append([]etcdstore.Condition(nil), initiation.fences...), provided.fences...)
-		initiation, err = newTaskInitiation(source.Record.Owner, TaskActorSystem, fences...)
+		initiation, err = newTaskInitiation(source.Record.Owner, taskjournal.TaskActorSystem, fences...)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}

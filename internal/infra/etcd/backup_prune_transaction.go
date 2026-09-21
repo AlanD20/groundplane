@@ -97,7 +97,7 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 	expected, err := cloneRetryTask(
 		source.Record,
 		authority.taskID,
-		TaskActorSystem,
+		taskjournal.TaskActorSystem,
 		authority.createdAt,
 	)
 	if err != nil {
@@ -111,7 +111,7 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 	if !backupTaskRecordsEqual(expected, retry) {
 		return nil, errs.New(errs.KindValidationFailed, "backup prune retry Task is invalid")
 	}
-	initiation, err := newInheritedTaskInitiation(source, TaskActorSystem)
+	initiation, err := newInheritedTaskInitiation(source, taskjournal.TaskActorSystem)
 	if err != nil {
 		return nil, err
 	}

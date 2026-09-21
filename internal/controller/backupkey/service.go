@@ -230,7 +230,7 @@ func (service *Service) RotateBackupKey(
 	defer prepared.Clear()
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, IdempotencyKey: idempotencyKey,
-		Owner: prepared.Owner, Actor: etcd.TaskActorOperator,
+		Owner: prepared.Owner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorController, PlanID: planID, PlanHash: corebackup.KeyRotationPlanHash(), RenderGeneration: 1,
 		Type: taskjournal.TaskRotate, Target: environmentID, TimeoutSeconds: corebackup.KeyRotationTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,

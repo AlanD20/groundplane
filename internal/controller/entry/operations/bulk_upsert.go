@@ -222,7 +222,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	planID := entryStableIDFromRevision(ids.KindPlan, claim.RevisionID)
-	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -231,7 +231,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		OperationID:       allocator.Named(ids.KindOperation, "entry-bulk-operation"),
 		IdempotencyKey:    idempotencyKey,
 		Owner:             owner,
-		Actor:             etcd.TaskActorOperator,
+		Actor:             taskjournal.TaskActorOperator,
 		Executor:          taskjournal.TaskExecutorAgent,
 		PlanID:            planID,
 		RenderGeneration:  int32(generation),

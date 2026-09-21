@@ -569,7 +569,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, effectiveEnvironment, TaskActorOperator)
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, effectiveEnvironment, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

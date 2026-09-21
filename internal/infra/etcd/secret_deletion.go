@@ -171,13 +171,13 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	}
 	var initiation TaskInitiation
 	if owner.Project == nil {
-		initiation, err = newPlatformTaskInitiation(TaskActorOperator)
+		initiation, err = newPlatformTaskInitiation(taskjournal.TaskActorOperator)
 	} else {
 		taskTenant, tenantErr := loadTaskInitiationTenant(ctx, repository.store, *owner.Project)
 		if tenantErr != nil {
 			return IdempotencyTransactionResult{}, tenantErr
 		}
-		initiation, err = newProjectTaskInitiation(taskTenant, *owner.Project, TaskActorOperator)
+		initiation, err = newProjectTaskInitiation(taskTenant, *owner.Project, taskjournal.TaskActorOperator)
 	}
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

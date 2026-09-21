@@ -246,7 +246,7 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 	}, nil
 }
 
-func taskAPIType(taskType taskjournal.TaskType, actor etcd.TaskActor) (string, error) {
+func taskAPIType(taskType taskjournal.TaskType, actor taskjournal.TaskActor) (string, error) {
 	switch taskType {
 	case taskjournal.TaskDeploy, taskjournal.TaskRollback, taskjournal.TaskBackup, taskjournal.TaskBackupPrune,
 		taskjournal.TaskRestore, taskjournal.TaskAttach, taskjournal.TaskDetach, taskjournal.TaskRun,
@@ -256,7 +256,7 @@ func taskAPIType(taskType taskjournal.TaskType, actor etcd.TaskActor) (string, e
 	default:
 		return "", errs.New(errs.KindInternal, "task has an invalid durable type")
 	}
-	if taskType == taskjournal.TaskBackupPrune && actor != etcd.TaskActorSystem {
+	if taskType == taskjournal.TaskBackupPrune && actor != taskjournal.TaskActorSystem {
 		return "", errs.New(errs.KindInternal, "backup_prune task has an invalid durable actor")
 	}
 	return string(taskType), nil
@@ -296,22 +296,22 @@ func taskListScope(request *taskListInput) (etcd.TaskListScope, error) {
 	return etcd.TaskListScope{Kind: etcd.TaskListScopeGlobal}, nil
 }
 
-func taskAPIWorkspace(workspace etcd.TaskWorkspaceType) (apiTypes.TaskWorkspaceType, error) {
+func taskAPIWorkspace(workspace taskjournal.TaskWorkspaceType) (apiTypes.TaskWorkspaceType, error) {
 	switch workspace {
-	case etcd.TaskWorkspacePlatform:
+	case taskjournal.TaskWorkspacePlatform:
 		return apiTypes.TaskWorkspacePlatform, nil
-	case etcd.TaskWorkspaceTenant:
+	case taskjournal.TaskWorkspaceTenant:
 		return apiTypes.TaskWorkspaceTenant, nil
 	default:
 		return "", errs.New(errs.KindInternal, "task has an invalid durable workspace")
 	}
 }
 
-func taskAPIActor(actor etcd.TaskActor) (apiTypes.TaskActor, error) {
+func taskAPIActor(actor taskjournal.TaskActor) (apiTypes.TaskActor, error) {
 	switch actor {
-	case etcd.TaskActorOperator:
+	case taskjournal.TaskActorOperator:
 		return apiTypes.TaskActorOperator, nil
-	case etcd.TaskActorSystem:
+	case taskjournal.TaskActorSystem:
 		return apiTypes.TaskActorSystem, nil
 	default:
 		return "", errs.New(errs.KindInternal, "task has an invalid durable actor")

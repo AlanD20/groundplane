@@ -214,7 +214,7 @@ func runnerRemovalLocator(desired runnerrecord.RunnerDesiredRecord, key string) 
 }
 
 func newRunnerRemovalTask(record runnerrecord.RunnerRecord, key string, now time.Time) etcd.TaskRecord {
-	owner := etcd.TaskOwner{WorkspaceType: etcd.TaskWorkspaceTenant, TenantID: record.Desired.TenantID}
+	owner := taskjournal.TaskOwner{WorkspaceType: taskjournal.TaskWorkspaceTenant, TenantID: record.Desired.TenantID}
 	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		owner.ProjectID = record.Desired.OwnerID
 	}
@@ -226,7 +226,7 @@ func newRunnerRemovalTask(record runnerrecord.RunnerRecord, key string, now time
 	planDigest := sha256.Sum256([]byte(planInput))
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: key,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
+		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: record.Desired.ID,
 		Params: etcd.RunnerRemovalTaskParams(record),

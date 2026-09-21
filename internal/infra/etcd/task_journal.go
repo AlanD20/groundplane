@@ -94,8 +94,8 @@ type TaskRecord struct {
 	OperationID        string                         `json:"operation_id"`
 	RetryOf            string                         `json:"retry_of,omitempty"`
 	IdempotencyKey     string                         `json:"idempotency_key,omitempty"`
-	Owner              TaskOwner                      `json:"owner"`
-	Actor              TaskActor                      `json:"actor"`
+	Owner              taskjournal.TaskOwner          `json:"owner"`
+	Actor              taskjournal.TaskActor          `json:"actor"`
 	Executor           taskjournal.TaskExecutor       `json:"executor"`
 	PlanID             string                         `json:"plan_id"`
 	PlanHash           string                         `json:"plan_hash,omitempty"`
@@ -128,8 +128,8 @@ type TaskRecord struct {
 func newTaskRecord(
 	id string,
 	operationID string,
-	owner TaskOwner,
-	actor TaskActor,
+	owner taskjournal.TaskOwner,
+	actor taskjournal.TaskActor,
 	taskType taskjournal.TaskType,
 	target string,
 	timeoutSeconds int64,

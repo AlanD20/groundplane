@@ -115,7 +115,7 @@ func (service *BackupRunService) RetryBackupTask(
 		RetryOf:           sourceTaskID,
 		IdempotencyKey:    prepared.SourceTask.IdempotencyKey,
 		Owner:             prepared.Owner,
-		Actor:             etcd.TaskActorOperator,
+		Actor:             taskjournal.TaskActorOperator,
 		Executor:          taskjournal.TaskExecutorAgent,
 		PlanID:            planID,
 		Type:              taskjournal.TaskBackup,
@@ -215,7 +215,7 @@ func (service *BackupRunService) runBackup(
 		ID:                taskID,
 		OperationID:       operationID,
 		Owner:             prepared.Owner,
-		Actor:             etcd.TaskActorOperator,
+		Actor:             taskjournal.TaskActorOperator,
 		Executor:          taskjournal.TaskExecutorAgent,
 		PlanID:            planID,
 		Type:              taskjournal.TaskBackup,
@@ -228,7 +228,7 @@ func (service *BackupRunService) runBackup(
 		UpdatedAt:         createdAt,
 	}
 	if initiator == backupruntime.BackupRunInitiatorSchedule {
-		task.Actor = etcd.TaskActorSystem
+		task.Actor = taskjournal.TaskActorSystem
 	}
 	sealed, err := service.plans.BuildBackupRunPlan(BackupRunPlanInput{
 		Task: task, Run: prepared.Run, Upload: BackupRunUploadAuthorities(prepared.Run),

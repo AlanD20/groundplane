@@ -45,7 +45,7 @@ func newAttachMutationTask(
 		renderGeneration > math.MaxInt32 || stepCount <= 0 {
 		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "Attach Task input is invalid")
 	}
-	owner, err := etcd.EnvironmentTaskOwner(project, environment)
+	owner, err := taskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil || environment.ID != environmentID {
 		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "attach task owner is invalid")
 	}
@@ -55,7 +55,7 @@ func newAttachMutationTask(
 	}
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator,
+		Owner: owner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
 		RenderGeneration: int32(renderGeneration), Type: taskType, Target: attachID,
 		Params: map[string]string{etcd.TaskMutationEnvironmentParam: environmentID}, Steps: steps,

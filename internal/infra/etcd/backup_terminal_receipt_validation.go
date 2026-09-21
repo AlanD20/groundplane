@@ -89,8 +89,8 @@ func validateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) err
 	if recordcodec.ValidateID(ids.KindTask, evidence.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindOperation, evidence.OperationID) != nil ||
 		(evidence.RetryOf != "" && recordcodec.ValidateID(ids.KindTask, evidence.RetryOf) != nil) ||
-		validateTaskOwner(evidence.Owner) != nil || evidence.Owner.EnvironmentID == "" ||
-		!validTaskActor(evidence.Actor) || !taskjournal.ValidExecutor(evidence.Executor) ||
+		taskjournal.ValidateOwner(evidence.Owner) != nil || evidence.Owner.EnvironmentID == "" ||
+		!taskjournal.ValidActor(evidence.Actor) || !taskjournal.ValidExecutor(evidence.Executor) ||
 		evidence.Executor != taskjournal.TaskExecutorAgent || evidence.Target != evidence.Owner.EnvironmentID ||
 		recordcodec.ValidateID(ids.KindPlan, evidence.PlanID) != nil || !recordcodec.ValidSHA256(evidence.PlanHash) ||
 		!isTerminalTaskStatus(evidence.Status) || !recordcodec.ValidSHA256(evidence.ResultDigest) ||
@@ -115,7 +115,7 @@ func validateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) err
 	if evidence.TaskType != taskjournal.TaskBackup && evidence.TaskType != taskjournal.TaskBackupPrune {
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt Task evidence type is invalid")
 	}
-	if evidence.TaskType == taskjournal.TaskBackupPrune && evidence.Actor != TaskActorSystem {
+	if evidence.TaskType == taskjournal.TaskBackupPrune && evidence.Actor != taskjournal.TaskActorSystem {
 		return errs.New(errs.KindValidationFailed, "backup prune terminal receipt actor is invalid")
 	}
 	return nil

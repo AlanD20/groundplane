@@ -358,9 +358,9 @@ func validPlatformComponentTaskParams(task etcd.TaskRecord) bool {
 	}
 	if hasAutomatic {
 		return len(task.Params) == 3 &&
-			(task.Actor == etcd.TaskActorSystem || task.Actor == etcd.TaskActorOperator && task.RetryOf != "")
+			(task.Actor == taskjournal.TaskActorSystem || task.Actor == taskjournal.TaskActorOperator && task.RetryOf != "")
 	}
-	return len(task.Params) == 2 && task.Actor == etcd.TaskActorOperator
+	return len(task.Params) == 2 && task.Actor == taskjournal.TaskActorOperator
 }
 
 func componentDigest(value string) ([sha256.Size]byte, error) {

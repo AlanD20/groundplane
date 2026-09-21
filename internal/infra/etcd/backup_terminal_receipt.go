@@ -49,8 +49,8 @@ type BackupTerminalTaskEvidence struct {
 	TaskType           taskjournal.TaskType          `json:"task_type"`
 	OperationID        string                        `json:"operation_id"`
 	RetryOf            string                        `json:"retry_of,omitempty"`
-	Owner              TaskOwner                     `json:"owner"`
-	Actor              TaskActor                     `json:"actor"`
+	Owner              taskjournal.TaskOwner         `json:"owner"`
+	Actor              taskjournal.TaskActor         `json:"actor"`
 	Executor           taskjournal.TaskExecutor      `json:"executor"`
 	Target             string                        `json:"target"`
 	PlanID             string                        `json:"plan_id"`

@@ -263,7 +263,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		versionedTenant,
 		versionedProject,
 		versionedEnvironment,
-		TaskActorOperator,
+		taskjournal.TaskActorOperator,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

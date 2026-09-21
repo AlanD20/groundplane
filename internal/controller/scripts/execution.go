@@ -56,13 +56,13 @@ func (service *scriptMutationService) RunScript(
 	}
 
 	now := service.now().UTC()
-	owner, err := etcd.EnvironmentTaskOwner(sources.Project.Record, sources.Environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(sources.Project.Record, sources.Environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
+		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), Type: taskjournal.TaskScript, Target: scriptID,
 		Params: map[string]string{
 			etcd.ScriptExecutionIDParam: ids.NewULID(),

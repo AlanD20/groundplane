@@ -147,14 +147,14 @@ func (service *serviceMutationService) removeServiceOnce(
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	taskID := claim.TaskID
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: serviceStableIDFromRevision(ids.KindOperation, taskID),
-		IdempotencyKey: idempotencyKey, Owner: owner, Actor: etcd.TaskActorOperator,
+		IdempotencyKey: idempotencyKey, Owner: owner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: serviceStableIDFromRevision(ids.KindPlan, taskID),
 		Type: taskjournal.TaskRemove, Target: serviceID, TimeoutSeconds: serviceLifecycleAgentTimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,

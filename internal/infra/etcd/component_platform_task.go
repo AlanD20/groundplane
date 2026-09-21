@@ -18,7 +18,7 @@ const TaskPlatformComponentDesiredSHA256Param = "component_desired_sha256"
 const TaskAutomaticReconcileParam = "automatic_reconcile"
 
 func IsAutomaticReconcileTask(task TaskRecord) bool {
-	return task.Actor == TaskActorSystem && task.Params[TaskAutomaticReconcileParam] == "true"
+	return task.Actor == taskjournal.TaskActorSystem && task.Params[TaskAutomaticReconcileParam] == "true"
 }
 
 // ReplacePlatformComponentDesiredWithTask commits one typed desired-state
@@ -49,7 +49,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	}
 	if task.Target != replacement.Desired.ID || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskUpdate || task.Status != taskjournal.TaskStatusPending ||
-		task.Owner != PlatformTaskOwner() || task.Actor != TaskActorOperator ||
+		task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorOperator ||
 		task.Params[TaskResourceKindParam] != TaskResourceComponent {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -81,7 +81,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(renderInputValue)
-	initiation, err := newPlatformTaskInitiation(TaskActorOperator)
+	initiation, err := newPlatformTaskInitiation(taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

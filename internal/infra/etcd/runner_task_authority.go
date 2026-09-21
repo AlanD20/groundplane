@@ -13,7 +13,7 @@ import (
 func newRunnerTaskInitiation(
 	desired runnerrecord.RunnerDesiredRecord,
 	parents runnerParents,
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 ) (TaskInitiation, error) {
 	owner, err := runnerTaskOwner(desired)
 	if err != nil {
@@ -41,14 +41,14 @@ func validateRunnerCreateTask(desired runnerrecord.RunnerDesiredRecord, task Tas
 	return nil
 }
 
-func runnerTaskOwner(desired runnerrecord.RunnerDesiredRecord) (TaskOwner, error) {
+func runnerTaskOwner(desired runnerrecord.RunnerDesiredRecord) (taskjournal.TaskOwner, error) {
 	if err := runnerrecord.ValidateRunnerOwnership(desired); err != nil {
-		return TaskOwner{}, err
+		return taskjournal.TaskOwner{}, err
 	}
 	if desired.OwnerKind == runnerrecord.RunnerOwnerTenant {
-		return TenantTaskOwner(desired.TenantID)
+		return taskjournal.TenantTaskOwner(desired.TenantID)
 	}
-	return TenantProjectTaskOwner(desired.TenantID, desired.OwnerID)
+	return taskjournal.TenantProjectTaskOwner(desired.TenantID, desired.OwnerID)
 }
 
 func validateRunnerCreateMarker(desired runnerrecord.RunnerDesiredRecord, task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {

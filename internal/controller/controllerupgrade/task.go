@@ -48,7 +48,7 @@ func NewTask(now time.Time, idempotencyKey string, input Input) (etcd.TaskRecord
 	}
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
+		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator,
 		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: string(upgrade.Hash(canonical))[7:], RenderGeneration: 1,
 		Type: taskjournal.TaskUpdate, Target: Target, Params: map[string]string{
@@ -65,7 +65,7 @@ func NewTask(now time.Time, idempotencyKey string, input Input) (etcd.TaskRecord
 
 func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Journal, error) {
 	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskUpdate || task.Target != Target ||
-		task.Owner != etcd.PlatformTaskOwner() || task.Actor != etcd.TaskActorOperator || ids.Validate(ids.KindTask, task.ID) != nil ||
+		task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorOperator || ids.Validate(ids.KindTask, task.ID) != nil ||
 		ids.Validate(ids.KindOperation, task.OperationID) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
 		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds || task.RenderGeneration != 1 || task.RetryOf != "" || len(task.Steps) != 0 ||
 		len(task.Materializations) != 0 ||

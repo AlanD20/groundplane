@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -42,7 +43,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		}
 		root.rootSlug = tenant.Slug
 		root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "tenant", TenantID: tenant.ID}
-		root.owner, err = TenantTaskOwner(tenant.ID)
+		root.owner, err = taskjournal.TenantTaskOwner(tenant.ID)
 		root.coordinationKeys = []string{hierarchydeletion.HierarchyCoordinationKey(string(targetKind), targetID)}
 	case HierarchyDeletionTargetProject:
 		project, decodeErr := hierarchyrecord.DecodeProject(result.Entry.Value)
@@ -50,7 +51,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
 		}
 		root.rootSlug = project.Slug
-		root.owner, err = ProjectTaskOwner(project)
+		root.owner, err = taskjournal.ProjectTaskOwner(project)
 		if project.Kind == hierarchyrecord.ProjectKindBacking {
 			root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "platform"}
 		} else {
@@ -68,7 +69,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		}
 		root.rootSlug = project.Slug
 		root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "platform"}
-		root.owner, err = ProjectTaskOwner(project)
+		root.owner, err = taskjournal.ProjectTaskOwner(project)
 		root.coordinationKeys = []string{hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), targetID)}
 	case HierarchyDeletionTargetEnvironment:
 		environment, decodeErr := hierarchyrecord.DecodeEnvironment(result.Entry.Value)
@@ -181,7 +182,7 @@ func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 	root.primaryFences = append(root.primaryFences, etcdstore.Condition{
 		Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision,
 	})
-	root.owner, err = EnvironmentTaskOwner(project, environment)
+	root.owner, err = taskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		return hierarchyDeletionRoot{}, err
 	}
@@ -344,7 +345,7 @@ func prepareHierarchyDeletionPublication(
 			Key: root.coordinationKeys[index], ModRevision: current.Revision,
 		})
 	}
-	initiation, err := newTaskInitiation(root.owner, TaskActorOperator, initiationFences...)
+	initiation, err := newTaskInitiation(root.owner, taskjournal.TaskActorOperator, initiationFences...)
 	if err != nil {
 		clearMutationValues(mutations)
 		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err

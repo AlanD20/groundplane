@@ -57,7 +57,7 @@ func validateEnvironmentVolumeRemovalTask(
 	expectedParams := etcd.EnvironmentVolumeRemovalTaskParams(runtime, attempt.Ordinal)
 	if task.ID != attempt.TaskID || task.ID != runtime.CurrentTaskID ||
 		task.OperationID != runtime.OperationID || task.RetryOf != attempt.PredecessorTaskID ||
-		task.Owner.EnvironmentID != runtime.EnvironmentID || task.Actor != etcd.TaskActorOperator ||
+		task.Owner.EnvironmentID != runtime.EnvironmentID || task.Actor != taskjournal.TaskActorOperator ||
 		task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove || task.Target != runtime.VolumeID ||
 		task.RenderGeneration != int32(runtime.DesiredGeneration) ||
 		task.TimeoutSeconds != removalrecord.TimeoutSeconds ||

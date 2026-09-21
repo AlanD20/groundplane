@@ -134,7 +134,7 @@ func startupResolverTask(componentID string, createdAt time.Time, ensureService 
 	}
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorSystem,
+		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorSystem,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskUpdate, Target: componentID,
 		Params: map[string]string{

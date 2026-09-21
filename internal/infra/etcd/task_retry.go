@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func cloneRetryTask(source TaskRecord, id string, actor TaskActor, createdAt time.Time) (TaskRecord, error) {
+func cloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, createdAt time.Time) (TaskRecord, error) {
 	if err := validateTaskRecord(source); err != nil {
 		return TaskRecord{}, err
 	}

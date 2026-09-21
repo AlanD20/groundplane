@@ -26,7 +26,7 @@ func (repository *TaskRepository) CreateTask(
 			"task creation marker does not match its Task",
 		)
 	}
-	initiation, err := newPlatformTaskInitiation(TaskActorOperator)
+	initiation, err := newPlatformTaskInitiation(taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -145,18 +145,18 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 	}
 	switch {
 	case run.RetryOfTaskID != "":
-		if task.Actor != etcd.TaskActorOperator || task.RetryOf != run.RetryOfTaskID {
+		if task.Actor != taskjournal.TaskActorOperator || task.RetryOf != run.RetryOfTaskID {
 			return nil, errs.New(
 				errs.KindValidationFailed,
 				"backup retry task must be operator-acted and name its source",
 			)
 		}
 	case run.Initiator == backupruntime.BackupRunInitiatorOperator:
-		if task.Actor != etcd.TaskActorOperator {
+		if task.Actor != taskjournal.TaskActorOperator {
 			return nil, errs.New(errs.KindValidationFailed, "operator backup run task must be operator-acted")
 		}
 	case run.Initiator == backupruntime.BackupRunInitiatorSchedule:
-		if task.Actor != etcd.TaskActorSystem {
+		if task.Actor != taskjournal.TaskActorSystem {
 			return nil, errs.New(errs.KindValidationFailed, "scheduled backup run task must be system-acted")
 		}
 	default:

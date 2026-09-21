@@ -477,8 +477,8 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 			recordcodec.ValidateID(ids.KindConfig, task.Params[TaskComposeArtifactParam]) == nil &&
 			task.Params[TaskEntryProjectSlugParam] != "" && task.Params[TaskEntryEnvironmentNameParam] != "" &&
 			task.Params[TaskEntryAuthorizedVolumeDirParam] != "" &&
-			(task.Owner.WorkspaceType == TaskWorkspacePlatform && task.Params[TaskEntryTenantSlugParam] == "" ||
-				task.Owner.WorkspaceType == TaskWorkspaceTenant && task.Params[TaskEntryTenantSlugParam] != "")
+			(task.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform && task.Params[TaskEntryTenantSlugParam] == "" ||
+				task.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant && task.Params[TaskEntryTenantSlugParam] != "")
 	}
 	if intent.Desired != nil && (task.Params[EnvironmentDesiredRevisionParam] != intent.Desired.RevisionID ||
 		uint64(task.RenderGeneration) != intent.Desired.RenderGeneration) {

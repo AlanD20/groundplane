@@ -30,7 +30,7 @@ func platformComponentTaskActiveKey(componentID string) string {
 func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRecord {
 	return TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: PlatformTaskOwner(), Actor: TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
+		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskjournal.TaskUpdate, Target: componentID,
 		Params: map[string]string{
 			TaskResourceKindParam:       TaskResourceComponent,
@@ -58,7 +58,7 @@ func platformResolverTaskSteps(input PlatformComponentTaskRenderInput) []taskjou
 }
 
 func isPlatformDNSResolverTask(task TaskRecord) bool {
-	return task.Owner == PlatformTaskOwner() && task.Actor == TaskActorSystem &&
+	return task.Owner == taskjournal.PlatformTaskOwner() && task.Actor == taskjournal.TaskActorSystem &&
 		task.Executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskUpdate &&
 		task.Params[TaskResourceKindParam] == TaskResourceComponent &&
 		task.Params[TaskAutomaticReconcileParam] == "true" &&
@@ -66,13 +66,13 @@ func isPlatformDNSResolverTask(task TaskRecord) bool {
 }
 
 func isPlatformDNSResolverTaskAttempt(task TaskRecord) bool {
-	if task.Owner != PlatformTaskOwner() || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate ||
+	if task.Owner != taskjournal.PlatformTaskOwner() || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate ||
 		task.Params[TaskResourceKindParam] != TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return false
 	}
-	return task.Actor == TaskActorOperator ||
-		task.Actor == TaskActorSystem && task.Params[TaskAutomaticReconcileParam] == "true"
+	return task.Actor == taskjournal.TaskActorOperator ||
+		task.Actor == taskjournal.TaskActorSystem && task.Params[TaskAutomaticReconcileParam] == "true"
 }
 
 func clearHostResolutionReconciliationChange(change hostResolutionReconciliationChange) {

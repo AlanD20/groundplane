@@ -263,9 +263,9 @@ func (service *secretDeletionService) deleteSecretOnce(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
-	taskOwner := etcd.PlatformTaskOwner()
+	taskOwner := taskjournal.PlatformTaskOwner()
 	if owner.Project != nil {
-		taskOwner, err = etcd.ProjectTaskOwner(owner.Project.Record)
+		taskOwner, err = taskjournal.ProjectTaskOwner(owner.Project.Record)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
@@ -273,7 +273,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator,
+		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: secretID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceSecret},

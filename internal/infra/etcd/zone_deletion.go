@@ -202,7 +202,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, TaskActorOperator)
+	initiation, err := newEnvironmentTaskInitiation(taskTenant, project, environment, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -512,7 +512,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	}
 	initiation, err := newInheritedTaskInitiation(etcdstore.Versioned[TaskRecord]{
 		Record: parent, Revision: parentResult.Values[0].ModRevision, ReadRevision: parentResult.ReadRevision,
-	}, TaskActorSystem)
+	}, taskjournal.TaskActorSystem)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

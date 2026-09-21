@@ -254,7 +254,7 @@ func (service *agentEnrollmentService) newTask(
 	}
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation),
-		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
+		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator,
 		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
 		Type: taskjournal.TaskCreate, Target: agentID, Params: params,

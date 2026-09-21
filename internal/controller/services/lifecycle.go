@@ -220,7 +220,7 @@ func (service *serviceLifecycleService) runOnce(
 	default:
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Service Project kind is invalid")
 	}
-	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -241,7 +241,7 @@ func (service *serviceLifecycleService) runOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator,
+		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
 		PlanID: ids.New(ids.KindPlan), Type: taskType, Target: serviceID,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}

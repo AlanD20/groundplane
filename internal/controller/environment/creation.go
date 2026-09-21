@@ -346,7 +346,7 @@ func newEnvironmentCreationTask(
 	createdAt time.Time,
 	volumeRoot string,
 ) (etcd.TaskRecord, error) {
-	owner, err := etcd.EnvironmentTaskOwner(project, environment)
+	owner, err := taskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
@@ -373,7 +373,7 @@ func newEnvironmentCreationTask(
 	}
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation),
-		Owner: owner, Actor: etcd.TaskActorOperator,
+		Owner: owner, Actor: taskjournal.TaskActorOperator,
 		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash), RenderGeneration: 1,
 		Type: taskjournal.TaskCreate, Target: environment.ID,

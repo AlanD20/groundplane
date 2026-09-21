@@ -19,9 +19,9 @@ import (
 // Retry publishes the successor and its operation ownership together. The
 // accepted DELETE response and all completed traversal work remain unchanged.
 func (repository *TaskRepository) retryVolumeRemovalTask(
-	ctx context.Context, source etcdstore.Versioned[TaskRecord], retryID string, actor TaskActor, marker idempotencyrecord.IdempotencyMarker,
+	ctx context.Context, source etcdstore.Versioned[TaskRecord], retryID string, actor taskjournal.TaskActor, marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if actor != TaskActorOperator ||
+	if actor != taskjournal.TaskActorOperator ||
 		(source.Record.Status != taskjournal.TaskStatusFailed && source.Record.Status != taskjournal.TaskStatusTimedOut) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindTaskNotRetryable,

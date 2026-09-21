@@ -72,7 +72,7 @@ func EncodeCapabilityIdempotencyMarker(marker idempotencyrecord.IdempotencyMarke
 	return idempotencyrecord.EncodeIdempotencyMarker(marker)
 }
 
-func CloneCapabilityRetryTask(source TaskRecord, id string, actor TaskActor, createdAt time.Time) (TaskRecord, error) {
+func CloneCapabilityRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, createdAt time.Time) (TaskRecord, error) {
 	return cloneRetryTask(source, id, actor, createdAt)
 }
 

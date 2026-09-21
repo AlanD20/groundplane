@@ -248,7 +248,7 @@ func validateVolumeRemovalInitialBinding(
 	}
 	if task.ID != runtime.OriginTaskID || task.OperationID != runtime.OperationID || task.RetryOf != "" ||
 		task.Owner.EnvironmentID != runtime.EnvironmentID || task.Target != runtime.VolumeID ||
-		task.Actor != TaskActorOperator || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
+		task.Actor != taskjournal.TaskActorOperator || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		task.Status != taskjournal.TaskStatusPending || task.RenderGeneration != int32(runtime.DesiredGeneration) ||
 		task.TimeoutSeconds != removalrecord.TimeoutSeconds || task.IdempotencyKey != runtime.RootLocator.Key ||
 		!EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||

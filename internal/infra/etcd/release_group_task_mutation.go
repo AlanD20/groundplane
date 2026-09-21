@@ -198,7 +198,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, TaskActorOperator)
+	initiation, err := newEnvironmentTaskInitiation(tenant, project, environment, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

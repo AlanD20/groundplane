@@ -197,7 +197,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		}
 		return stateConflict("runner", current.Record.Desired.ID)
 	}
-	initiation, err := newRunnerTaskInitiation(current.Record.Desired, parents, TaskActorOperator)
+	initiation, err := newRunnerTaskInitiation(current.Record.Desired, parents, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

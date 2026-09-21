@@ -151,14 +151,14 @@ func (repository *EtcdRepository) PublishRemoval(
 		return removalOutcome(resolution.Response)
 	}
 
-	owner, err := etcd.EnvironmentTaskOwner(state.project.Record, state.environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(state.project.Record, state.environment.Record)
 	if err != nil {
 		return RemovalOutcome{}, err
 	}
 	taskInput := publication.Task
 	task := etcd.TaskRecord{
 		ID: taskInput.ID, OperationID: taskInput.OperationID, IdempotencyKey: request.IdempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator, PlanID: taskInput.PlanID,
+		Owner: owner, Actor: taskjournal.TaskActorOperator, PlanID: taskInput.PlanID,
 		Type: taskjournal.TaskRemove, Target: request.EntryID, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: taskInput.CreatedAt, UpdatedAt: taskInput.CreatedAt,
 	}

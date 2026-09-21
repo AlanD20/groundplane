@@ -198,7 +198,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newEnvironmentCreationTaskInitiation(taskTenant, project, record, TaskActorOperator)
+	initiation, err := newEnvironmentCreationTaskInitiation(taskTenant, project, record, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

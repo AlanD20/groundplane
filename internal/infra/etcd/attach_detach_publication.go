@@ -299,7 +299,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	initiation := TaskInitiation{}
 	if provided == nil {
 		initiation, err = newEnvironmentTaskInitiation(
-			versionedTenant, versionedProject, versionedEnvironment, TaskActorOperator,
+			versionedTenant, versionedProject, versionedEnvironment, taskjournal.TaskActorOperator,
 		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err

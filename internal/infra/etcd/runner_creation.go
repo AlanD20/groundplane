@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -103,7 +104,7 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 		{Type: etcdstore.MutationPut, Key: runnerHostSlotKey(allocationState.host.slot), Value: values.host},
 		{Type: etcdstore.MutationPut, Key: systemPoolRegistryKey, Value: values.system},
 	}
-	initiation, err := newRunnerTaskInitiation(desired, parents, TaskActorOperator)
+	initiation, err := newRunnerTaskInitiation(desired, parents, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -256,7 +256,7 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -290,7 +290,7 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator,
+		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: scriptID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceScript},

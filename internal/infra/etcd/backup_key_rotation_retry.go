@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,10 +15,10 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	ctx context.Context,
 	source etcdstore.Versioned[TaskRecord],
 	retryTaskID string,
-	actor TaskActor,
+	actor taskjournal.TaskActor,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if actor != TaskActorOperator {
+	if actor != taskjournal.TaskActorOperator {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"backup key rotation retry actor must be operator",

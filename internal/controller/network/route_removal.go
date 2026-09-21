@@ -253,7 +253,7 @@ func (service *routeRemovalService) removeRouteOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -273,7 +273,7 @@ func (service *routeRemovalService) removeRouteOnce(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator, PlanID: ids.New(ids.KindPlan),
+		Owner: taskOwner, Actor: taskjournal.TaskActorOperator, PlanID: ids.New(ids.KindPlan),
 		Type: taskjournal.TaskRemove, Target: routeID, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}

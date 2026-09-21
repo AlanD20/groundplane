@@ -430,7 +430,7 @@ func (service *MutationService) mutateOnce(
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -447,7 +447,7 @@ func (service *MutationService) mutateOnce(
 	}
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: stableIDFromTask(ids.KindOperation, taskID),
-		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: etcd.TaskActorOperator,
+		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
 		RenderGeneration: int32(generation), Type: volumeMutationTaskType(request.action), Target: request.volumeID,
 		Params: params, Steps: steps, TimeoutSeconds: volumeMutationTimeoutSeconds,

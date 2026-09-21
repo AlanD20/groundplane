@@ -280,7 +280,7 @@ func (service *MutationService) apply(
 		}
 		return releaseGroupReplayResponse(resolution)
 	}
-	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -294,7 +294,7 @@ func (service *MutationService) apply(
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: key,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
+		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskType, Target: desired.ID,
 		Params: map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceReleaseGroup},
 		Steps: []taskjournal.TaskStepRecord{

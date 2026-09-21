@@ -49,14 +49,14 @@ func (service *routeMutationService) prepareRouteMutationTask(
 	}
 	taskID := ids.New(ids.KindTask)
 	operationID := ids.New(ids.KindOperation)
-	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return etcd.RouteMutationTaskPreparation{}, err
 	}
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator, PlanID: ids.New(ids.KindPlan),
+		Owner: owner, Actor: taskjournal.TaskActorOperator, PlanID: ids.New(ids.KindPlan),
 		Type: taskjournal.TaskCreate, Target: record.Desired.ID,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: now, UpdatedAt: now,

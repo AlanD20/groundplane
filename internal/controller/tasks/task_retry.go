@@ -26,7 +26,7 @@ type taskRetryRepository interface {
 		context.Context,
 		string,
 		string,
-		etcd.TaskActor,
+		taskjournal.TaskActor,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	RetryTaskWithInitiation(
@@ -262,7 +262,7 @@ func (service *taskRetryService) retryTask(
 		)
 	} else if initiation == nil {
 		result, retryErr = service.repository.RetryTask(
-			ctx, sourceTaskID, retryTaskID, etcd.TaskActorOperator, marker,
+			ctx, sourceTaskID, retryTaskID, taskjournal.TaskActorOperator, marker,
 		)
 	} else {
 		result, retryErr = service.repository.RetryTaskWithInitiation(

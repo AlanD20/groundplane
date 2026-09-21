@@ -291,7 +291,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		versionedTenant,
 		versionedProject,
 		versionedEnvironment,
-		TaskActorOperator,
+		taskjournal.TaskActorOperator,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

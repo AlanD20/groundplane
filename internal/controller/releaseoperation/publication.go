@@ -69,13 +69,13 @@ func (service *Service) publish(
 	taskID := ids.New(ids.KindTask)
 	planID := ids.New(ids.KindPlan)
 	artifactID := ids.New(ids.KindConfig)
-	owner, err := etcd.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
+	owner, err := taskjournal.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, IdempotencyKey: locator.Key,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
+		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: planID, Type: taskType, Target: desiredID,
 		Params: map[string]string{
 			etcd.TaskReleasePublicationParam: publicationID,

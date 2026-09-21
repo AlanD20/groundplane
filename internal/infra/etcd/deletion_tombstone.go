@@ -311,7 +311,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	fixedEnvironment := environment
 	fixedEnvironment.ReadRevision = readRevision
 	initiation, err := newEnvironmentTaskInitiation(
-		&fixedTenant, fixedProject, fixedEnvironment, TaskActorOperator,
+		&fixedTenant, fixedProject, fixedEnvironment, taskjournal.TaskActorOperator,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

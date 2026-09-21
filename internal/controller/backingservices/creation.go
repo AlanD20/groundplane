@@ -351,13 +351,13 @@ func (service *CreationService) createBackingServiceFromStage(
 	}
 	steps, stepRecords := preparedSteps.steps, preparedSteps.records
 	taskParams, materializations := preparedSteps.params, preparedSteps.materializations
-	owner, err := etcd.EnvironmentTaskOwner(project, environment)
+	owner, err := taskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task := etcd.TaskRecord{
 		ID: stage.Record.TaskID, OperationID: allocator.Named(ids.KindOperation, "operation"),
-		IdempotencyKey: stage.Record.Locator.Key, Owner: owner, Actor: etcd.TaskActorOperator,
+		IdempotencyKey: stage.Record.Locator.Key, Owner: owner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: 1, Type: taskjournal.TaskUpdate, Target: environment.ID,
 		Params: taskParams, Steps: stepRecords,

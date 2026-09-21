@@ -7,6 +7,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -87,7 +88,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	if err != nil || project.ID != environment.ProjectID {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindInternal, "backup key rotation Project is corrupt")
 	}
-	owner, err := EnvironmentTaskOwner(project, environment)
+	owner, err := taskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		return PreparedBackupKeyRotation{}, err
 	}

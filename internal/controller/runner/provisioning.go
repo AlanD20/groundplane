@@ -418,7 +418,7 @@ func newRunnerCreateTask(
 	planDigest := sha256.Sum256([]byte(planInput))
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
+		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
 		Type: taskjournal.TaskCreate, Target: desired.ID,
 		Params: map[string]string{
@@ -435,7 +435,7 @@ func newRunnerCreateTask(
 func newRunnerRetryTask(source etcd.TaskRecord, now time.Time) etcd.TaskRecord {
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: source.OperationID, RetryOf: source.ID,
-		IdempotencyKey: source.IdempotencyKey, Owner: source.Owner, Actor: etcd.TaskActorOperator,
+		IdempotencyKey: source.IdempotencyKey, Owner: source.Owner, Actor: taskjournal.TaskActorOperator,
 		Executor: source.Executor, PlanID: source.PlanID, PlanHash: source.PlanHash,
 		RenderGeneration: source.RenderGeneration, Type: source.Type, Target: source.Target,
 		Params: cloneRunnerTaskParams(source.Params), Steps: slices.Clone(source.Steps),
@@ -444,14 +444,14 @@ func newRunnerRetryTask(source etcd.TaskRecord, now time.Time) etcd.TaskRecord {
 	}
 }
 
-func runnerTaskOwnerForController(desired runnerrecord.RunnerDesiredRecord) (etcd.TaskOwner, error) {
+func runnerTaskOwnerForController(desired runnerrecord.RunnerDesiredRecord) (taskjournal.TaskOwner, error) {
 	if desired.OwnerKind == runnerrecord.RunnerOwnerTenant {
-		return etcd.TenantTaskOwner(desired.TenantID)
+		return taskjournal.TenantTaskOwner(desired.TenantID)
 	}
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		return etcd.TenantProjectTaskOwner(desired.TenantID, desired.OwnerID)
+		return taskjournal.TenantProjectTaskOwner(desired.TenantID, desired.OwnerID)
 	}
-	return etcd.TaskOwner{}, errs.New(errs.KindValidationFailed, "Runner owner is invalid")
+	return taskjournal.TaskOwner{}, errs.New(errs.KindValidationFailed, "Runner owner is invalid")
 }
 
 func cloneRunnerTaskParams(source map[string]string) map[string]string {

@@ -22,7 +22,7 @@ type BackupRunRetryInput struct {
 type PreparedBackupRunRetry struct {
 	SourceTask  TaskRecord
 	Run         backupruntime.BackupRunRecord
-	Owner       TaskOwner
+	Owner       taskjournal.TaskOwner
 	Publication *PreparedBackupRunPublication
 }
 

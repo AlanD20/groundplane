@@ -73,7 +73,7 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	initiation, err := newTaskInitiation(task.Owner, TaskActorOperator)
+	initiation, err := newTaskInitiation(task.Owner, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -182,7 +182,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	}
 	task := TaskRecord{
 		ID: taskID, OperationID: action.AgentProcedure.ChildOperationID, RetryOf: retryOf,
-		Owner: parent.Owner, Actor: TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
+		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: planID, PlanHash: planHash, RenderGeneration: 1,
 		Type: action.AgentProcedure.TaskType, Target: action.TargetID,
 		Params: map[string]string{

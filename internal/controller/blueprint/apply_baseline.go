@@ -5,8 +5,8 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
@@ -17,7 +17,7 @@ type applyBaseline struct {
 	environment          etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	project              etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	tenant               etcdstore.Versioned[hierarchyrecord.TenantRecord]
-	taskOwner            etcd.TaskOwner
+	taskOwner            taskjournal.TaskOwner
 	previousProjection   etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	hasProjection        bool
 	expectedHeadRevision int64
@@ -38,7 +38,7 @@ func (service *Service) loadApplyBaseline(ctx context.Context, environmentID, ex
 	if err != nil {
 		return applyBaseline{}, err
 	}
-	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
+	taskOwner, err := taskjournal.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
 		return applyBaseline{}, err
 	}

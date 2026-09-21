@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"time"
@@ -31,7 +32,7 @@ type BackupRunPrepareInput struct {
 // one-shot.
 type BackupRunPrepared struct {
 	Run         backupruntime.BackupRunRecord
-	Owner       etcd.TaskOwner
+	Owner       taskjournal.TaskOwner
 	Publication backupRunPublication
 }
 
@@ -44,7 +45,7 @@ type BackupRunRetryPrepareInput struct {
 type BackupRunRetryPrepared struct {
 	SourceTask  etcd.TaskRecord
 	Run         backupruntime.BackupRunRecord
-	Owner       etcd.TaskOwner
+	Owner       taskjournal.TaskOwner
 	Publication backupRunPublication
 }
 

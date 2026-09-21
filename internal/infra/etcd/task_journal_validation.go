@@ -31,10 +31,10 @@ func validateTaskRecord(record TaskRecord) error {
 			return errs.New(errs.KindValidationFailed, "task retry_of must name another task")
 		}
 	}
-	if err := validateTaskOwner(record.Owner); err != nil {
+	if err := taskjournal.ValidateOwner(record.Owner); err != nil {
 		return err
 	}
-	if !validTaskActor(record.Actor) {
+	if !taskjournal.ValidActor(record.Actor) {
 		return errs.New(errs.KindValidationFailed, "task actor is invalid")
 	}
 	if !taskjournal.ValidExecutor(record.Executor) {
@@ -43,7 +43,7 @@ func validateTaskRecord(record TaskRecord) error {
 	if !validTaskType(record.Type) {
 		return errs.New(errs.KindValidationFailed, "task type is not in the durable task catalog")
 	}
-	if record.Type == taskjournal.TaskBackupPrune && record.Actor != TaskActorSystem {
+	if record.Type == taskjournal.TaskBackupPrune && record.Actor != taskjournal.TaskActorSystem {
 		return errs.New(errs.KindValidationFailed, "backup_prune task actor must be system")
 	}
 	if record.Target == "" || !utf8.ValidString(record.Target) {

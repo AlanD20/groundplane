@@ -6,6 +6,7 @@ import (
 	"errors"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -308,10 +309,10 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 
 func replayScopeMatches(locator idempotencyrecord.IdempotencyLocator, operation etcdinfra.HierarchyDeletionOperation) bool {
 	owner := operation.Owner
-	if owner.WorkspaceType == etcdinfra.TaskWorkspacePlatform {
+	if owner.WorkspaceType == taskjournal.TaskWorkspacePlatform {
 		return locator.ScopeKind == idempotencyrecord.IdempotencyScopePlatform && locator.ScopeID == "-"
 	}
-	if owner.WorkspaceType != etcdinfra.TaskWorkspaceTenant || owner.TenantID == "" {
+	if owner.WorkspaceType != taskjournal.TaskWorkspaceTenant || owner.TenantID == "" {
 		return false
 	}
 	if owner.EnvironmentID != "" {

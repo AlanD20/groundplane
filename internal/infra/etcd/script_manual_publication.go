@@ -48,7 +48,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		&sources.Tenant,
 		sources.Project,
 		sources.Environment,
-		TaskActorOperator,
+		taskjournal.TaskActorOperator,
 	)
 	if err != nil {
 		return result, err

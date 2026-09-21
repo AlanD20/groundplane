@@ -43,7 +43,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	}
 	task, taskErr := decodeTaskRecord(read.Values[1].Value)
 	if taskErr != nil || task.ID != marker.TaskID || task.Type != taskjournal.TaskBackup ||
-		(task.Actor != TaskActorOperator && task.Actor != TaskActorSystem) || task.Executor != taskjournal.TaskExecutorAgent ||
+		(task.Actor != taskjournal.TaskActorOperator && task.Actor != taskjournal.TaskActorSystem) || task.Executor != taskjournal.TaskExecutorAgent ||
 		(task.RetryOf == "" && task.IdempotencyKey != marker.Locator.Key) ||
 		task.idempotencyMarker == nil ||
 		*task.idempotencyMarker != marker.Locator || task.Owner.EnvironmentID != marker.Locator.ScopeID {
@@ -66,9 +66,9 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	run, runErr := backupruntime.DecodeBackupRunRecord(read.Values[0].Value)
 	lock, lockErr := backupruntime.DecodeBackupOperationLockRecord(read.Values[2].Value)
 	if runErr != nil || lockErr != nil || validateBackupRunTaskBinding(task, run) != nil ||
-		(run.RetryOfTaskID != "" && task.Actor != TaskActorOperator) ||
-		(run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorOperator && task.Actor != TaskActorOperator) ||
-		(run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorSchedule && task.Actor != TaskActorSystem) ||
+		(run.RetryOfTaskID != "" && task.Actor != taskjournal.TaskActorOperator) ||
+		(run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorOperator && task.Actor != taskjournal.TaskActorOperator) ||
+		(run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorSchedule && task.Actor != taskjournal.TaskActorSystem) ||
 		lock.TaskID != marker.TaskID || lock.OperationID != run.OperationID ||
 		lock.EnvironmentID != run.EnvironmentID || lock.Kind != backupruntime.BackupOperationBackup ||
 		!lock.CreatedAt.Equal(run.CreatedAt) || !lock.UpdatedAt.Equal(lock.CreatedAt) {

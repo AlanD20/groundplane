@@ -64,12 +64,12 @@ func (planner *EntryRemovalPlanner) PrepareEntryRemoval(
 	if err != nil {
 		return entrycapability.RemovalTaskPlan{}, err
 	}
-	owner := etcd.TaskOwner{
-		WorkspaceType: etcd.TaskWorkspacePlatform,
+	owner := taskjournal.TaskOwner{
+		WorkspaceType: taskjournal.TaskWorkspacePlatform,
 		ProjectID:     request.Identity.ProjectID, EnvironmentID: request.Identity.EnvironmentID,
 	}
 	if request.Identity.TenantID != "" {
-		owner.WorkspaceType = etcd.TaskWorkspaceTenant
+		owner.WorkspaceType = taskjournal.TaskWorkspaceTenant
 		owner.TenantID = request.Identity.TenantID
 	}
 	task := etcd.TaskRecord{

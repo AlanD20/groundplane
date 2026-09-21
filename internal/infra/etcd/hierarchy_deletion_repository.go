@@ -193,7 +193,7 @@ type HierarchyDeletionOperation struct {
 	Tombstone         hierarchydeletion.HierarchyDeletionTombstone
 	RootTaskID        string
 	MarkerLocator     idempotencyrecord.IdempotencyLocator
-	Owner             TaskOwner
+	Owner             taskjournal.TaskOwner
 	TombstoneRevision int64
 	Fence             hierarchydeletion.HierarchyDeletionCleanupFence
 	FenceRevision     int64
@@ -217,7 +217,7 @@ type hierarchyDeletionRoot struct {
 	targetValue      []byte
 	rootSlug         string
 	workspace        hierarchydeletion.HierarchyDeletionWorkspace
-	owner            TaskOwner
+	owner            taskjournal.TaskOwner
 	primaryFences    []etcdstore.Condition
 	coordination     []etcdstore.Versioned[hierarchydeletion.HierarchyCoordinationRecord]
 	coordinationKeys []string
@@ -354,7 +354,7 @@ func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
 
 func hierarchyDeletionTask(
 	begin HierarchyDeletionBegin,
-	owner TaskOwner,
+	owner taskjournal.TaskOwner,
 	intent hierarchydeletion.HierarchyDeletionIntent,
 ) (TaskRecord, error) {
 	separator := strings.IndexByte(begin.TaskID, '_')
@@ -369,7 +369,7 @@ func hierarchyDeletionTask(
 	defer clear(intentValue)
 	task := TaskRecord{
 		ID: begin.TaskID, OperationID: begin.TaskOperationID, IdempotencyKey: begin.Marker.Locator.Key,
-		Owner: owner, Actor: TaskActorOperator, Executor: taskjournal.TaskExecutorController,
+		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: "plan_" + suffix, PlanHash: hierarchydeletion.HierarchyDeletionDigest(intentValue), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: begin.TargetID,
 		Params: map[string]string{

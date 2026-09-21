@@ -152,7 +152,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err := validateBackingServiceProjection(creation); err != nil {
 		return err
 	}
-	wantOwner, err := EnvironmentTaskOwner(creation.Project, creation.Environment)
+	wantOwner, err := taskjournal.EnvironmentTaskOwner(creation.Project, creation.Environment)
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	afterStartServiceID, hasAfterStartStep := creation.Task.Params[TaskBackingServiceAfterStartParam]
 	hasDesiredAfterStart := creation.Service.Desired.Hooks != nil &&
 		creation.Service.Desired.Hooks.AfterStart != nil
-	if creation.Task.Owner != wantOwner || creation.Task.Actor != TaskActorOperator ||
+	if creation.Task.Owner != wantOwner || creation.Task.Actor != taskjournal.TaskActorOperator ||
 		creation.Task.Executor != taskjournal.TaskExecutorAgent || creation.Task.Type != taskjournal.TaskUpdate ||
 		creation.Task.Target != creation.Environment.ID || creation.Task.Status != taskjournal.TaskStatusPending ||
 		creation.Task.RenderGeneration != 1 ||

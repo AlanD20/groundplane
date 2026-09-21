@@ -604,7 +604,7 @@ func (service *Service) applyBlueprintOnce(
 	}
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,
-		Owner: taskOwner, Actor: etcd.TaskActorOperator,
+		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: planID,
 		RenderGeneration: int32(generation), Type: taskjournal.TaskUpdate, Target: taskTarget,
 		Params: params, Steps: stepRecords, TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,

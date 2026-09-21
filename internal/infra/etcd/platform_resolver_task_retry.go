@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,7 +19,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 		return hostResolutionReconciliationChange{}, nil
 	}
 	if source.ReadRevision <= 0 || source.Revision <= 0 || retry.RetryOf != source.Record.ID ||
-		retry.Actor != TaskActorOperator || retry.PlanID != source.Record.PlanID ||
+		retry.Actor != taskjournal.TaskActorOperator || retry.PlanID != source.Record.PlanID ||
 		retry.PlanHash != source.Record.PlanHash || retry.Target != source.Record.Target ||
 		retry.Params[TaskPlatformComponentDesiredSHA256Param] !=
 			source.Record.Params[TaskPlatformComponentDesiredSHA256Param] {

@@ -232,7 +232,7 @@ func newAgentRemovalTask(
 	}
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
+		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorOperator,
 		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: agentID,

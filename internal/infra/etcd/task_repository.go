@@ -268,7 +268,7 @@ func (repository *TaskRepository) GetSystemTaskInitiation(
 			"system task initiation parent is not a running controller task",
 		)
 	}
-	return newInheritedTaskInitiation(parent, TaskActorSystem)
+	return newInheritedTaskInitiation(parent, taskjournal.TaskActorSystem)
 }
 
 func (repository *TaskRepository) ListTasks(
@@ -308,7 +308,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		page, err := listIndexPage(
 			ctx, repository.store, "tasks", "workspace", "platform", taskWorkspacePlatformPrefix,
 			taskKey, ids.KindTask, request, decodeTaskRecord, identity,
-			func(record TaskRecord) bool { return record.Owner.WorkspaceType == TaskWorkspacePlatform },
+			func(record TaskRecord) bool { return record.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeTenantWorkspace:
@@ -320,7 +320,7 @@ func (repository *TaskRepository) ListTasksByScope(
 			taskWorkspaceTenantPrefix+scope.ID+"/", taskKey, ids.KindTask, request,
 			decodeTaskRecord, identity,
 			func(record TaskRecord) bool {
-				return record.Owner.WorkspaceType == TaskWorkspaceTenant && record.Owner.TenantID == scope.ID
+				return record.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant && record.Owner.TenantID == scope.ID
 			},
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
