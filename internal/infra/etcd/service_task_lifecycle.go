@@ -35,7 +35,7 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 		return serviceTaskChange{}, err
 	}
 	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		serviceLifecycleActiveKey(source.Target),
+		servicerecord.ServiceLifecycleActiveKey(source.Target),
 		releaserender.ServiceLifecycleRenderInputKey(source.ID),
 		releaserender.ServiceLifecycleRenderInputKey(retry.ID),
 	}, Revision: readRevision})
@@ -63,9 +63,9 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 		conditions: []etcdstore.Condition{
 			servicerecord.ServiceDesiredCondition(service),
 			servicerecord.ServiceRuntimeCondition(service),
-			{Key: serviceLifecycleActiveKey(source.Target)},
+			{Key: servicerecord.ServiceLifecycleActiveKey(source.Target)},
 		},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(source.Target), Value: reference}},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: servicerecord.ServiceLifecycleActiveKey(source.Target), Value: reference}},
 	}
 	if source.Executor == taskjournal.TaskExecutorAgent {
 		if values.Values[1] == nil {
@@ -97,7 +97,7 @@ func (repository *TaskRepository) prepareServiceTaskAcknowledgement(
 		return serviceTaskChange{}, nil
 	}
 	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{serviceLifecycleActiveKey(task.Target)}, Revision: readRevision,
+		Keys: []string{servicerecord.ServiceLifecycleActiveKey(task.Target)}, Revision: readRevision,
 	})
 	if err != nil {
 		return serviceTaskChange{}, err
@@ -115,9 +115,9 @@ func (repository *TaskRepository) prepareServiceTaskAcknowledgement(
 	return serviceTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: serviceLifecycleActiveKey(task.Target), ModRevision: values.Values[0].ModRevision},
+			{Key: servicerecord.ServiceLifecycleActiveKey(task.Target), ModRevision: values.Values[0].ModRevision},
 		},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: serviceLifecycleActiveKey(task.Target)}},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: servicerecord.ServiceLifecycleActiveKey(task.Target)}},
 	}, nil
 }
 

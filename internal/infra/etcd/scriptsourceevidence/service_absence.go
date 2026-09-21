@@ -1,10 +1,9 @@
-package etcd
+package scriptsourceevidence
 
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,12 +16,12 @@ func serviceScriptSource(serviceID string) sourceref.SourceIdentity {
 func serviceScriptAbsenceConditions(serviceID string) []etcdstore.Condition {
 	source := serviceScriptSource(serviceID)
 	return []etcdstore.Condition{
-		{Key: scriptsourceevidence.ScriptSourceCountKey(source)},
-		{Key: sourceref.ForwardReferencePrefix + scriptsourceevidence.ScriptSourceSuffix(source) + "/", Prefix: true},
+		{Key: ScriptSourceCountKey(source)},
+		{Key: sourceref.ForwardReferencePrefix + ScriptSourceSuffix(source) + "/", Prefix: true},
 	}
 }
 
-func classifyServiceScriptReferences(serviceID string, values []*etcdstore.KeyValue) error {
+func ClassifyServiceScriptReferences(serviceID string, values []*etcdstore.KeyValue) error {
 	if len(values) != 2 || (values[0] == nil) != (values[1] == nil) {
 		return errs.New(errs.KindInternal, "Service Script reference absence proof is inconsistent")
 	}
@@ -30,13 +29,13 @@ func classifyServiceScriptReferences(serviceID string, values []*etcdstore.KeyVa
 		return nil
 	}
 	source := serviceScriptSource(serviceID)
-	count, err := scriptsourceevidence.DecodeScriptSourceCount(values[0].Value)
-	if err != nil || values[0].Key != scriptsourceevidence.ScriptSourceCountKey(source) || count.Source != source ||
+	count, err := DecodeScriptSourceCount(values[0].Value)
+	if err != nil || values[0].Key != ScriptSourceCountKey(source) || count.Source != source ||
 		count.ReferencedExecutionCount == 0 {
 		return errs.New(errs.KindInternal, "Service Script reference count is corrupt")
 	}
 	reference, err := recordcodec.Decode[sourceref.Reference](values[1].Value, "script-source-reference")
-	if err != nil || reference.Source != source || scriptsourceevidence.ScriptSourceForwardReferenceKey(reference) != values[1].Key {
+	if err != nil || reference.Source != source || ScriptSourceForwardReferenceKey(reference) != values[1].Key {
 		return errs.New(errs.KindInternal, "Service Script source membership is corrupt")
 	}
 	return errs.New(errs.KindResourceInUse, "Service is referenced by a Script")
@@ -44,9 +43,14 @@ func classifyServiceScriptReferences(serviceID string, values []*etcdstore.KeyVa
 
 // Both reads share one revision, and both absence conditions remain in the
 // final removal transaction so a reservation cannot race the read proof.
-func prepareServiceScriptAbsence(
+type serviceAbsenceStore interface {
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+}
+
+func PrepareServiceScriptAbsence(
 	ctx context.Context,
-	store hierarchyStore,
+	store serviceAbsenceStore,
 	serviceID string,
 	revision int64,
 ) ([]etcdstore.Condition, error) {
@@ -71,7 +75,7 @@ func prepareServiceScriptAbsence(
 	if len(members.Values) == 1 {
 		first = &members.Values[0]
 	}
-	if err := classifyServiceScriptReferences(serviceID, []*etcdstore.KeyValue{count.Values[0], first}); err != nil {
+	if err := ClassifyServiceScriptReferences(serviceID, []*etcdstore.KeyValue{count.Values[0], first}); err != nil {
 		return nil, err
 	}
 	return conditions, nil

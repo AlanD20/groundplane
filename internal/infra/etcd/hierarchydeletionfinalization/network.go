@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionfinalization
 
 import (
 	"context"
@@ -15,16 +15,16 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionRouteFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	result, err := repository.store.Get(ctx, routerecord.ObservationKey(action.TargetID))
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	if result == nil || result.ReadRevision <= 0 {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	conditions := []etcdstore.Condition{{Key: routerecord.ObservationKey(action.TargetID)}}
 	mutations := []etcdstore.Mutation{}
@@ -32,36 +32,36 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 	if result.Entry != nil {
 		if result.Entry.Key != routerecord.ObservationKey(action.TargetID) {
 			clear(result.Entry.Value)
-			return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+			return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		if _, decodeErr := routerecord.DecodeObservation(result.Entry.Value); decodeErr != nil {
 			clear(result.Entry.Value)
-			return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+			return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		conditions[0].ModRevision = result.Entry.ModRevision
 		digest = hierarchydeletion.HierarchyDeletionBytesDigest(result.Entry.Value)
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routerecord.ObservationKey(action.TargetID)})
 		clear(result.Entry.Value)
 	}
-	return hierarchyDeletionControllerEffects{
+	return Effects{
 		fixedInputDigest: digest,
 		conditions:       conditions,
 		mutations:        mutations,
 	}, nil
 }
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponentFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionComponentFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, componentrecord.RecordKey(action.TargetID), action)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	defer clear(primary.Value)
 	record, err := componentrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Desired.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	keys := []string{
 		componentrecord.EnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID),
@@ -69,21 +69,21 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponent
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	effects.mutations = append(effects.mutations, componentrecord.WriteFenceMutation(action.TargetID))
 	return effects, nil
 }
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionZoneFinalizer(
 	ctx context.Context,
 	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	evidence, zoneValue, err := hierarchydeletionplanning.HierarchyDeletionZoneEvidenceAtRevision(
 		ctx, repository.store, action.TargetID, operation.Tombstone.SnapshotRevision, action.TargetRevision,
 	)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	defer clear(zoneValue)
 	zone := zonerecord.Record{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired}
@@ -94,20 +94,20 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		environmentchanges.ComponentTaskActiveEnvironmentKey(evidence.EnvironmentID),
 	}})
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	if values == nil || len(values.Values) != 4 || values.Values[0] == nil ||
 		values.Values[2] != nil || values.Values[3] != nil {
 		if values != nil {
 			etcdstore.ClearValues(values.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer etcdstore.ClearValues(values.Values)
 	pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](values.Values[0].Value, "zone_pool_registry")
 	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
 		pool.Reservations[action.TargetID] != evidence.Desired.Subnet {
-		return hierarchyDeletionControllerEffects{}, networkreservations.CorruptZonePoolRegistry()
+		return Effects{}, networkreservations.CorruptZonePoolRegistry()
 	}
 	if values.Values[1] != nil {
 		addresses, decodeErr := recordcodec.Decode[networkreservations.ComponentAddressRegistry](
@@ -115,18 +115,18 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 			"component_address_registry",
 		)
 		if decodeErr != nil || networkreservations.ValidateComponentAddressRegistry(zone, addresses) != nil {
-			return hierarchyDeletionControllerEffects{}, networkreservations.CorruptComponentAddressRegistry()
+			return Effects{}, networkreservations.CorruptComponentAddressRegistry()
 		}
 		if len(addresses.Reservations) != 0 {
-			return hierarchyDeletionControllerEffects{}, errs.New(errs.KindResourceInUse,
+			return Effects{}, errs.New(errs.KindResourceInUse,
 				"Zone gained a Component address reservation")
 		}
 	}
 	nextPool, err := pool.Release(zone)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
-	effects := hierarchyDeletionControllerEffects{
+	effects := Effects{
 		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(zoneValue),
 		conditions: []etcdstore.Condition{
 			{Key: poolKey, ModRevision: values.Values[0].ModRevision},
@@ -142,7 +142,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 	}
 	poolValue, err := recordcodec.Encode("zone_pool_registry", nextPool)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	effects.values = append(effects.values, poolValue)
 	effects.mutations = append(effects.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: poolKey, Value: poolValue})

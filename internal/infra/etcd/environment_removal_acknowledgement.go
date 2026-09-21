@@ -8,6 +8,7 @@ import (
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletionfinalization "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -162,13 +163,13 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 					deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Desired.ID))
 			}
 		}
-		if err := requireEnvironmentDeletionLiveAuthorityEmpty(
+		if err := hierarchydeletionfinalization.RequireEnvironmentDeletionLiveAuthorityEmpty(
 			ctx, repository.store, environment.ID, task.OperationID, readRevision, projectedKeys...,
 		); err != nil {
 			return nil, nil, err
 		}
 		conditions = append(conditions,
-			environmentDeletionLiveAuthorityConditions(environment.ID, task.OperationID, projectedKeys...)...)
+			hierarchydeletionfinalization.EnvironmentDeletionLiveAuthorityConditions(environment.ID, task.OperationID, projectedKeys...)...)
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(intentMutations)+12)
 	if terminalStatus == taskjournal.TaskStatusCompleted {

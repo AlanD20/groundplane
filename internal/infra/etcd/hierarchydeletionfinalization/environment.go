@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionfinalization
 
 import (
 	"context"
@@ -14,18 +14,18 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReleaseGroupFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionReleaseGroupFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, groupstore.ReleaseGroupRecordKey(action.TargetID), action)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	defer clear(primary.Value)
 	record, err := groupstore.DecodeReleaseGroupStored(primary.Value)
 	if err != nil || record.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, []string{
 		groupstore.ReleaseGroupOwnerKey(record.EnvironmentID, record.ID),
@@ -33,27 +33,27 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReleaseGr
 	})
 }
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironmentFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 	ctx context.Context,
 	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	if err := scriptmutations.CleanupEnvironmentDeletionScriptLocators(
 		ctx, repository.store, action.TargetID, etcdstore.Condition{
 			Key:         hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), action.TargetID),
 			ModRevision: operation.TombstoneRevision,
 		},
 	); err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, hierarchyrecord.EnvironmentKey(action.TargetID), action)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	defer clear(primary.Value)
 	record, err := hierarchyrecord.DecodeEnvironment(primary.Value)
 	if err != nil || record.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID),
@@ -61,32 +61,32 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		groupstore.ReleaseGroupCollectionEpochKey(record.ID),
 	}})
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	if indexes == nil || len(indexes.Values) != 5 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != record.ID || string(indexes.Values[1].Value) != record.ID {
 		if indexes != nil {
 			etcdstore.ClearValues(indexes.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer etcdstore.ClearValues(indexes.Values)
-	if err := requireEnvironmentDeletionLiveAuthorityEmpty(
+	if err := RequireEnvironmentDeletionLiveAuthorityEmpty(
 		ctx, repository.store, record.ID, operation.Tombstone.OperationID, indexes.ReadRevision,
 	); err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	revisions, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: blueprints.EnvironmentBlueprintRevisionsPrefix(record.ID), Limit: 1, Revision: indexes.ReadRevision,
 	})
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	if revisions == nil || revisions.ReadRevision != indexes.ReadRevision || len(revisions.Values) != 0 {
 		if revisions != nil {
 			etcdstore.ClearRangeValues(revisions.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, errs.New(
+		return Effects{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion Environment retained Blueprint revisions",
 		)
@@ -101,7 +101,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	}
 	conditions = append(
 		conditions,
-		environmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
+		EnvironmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
 	conditions = append(conditions, etcdstore.Condition{Key: blueprints.EnvironmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
 	conditions = append(conditions, etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
 	mutations := []etcdstore.Mutation{
@@ -114,7 +114,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptSetEnvironmentPrefix(record.ID), Prefix: true},
 		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
 	}
-	return hierarchyDeletionControllerEffects{
+	return Effects{
 		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
 	}, nil
 }

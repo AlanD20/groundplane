@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionfinalization
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
@@ -21,9 +22,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func requireEnvironmentDeletionLiveAuthorityEmpty(
+func RequireEnvironmentDeletionLiveAuthorityEmpty(
 	ctx context.Context,
-	store hierarchyStore,
+	store finalizationStore,
 	environmentID string,
 	operationID string,
 	revision int64,
@@ -86,7 +87,7 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 	return nil
 }
 
-func environmentDeletionLiveAuthorityConditions(
+func EnvironmentDeletionLiveAuthorityConditions(
 	environmentID string, operationID string, projectedKeys ...string,
 ) []etcdstore.Condition {
 	keys := append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...)
@@ -121,7 +122,7 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 		attachrecord.AttachOwnerPrefix(environmentID),
 		componentrecord.EnvironmentOwnerPrefix(environmentID),
 		connectors.ConnectorEnvironmentPrefix(environmentID),
-		environmentReleaseGroupOwnerPrefix + environmentID + "/",
+		releasegroups.ReleaseGroupOwnerPrefix + environmentID + "/",
 		backuppolicy.BackupSourceEnvironmentPrefix(environmentID),
 		backupruntime.BackupScheduleCursorPrefix + environmentID + "/",
 		backupruntime.BackupDueOutcomePrefix + environmentID + "/",

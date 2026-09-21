@@ -4,19 +4,13 @@ import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
 	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
-
-type hierarchyDeletionControllerEffects struct {
-	fixedInputDigest string
-	conditions       []etcdstore.Condition
-	mutations        []etcdstore.Mutation
-	values           [][]byte
-}
 
 func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	ctx context.Context,
@@ -48,11 +42,11 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 			"root hierarchy deletion finalizer requires Task acknowledgement",
 		)
 	}
-	effects, err := repository.prepareHierarchyDeletionControllerEffects(ctx, current, action)
+	effects, err := hierarchydeletionfinalization.NewPreparer(repository.store).Prepare(ctx, current, action)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	defer hierarchydeletionexecution.ClearByteSlices(effects.values)
+	defer hierarchydeletionexecution.ClearByteSlices(effects.Values())
 	expected, err := bindHierarchyDeletionControllerProcedure(
 		HierarchyDeletionPlannedAction{
 			NodeID: action.NodeID, Ordinal: action.Ordinal, ParentOperationID: action.ParentOperationID,
@@ -62,7 +56,7 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 		hierarchydeletionplanning.HierarchyDeletionControllerFinalizerInput{
 			Finalizer: action.ControllerProcedure.Finalizer, TargetKind: action.TargetKind,
 			TargetID: action.TargetID, FixedInputRevision: action.TargetRevision,
-			FixedInputDigest: effects.fixedInputDigest, BatchOrdinal: 0, BatchCount: 1,
+			FixedInputDigest: effects.FixedInputDigest(), BatchOrdinal: 0, BatchCount: 1,
 		},
 	)
 	if err != nil || expected != *action.ControllerProcedure {
@@ -101,51 +95,6 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	)
 	return repository.CommitActionCompletion(
 		ctx, current, nextTombstone, nextFence, action.Ordinal, completionValue,
-		effects.conditions, effects.mutations,
+		effects.Conditions(), effects.Mutations(),
 	)
-}
-
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionControllerEffects(
-	ctx context.Context,
-	operation hierarchydeletion.HierarchyDeletionOperation,
-	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
-	switch action.ActionKind {
-	case hierarchydeletion.HierarchyDeletionReleaseGroupRemove:
-		return repository.prepareHierarchyDeletionReleaseGroupFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionServiceRemove:
-		return repository.prepareHierarchyDeletionServiceFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionEntryRemove:
-		return repository.prepareHierarchyDeletionEntryFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionRouteRemove:
-		return repository.prepareHierarchyDeletionRouteFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionComponentRemove:
-		return repository.prepareHierarchyDeletionComponentFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionScriptRemove:
-		return repository.prepareHierarchyDeletionScriptFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionZoneRemove:
-		return repository.prepareHierarchyDeletionZoneFinalizer(ctx, operation, action)
-	case hierarchydeletion.HierarchyDeletionConnectorFinalize:
-		return repository.prepareHierarchyDeletionConnectorFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionProjectSecretRemove:
-		return repository.prepareHierarchyDeletionSecretFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionReservationRelease:
-		return repository.prepareHierarchyDeletionReservationFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionRunnerLocalRemove:
-		return repository.prepareHierarchyDeletionRunnerFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionEnvironmentFinalize:
-		return repository.prepareHierarchyDeletionEnvironmentFinalizer(ctx, operation, action)
-	case hierarchydeletion.HierarchyDeletionProjectFinalize:
-		return repository.prepareHierarchyDeletionProjectFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionTenantFinalize:
-		return repository.prepareHierarchyDeletionTenantFinalizer(ctx, action)
-	case hierarchydeletion.HierarchyDeletionBackingServiceFinalize:
-		return repository.prepareHierarchyDeletionProjectFinalizer(ctx, action)
-	default:
-		return hierarchyDeletionControllerEffects{}, errs.Newf(
-			errs.KindValidationFailed,
-			"hierarchy deletion Controller finalizer %q is unsupported before plan execution",
-			action.ActionKind,
-		)
-	}
 }

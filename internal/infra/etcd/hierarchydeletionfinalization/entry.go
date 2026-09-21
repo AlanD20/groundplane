@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionfinalization
 
 import (
 	"context"
@@ -8,28 +8,28 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEntryFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionEntryFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, entryrecord.RecordKey(action.TargetID), action)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	defer clear(primary.Value)
 	record, err := entryrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Entry.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	fences, err := entryrecord.PrepareEntryScriptAbsence(ctx, repository.store, action.TargetID, 0)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, []string{
 		entryrecord.EntryOwnerKey(record.EnvironmentID, record.Entry.ID),
 	})
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	effects.conditions = append(effects.conditions, fences...)
 	effects.mutations = append(effects.mutations,

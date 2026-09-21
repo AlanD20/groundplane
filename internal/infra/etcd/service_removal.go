@@ -11,6 +11,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -71,7 +72,7 @@ func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	if err := repository.scanServiceRemovalRecords(ctx, projection.ReadRevision, current.Record); err != nil {
 		return err
 	}
-	_, err := prepareServiceScriptAbsence(ctx, repository.store, current.Record.Desired.ID, projection.ReadRevision)
+	_, err := scriptsourceevidence.PrepareServiceScriptAbsence(ctx, repository.store, current.Record.Desired.ID, projection.ReadRevision)
 	return err
 }
 
@@ -172,7 +173,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
-		serviceLifecycleActiveKey(current.Record.Desired.ID),
+		servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
 	}, Revision: mutationContext.ReadRevision()})
 	if err != nil {
@@ -232,7 +233,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID)},
 		{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
-		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
+		{Key: servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)},
 		{
 			Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
@@ -284,7 +285,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err := binding.PreparedConflict(originalClassify); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	scriptConditions, err := prepareServiceScriptAbsence(
+	scriptConditions, err := scriptsourceevidence.PrepareServiceScriptAbsence(
 		ctx, repository.store, current.Record.Desired.ID, mutationContext.ReadRevision(),
 	)
 	if err != nil {
@@ -305,7 +306,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 			if len(values) != len(finalConditions) {
 				return errs.New(errs.KindInternal, "Service removal Script compare evidence is incomplete")
 			}
-			if err := classifyServiceScriptReferences(current.Record.Desired.ID, values[len(binding.Conditions()):]); err != nil {
+			if err := scriptsourceevidence.ClassifyServiceScriptReferences(current.Record.Desired.ID, values[len(binding.Conditions()):]); err != nil {
 				return err
 			}
 			return binding.ClassifyConflict(revision, values[:len(binding.Conditions())], originalClassify)

@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -137,7 +138,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return change, nil
 	}
-	scriptConditions, err := prepareServiceScriptAbsence(ctx, repository.store, intent.ServiceID, revision)
+	scriptConditions, err := scriptsourceevidence.PrepareServiceScriptAbsence(ctx, repository.store, intent.ServiceID, revision)
 	if err != nil {
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err

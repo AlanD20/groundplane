@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionfinalization
 
 import (
 	"context"
@@ -11,21 +11,21 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservationFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionReservationFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentKey(action.TargetID), networkreservations.EnvironmentPoolRegistryKey,
 	}})
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	if result == nil || len(result.Values) != 2 || result.Values[0] == nil || result.Values[1] == nil {
 		if result != nil {
 			etcdstore.ClearValues(result.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, errs.New(
+		return Effects{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion reservation authority changed",
 		)
@@ -33,12 +33,12 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	defer etcdstore.ClearValues(result.Values)
 	environment, err := hierarchyrecord.DecodeEnvironment(result.Values[0].Value)
 	if err != nil || environment.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	fixedInputDigest := hierarchydeletion.HierarchyDeletionBytesDigest(result.Values[0].Value)
 	if result.Values[0].ModRevision != action.TargetRevision {
 		if environment.DeletionTaskID == "" {
-			return hierarchyDeletionControllerEffects{}, errs.New(
+			return Effects{}, errs.New(
 				errs.KindStateConflict,
 				"hierarchy deletion reservation authority changed",
 			)
@@ -47,30 +47,30 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 		frozen.DeletionTaskID = ""
 		frozenValue, encodeErr := hierarchyrecord.EncodeEnvironment(frozen)
 		if encodeErr != nil {
-			return hierarchyDeletionControllerEffects{}, encodeErr
+			return Effects{}, encodeErr
 		}
 		fixedInputDigest = hierarchydeletion.HierarchyDeletionBytesDigest(frozenValue)
 		clear(frozenValue)
 	}
 	registry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](result.Values[1].Value, "environment_pool_registry")
 	if err != nil || networkreservations.ValidateEnvironmentPoolRegistry(registry) != nil {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	next, err := registry.Release(environment.ID, environment.NetworkPool)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	mutation := etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: networkreservations.EnvironmentPoolRegistryKey}
 	values := [][]byte(nil)
 	if len(next.Reservations) != 0 {
 		value, encodeErr := recordcodec.Encode("environment_pool_registry", next)
 		if encodeErr != nil {
-			return hierarchyDeletionControllerEffects{}, encodeErr
+			return Effects{}, encodeErr
 		}
 		values = append(values, value)
 		mutation = etcdstore.Mutation{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: value}
 	}
-	return hierarchyDeletionControllerEffects{
+	return Effects{
 		fixedInputDigest: fixedInputDigest,
 		conditions: []etcdstore.Condition{
 			{Key: hierarchyrecord.EnvironmentKey(environment.ID), ModRevision: result.Values[0].ModRevision},
@@ -80,23 +80,23 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	}, nil
 }
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionRunnerFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		runnerrecord.RunnerKey(action.TargetID), runnerrecord.RunnerLifecycleKey(action.TargetID),
 		runnerrecord.RunnerObservationKey(action.TargetID), runnerrecord.RunnerRuntimeOwnershipKey(action.TargetID),
 	}})
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	if base == nil || len(base.Values) != 4 || base.Values[0] == nil || base.Values[1] == nil ||
 		base.Values[0].ModRevision != action.TargetRevision || base.Values[3] != nil {
 		if base != nil {
 			etcdstore.ClearValues(base.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, errs.New(
+		return Effects{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion Runner cleanup authority changed",
 		)
@@ -104,37 +104,37 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 	defer etcdstore.ClearValues(base.Values)
 	record, err := runnerrecord.DecodeRunnerAggregate(base.Values[0], base.Values[1])
 	if err != nil || record.Desired.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	allocation, err := (composeRunnerRepository(repository.store)).ReadRunnerAllocationEvidence(ctx, record, 0)
+	allocation, err := runnerrecord.NewReader(repository.store).ReadRunnerAllocationEvidence(ctx, record, 0)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	defer runnerrecord.ClearRunnerAllocationEvidence(allocation)
 	quota, err := runnerrecord.DecodeRunnerTenantQuota(allocation.Quota.Value)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	quota, err = quota.Release(action.TargetID)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	system, err := runnerrecord.DecodeSystemPoolRegistry(allocation.System.Value)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	system, err = system.ReleaseRunner(action.TargetID, record.Allocation.NetworkCIDR)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	quotaValue, err := recordcodec.Encode("runner_tenant_quota", quota)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	systemValue, err := recordcodec.Encode("system_pool_registry", system)
 	if err != nil {
 		clear(quotaValue)
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	conditions := []etcdstore.Condition{
 		{Key: runnerrecord.RunnerKey(action.TargetID), ModRevision: base.Values[0].ModRevision},
@@ -163,7 +163,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerLifecycleKey(action.TargetID)},
 		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerKey(action.TargetID)},
 	}
-	return hierarchyDeletionControllerEffects{
+	return Effects{
 		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(base.Values[0].Value), conditions: conditions,
 		mutations: mutations, values: [][]byte{quotaValue, systemValue},
 	}, nil

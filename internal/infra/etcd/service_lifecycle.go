@@ -21,12 +21,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const serviceLifecycleActivePrefix = "/v1/indexes/service-lifecycle/active/"
-
-func serviceLifecycleActiveKey(serviceID string) string {
-	return serviceLifecycleActivePrefix + serviceID
-}
-
 // BeginServiceLifecycleWithTask atomically changes Controller-owned runtime
 // intent and publishes the exact Task that will converge it. Applied Services
 // also persist the immutable render snapshot used after restart and on retry.
@@ -154,7 +148,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		servicerecord.ServiceDesiredCondition(current),
 		servicerecord.ServiceRuntimeCondition(current),
-		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
+		{Key: servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
@@ -175,7 +169,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(current.Record.Desired.ID), Value: serviceValue},
-		{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
 	}
 	if renderInput != nil {
 		inputValue, encodeErr := releaserender.EncodeServiceLifecycleRenderInput(*renderInput)

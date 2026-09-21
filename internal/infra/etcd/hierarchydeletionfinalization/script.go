@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionfinalization
 
 import (
 	"context"
@@ -8,12 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionScriptFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	if action.ControllerProcedure == nil {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	storage, err := scriptrecord.ReadActiveScriptStorage(
 		ctx,
@@ -22,20 +22,20 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 		action.ControllerProcedure.FixedInputRevision,
 	)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	record := storage.Script.Record
 	if storage.Script.Revision != action.TargetRevision || record.Desired.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if record.ActiveReferences != 0 {
-		return hierarchyDeletionControllerEffects{}, errs.New(
+		return Effects{}, errs.New(
 			errs.KindResourceInUse, "active Script executions fence hierarchy deletion",
 		)
 	}
 	value, err := scriptrecord.EncodeRecord(record)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	defer clear(value)
 	primary := etcdstore.KeyValue{
@@ -48,11 +48,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, &primary, keys)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	activeValue, err := scriptrecord.EncodeScriptSetGeneration(storage.Active.Record)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	effects.values = append(effects.values, activeValue)
 	effects.conditions = append(

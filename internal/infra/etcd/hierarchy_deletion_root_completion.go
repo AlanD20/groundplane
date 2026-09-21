@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
 	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -53,14 +54,14 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	if err := repository.validateHierarchyDeletionRootProjection(ctx, operation); err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	effects, err := repository.prepareHierarchyDeletionControllerEffects(ctx, operation, action)
+	effects, err := hierarchydeletionfinalization.NewPreparer(repository.store).Prepare(ctx, operation, action)
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
 	change := hierarchyDeletionRootAckChange{
-		conditions: effects.conditions,
-		mutations:  effects.mutations,
-		values:     effects.values,
+		conditions: effects.Conditions(),
+		mutations:  effects.Mutations(),
+		values:     effects.Values(),
 	}
 	expected, err := bindHierarchyDeletionControllerProcedure(
 		HierarchyDeletionPlannedAction{
@@ -71,7 +72,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 		hierarchydeletionplanning.HierarchyDeletionControllerFinalizerInput{
 			Finalizer: action.ControllerProcedure.Finalizer, TargetKind: action.TargetKind,
 			TargetID: action.TargetID, FixedInputRevision: action.TargetRevision,
-			FixedInputDigest: effects.fixedInputDigest, BatchOrdinal: 0, BatchCount: 1,
+			FixedInputDigest: effects.FixedInputDigest(), BatchOrdinal: 0, BatchCount: 1,
 		},
 	)
 	if err != nil || expected != *action.ControllerProcedure {

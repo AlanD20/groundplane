@@ -10,8 +10,6 @@ import (
 
 const environmentBlueprintDeletionBatchSize int64 = 32
 
-const environmentReleaseGroupOwnerPrefix = "/v1/indexes/release-groups/by-owner/environment/"
-
 func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,

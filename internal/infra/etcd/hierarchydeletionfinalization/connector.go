@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionfinalization
 
 import (
 	"context"
@@ -8,18 +8,18 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
-func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnectorFinalizer(
+func (repository *Preparer) prepareHierarchyDeletionConnectorFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (hierarchyDeletionControllerEffects, error) {
+) (Effects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, connectorrecord.RecordKey(action.TargetID), action)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	defer clear(primary.Value)
 	record, err := connectorrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Connector.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	keys := []string{
 		connectorrecord.ConnectorEnvironmentKey(record.Connector.EnvironmentID, action.TargetID),
@@ -28,13 +28,13 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnector
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
 	if err != nil {
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	prefixes := hierarchyDeletionConnectorReferencePrefixes(action.TargetID)
 	_, err = repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes)
 	if err != nil {
 		hierarchydeletionexecution.ClearByteSlices(effects.values)
-		return hierarchyDeletionControllerEffects{}, err
+		return Effects{}, err
 	}
 	for _, prefix := range prefixes {
 		effects.conditions = append(effects.conditions, etcdstore.Condition{Key: prefix, Prefix: true})
