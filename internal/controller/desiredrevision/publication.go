@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -49,7 +50,7 @@ type PublicationRepository interface {
 		[]blueprints.EnvironmentBlueprintServiceChange,
 		[]blueprints.EnvironmentBlueprintRouteChange,
 		groupstore.ReleaseGroupBlueprintPreparedMutation,
-		etcd.ComponentTaskPreparation,
+		componentplanning.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.BlueprintBackupPolicyPreparation,
 		etcd.BlueprintScriptPublication,
@@ -86,7 +87,7 @@ type Repository interface {
 		[]blueprints.EnvironmentBlueprintServiceChange,
 		[]blueprints.EnvironmentBlueprintRouteChange,
 		groupstore.ReleaseGroupBlueprintPreparedMutation,
-		etcd.ComponentTaskPreparation,
+		componentplanning.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -182,7 +183,7 @@ type PublishInput struct {
 	ServiceChanges          []blueprints.EnvironmentBlueprintServiceChange
 	RouteChanges            []blueprints.EnvironmentBlueprintRouteChange
 	ReleaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation
-	ComponentPreparation    etcd.ComponentTaskPreparation
+	ComponentPreparation    componentplanning.ComponentTaskPreparation
 	AttachPreparation       etcd.BlueprintAttachTaskPreparation
 	BackupPreparation       etcd.BlueprintBackupPolicyPreparation
 	ScriptPublication       etcd.BlueprintScriptPublication

@@ -63,7 +63,7 @@ func validateBlueprintCandidateManifest(
 	if err != nil || digest != manifest.Digest {
 		return releases.CorruptReleaseRecord()
 	}
-	releases := make(map[string]struct{}, len(manifest.Members))
+	releaseIDs := make(map[string]struct{}, len(manifest.Members))
 	services := make(map[string]struct{}, len(manifest.Members))
 	for _, member := range manifest.Members {
 		if ids.Validate(ids.KindDeployment, member.ReleaseID) != nil ||
@@ -72,13 +72,13 @@ func validateBlueprintCandidateManifest(
 			!recordcodec.ValidSHA256(member.CheckpointDigest) {
 			return releases.CorruptReleaseRecord()
 		}
-		if _, duplicate := releases[member.ReleaseID]; duplicate {
+		if _, duplicate := releaseIDs[member.ReleaseID]; duplicate {
 			return releases.CorruptReleaseRecord()
 		}
 		if _, duplicate := services[member.ServiceID]; duplicate {
 			return releases.CorruptReleaseRecord()
 		}
-		releases[member.ReleaseID] = struct{}{}
+		releaseIDs[member.ReleaseID] = struct{}{}
 		services[member.ServiceID] = struct{}{}
 	}
 	return nil

@@ -1,4 +1,4 @@
-package etcd
+package componentplanning
 
 // AppliedComponentRuntime returns the exact captured applied artifact whose
 // key revision the Component publication already compares. The caller owns

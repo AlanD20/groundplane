@@ -1,4 +1,4 @@
-package etcd
+package componentplanning
 
 import (
 	"context"
@@ -22,21 +22,21 @@ type componentTaskSecretReference struct {
 	revision    int64
 }
 
-func componentSecretReferencePrefix(secretID string) string {
+func ComponentSecretReferencePrefix(secretID string) string {
 	return componentSecretReferenceIndexPrefix + secretID + "/"
 }
 
 func componentActiveSecretReferenceKey(secretID string, componentID string) string {
-	return componentSecretReferencePrefix(secretID) + "active/" + componentID
+	return ComponentSecretReferencePrefix(secretID) + "active/" + componentID
 }
 
 func componentCandidateSecretReferenceKey(secretID string, taskID string, componentID string) string {
-	return componentSecretReferencePrefix(secretID) + "candidates/" + taskID + "/" + componentID
+	return ComponentSecretReferencePrefix(secretID) + "candidates/" + taskID + "/" + componentID
 }
 
-func prepareComponentTaskSecretReferences(
+func PrepareComponentTaskSecretReferences(
 	ctx context.Context,
-	store hierarchyStore,
+	store planningStore,
 	projectID string,
 	taskID string,
 	candidates []environmentchanges.ComponentTaskCandidate,
@@ -118,7 +118,7 @@ func prepareComponentTaskSecretReferences(
 	return references, conditions, mutations, nil
 }
 
-func componentTaskTerminalSecretMutations(
+func ComponentTaskTerminalSecretMutations(
 	intent environmentchanges.ComponentTaskIntent,
 	taskID string,
 	terminalStatus taskjournal.TaskStatus,

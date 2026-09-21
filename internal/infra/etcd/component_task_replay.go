@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -35,7 +36,7 @@ func (repository *TaskRepository) validateComponentTaskAcknowledgementReplay(
 	if err != nil {
 		return err
 	}
-	if err := validateComponentTaskOwner(task, intent); err != nil {
+	if err := componentplanning.ValidateComponentTaskOwner(componentplanning.TaskIdentity{ID: task.ID, Target: task.Target, Executor: task.Executor, Type: task.Type, CreatedAt: task.CreatedAt}, intent); err != nil {
 		return err
 	}
 	if intent.Status != terminalStatus || intent.TerminalAt == nil || task.FinishedAt == nil ||

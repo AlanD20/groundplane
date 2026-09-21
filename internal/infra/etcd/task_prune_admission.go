@@ -7,6 +7,7 @@ import (
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -168,7 +169,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	if companions.Values[4] != nil {
 		componentIntent, decodeErr := environmentchanges.DecodeComponentTaskIntent(companions.Values[4].Value)
-		if decodeErr != nil || validateComponentTaskOwner(task, componentIntent) != nil ||
+		if decodeErr != nil || componentplanning.ValidateComponentTaskOwner(componentplanning.TaskIdentity{ID: task.ID, Target: task.Target, Executor: task.Executor, Type: task.Type, CreatedAt: task.CreatedAt}, componentIntent) != nil ||
 			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!componentIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()

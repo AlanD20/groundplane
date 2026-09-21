@@ -13,7 +13,8 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -25,7 +26,7 @@ import (
 	"time"
 )
 
-func componentTaskPreparationIsZeroForBlueprint(preparation etcd.ComponentTaskPreparation) bool {
+func componentTaskPreparationIsZeroForBlueprint(preparation componentplanning.ComponentTaskPreparation) bool {
 	return preparation.Intent.TaskID == ""
 }
 
@@ -38,16 +39,16 @@ func (service *Service) prepareBlueprintComponents(
 	specs map[string]core.ComponentSpec,
 	current []etcdstore.Versioned[componentrecord.Record],
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
-) (etcd.ComponentTaskPreparation, []componentrecord.Record, []core.Component, error) {
+) (componentplanning.ComponentTaskPreparation, []componentrecord.Record, []core.Component, error) {
 	currentComponents := make([]core.Component, len(current))
 	currentByID := make(map[string]etcdstore.Versioned[componentrecord.Record], len(current))
 	for index, versioned := range current {
 		component, err := componentrecord.ProjectRecord(versioned.Record)
 		if err != nil {
-			return etcd.ComponentTaskPreparation{}, nil, nil, err
+			return componentplanning.ComponentTaskPreparation{}, nil, nil, err
 		}
 		if _, duplicate := currentByID[component.ID]; duplicate {
-			return etcd.ComponentTaskPreparation{}, nil, nil, errs.New(
+			return componentplanning.ComponentTaskPreparation{}, nil, nil, errs.New(
 				errs.KindInternal,
 				"Environment Component singleton set repeats an id",
 			)
@@ -57,22 +58,22 @@ func (service *Service) prepareBlueprintComponents(
 	}
 	changes, err := taskplanning.ReconcileBlueprintComponents(specs, currentComponents, allocate)
 	if err != nil {
-		return etcd.ComponentTaskPreparation{}, nil, nil, err
+		return componentplanning.ComponentTaskPreparation{}, nil, nil, err
 	}
-	inputs := make([]etcd.EnvironmentComponentCandidateInput, len(changes.Candidates))
+	inputs := make([]componentplanning.EnvironmentComponentCandidateInput, len(changes.Candidates))
 	for index, candidate := range changes.Candidates {
 		versioned, exists := currentByID[candidate.Current.ID]
 		if !exists {
-			return etcd.ComponentTaskPreparation{}, nil, nil, errs.New(
+			return componentplanning.ComponentTaskPreparation{}, nil, nil, errs.New(
 				errs.KindInternal,
 				"Blueprint Component candidate lost its active record",
 			)
 		}
-		inputs[index] = etcd.EnvironmentComponentCandidateInput{
+		inputs[index] = componentplanning.EnvironmentComponentCandidateInput{
 			Current: versioned, Candidate: candidate.Candidate,
 		}
 	}
-	preparation := etcd.ComponentTaskPreparation{}
+	preparation := componentplanning.ComponentTaskPreparation{}
 	if len(inputs) != 0 {
 		preparation, err = service.repository.PrepareEnvironmentComponentTask(
 			ctx,
@@ -83,26 +84,26 @@ func (service *Service) prepareBlueprintComponents(
 			createdAt,
 		)
 		if err != nil {
-			return etcd.ComponentTaskPreparation{}, nil, nil, err
+			return componentplanning.ComponentTaskPreparation{}, nil, nil, err
 		}
 	}
 	recordsByID := make(map[string]componentrecord.Record, len(changes.Effective))
 	for _, component := range changes.Effective {
 		record, recordErr := componentrecord.NewRecord(component)
 		if recordErr != nil {
-			return etcd.ComponentTaskPreparation{}, nil, nil, recordErr
+			return componentplanning.ComponentTaskPreparation{}, nil, nil, recordErr
 		}
 		recordsByID[component.ID] = record
 	}
 	if len(preparation.Intent.Candidates) != len(changes.Candidates) {
-		return etcd.ComponentTaskPreparation{}, nil, nil, errs.New(
+		return componentplanning.ComponentTaskPreparation{}, nil, nil, errs.New(
 			errs.KindInternal,
 			"prepared Blueprint Component candidate count changed",
 		)
 	}
 	for _, candidate := range preparation.Intent.Candidates {
 		if _, exists := recordsByID[candidate.Candidate.Desired.ID]; !exists {
-			return etcd.ComponentTaskPreparation{}, nil, nil, errs.New(
+			return componentplanning.ComponentTaskPreparation{}, nil, nil, errs.New(
 				errs.KindInternal,
 				"prepared Blueprint Component candidate is unknown",
 			)
@@ -120,7 +121,7 @@ func (service *Service) prepareBlueprintComponents(
 	for index, record := range records {
 		effective[index], err = componentrecord.ProjectRecord(record)
 		if err != nil {
-			return etcd.ComponentTaskPreparation{}, nil, nil, err
+			return componentplanning.ComponentTaskPreparation{}, nil, nil, err
 		}
 	}
 	return preparation, records, effective, nil

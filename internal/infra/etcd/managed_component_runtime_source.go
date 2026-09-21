@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"sort"
 
@@ -13,12 +14,12 @@ import (
 // immutable desired revision. Failed attempts therefore remain removable by a
 // later Task without depending on the short-lived Component candidate record.
 func ProjectManagedComponentRuntimeSources(
-	preparation ComponentTaskPreparation,
+	preparation componentplanning.ComponentTaskPreparation,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]projectionrecord.ManagedComponentRuntimeSource, error) {
 	sources := append([]projectionrecord.ManagedComponentRuntimeSource(nil), projection.ManagedComponentRuntimeSources...)
-	if !componentTaskPreparationIsZero(preparation) {
-		if err := validateComponentTaskPreparation(preparation); err != nil {
+	if !componentplanning.ComponentTaskPreparationIsZero(preparation) {
+		if err := componentplanning.ValidateComponentTaskPreparation(preparation); err != nil {
 			return nil, err
 		}
 		sources = append(sources[:0], preparation.managedRuntimeSources...)

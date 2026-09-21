@@ -1,4 +1,4 @@
-package etcd
+package componentplanning
 
 import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"

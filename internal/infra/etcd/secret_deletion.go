@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -154,7 +155,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		}
 	}
 	conditions = append(conditions, etcdstore.Condition{
-		Key: componentSecretReferencePrefix(secretID), Prefix: true,
+		Key: componentplanning.ComponentSecretReferencePrefix(secretID), Prefix: true,
 	})
 	conditions = append(conditions, secretmutations.SecretScriptAbsenceConditions(secretID)...)
 	mutations := []etcdstore.Mutation{

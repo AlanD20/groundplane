@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchymutations"
@@ -20,6 +21,7 @@ type hierarchyStore interface {
 
 // HierarchyRepository owns durable Tenant, Project, and Environment persistence.
 type HierarchyRepository struct {
+	*componentplanning.Planner
 	*groupstore.Preparer
 	*hierarchyrecord.Reader
 	*environmentqueries.ProjectionReader
@@ -54,6 +56,7 @@ func newHierarchyRepository(store hierarchyStore) (*HierarchyRepository, error) 
 
 func composeHierarchyRepository(store hierarchyStore) *HierarchyRepository {
 	return &HierarchyRepository{
+		Planner:          componentplanning.NewPlanner(store),
 		Preparer:         groupstore.NewPreparer(store),
 		Reader:           hierarchyrecord.NewReader(store),
 		ProjectionReader: environmentqueries.NewProjectionReader(store),

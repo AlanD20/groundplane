@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
@@ -53,7 +54,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemova
 		nil,
 		nil,
 		groupstore.ReleaseGroupBlueprintPreparedMutation{},
-		ComponentTaskPreparation{},
+		componentplanning.ComponentTaskPreparation{},
 		BlueprintAttachTaskPreparation{},
 		BlueprintBackupPolicyPreparation{},
 		BlueprintScriptPublication{},

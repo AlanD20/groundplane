@@ -3,13 +3,14 @@ package blueprint
 import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 )
 
-func (service *Service) prepareRoutePublication(componentEnvironment core.Environment, pinnedComponents []componentrecord.Record, componentPreparation etcd.ComponentTaskPreparation, generation uint64, routeChanges []blueprints.EnvironmentBlueprintRouteChange) (etcd.ComponentTaskPreparation, []blueprints.EnvironmentBlueprintRouteChange, error) {
+func (service *Service) prepareRoutePublication(componentEnvironment core.Environment, pinnedComponents []componentrecord.Record, componentPreparation componentplanning.ComponentTaskPreparation, generation uint64, routeChanges []blueprints.EnvironmentBlueprintRouteChange) (componentplanning.ComponentTaskPreparation, []blueprints.EnvironmentBlueprintRouteChange, error) {
 	routeProvider, routeProjection, err := taskplanning.ResolveComponentTaskRouteProvider(
 		service.componentCatalog,
 		componentEnvironment,
@@ -19,7 +20,7 @@ func (service *Service) prepareRoutePublication(componentEnvironment core.Enviro
 		generation,
 	)
 	if err != nil {
-		return etcd.ComponentTaskPreparation{}, nil, err
+		return componentplanning.ComponentTaskPreparation{}, nil, err
 	}
 	if routeProjection {
 		if routeProvider != nil {
@@ -37,7 +38,7 @@ func (service *Service) prepareRoutePublication(componentEnvironment core.Enviro
 					Provider:          provider,
 				})
 				if err != nil {
-					return etcd.ComponentTaskPreparation{}, nil, err
+					return componentplanning.ComponentTaskPreparation{}, nil, err
 				}
 				routeChanges[index] = change
 			}
@@ -46,11 +47,11 @@ func (service *Service) prepareRoutePublication(componentEnvironment core.Enviro
 		for index, change := range routeChanges {
 			routeRecords[index] = change.Record
 		}
-		componentPreparation, err = etcd.WithComponentTaskRouteProjection(
+		componentPreparation, err = componentplanning.WithComponentTaskRouteProjection(
 			componentPreparation, routeRecords, routeProvider,
 		)
 		if err != nil {
-			return etcd.ComponentTaskPreparation{}, nil, err
+			return componentplanning.ComponentTaskPreparation{}, nil, err
 		}
 	}
 	return componentPreparation, routeChanges, nil

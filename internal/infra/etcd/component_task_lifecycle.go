@@ -5,12 +5,9 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -28,14 +25,6 @@ const (
 	componentTaskBlueprintProcedureFullReconcile     = "full-reconcile"
 	componentTaskBlueprintProcedureCandidateReleases = "candidate-releases"
 )
-
-func validateComponentTaskOwner(task TaskRecord, intent environmentchanges.ComponentTaskIntent) error {
-	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate || task.ID != intent.TaskID ||
-		task.Target != intent.EnvironmentID || !task.CreatedAt.Equal(intent.CreatedAt) {
-		return errs.New(errs.KindStateConflict, "Component candidate does not belong to its Task")
-	}
-	return nil
-}
 
 func componentTaskDesiredProjectionZones(
 	ctx context.Context,
@@ -80,28 +69,6 @@ func componentTaskDesiredProjectionZones(
 		result[zoneID] = zone
 	}
 	return desiredRevisionID, result, nil
-}
-
-func validateComponentTaskReservations(
-	intent environmentchanges.ComponentTaskIntent,
-	registries map[string]networkreservations.ComponentAddressRegistry,
-) error {
-	for _, candidate := range intent.Candidates {
-		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
-			binding, present, err := environmentchanges.ComponentTaskAddress(record)
-			if err != nil {
-				return err
-			}
-			if !present {
-				continue
-			}
-			registry, exists := registries[binding.ZoneID()]
-			if !exists || registry.Reservations[record.Desired.ID] != binding.Address() {
-				return errs.New(errs.KindStateConflict, "Component address reservation changed")
-			}
-		}
-	}
-	return nil
 }
 
 func clearComponentTaskChange(change componentTaskChange) {

@@ -1,4 +1,4 @@
-package etcd
+package componentplanning
 
 import (
 	"context"
@@ -53,7 +53,7 @@ type componentTaskAddressPreparation struct {
 // reservations without changing durable state. A caller may render from the
 // returned Intent, but only the later atomic Blueprint transaction may publish
 // it.
-func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
+func (repository *Planner) PrepareEnvironmentComponentTask(
 	ctx context.Context,
 	taskID string,
 	environmentID string,
@@ -368,7 +368,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		desiredProjectionRevision: desired.Revision,
 		addresses:                 addresses,
 	}
-	if err := validateComponentTaskPreparation(preparation); err != nil {
+	if err := ValidateComponentTaskPreparation(preparation); err != nil {
 		return ComponentTaskPreparation{}, err
 	}
 	return cloneComponentTaskPreparation(preparation), nil
@@ -447,7 +447,7 @@ func validatePreparedCurrentComponentReservations(
 	return nil
 }
 
-func validateComponentTaskPreparation(preparation ComponentTaskPreparation) error {
+func ValidateComponentTaskPreparation(preparation ComponentTaskPreparation) error {
 	if err := environmentchanges.ValidateComponentTaskIntent(preparation.Intent); err != nil {
 		return err
 	}
@@ -492,7 +492,7 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 		previousZoneID = zoneID
 		registries[zoneID] = address.Next
 	}
-	return validateComponentTaskReservations(preparation.Intent, registries)
+	return ValidateComponentTaskReservations(preparation.Intent, registries)
 }
 
 func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) ComponentTaskPreparation {

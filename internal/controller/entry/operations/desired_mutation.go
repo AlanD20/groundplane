@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -326,7 +327,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		ctx, project, environment, expectedHeadRevision, claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
 		candidate, nil, nil, nil, groupstore.ReleaseGroupBlueprintPreparedMutation{},
-		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
+		componentplanning.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
 	)
 	if publicationErr != nil {
 		if !isUnknownEntryCreationOutcome(publicationErr) {

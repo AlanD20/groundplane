@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -43,7 +44,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-	if err := validateComponentTaskOwner(task, intent); err != nil {
+	if err := componentplanning.ValidateComponentTaskOwner(componentplanning.TaskIdentity{ID: task.ID, Target: task.Target, Executor: task.Executor, Type: task.Type, CreatedAt: task.CreatedAt}, intent); err != nil {
 		return componentTaskChange{}, err
 	}
 	if intent.Status != taskjournal.TaskStatusPending {
@@ -176,7 +177,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		change.conditions = append(change.conditions, registryCondition)
 	}
 
-	if err := validateComponentTaskReservations(intent, registries); err != nil {
+	if err := componentplanning.ValidateComponentTaskReservations(intent, registries); err != nil {
 		return componentTaskChange{}, err
 	}
 	changedRegistries := make(map[string]struct{})
@@ -243,7 +244,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		change.mutations = append(change.mutations, routeObservationChange.mutations...)
 		change.values = append(change.values, routeObservationChange.values...)
 	}
-	secretMutations, err := componentTaskTerminalSecretMutations(intent, task.ID, terminalStatus)
+	secretMutations, err := componentplanning.ComponentTaskTerminalSecretMutations(intent, task.ID, terminalStatus)
 	if err != nil {
 		clearComponentTaskChange(change)
 		return componentTaskChange{}, err

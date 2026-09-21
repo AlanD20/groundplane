@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -43,7 +44,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-	if err := validateComponentTaskOwner(source, intent); err != nil {
+	if err := componentplanning.ValidateComponentTaskOwner(componentplanning.TaskIdentity{ID: source.ID, Target: source.Target, Executor: source.Executor, Type: source.Type, CreatedAt: source.CreatedAt}, intent); err != nil {
 		return componentTaskChange{}, err
 	}
 	if source.FinishedAt == nil || intent.TerminalAt == nil || intent.Status != source.Status ||
@@ -317,7 +318,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		clearComponentTaskChange(change)
 		return componentTaskChange{}, recordcodec.CorruptRecord()
 	}
-	_, secretConditions, secretMutations, err := prepareComponentTaskSecretReferences(
+	_, secretConditions, secretMutations, err := componentplanning.PrepareComponentTaskSecretReferences(
 		ctx,
 		repository.store,
 		environment.ProjectID,

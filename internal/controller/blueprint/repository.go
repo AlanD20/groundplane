@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -58,9 +59,9 @@ type environmentBlueprintRepository interface {
 		string,
 		string,
 		[]blueprints.EnvironmentBlueprintZoneChange,
-		[]etcd.EnvironmentComponentCandidateInput,
+		[]componentplanning.EnvironmentComponentCandidateInput,
 		time.Time,
-	) (etcd.ComponentTaskPreparation, error)
+	) (componentplanning.ComponentTaskPreparation, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageClaimRequest,
@@ -84,7 +85,7 @@ type environmentBlueprintRepository interface {
 		[]blueprints.EnvironmentBlueprintServiceChange,
 		[]blueprints.EnvironmentBlueprintRouteChange,
 		groupstore.ReleaseGroupBlueprintPreparedMutation,
-		etcd.ComponentTaskPreparation,
+		componentplanning.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.BlueprintBackupPolicyPreparation,
 		etcd.BlueprintScriptPublication,
@@ -293,7 +294,7 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
-	componentPreparation etcd.ComponentTaskPreparation,
+	componentPreparation componentplanning.ComponentTaskPreparation,
 	attachPreparation etcd.BlueprintAttachTaskPreparation,
 	backupPreparation etcd.BlueprintBackupPolicyPreparation,
 	scriptPublication etcd.BlueprintScriptPublication,

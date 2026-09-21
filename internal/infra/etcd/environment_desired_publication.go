@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -35,7 +36,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
-	componentPreparation ComponentTaskPreparation,
+	componentPreparation componentplanning.ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -72,7 +73,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
-	componentPreparation ComponentTaskPreparation,
+	componentPreparation componentplanning.ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	backupPreparation BlueprintBackupPolicyPreparation,
 	scriptPublication BlueprintScriptPublication,
@@ -110,7 +111,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
-	componentPreparation ComponentTaskPreparation,
+	componentPreparation componentplanning.ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	backupPreparation BlueprintBackupPolicyPreparation,
 	scriptPublication BlueprintScriptPublication,
@@ -252,17 +253,17 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	defer requirementPublication.clear()
-	var componentPublication preparedComponentTaskPublication
+	var componentPublication componentplanning.Publication
 	var attachPublication preparedBlueprintAttachTaskPublication
 	var backupPublication preparedBlueprintBackupPolicyPublication
 	if publishDomain {
-		componentPublication, err = repository.prepareComponentTaskPublication(
-			ctx, effectiveEnvironment, task, zoneChanges, componentPreparation,
+		componentPublication, err = repository.PrepareComponentTaskPublication(
+			ctx, effectiveEnvironment, componentplanning.TaskIdentity{ID: task.ID, Target: task.Target, Executor: task.Executor, Type: task.Type, CreatedAt: task.CreatedAt}, zoneChanges, componentPreparation,
 		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		defer clearPreparedComponentTaskPublication(componentPublication)
+		defer componentplanning.ClearPreparedComponentTaskPublication(componentPublication)
 		attachPublication, err = prepareBlueprintAttachTaskPublication(
 			effectiveEnvironment, projection, task, attachPreparation,
 		)
@@ -279,7 +280,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		defer clearPreparedBlueprintBackupPolicyPublication(backupPublication)
 	} else if len(zoneChanges) != 0 || len(serviceChanges) != 0 || len(routeChanges) != 0 ||
 		!releaseGroupPreparation.IsZero() ||
-		!componentTaskPreparationIsZero(componentPreparation) ||
+		!componentplanning.ComponentTaskPreparationIsZero(componentPreparation) ||
 		!blueprintAttachTaskPreparationIsZero(attachPreparation) ||
 		!backupPreparation.IsZero() ||
 		!scriptPublication.IsZero() || !releasePublication.IsZero() {
@@ -493,7 +494,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		mutations = append(mutations, componentPublication.mutations...)
+		mutations = append(mutations, componentPublication.Mutations()...)
 		conditions = append(conditions, attachPublication.conditions...)
 		mutations = append(mutations, attachPublication.mutations...)
 		classified = classifyEnvironmentBlueprintAttachPublication(classified, attachPublication)

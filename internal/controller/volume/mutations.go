@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -491,7 +492,7 @@ func (service *MutationService) mutateOnce(
 			nil,
 			nil,
 			groupstore.ReleaseGroupBlueprintPreparedMutation{},
-			etcd.ComponentTaskPreparation{},
+			componentplanning.ComponentTaskPreparation{},
 			etcd.BlueprintAttachTaskPreparation{},
 			task,
 			marker,
