@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backupconfigrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
@@ -1255,9 +1256,9 @@ func (repository *BackupRuntimeRepository) currentBackupRunConfigCompanions(
 		}
 		snapshot := source.Snapshot.Config
 		keys := []string{
-			backupConfigSnapshotKey(snapshot.ConfigSnapshotID),
-			backupConfigSnapshotTaskReferenceKey(run.TaskID, snapshot.ConfigSnapshotID),
-			backupConfigSnapshotReferenceTaskKey(snapshot.ConfigSnapshotID, run.TaskID),
+			backupconfigrecord.BackupConfigSnapshotKey(snapshot.ConfigSnapshotID),
+			backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(run.TaskID, snapshot.ConfigSnapshotID),
+			backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshot.ConfigSnapshotID, run.TaskID),
 		}
 		read, err := repository.readFixedKeys(ctx, keys, readRevision)
 		if err != nil {
@@ -1275,13 +1276,13 @@ func (repository *BackupRuntimeRepository) currentBackupRunConfigCompanions(
 			clearKeyValues(read.Values)
 			return false
 		}
-		stored, decodeErr := decodeBackupConfigSnapshotRecord(read.Values[0].Value)
+		stored, decodeErr := backupconfigrecord.DecodeBackupConfigSnapshotRecord(read.Values[0].Value)
 		clearKeyValues(read.Values)
 		createdAtValid := (run.RetryOfTaskID == "" && stored.CreatedAt.Equal(run.CreatedAt)) ||
 			(run.RetryOfTaskID != "" && stored.CreatedAt.Before(run.CreatedAt))
 		if decodeErr != nil || stored.SnapshotID != snapshot.ConfigSnapshotID ||
 			stored.EnvironmentID != run.EnvironmentID || stored.SourceID != source.SourceID ||
-			stored.State == BackupConfigSnapshotUninitialized ||
+			stored.State == backupconfigrecord.BackupConfigSnapshotUninitialized ||
 			stored.ReadRevision != snapshot.ReadRevision || !createdAtValid {
 			return false
 		}

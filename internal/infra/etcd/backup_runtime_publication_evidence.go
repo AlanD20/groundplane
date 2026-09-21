@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backupconfigrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -279,16 +280,16 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				clearBackupRuntimeMutations(mutations)
 				return nil, nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
-			config := BackupConfigSnapshotRecord{
+			config := backupconfigrecord.BackupConfigSnapshotRecord{
 				SnapshotID:    snapshot.ConfigSnapshotID,
 				EnvironmentID: run.EnvironmentID,
 				SourceID:      source.SourceID,
-				State:         BackupConfigSnapshotBuilding,
+				State:         backupconfigrecord.BackupConfigSnapshotBuilding,
 				ReadRevision:  snapshot.ReadRevision,
 				CreatedAt:     run.CreatedAt,
 				UpdatedAt:     run.CreatedAt,
 			}
-			value, encodeErr := encodeBackupConfigSnapshotRecord(config)
+			value, encodeErr := backupconfigrecord.EncodeBackupConfigSnapshotRecord(config)
 			if encodeErr != nil {
 				clearBackupRuntimeMutations(mutations)
 				return nil, nil, encodeErr
@@ -297,12 +298,12 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				mutations,
 				etcdstore.Mutation{
 					Type:  etcdstore.MutationPut,
-					Key:   backupConfigSnapshotKey(snapshot.ConfigSnapshotID),
+					Key:   backupconfigrecord.BackupConfigSnapshotKey(snapshot.ConfigSnapshotID),
 					Value: value,
 				},
 				etcdstore.Mutation{
 					Type: etcdstore.MutationPut,
-					Key: backupConfigSnapshotTaskReferenceKey(
+					Key: backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(
 						run.TaskID,
 						snapshot.ConfigSnapshotID,
 					),
@@ -310,7 +311,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				},
 				etcdstore.Mutation{
 					Type: etcdstore.MutationPut,
-					Key: backupConfigSnapshotReferenceTaskKey(
+					Key: backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(
 						snapshot.ConfigSnapshotID,
 						run.TaskID,
 					),

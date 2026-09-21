@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupconfigrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
@@ -247,11 +248,11 @@ func backupRunExternalConditions(
 		}
 		if source.Snapshot.Config != nil {
 			snapshotID := source.Snapshot.Config.ConfigSnapshotID
-			allowed[backupConfigSnapshotKey(snapshotID)] = struct{}{}
-			allowed[backupConfigSnapshotTaskReferenceKey(run.RetryOfTaskID, snapshotID)] = struct{}{}
-			allowed[backupConfigSnapshotReferenceTaskKey(snapshotID, run.RetryOfTaskID)] = struct{}{}
-			allowed[backupConfigSnapshotTaskReferenceKey(run.TaskID, snapshotID)] = struct{}{}
-			allowed[backupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID)] = struct{}{}
+			allowed[backupconfigrecord.BackupConfigSnapshotKey(snapshotID)] = struct{}{}
+			allowed[backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(run.RetryOfTaskID, snapshotID)] = struct{}{}
+			allowed[backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshotID, run.RetryOfTaskID)] = struct{}{}
+			allowed[backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(run.TaskID, snapshotID)] = struct{}{}
+			allowed[backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID)] = struct{}{}
 			allowed[hierarchyrecord.EnvironmentKey(run.EnvironmentID)] = struct{}{}
 		}
 	}
@@ -276,9 +277,9 @@ func (repository *BackupRuntimeRepository) exactBackupRunConfigCompanions(
 		}
 		snapshot := source.Snapshot.Config
 		keys := []string{
-			backupConfigSnapshotKey(snapshot.ConfigSnapshotID),
-			backupConfigSnapshotTaskReferenceKey(run.TaskID, snapshot.ConfigSnapshotID),
-			backupConfigSnapshotReferenceTaskKey(snapshot.ConfigSnapshotID, run.TaskID),
+			backupconfigrecord.BackupConfigSnapshotKey(snapshot.ConfigSnapshotID),
+			backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(run.TaskID, snapshot.ConfigSnapshotID),
+			backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshot.ConfigSnapshotID, run.TaskID),
 		}
 		read, err := repository.readFixedKeys(ctx, keys, readRevision)
 		if err != nil {
@@ -296,16 +297,16 @@ func (repository *BackupRuntimeRepository) exactBackupRunConfigCompanions(
 			clearKeyValues(read.Values)
 			return false
 		}
-		stored, decodeErr := decodeBackupConfigSnapshotRecord(read.Values[0].Value)
+		stored, decodeErr := backupconfigrecord.DecodeBackupConfigSnapshotRecord(read.Values[0].Value)
 		clearKeyValues(read.Values)
 		createdAtValid := (run.RetryOfTaskID == "" && stored.CreatedAt.Equal(run.CreatedAt)) ||
 			(run.RetryOfTaskID != "" && stored.CreatedAt.Before(run.CreatedAt))
 		if decodeErr != nil || stored.SnapshotID != snapshot.ConfigSnapshotID ||
 			stored.EnvironmentID != run.EnvironmentID || stored.SourceID != source.SourceID ||
-			stored.State == BackupConfigSnapshotUninitialized ||
+			stored.State == backupconfigrecord.BackupConfigSnapshotUninitialized ||
 			stored.ReadRevision != snapshot.ReadRevision || !createdAtValid ||
 			(run.RetryOfTaskID == "" && (!stored.UpdatedAt.Equal(run.CreatedAt) ||
-				stored.State != BackupConfigSnapshotBuilding)) {
+				stored.State != backupconfigrecord.BackupConfigSnapshotBuilding)) {
 			return false
 		}
 	}

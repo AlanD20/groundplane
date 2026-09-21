@@ -1,4 +1,4 @@
-package etcd
+package backupconfiguration
 
 import (
 	"crypto/sha256"
@@ -144,7 +144,7 @@ type backupConfigSnapshotData struct {
 	UpdatedAt              string                    `json:"updated_at"`
 }
 
-func backupConfigSnapshotKey(snapshotID string) string {
+func BackupConfigSnapshotKey(snapshotID string) string {
 	return backupConfigSnapshotPrefix + snapshotID
 }
 
@@ -177,7 +177,7 @@ func backupConfigSnapshotTaskReferencePrefix(taskID string) string {
 	return backupConfigSnapshotByTaskPrefix + taskID + "/"
 }
 
-func backupConfigSnapshotTaskReferenceKey(taskID string, snapshotID string) string {
+func BackupConfigSnapshotTaskReferenceKey(taskID string, snapshotID string) string {
 	return backupConfigSnapshotTaskReferencePrefix(taskID) + snapshotID
 }
 
@@ -185,7 +185,7 @@ func backupConfigSnapshotReferenceTaskPrefix(snapshotID string) string {
 	return backupConfigSnapshotBySnapshotPrefix + snapshotID + "/"
 }
 
-func backupConfigSnapshotReferenceTaskKey(snapshotID string, taskID string) string {
+func BackupConfigSnapshotReferenceTaskKey(snapshotID string, taskID string) string {
 	return backupConfigSnapshotReferenceTaskPrefix(snapshotID) + taskID
 }
 
@@ -197,7 +197,7 @@ func backupConfigChunkOrdinal(ordinal uint32) string {
 	return fmt.Sprintf("%0*d", backupConfigChunkOrdinalWidth, ordinal)
 }
 
-func encodeBackupConfigSnapshotRecord(record BackupConfigSnapshotRecord) ([]byte, error) {
+func EncodeBackupConfigSnapshotRecord(record BackupConfigSnapshotRecord) ([]byte, error) {
 	if err := validateBackupConfigSnapshotRecord(record); err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func encodeBackupConfigSnapshotRecord(record BackupConfigSnapshotRecord) ([]byte
 	return encodeBoundedBackupConfigEnvelope("backup-config-snapshot", data)
 }
 
-func decodeBackupConfigSnapshotRecord(value []byte) (BackupConfigSnapshotRecord, error) {
+func DecodeBackupConfigSnapshotRecord(value []byte) (BackupConfigSnapshotRecord, error) {
 	data, err := decodeBoundedBackupConfigEnvelope[backupConfigSnapshotData](value, "backup-config-snapshot")
 	if err != nil {
 		return BackupConfigSnapshotRecord{}, err

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupconfigrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -232,11 +233,11 @@ func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 	}
 	snapshotID := source.Snapshot.Config.ConfigSnapshotID
 	keys := []string{
-		backupConfigSnapshotKey(snapshotID),
-		backupConfigSnapshotTaskReferenceKey(retrySource.TaskID, snapshotID),
-		backupConfigSnapshotReferenceTaskKey(snapshotID, retrySource.TaskID),
-		backupConfigSnapshotTaskReferenceKey(run.TaskID, snapshotID),
-		backupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID),
+		backupconfigrecord.BackupConfigSnapshotKey(snapshotID),
+		backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(retrySource.TaskID, snapshotID),
+		backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshotID, retrySource.TaskID),
+		backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(run.TaskID, snapshotID),
+		backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID),
 		hierarchyrecord.EnvironmentKey(run.EnvironmentID),
 	}
 	read, err := repository.readFixedKeys(ctx, keys, fixedRevision)
@@ -254,11 +255,11 @@ func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 			"backup retry config authority changed",
 		)
 	}
-	stored, decodeErr := decodeBackupConfigSnapshotRecord(read.Values[0].Value)
+	stored, decodeErr := backupconfigrecord.DecodeBackupConfigSnapshotRecord(read.Values[0].Value)
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(read.Values[5].Value)
 	if decodeErr != nil || environmentErr != nil || environment.ID != run.EnvironmentID ||
 		stored.SnapshotID != snapshotID || stored.EnvironmentID != run.EnvironmentID ||
-		stored.SourceID != source.SourceID || stored.State == BackupConfigSnapshotUninitialized ||
+		stored.SourceID != source.SourceID || stored.State == backupconfigrecord.BackupConfigSnapshotUninitialized ||
 		stored.ReadRevision != source.Snapshot.Config.ReadRevision ||
 		stored.CreatedAt.After(retrySource.CreatedAt) {
 		return nil, nil, errs.New(

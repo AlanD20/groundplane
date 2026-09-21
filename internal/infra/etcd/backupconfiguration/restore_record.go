@@ -1,4 +1,4 @@
-package etcd
+package backupconfiguration
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
