@@ -18,7 +18,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	fixedRevision int64,
 	resolvePostgres BackupPostgresIdentityResolver,
 ) (backupruntime.BackupRunSourceAttemptRecord, error) {
-	read, err := repository.readFixedKeys(
+	read, err := repository.ReadFixedKeys(
 		ctx, []string{attachrecord.AttachKey(attempt.TargetID), attachrecord.AttachFactsKey(attempt.TargetID)}, fixedRevision,
 	)
 	if err != nil {
@@ -43,7 +43,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 		)
 	}
 	defer clear(facts.Ciphertext)
-	backingRead, err := repository.readFixedKeys(ctx, []string{
+	backingRead, err := repository.ReadFixedKeys(ctx, []string{
 		hierarchyrecord.ProjectKey(attach.BackingProjectID),
 		hierarchyrecord.EnvironmentKey(attach.BackingEnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(attach.BackingEnvironmentID),

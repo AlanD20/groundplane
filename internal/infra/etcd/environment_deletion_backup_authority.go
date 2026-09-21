@@ -109,7 +109,7 @@ func environmentDeletionBackupAuthorityPresent(
 		}
 		if page == nil || page.ReadRevision != revision || len(page.Values) > 1 {
 			if page != nil {
-				clearRangeValues(page.Values)
+				etcdstore.ClearRangeValues(page.Values)
 			}
 			return false, errs.New(
 				errs.KindInternal,
@@ -117,7 +117,7 @@ func environmentDeletionBackupAuthorityPresent(
 			)
 		}
 		found := len(page.Values) != 0
-		clearRangeValues(page.Values)
+		etcdstore.ClearRangeValues(page.Values)
 		if found {
 			return true, nil
 		}

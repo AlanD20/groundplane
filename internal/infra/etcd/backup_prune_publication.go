@@ -85,7 +85,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 			return backupPruneTransactionPlan{}, err
 		}
 	}
-	anchor, err := repository.readCurrentKeys(ctx, keys)
+	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		clear(dispatchValue)
 		clear(lockValue)
@@ -198,7 +198,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 		if err != nil || point.BackupRecoveryPointSnapshot != version.Record.Point {
 			return nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		fixed, err := repository.readFixedKeys(ctx, []string{
+		fixed, err := repository.ReadFixedKeys(ctx, []string{
 			backuppolicy.BackupSourceKey(point.SourceID),
 			hierarchyrecord.EnvironmentKey(point.EnvironmentID),
 			connectorrecord.RecordKey(point.ConnectorID),

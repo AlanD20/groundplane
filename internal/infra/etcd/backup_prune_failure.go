@@ -47,7 +47,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 		}
 		keys = append(keys, authorityKeys...)
 	}
-	anchor, err := repository.readCurrentKeys(ctx, keys)
+	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}

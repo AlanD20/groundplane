@@ -26,7 +26,7 @@ func (repository *BackupRuntimeRepository) currentBackupRunConfigCompanions(
 			backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(run.TaskID, snapshot.ConfigSnapshotID),
 			backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshot.ConfigSnapshotID, run.TaskID),
 		}
-		read, err := repository.readFixedKeys(ctx, keys, readRevision)
+		read, err := repository.ReadFixedKeys(ctx, keys, readRevision)
 		if err != nil {
 			return false
 		}

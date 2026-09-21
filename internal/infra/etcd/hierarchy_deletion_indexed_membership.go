@@ -76,19 +76,19 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 		}
 		for _, value := range page.Values {
 			if recordquery.ValidateListKey(prefix, value.Key, kind) != nil {
-				clearRangeValues(page.Values)
+				etcdstore.ClearRangeValues(page.Values)
 				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			id := strings.TrimPrefix(value.Key, prefix)
 			if string(value.Value) != id {
-				clearRangeValues(page.Values)
+				etcdstore.ClearRangeValues(page.Values)
 				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			idsAtRevision = append(idsAtRevision, id)
 			start = value.Key
 		}
 		more := page.More
-		clearRangeValues(page.Values)
+		etcdstore.ClearRangeValues(page.Values)
 		if !more {
 			break
 		}

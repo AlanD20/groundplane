@@ -46,7 +46,7 @@ func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates
 	}
 	keys = append(keys, ownerKeys...)
 	keys = append(keys, hierarchyrecord.EnvironmentMutationEpochKey(run.EnvironmentID))
-	read, err := repository.readFixedKeys(ctx, keys, readRevision)
+	read, err := repository.ReadFixedKeys(ctx, keys, readRevision)
 	if err != nil {
 		return false
 	}

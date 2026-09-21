@@ -44,7 +44,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		for index := range run.Sources {
 			sourceIDs[index] = run.Sources[index].SourceID
 		}
-		policyRead, err := repository.readFixedKeys(
+		policyRead, err := repository.ReadFixedKeys(
 			ctx,
 			[]string{backuppolicy.BackupPolicyKey(run.EnvironmentID)},
 			fixedRevision,
@@ -75,7 +75,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		}
 	}
 	if run.Encryption == backupruntime.BackupRuntimeEncryptionAge {
-		keyRead, readErr := repository.readFixedKeys(ctx, []string{
+		keyRead, readErr := repository.ReadFixedKeys(ctx, []string{
 			backuppolicy.BackupKeyKey(run.EnvironmentID), backuppolicy.BackupKeyValueKey(run.EnvironmentID),
 		}, fixedRevision)
 		if readErr != nil {
@@ -109,7 +109,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		}
 	}
 	for _, source := range run.Sources {
-		sourceRead, readErr := repository.readFixedKeys(
+		sourceRead, readErr := repository.ReadFixedKeys(
 			ctx,
 			[]string{backuppolicy.BackupSourceKey(source.SourceID)},
 			fixedRevision,
@@ -146,7 +146,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		switch source.Kind {
 		case backupruntime.BackupRuntimeSourceAttach:
 			snapshot := source.Snapshot.Postgres
-			read, readErr := repository.readFixedKeys(ctx, []string{
+			read, readErr := repository.ReadFixedKeys(ctx, []string{
 				attachrecord.AttachKey(source.TargetID),
 				attachrecord.AttachFactsKey(source.TargetID),
 				hierarchyrecord.ProjectKey(
@@ -194,7 +194,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			for _, service := range snapshot.Services {
 				keys = append(keys, servicerecord.ServiceRuntimeKey(service.ServiceID))
 			}
-			read, readErr := repository.readFixedKeys(ctx, keys, fixedRevision)
+			read, readErr := repository.ReadFixedKeys(ctx, keys, fixedRevision)
 			if readErr != nil {
 				clearBackupRuntimeMutations(mutations)
 				return nil, nil, readErr
@@ -260,7 +260,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 					"backup config snapshot revision changed",
 				)
 			}
-			targetRead, readErr := repository.readFixedKeys(
+			targetRead, readErr := repository.ReadFixedKeys(
 				ctx,
 				[]string{hierarchyrecord.EnvironmentKey(run.EnvironmentID)},
 				fixedRevision,

@@ -119,7 +119,7 @@ func (repository *HierarchyDeletionRepository) requireHierarchyDeletionPrefixesE
 		}
 		if page == nil || len(page.Values) != 0 || (revision != 0 && page.ReadRevision != revision) {
 			if page != nil {
-				clearRangeValues(page.Values)
+				etcdstore.ClearRangeValues(page.Values)
 			}
 			return 0, errs.New(errs.KindStateConflict, "hierarchy deletion finalizer retained descendants")
 		}

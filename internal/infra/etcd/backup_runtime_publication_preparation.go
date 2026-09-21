@@ -91,7 +91,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		keys = append(keys, key)
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	}
-	anchor, err := repository.readFixedKeys(ctx, keys, fixedRevision)
+	anchor, err := repository.ReadFixedKeys(ctx, keys, fixedRevision)
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
 		clear(lockValue)
@@ -284,7 +284,7 @@ func (repository *BackupRuntimeRepository) exactBackupRunConfigCompanions(
 			backupconfigrecord.BackupConfigSnapshotTaskReferenceKey(run.TaskID, snapshot.ConfigSnapshotID),
 			backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshot.ConfigSnapshotID, run.TaskID),
 		}
-		read, err := repository.readFixedKeys(ctx, keys, readRevision)
+		read, err := repository.ReadFixedKeys(ctx, keys, readRevision)
 		if err != nil {
 			return false
 		}

@@ -241,7 +241,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 		backupconfigrecord.BackupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID),
 		hierarchyrecord.EnvironmentKey(run.EnvironmentID),
 	}
-	read, err := repository.readFixedKeys(ctx, keys, fixedRevision)
+	read, err := repository.ReadFixedKeys(ctx, keys, fixedRevision)
 	if err != nil {
 		return nil, nil, err
 	}

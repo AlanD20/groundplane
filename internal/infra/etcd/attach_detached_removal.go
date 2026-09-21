@@ -74,7 +74,7 @@ func prepareAttachRemoval(
 		return nil, nil, nil, errs.New(errs.KindResourceInUse, "Attach is referenced by another Attach grant")
 	}
 	if dependents != nil {
-		defer clearRangeValues(dependents.Values)
+		defer etcdstore.ClearRangeValues(dependents.Values)
 	}
 	credentialDependents, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachrecord.AttachCredentialByPrefix(current.Record.ID), Limit: 1, Revision: revision,
@@ -88,7 +88,7 @@ func prepareAttachRemoval(
 	if len(credentialDependents.Values) != 0 {
 		return nil, nil, nil, errs.New(errs.KindResourceInUse, "Attach credential is used by another Service")
 	}
-	defer clearRangeValues(credentialDependents.Values)
+	defer etcdstore.ClearRangeValues(credentialDependents.Values)
 	dependentGrants, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachrecord.AttachDependentGrantPrefix(current.Record.ID),
 		Limit:  2, Revision: revision,
@@ -100,7 +100,7 @@ func prepareAttachRemoval(
 		dependentGrants.More || len(dependentGrants.Values) > 1 {
 		return nil, nil, nil, attachrecord.CorruptAttachRecord()
 	}
-	defer clearRangeValues(dependentGrants.Values)
+	defer etcdstore.ClearRangeValues(dependentGrants.Values)
 	if err := attachrecord.ValidateAttachDependentGrantRange(
 		dependentGrants, current.Record.ID, current.Record.GrantAttachIDs,
 	); err != nil {

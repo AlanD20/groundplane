@@ -5,114 +5,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
-
-func (repository *BackupRuntimeRepository) GetBackupRetentionSweep(
-	ctx context.Context,
-	sourceID string,
-	triggerRecoveryPointID string,
-) (etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord], bool, error) {
-	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, err
-	}
-	if err := recordcodec.ValidateID(ids.KindRecoveryPoint, triggerRecoveryPointID); err != nil {
-		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, err
-	}
-	record, found, err := getOptionalBackupRuntimeRecord(
-		ctx,
-		repository.store,
-		backupruntime.BackupRetentionKey(sourceID, triggerRecoveryPointID),
-		triggerRecoveryPointID,
-		backupruntime.DecodeBackupRetentionSweepRecord,
-		func(record backupruntime.BackupRetentionSweepRecord) string {
-			if record.SourceID != sourceID {
-				return ""
-			}
-			return record.TriggerRecoveryPointID
-		},
-	)
-	if err != nil || !found {
-		return record, found, err
-	}
-	authority, err := repository.readFixedKeys(
-		ctx,
-		[]string{
-			backupruntime.BackupRetentionKey(sourceID, triggerRecoveryPointID),
-			backupruntime.BackupRecoveryPointKey(triggerRecoveryPointID),
-		},
-		record.ReadRevision,
-	)
-	if err != nil {
-		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, err
-	}
-	defer etcdstore.ClearValues(authority.Values)
-	if authority.Values[0] == nil || authority.Values[1] == nil ||
-		authority.Values[0].ModRevision != record.Revision || authority.Values[1].Version != 1 {
-		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
-	}
-	point, err := backupruntime.DecodeBackupRecoveryPointRecord(authority.Values[1].Value)
-	if err != nil || point.ID != triggerRecoveryPointID || point.SourceID != sourceID {
-		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
-	}
-	if record.Record.State == backupruntime.BackupRetentionPending {
-		if authority.Values[0].Version != 1 || authority.Values[0].ModRevision != authority.Values[1].ModRevision {
-			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
-		}
-	} else if authority.Values[0].Version < 2 ||
-		authority.Values[0].ModRevision <= authority.Values[1].ModRevision {
-		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
-	}
-	return record, true, nil
-}
-
-func (repository *BackupRuntimeRepository) ListBackupRetentionSweepsBySource(
-	ctx context.Context,
-	sourceID string,
-	request backupruntime.BackupRuntimeListRequest,
-) (backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord], error) {
-	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
-	}
-	prefix := backupruntime.BackupRetentionPrefix + sourceID + "/"
-	if err := backupruntime.ValidateBackupRuntimeListRequest(prefix, request); err != nil {
-		return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
-	}
-	result, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: prefix, StartExclusive: request.StartExclusive,
-		Limit: int64(request.Limit), Revision: request.Revision,
-	})
-	if err != nil {
-		return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
-	}
-	if result == nil || result.ReadRevision <= 0 {
-		return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, errs.New(
-			errs.KindInternal,
-			"backup retention page is incomplete",
-		)
-	}
-	defer clearRangeValues(result.Values)
-	page := backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{
-		Items:    make([]etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord], len(result.Values)),
-		Revision: result.ReadRevision,
-	}
-	for index, item := range result.Values {
-		record, decodeErr := backupruntime.DecodeBackupRetentionSweepRecord(item.Value)
-		if decodeErr != nil || record.SourceID != sourceID ||
-			item.Key != backupruntime.BackupRetentionKey(sourceID, record.TriggerRecoveryPointID) {
-			return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
-		}
-		page.Items[index] = etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{
-			Record: record, Revision: item.ModRevision, ReadRevision: result.ReadRevision,
-		}
-	}
-	if result.More {
-		page.Next = result.Values[len(result.Values)-1].Key
-	}
-	return page, nil
-}
 
 // AdvanceBackupRetentionSweep scans one bounded newest-first source page,
 // retains exactly the first Keep visible points, and atomically tombstones
@@ -135,7 +30,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		)
 	}
 	sweepKey := backupruntime.BackupRetentionKey(current.Record.SourceID, current.Record.TriggerRecoveryPointID)
-	anchor, err := repository.readCurrentKeys(
+	anchor, err := repository.ReadCurrentKeys(
 		ctx,
 		[]string{backupruntime.BackupRunKey(run.Record.TaskID), sweepKey},
 	)
@@ -187,7 +82,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 			"backup retention point page is incomplete",
 		)
 	}
-	defer clearRangeValues(index.Values)
+	defer etcdstore.ClearRangeValues(index.Values)
 	authorityKeys := make([]string, 0, len(index.Values)*2)
 	pointIDs := make([]string, len(index.Values))
 	for position, item := range index.Values {

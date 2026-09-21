@@ -44,7 +44,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
-	anchor, err := repository.readCurrentKeys(ctx, []string{
+	anchor, err := repository.ReadCurrentKeys(ctx, []string{
 		backupruntime.BackupRunKey(
 			run.Record.TaskID,
 		),

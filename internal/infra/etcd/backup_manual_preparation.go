@@ -47,9 +47,9 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	var anchor *etcdstore.GetManyResult
 	var err error
 	if input.FixedRevision == 0 {
-		anchor, err = repository.readCurrentKeys(ctx, anchorKeys)
+		anchor, err = repository.ReadCurrentKeys(ctx, anchorKeys)
 	} else {
-		anchor, err = repository.readFixedKeys(ctx, anchorKeys, input.FixedRevision)
+		anchor, err = repository.ReadFixedKeys(ctx, anchorKeys, input.FixedRevision)
 	}
 	if err != nil {
 		return PreparedManualBackupRun{}, err
@@ -137,7 +137,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	for index, sourceID := range policy.SourceIDs {
 		sourceKeys[index] = backuppolicy.BackupSourceKey(sourceID)
 	}
-	sourceRead, err := repository.readFixedKeys(ctx, sourceKeys, fixedRevision)
+	sourceRead, err := repository.ReadFixedKeys(ctx, sourceKeys, fixedRevision)
 	if err != nil {
 		return PreparedManualBackupRun{}, err
 	}

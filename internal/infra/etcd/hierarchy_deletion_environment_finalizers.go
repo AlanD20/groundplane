@@ -82,7 +82,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	}
 	if revisions == nil || revisions.ReadRevision != indexes.ReadRevision || len(revisions.Values) != 0 {
 		if revisions != nil {
-			clearRangeValues(revisions.Values)
+			etcdstore.ClearRangeValues(revisions.Values)
 		}
 		return hierarchyDeletionControllerEffects{}, errs.New(
 			errs.KindStateConflict,

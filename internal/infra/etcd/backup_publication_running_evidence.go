@@ -51,7 +51,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 	}
 	keys = append(keys, ownerKeys...)
 	keys = append(keys, hierarchyrecord.EnvironmentMutationEpochKey(run.EnvironmentID))
-	read, err := repository.readFixedKeys(ctx, keys, readRevision)
+	read, err := repository.ReadFixedKeys(ctx, keys, readRevision)
 	if err != nil {
 		return false
 	}
@@ -130,7 +130,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 		taskjournal.TaskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
 		taskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline),
 	}
-	claim, err := repository.readFixedKeys(ctx, claimKeys, readRevision)
+	claim, err := repository.ReadFixedKeys(ctx, claimKeys, readRevision)
 	if err != nil {
 		return false
 	}

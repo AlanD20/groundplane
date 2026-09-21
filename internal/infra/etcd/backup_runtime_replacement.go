@@ -34,7 +34,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	for _, condition := range extraConditions {
 		anchorKeys = append(anchorKeys, condition.Key)
 	}
-	anchor, err := repository.readCurrentKeys(ctx, anchorKeys)
+	anchor, err := repository.ReadCurrentKeys(ctx, anchorKeys)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}

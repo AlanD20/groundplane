@@ -61,7 +61,7 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 	}
 	if activeScripts == nil || activeScripts.ReadRevision != revision || len(activeScripts.Values) != 0 {
 		if activeScripts != nil {
-			clearRangeValues(activeScripts.Values)
+			etcdstore.ClearRangeValues(activeScripts.Values)
 		}
 		return errs.New(errs.KindStateConflict, "environment retained durable Scripts")
 	}
@@ -72,12 +72,12 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 		}
 		if page == nil || page.ReadRevision != revision || len(page.Values) > 1 {
 			if page != nil {
-				clearRangeValues(page.Values)
+				etcdstore.ClearRangeValues(page.Values)
 			}
 			return errs.New(errs.KindInternal, "environment child authority evidence is incomplete")
 		}
 		present := len(page.Values) != 0
-		clearRangeValues(page.Values)
+		etcdstore.ClearRangeValues(page.Values)
 		if present {
 			return errs.New(errs.KindStateConflict, "environment retained durable children")
 		}

@@ -53,7 +53,7 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 				errs.KindStateConflict, "config backup source requires age encryption",
 			)
 		}
-		read, readErr := repository.readFixedKeys(
+		read, readErr := repository.ReadFixedKeys(
 			ctx,
 			[]string{hierarchyrecord.EnvironmentKey(run.EnvironmentID)},
 			fixedRevision,

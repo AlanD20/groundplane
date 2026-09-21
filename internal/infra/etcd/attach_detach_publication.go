@@ -167,7 +167,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			"Attach credential is used by another Service",
 		)
 	}
-	defer clearRangeValues(credentialDependents.Values)
+	defer etcdstore.ClearRangeValues(credentialDependents.Values)
 	var credentialReferenceCondition *etcdstore.Condition
 	if !current.Record.OwnsCredential() {
 		key := attachrecord.AttachCredentialByKey(current.Record.CredentialAttachID, current.Record.ID)

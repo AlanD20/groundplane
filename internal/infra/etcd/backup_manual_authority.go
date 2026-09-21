@@ -16,7 +16,7 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	environment hierarchyrecord.EnvironmentRecord,
 	fixedRevision int64,
 ) (taskjournal.TaskOwner, error) {
-	read, err := repository.readFixedKeys(
+	read, err := repository.ReadFixedKeys(
 		ctx,
 		[]string{hierarchyrecord.ProjectKey(environment.ProjectID)},
 		fixedRevision,
@@ -35,7 +35,7 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 			"backing Environments cannot run consumer backups",
 		)
 	}
-	tenantRead, err := repository.readFixedKeys(
+	tenantRead, err := repository.ReadFixedKeys(
 		ctx,
 		[]string{hierarchyrecord.TenantKey(project.TenantID)},
 		fixedRevision,
@@ -60,7 +60,7 @@ func (repository *BackupRuntimeRepository) manualBackupConnector(
 	environmentID string,
 	fixedRevision int64,
 ) (connectorrecord.Record, int64, int64, bool, error) {
-	read, err := repository.readFixedKeys(ctx, []string{
+	read, err := repository.ReadFixedKeys(ctx, []string{
 		connectorrecord.RecordKey(connectorID), connectorrecord.CredentialValueKey(connectorID),
 	}, fixedRevision)
 	if err != nil {
@@ -118,7 +118,7 @@ func (repository *BackupRuntimeRepository) manualBackupKey(
 	if run.Encryption != backupruntime.BackupRuntimeEncryptionAge {
 		return errs.New(errs.KindStateConflict, "backup encryption strategy is unsupported")
 	}
-	read, err := repository.readFixedKeys(ctx, []string{
+	read, err := repository.ReadFixedKeys(ctx, []string{
 		backuppolicy.BackupKeyKey(run.EnvironmentID), backuppolicy.BackupKeyValueKey(run.EnvironmentID),
 	}, fixedRevision)
 	if err != nil {

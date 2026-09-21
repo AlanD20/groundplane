@@ -368,7 +368,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		return err
 	}
 	if grants != nil {
-		defer clearRangeValues(grants.Values)
+		defer etcdstore.ClearRangeValues(grants.Values)
 	}
 	if grants == nil || grants.ReadRevision != revision || len(grants.Values) > 1 {
 		return errs.New(errs.KindInternal, "attach detach replay grant evidence is incomplete")
@@ -384,7 +384,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		return err
 	}
 	if dependentGrants != nil {
-		defer clearRangeValues(dependentGrants.Values)
+		defer etcdstore.ClearRangeValues(dependentGrants.Values)
 	}
 	if dependentGrants == nil || dependentGrants.ReadRevision != revision ||
 		dependentGrants.More || len(dependentGrants.Values) > 1 {

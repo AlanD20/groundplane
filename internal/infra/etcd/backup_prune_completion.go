@@ -63,7 +63,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		[]string{backupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.Record.TaskID)},
 		authorityKeys...)
 	keys = append(keys, backupruntime.BackupRetentionKey(current.Record.Point.SourceID, current.Record.Point.ID))
-	anchor, err := repository.readCurrentKeys(ctx, keys)
+	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
@@ -198,7 +198,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 		}
 		keys = append(keys, authorityKeys...)
 	}
-	anchor, err := repository.readCurrentKeys(ctx, keys)
+	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}

@@ -29,7 +29,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		response.TaskID != marker.TaskID {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	read, err := repository.readFixedKeys(ctx, []string{
+	read, err := repository.ReadFixedKeys(ctx, []string{
 		backupruntime.BackupRunKey(marker.TaskID),
 		taskjournal.TaskStorageKey(marker.TaskID),
 		hierarchyrecord.EnvironmentOperationLockKey(marker.Locator.ScopeID),

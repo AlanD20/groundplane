@@ -87,7 +87,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		}
 		keys = append(keys, backupruntime.BackupOrphanKey(pointID), connectorIndex, environmentIndex)
 	}
-	anchor, err := repository.readCurrentKeys(ctx, keys)
+	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return backupRunPublicationPlan{}, err
 	}

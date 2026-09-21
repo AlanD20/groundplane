@@ -38,7 +38,7 @@ func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	keys := []string{backupruntime.BackupOrphanKey(next.Point.ID), connectorIndex, environmentIndex}
-	anchor, err := repository.readCurrentKeys(ctx, keys)
+	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
@@ -110,7 +110,7 @@ func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 		return err
 	}
 	keys := []string{backupruntime.BackupOrphanKey(current.Record.Point.ID), connectorIndex, environmentIndex}
-	anchor, err := repository.readCurrentKeys(ctx, keys)
+	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return err
 	}
@@ -198,7 +198,7 @@ func (repository *BackupRuntimeRepository) AdoptReconciledBackupOrphan(
 		backupruntime.BackupRecoveryPointKey(point.ID), environmentIndex, sourceIndex, connectorIndex,
 		backupruntime.BackupRetentionKey(point.SourceID, point.ID),
 	}
-	anchor, err := repository.readCurrentKeys(ctx, keys)
+	anchor, err := repository.ReadCurrentKeys(ctx, keys)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}

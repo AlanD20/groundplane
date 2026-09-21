@@ -70,7 +70,7 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 			task.Executor, task.TerminalAssignment.AgentID, task.ID,
 		))
 	}
-	read, err := repository.readFixedKeys(ctx, keys, readRevision)
+	read, err := repository.ReadFixedKeys(ctx, keys, readRevision)
 	if err != nil {
 		return false
 	}
