@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptmutations "github.com/AlanD20/groundplane/internal/infra/etcd/scriptmutations"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -27,10 +28,10 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateScriptHierarchy(ctx, environment, project, target, current.Record); err != nil {
+	if err := scriptmutations.ValidateScriptHierarchy(ctx, environment, project, target, current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateScriptVersion(current); err != nil {
+	if err := scriptmutations.ValidateScriptVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if current.Record.ActiveReferences != 0 {

@@ -1,4 +1,4 @@
-package etcd
+package scriptmutations
 
 import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"

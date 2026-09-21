@@ -1,4 +1,4 @@
-package etcd
+package scriptmutations
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateScriptMutationMarker(marker idempotencyrecord.IdempotencyMarker, environmentID string) error {
+func ValidateScriptMutationMarker(marker idempotencyrecord.IdempotencyMarker, environmentID string) error {
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
 		return errs.New(
@@ -71,7 +71,7 @@ func scriptWriteConditions(
 	return conditions
 }
 
-func validateScriptHierarchy(
+func ValidateScriptHierarchy(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -109,7 +109,7 @@ func validateScriptHierarchy(
 	return nil
 }
 
-func validateScriptVersion(current etcdstore.Versioned[scriptrecord.Record]) error {
+func ValidateScriptVersion(current etcdstore.Versioned[scriptrecord.Record]) error {
 	if err := scriptrecord.ValidateRecord(current.Record); err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ import (
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptmutations "github.com/AlanD20/groundplane/internal/infra/etcd/scriptmutations"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"sort"
 
@@ -109,7 +110,7 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 				"Blueprint Script snapshot is inconsistent",
 			)
 		}
-		if err := validateScriptVersion(versioned); err != nil {
+		if err := scriptmutations.ValidateScriptVersion(versioned); err != nil {
 			return BlueprintScriptPublication{}, err
 		}
 		if versioned.Record.ActiveReferences != 0 {

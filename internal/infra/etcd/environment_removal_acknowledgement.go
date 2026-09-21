@@ -13,6 +13,7 @@ import (
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	scriptmutations "github.com/AlanD20/groundplane/internal/infra/etcd/scriptmutations"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -26,7 +27,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	readRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		if err := cleanupTaskEnvironmentDeletionScriptLocators(ctx, repository.store, task.Target, task.ID); err != nil {
+		if err := scriptmutations.CleanupTaskEnvironmentDeletionScriptLocators(ctx, repository.store, task.Target, task.ID); err != nil {
 			return nil, nil, err
 		}
 	}

@@ -1,4 +1,4 @@
-package etcd
+package scriptmutations
 
 import (
 	"context"
@@ -15,9 +15,9 @@ const scriptLocatorCleanupBatchSize int64 = 16
 // cleanupEnvironmentDeletionScriptLocators removes locator authority for
 // inactive/abandoned generations. The owned Environment tombstone is the
 // durable proof that no Blueprint staging transaction can add more locators.
-func cleanupEnvironmentDeletionScriptLocators(
+func CleanupEnvironmentDeletionScriptLocators(
 	ctx context.Context,
-	store hierarchyStore,
+	store mutationStore,
 	environmentID string,
 	authority etcdstore.Condition,
 ) error {
@@ -97,9 +97,9 @@ func cleanupEnvironmentDeletionScriptLocators(
 	}
 }
 
-func cleanupTaskEnvironmentDeletionScriptLocators(
+func CleanupTaskEnvironmentDeletionScriptLocators(
 	ctx context.Context,
-	store hierarchyStore,
+	store mutationStore,
 	environmentID string,
 	taskID string,
 ) error {
@@ -116,7 +116,7 @@ func cleanupTaskEnvironmentDeletionScriptLocators(
 		tombstone.TaskID != taskID {
 		return errs.New(errs.KindStateConflict, "Environment deletion tombstone ownership changed")
 	}
-	return cleanupEnvironmentDeletionScriptLocators(
+	return CleanupEnvironmentDeletionScriptLocators(
 		ctx, store, environmentID, etcdstore.Condition{Key: key, ModRevision: read.Entry.ModRevision},
 	)
 }

@@ -2,14 +2,14 @@ package etcd
 
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptmutations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // ScriptRepository owns Script records, Environment membership, slug uniqueness, and CAS updates.
 type ScriptRepository struct {
-	*scriptrecord.Reader
+	*scriptmutations.Repository
 	*scriptsourcequeries.SourceReader
 	store hierarchyStore
 }
@@ -26,5 +26,5 @@ func newScriptRepository(store hierarchyStore) (*ScriptRepository, error) {
 }
 
 func composeScriptRepository(store hierarchyStore) *ScriptRepository {
-	return &ScriptRepository{Reader: scriptrecord.NewReader(store), SourceReader: scriptsourcequeries.NewSourceReader(store), store: store}
+	return &ScriptRepository{Repository: scriptmutations.NewRepository(store), SourceReader: scriptsourcequeries.NewSourceReader(store), store: store}
 }

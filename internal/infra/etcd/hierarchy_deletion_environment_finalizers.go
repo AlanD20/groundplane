@@ -8,6 +8,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	scriptmutations "github.com/AlanD20/groundplane/internal/infra/etcd/scriptmutations"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -37,7 +38,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	operation HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	if err := cleanupEnvironmentDeletionScriptLocators(
+	if err := scriptmutations.CleanupEnvironmentDeletionScriptLocators(
 		ctx, repository.store, action.TargetID, etcdstore.Condition{
 			Key:         hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), action.TargetID),
 			ModRevision: operation.TombstoneRevision,
