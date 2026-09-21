@@ -82,7 +82,7 @@ func transactionRequest(
 			Key:         []byte(physicalConditions[index]),
 			TargetUnion: &etcdserverpb.Compare_ModRevision{ModRevision: condition.ModRevision},
 		}
-		failure := &etcdserverpb.etcdstore.RangeRequest{Key: []byte(physicalConditions[index])}
+		failure := &etcdserverpb.RangeRequest{Key: []byte(physicalConditions[index])}
 		if condition.Prefix {
 			end := []byte(clientv3.GetPrefixRangeEnd(physicalConditions[index]))
 			comparison.RangeEnd = end
