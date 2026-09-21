@@ -1,4 +1,4 @@
-package etcd
+package environmentqueries
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
 
-func (repository *HierarchyRepository) GetEnvironmentPoolRegistry(
+func (repository *ProjectionReader) GetEnvironmentPoolRegistry(
 	ctx context.Context,
 ) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {

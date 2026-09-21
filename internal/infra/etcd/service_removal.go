@@ -184,7 +184,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		indexes.Values[1].ModRevision != projection.Revision {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Service removal baseline changed")
 	}
-	hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
+	hierarchy := &HierarchyRepository{Reader: hierarchyrecord.NewReader(repository.store), store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx, intent.Claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},

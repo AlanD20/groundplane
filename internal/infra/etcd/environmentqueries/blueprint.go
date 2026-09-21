@@ -1,4 +1,4 @@
-package etcd
+package environmentqueries
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 // GetEnvironmentBlueprintHead returns the current immutable revision pointer.
 // A missing head is normal before an Environment's first successful apply.
-func (repository *HierarchyRepository) GetEnvironmentBlueprintHead(
+func (repository *ProjectionReader) GetEnvironmentBlueprintHead(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error) {
@@ -41,7 +41,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintHead(
 // GetEnvironmentBlueprintRevision reconstructs verified file bytes at the
 // manifest's pinned MVCC revision. Missing immutable state is reported as not
 // found; mismatched bytes or metadata are durable corruption.
-func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
+func (repository *ProjectionReader) GetEnvironmentBlueprintRevision(
 	ctx context.Context,
 	environmentID string,
 	revisionID string,

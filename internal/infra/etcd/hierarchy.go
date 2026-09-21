@@ -8,11 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type ProjectFilter struct {
-	TenantID string
-	Kind     hierarchyrecord.ProjectKind
-}
-
 type hierarchyStore interface {
 	Get(context.Context, string) (*etcdstore.GetResult, error)
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
@@ -23,6 +18,7 @@ type hierarchyStore interface {
 
 // HierarchyRepository owns durable Tenant, Project, and Environment persistence.
 type HierarchyRepository struct {
+	*hierarchyrecord.Reader
 	*environmentqueries.ProjectionReader
 	store hierarchyStore
 }
@@ -49,7 +45,7 @@ func newHierarchyRepository(store hierarchyStore) (*HierarchyRepository, error) 
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "hierarchy store is required")
 	}
-	return &HierarchyRepository{store: store, ProjectionReader: environmentqueries.NewProjectionReader(store)}, nil
+	return &HierarchyRepository{Reader: hierarchyrecord.NewReader(store), store: store, ProjectionReader: environmentqueries.NewProjectionReader(store)}, nil
 }
 
 func newEnvironmentBlueprintRepository(

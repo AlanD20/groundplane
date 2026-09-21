@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
@@ -33,7 +34,7 @@ func (repository *ServiceRepository) GetServiceRevision(
 	revisionID string,
 	serviceID string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
-	hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
+	hierarchy := &HierarchyRepository{Reader: hierarchyrecord.NewReader(repository.store), store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 	projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 	if err != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err

@@ -93,7 +93,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	}
 	var blueprintProjection projectionrecord.EnvironmentComposeProjection
 	if blueprintRetry {
-		hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
+		hierarchy := &HierarchyRepository{Reader: hierarchyrecord.NewReader(repository.store), store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 		desiredProjection, found, projectionErr := hierarchy.GetEnvironmentComposeProjectionRevision(
 			ctx, intent.EnvironmentID, desiredRevisionID,
 		)

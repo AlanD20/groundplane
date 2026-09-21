@@ -117,7 +117,7 @@ func (repository *EtcdRepository) ListProjects(
 	filter ProjectFilter,
 	request PageRequest,
 ) (Page[core.Project], error) {
-	page, err := repository.repository.ListProjects(ctx, etcdinfra.ProjectFilter{
+	page, err := repository.repository.ListProjects(ctx, hierarchyrecord.ProjectFilter{
 		TenantID: filter.TenantID, Kind: hierarchyrecord.ProjectKind(filter.Kind),
 	}, pageRequestToEtcd(request))
 	return projectPageFromEtcd(page), err
