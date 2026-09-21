@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
@@ -17,7 +18,7 @@ import (
 type BlueprintRetainedRuntimeSource struct {
 	Planning ReleasePlanningService
 	Release  *releaserender.ServiceLifecycleRelease
-	Intent   *ServingRelease
+	Intent   *releasequeries.ServingRelease
 }
 
 func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(

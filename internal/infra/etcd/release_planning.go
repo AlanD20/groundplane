@@ -11,6 +11,7 @@ import (
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -285,11 +286,11 @@ func (ledger *ReleaseLedger) GetPlanningServingIntent(
 	if index == nil || index.ReadRevision != scope.ReadRevision || len(index.Values) != 1 || index.Values[0] == nil {
 		return domain.Intent{}, false, releases.CorruptReleaseRecord()
 	}
-	publicationID, err := decodeReleaseIndex(index.Values[0].Value, service.Service.Record.Desired.ID)
+	publicationID, err := releasequeries.DecodeReleaseIndex(index.Values[0].Value, service.Service.Record.Desired.ID)
 	if err != nil {
 		return domain.Intent{}, false, err
 	}
-	view, err := ledger.readViewAt(ctx, publicationID, service.Projection.ServingReleaseID, scope.ReadRevision)
+	view, err := ledger.ReadViewAt(ctx, publicationID, service.Projection.ServingReleaseID, scope.ReadRevision)
 	if err != nil {
 		return domain.Intent{}, false, err
 	}

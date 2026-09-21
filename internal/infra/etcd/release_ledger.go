@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"net/http"
 	"slices"
@@ -22,6 +23,7 @@ import (
 )
 
 type ReleaseLedger struct {
+	*releasequeries.Reader
 	store etcdstore.Store
 	tasks *TaskRepository
 }
@@ -30,7 +32,7 @@ func NewReleaseLedger(store etcdstore.Store, tasks *TaskRepository) (*ReleaseLed
 	if store == nil || tasks == nil || tasks.store == nil {
 		return nil, errs.New(errs.KindInternal, "release ledger dependencies are not configured")
 	}
-	return &ReleaseLedger{store: store, tasks: tasks}, nil
+	return &ReleaseLedger{Reader: releasequeries.NewReader(store), store: store, tasks: tasks}, nil
 }
 
 type VersionedReleaseManifest struct {

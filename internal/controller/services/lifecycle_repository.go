@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -21,7 +22,7 @@ type serviceLifecycleRepository interface {
 		context.Context,
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
-	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
+	ResolveServing(context.Context, string, string, int64) (releasequeries.ServingRelease, error)
 	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
 	BeginServiceLifecycleWithTaskHookInputs(
 		context.Context,
@@ -64,7 +65,7 @@ func (repository *MutationRepository) ResolveServing(
 	environmentID string,
 	serviceID string,
 	revision int64,
-) (etcd.ServingRelease, error) {
+) (releasequeries.ServingRelease, error) {
 	return repository.releases.ResolveServing(ctx, environmentID, serviceID, revision)
 }
 

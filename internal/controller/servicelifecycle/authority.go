@@ -6,15 +6,16 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type ReleaseReader interface {
-	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
+	ResolveServing(context.Context, string, string, int64) (releasequeries.ServingRelease, error)
 	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
 }
 

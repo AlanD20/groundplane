@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 )
 
-func (ledger *ReleaseLedger) verifySuccessfulRelease(
+func (ledger *Reader) VerifySuccessfulRelease(
 	ctx context.Context,
 	environmentID, serviceID string,
 	intent domain.Intent,

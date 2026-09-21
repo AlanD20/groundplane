@@ -12,6 +12,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -36,7 +37,7 @@ type ScriptExecutionSources struct {
 	ScriptSet         etcdstore.Versioned[scriptrecord.SetGenerationRecord]
 	Script            etcdstore.Versioned[scriptrecord.Record]
 	BodyGeneration    etcdstore.Versioned[scriptrecord.BodyGenerationRecord]
-	Release           ServingRelease
+	Release           releasequeries.ServingRelease
 	RenderInput       etcdstore.Versioned[releaserender.ReleaseRenderInput]
 	DesiredHead       etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]
 	DesiredProjection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
@@ -174,7 +175,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 			Revision:     read.Values[1].ModRevision,
 			ReadRevision: revision,
 		},
-		Release: ServingRelease{
+		Release: releasequeries.ServingRelease{
 			Intent:         intent,
 			IntentRevision: read.Values[2].ModRevision,
 			Revision:       revision,
@@ -307,7 +308,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script target Service is not runnable")
 	}
 
-	var release ServingRelease
+	var release releasequeries.ServingRelease
 	if releaseID == "" {
 		release, err = ledger.ResolveServing(ctx, environment.ID, target.Desired.ID, revision)
 		if err != nil {
@@ -327,7 +328,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 		}
 		// Hook policy selects a sealed candidate before it can have a terminal
 		// success record. Manual execution above still requires ResolveServing.
-		release = ServingRelease{
+		release = releasequeries.ServingRelease{
 			Intent: intent, IntentRevision: intentValue.ModRevision, Revision: revision,
 		}
 	}

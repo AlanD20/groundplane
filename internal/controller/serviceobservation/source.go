@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -28,7 +29,7 @@ type Services interface {
 
 // Releases exposes only the immutable serving-source and runtime-receipt reads.
 type Releases interface {
-	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
+	ResolveServing(context.Context, string, string, int64) (releasequeries.ServingRelease, error)
 	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
 	LoadAcknowledgedServiceRuntimesAtRevision(
 		context.Context,

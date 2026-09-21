@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"context"
@@ -16,7 +16,7 @@ type ReleaseRollbackSelection struct {
 	View   ReleaseView
 }
 
-func (ledger *ReleaseLedger) SelectRollback(
+func (ledger *Reader) SelectRollback(
 	ctx context.Context,
 	environmentID string,
 	serviceID string,
@@ -59,11 +59,11 @@ func (ledger *ReleaseLedger) SelectRollback(
 			servingIndex.Values[0] == nil {
 			return ReleaseRollbackSelection{}, releases.CorruptReleaseRecord()
 		}
-		publicationID, err := decodeReleaseIndex(servingIndex.Values[0].Value, serviceID)
+		publicationID, err := DecodeReleaseIndex(servingIndex.Values[0].Value, serviceID)
 		if err != nil {
 			return ReleaseRollbackSelection{}, err
 		}
-		serving, err := ledger.readViewAt(ctx, publicationID, projection.ServingReleaseID, revision)
+		serving, err := ledger.ReadViewAt(ctx, publicationID, projection.ServingReleaseID, revision)
 		if err != nil {
 			return ReleaseRollbackSelection{}, err
 		}
@@ -88,11 +88,11 @@ func (ledger *ReleaseLedger) SelectRollback(
 		}
 		for _, indexed := range page.Values {
 			releaseID := strings.TrimPrefix(indexed.Key, prefix)
-			publicationID, err := decodeReleaseIndex(indexed.Value, serviceID)
+			publicationID, err := DecodeReleaseIndex(indexed.Value, serviceID)
 			if err != nil {
 				return ReleaseRollbackSelection{}, err
 			}
-			view, err := ledger.readViewAt(ctx, publicationID, releaseID, revision)
+			view, err := ledger.ReadViewAt(ctx, publicationID, releaseID, revision)
 			if err != nil {
 				return ReleaseRollbackSelection{}, err
 			}

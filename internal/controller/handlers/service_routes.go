@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"log/slog"
 	"net/http"
@@ -11,7 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -190,7 +191,7 @@ func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*s
 	if s.releases == nil {
 		return nil, errs.New(errs.KindInternal, "release reader is not configured")
 	}
-	ledger, err := s.releases.List(ctx, etcd.ReleasePageRequest{
+	ledger, err := s.releases.List(ctx, releasequeries.ReleasePageRequest{
 		EnvironmentID: record.Record.EnvironmentID,
 		ServiceID:     record.Record.Desired.ID,
 		Limit:         50,

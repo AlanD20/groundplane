@@ -2,20 +2,21 @@ package handlers
 
 import (
 	"context"
+	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	"log/slog"
 	"net/http"
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type ReleaseReader interface {
-	Get(context.Context, string) (etcd.ReleaseView, error)
-	List(context.Context, etcd.ReleasePageRequest) (etcd.ReleasePage, error)
+	Get(context.Context, string) (releasequeries.ReleaseView, error)
+	List(context.Context, releasequeries.ReleasePageRequest) (releasequeries.ReleasePage, error)
 }
 
 type releaseListInput struct {
@@ -86,7 +87,7 @@ func (s *Server) listReleases(ctx context.Context, input *releaseListInput) (*re
 	if limit == 0 {
 		limit = 50
 	}
-	page, err := s.releases.List(ctx, etcd.ReleasePageRequest{
+	page, err := s.releases.List(ctx, releasequeries.ReleasePageRequest{
 		EnvironmentID: input.EnvironmentID, ServiceID: input.ServiceID, Limit: limit, Cursor: input.Cursor,
 	})
 	if err != nil {
@@ -95,7 +96,7 @@ func (s *Server) listReleases(ctx context.Context, input *releaseListInput) (*re
 	return &releasePageOutput{Body: releasePageResponse(page)}, nil
 }
 
-func releasePageResponse(page etcd.ReleasePage) apiTypes.Page[apiTypes.ReleaseSummary] {
+func releasePageResponse(page releasequeries.ReleasePage) apiTypes.Page[apiTypes.ReleaseSummary] {
 	items := make([]apiTypes.ReleaseSummary, len(page.Items))
 	for index, item := range page.Items {
 		items[index] = releaseSummary(item)
@@ -172,7 +173,7 @@ func (s *Server) rollbackService(
 	return s.releaseGroupMutationResponse(response), nil
 }
 
-func releaseSummary(view etcd.ReleaseView) apiTypes.ReleaseSummary {
+func releaseSummary(view releasequeries.ReleaseView) apiTypes.ReleaseSummary {
 	completedAt := (*string)(nil)
 	if view.Terminal != nil {
 		formatted := view.Terminal.CompletedAt.Format(time.RFC3339Nano)
@@ -191,7 +192,7 @@ func releaseSummary(view etcd.ReleaseView) apiTypes.ReleaseSummary {
 	}
 }
 
-func releaseDetail(view etcd.ReleaseView) apiTypes.ReleaseDetail {
+func releaseDetail(view releasequeries.ReleaseView) apiTypes.ReleaseDetail {
 	attempts := make([]apiTypes.ReleaseAttempt, len(view.Attempts))
 	for index, attempt := range view.Attempts {
 		attempts[index] = apiTypes.ReleaseAttempt{

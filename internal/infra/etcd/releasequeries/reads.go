@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"bytes"
@@ -60,7 +60,7 @@ type ServingRelease struct {
 // ResolveCurrentSuccessful resolves the Service projection and its immutable
 // successful Release intent at one fixed etcd revision. It never falls back to
 // the mutable desired image when a Service has no successful Release.
-func (ledger *ReleaseLedger) ResolveCurrentSuccessful(
+func (ledger *Reader) ResolveCurrentSuccessful(
 	ctx context.Context,
 	environmentID, serviceID string,
 	revision int64,
@@ -121,7 +121,7 @@ func (ledger *ReleaseLedger) ResolveCurrentSuccessful(
 	}, nil
 }
 
-func (ledger *ReleaseLedger) ResolveServing(
+func (ledger *Reader) ResolveServing(
 	ctx context.Context,
 	environmentID, serviceID string,
 	revision int64,
@@ -185,7 +185,7 @@ type releaseCursor struct {
 	FilterDigest  string `json:"filter_digest"`
 }
 
-func (ledger *ReleaseLedger) Get(ctx context.Context, releaseID string) (ReleaseView, error) {
+func (ledger *Reader) Get(ctx context.Context, releaseID string) (ReleaseView, error) {
 	if ctx == nil || ledger == nil || ids.Validate(ids.KindDeployment, releaseID) != nil {
 		return ReleaseView{}, errs.New(errs.KindValidationFailed, "release id is invalid")
 	}
@@ -221,20 +221,20 @@ func (ledger *ReleaseLedger) Get(ctx context.Context, releaseID string) (Release
 			len(indexRead.Values) != 1 || indexRead.Values[0] == nil {
 			return ReleaseView{}, errs.New(errs.KindReleaseNotFound, "release was not published")
 		}
-		publicationID, decodeErr := decodeReleaseIndex(indexRead.Values[0].Value, intent.ServiceID)
+		publicationID, decodeErr := DecodeReleaseIndex(indexRead.Values[0].Value, intent.ServiceID)
 		if decodeErr != nil {
 			return ReleaseView{}, decodeErr
 		}
-		return ledger.readViewAt(ctx, publicationID, releaseID, intentRead.ReadRevision)
+		return ledger.ReadViewAt(ctx, publicationID, releaseID, intentRead.ReadRevision)
 	}
 	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](headRead.Values[0].Value, "release-operation")
 	if err != nil || head.OperationID != intent.OperationID {
 		return ReleaseView{}, releases.CorruptReleaseRecord()
 	}
-	return ledger.readViewAt(ctx, head.PublicationID, releaseID, headRead.ReadRevision)
+	return ledger.ReadViewAt(ctx, head.PublicationID, releaseID, headRead.ReadRevision)
 }
 
-func (ledger *ReleaseLedger) List(ctx context.Context, request ReleasePageRequest) (ReleasePage, error) {
+func (ledger *Reader) List(ctx context.Context, request ReleasePageRequest) (ReleasePage, error) {
 	if ctx == nil || ledger == nil || ids.Validate(ids.KindEnvironment, request.EnvironmentID) != nil ||
 		request.Limit < 1 || request.Limit > 200 || request.ServiceID != "" && ids.Validate(ids.KindService, request.ServiceID) != nil {
 		return ReleasePage{}, errs.New(errs.KindValidationFailed, "release page request is invalid")
@@ -276,11 +276,11 @@ func (ledger *ReleaseLedger) List(ctx context.Context, request ReleasePageReques
 		if strings.Contains(releaseID, "/") || ids.Validate(ids.KindDeployment, releaseID) != nil {
 			return ReleasePage{}, releases.CorruptReleaseRecord()
 		}
-		publicationID, err := decodeReleaseIndex(value.Value, request.ServiceID)
+		publicationID, err := DecodeReleaseIndex(value.Value, request.ServiceID)
 		if err != nil {
 			return ReleasePage{}, err
 		}
-		view, err := ledger.readViewAt(ctx, publicationID, releaseID, page.ReadRevision)
+		view, err := ledger.ReadViewAt(ctx, publicationID, releaseID, page.ReadRevision)
 		if err != nil {
 			return ReleasePage{}, err
 		}
@@ -305,7 +305,7 @@ func (ledger *ReleaseLedger) List(ctx context.Context, request ReleasePageReques
 	return ReleasePage{Items: items, NextCursor: nextCursor, Revision: page.ReadRevision}, nil
 }
 
-func (ledger *ReleaseLedger) readViewAt(
+func (ledger *Reader) ReadViewAt(
 	ctx context.Context,
 	publicationID string,
 	releaseID string,
@@ -385,7 +385,7 @@ func (ledger *ReleaseLedger) readViewAt(
 	return view, nil
 }
 
-func decodeReleaseIndex(value []byte, serviceFilter string) (string, error) {
+func DecodeReleaseIndex(value []byte, serviceFilter string) (string, error) {
 	if recordcodec.RejectDuplicateFields(value) != nil {
 		return "", releases.CorruptReleaseRecord()
 	}

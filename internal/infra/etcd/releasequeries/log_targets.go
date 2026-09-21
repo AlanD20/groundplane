@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"context"
@@ -21,7 +21,7 @@ type EnvironmentLogTarget struct {
 
 // ResolveEnvironmentLogTargets anchors Environment existence and pages every
 // Service at that exact revision before returning only serving Releases.
-func (ledger *ReleaseLedger) ResolveEnvironmentLogTargets(
+func (ledger *Reader) ResolveEnvironmentLogTargets(
 	ctx context.Context,
 	environmentID string,
 	maximumTargets int,

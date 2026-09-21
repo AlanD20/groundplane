@@ -1,4 +1,4 @@
-package etcd
+package releasequeries
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // GetReleaseRenderInputAt returns the immutable render input for one Release
 // from the caller's fixed MVCC view. Script snapshots use this instead of
 // rebuilding a service definition from mutable desired state.
-func (ledger *ReleaseLedger) GetReleaseRenderInputAt(
+func (ledger *Reader) GetReleaseRenderInputAt(
 	ctx context.Context,
 	releaseID string,
 	revision int64,
