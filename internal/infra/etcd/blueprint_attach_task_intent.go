@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -106,7 +107,7 @@ func validateEnvironmentBlueprintBackupPolicy(
 	if policy == nil {
 		return nil
 	}
-	selections := make([]BackupPolicySourceSelection, len(policy.Sources))
+	selections := make([]backuppolicy.BackupPolicySourceSelection, len(policy.Sources))
 	seenIDs := make(map[string]struct{}, len(policy.Sources))
 	for index, source := range policy.Sources {
 		if ids.Validate(ids.KindBackupSource, source.ID) != nil {
@@ -116,9 +117,9 @@ func validateEnvironmentBlueprintBackupPolicy(
 			return errs.New(errs.KindValidationFailed, "Blueprint Backup source identity is duplicated")
 		}
 		seenIDs[source.ID] = struct{}{}
-		selections[index] = BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
+		selections[index] = backuppolicy.BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
 	}
-	return validateBackupPolicyReplacementInput(context.Background(), BackupPolicyReplacementInput{
+	return backuppolicy.ValidateReplacementInput(context.Background(), backuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: environmentID, Enabled: policy.Enabled, Frequency: policy.Frequency,
 		Keep: policy.Keep, Encryption: policy.Encryption, ConnectorID: policy.ConnectorID,
 		Sources: selections,

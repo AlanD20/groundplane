@@ -2,7 +2,6 @@ package etcd
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/core"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -10,24 +9,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
-
-// BackupPolicySourceSelection is the stable-id form accepted by the human API
-// after label resolution. It carries no persistence revisions or indexes.
-type BackupPolicySourceSelection struct {
-	Kind     core.BackupSourceKind
-	TargetID string
-}
-
-// BackupPolicyReplacementInput is one complete desired singleton document.
-type BackupPolicyReplacementInput struct {
-	EnvironmentID string
-	Enabled       bool
-	Frequency     string
-	Keep          int64
-	Encryption    string
-	ConnectorID   string
-	Sources       []BackupPolicySourceSelection
-}
 
 // BackupPolicyInitialKeyMaterial is cryptographic output supplied by the
 // application. Persistence owns the era, owner, and lifecycle timestamps.
@@ -96,9 +77,9 @@ func (prepared *PreparedBackupPolicyReplacement) Destroy() {
 // compare inside the etcd adapter. Callers never construct KeyValue evidence.
 func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	ctx context.Context,
-	input BackupPolicyReplacementInput,
+	input backuppolicy.BackupPolicyReplacementInput,
 ) (PreparedBackupPolicyReplacement, error) {
-	if err := validateBackupPolicyReplacementInput(ctx, input); err != nil {
+	if err := backuppolicy.ValidateReplacementInput(ctx, input); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	hierarchy, err := newHierarchyRepository(repository.store)

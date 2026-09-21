@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
@@ -23,7 +24,7 @@ type backupPolicyRepository interface {
 	GetBackupPolicyProjection(context.Context, string) (etcd.BackupPolicyProjection, error)
 	PrepareBackupPolicyReplacement(
 		context.Context,
-		etcd.BackupPolicyReplacementInput,
+		backuppolicy.BackupPolicyReplacementInput,
 	) (etcd.PreparedBackupPolicyReplacement, bool, error)
 	SupplyBackupPolicyInitialKey(
 		context.Context,
@@ -300,14 +301,14 @@ func (service *backupPolicyService) SetBackupPolicy(
 func backupPolicyReplacementInput(
 	environmentID string,
 	input apiTypes.BackupPolicyReplacementRequest,
-) etcd.BackupPolicyReplacementInput {
-	sources := make([]etcd.BackupPolicySourceSelection, len(input.Sources))
+) backuppolicy.BackupPolicyReplacementInput {
+	sources := make([]backuppolicy.BackupPolicySourceSelection, len(input.Sources))
 	for index, source := range input.Sources {
-		sources[index] = etcd.BackupPolicySourceSelection{
+		sources[index] = backuppolicy.BackupPolicySourceSelection{
 			Kind: core.BackupSourceKind(source.Kind), TargetID: source.TargetID,
 		}
 	}
-	return etcd.BackupPolicyReplacementInput{
+	return backuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: environmentID, Enabled: input.Enabled, Frequency: input.Frequency,
 		Keep: input.Keep, Encryption: string(input.Encryption), ConnectorID: input.ConnectorID,
 		Sources: sources,

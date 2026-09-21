@@ -157,11 +157,11 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 		clearBlueprintBackupPolicyPreparationState(state)
 		return BlueprintBackupPolicyPreparation{}, err
 	}
-	selections := make([]BackupPolicySourceSelection, len(input.Sources))
+	selections := make([]backuppolicy.BackupPolicySourceSelection, len(input.Sources))
 	for index, source := range input.Sources {
-		selections[index] = BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
+		selections[index] = backuppolicy.BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
 	}
-	if err := validateBackupPolicyReplacementInput(ctx, BackupPolicyReplacementInput{
+	if err := backuppolicy.ValidateReplacementInput(ctx, backuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: input.EnvironmentID, Enabled: input.Enabled, Frequency: input.Frequency,
 		Keep: input.Keep, Encryption: input.Encryption, ConnectorID: connectorID, Sources: selections,
 	}); err != nil {
@@ -228,11 +228,11 @@ func (repository *BackupPolicyRepository) ValidateEnvironmentBlueprintBackupPoli
 	if err != nil {
 		return err
 	}
-	selections := make([]BackupPolicySourceSelection, len(input.Sources))
+	selections := make([]backuppolicy.BackupPolicySourceSelection, len(input.Sources))
 	for index, source := range input.Sources {
-		selections[index] = BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
+		selections[index] = backuppolicy.BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
 	}
-	return validateBackupPolicyReplacementInput(ctx, BackupPolicyReplacementInput{
+	return backuppolicy.ValidateReplacementInput(ctx, backuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: input.EnvironmentID, Enabled: input.Enabled, Frequency: input.Frequency,
 		Keep: input.Keep, Encryption: input.Encryption, ConnectorID: connectorID, Sources: selections,
 	})

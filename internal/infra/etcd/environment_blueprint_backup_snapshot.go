@@ -82,7 +82,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 		Policy: policy, Sources: make([]backuppolicy.BackupSourceRecord, len(policy.SourceIDs)), Found: true,
 	}
 	offset := 0
-	selections := make([]BackupPolicySourceSelection, len(policy.SourceIDs))
+	selections := make([]backuppolicy.BackupPolicySourceSelection, len(policy.SourceIDs))
 	for index, sourceID := range policy.SourceIDs {
 		primary, owner := support.Values[offset], support.Values[offset+1]
 		offset += 2
@@ -94,9 +94,9 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 			return EnvironmentBlueprintBackupPolicySnapshot{}, recordcodec.CorruptRecord()
 		}
 		snapshot.Sources[index] = source
-		selections[index] = BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
+		selections[index] = backuppolicy.BackupPolicySourceSelection{Kind: source.Kind, TargetID: source.TargetID}
 	}
-	if err := validateBackupPolicyReplacementInput(ctx, BackupPolicyReplacementInput{
+	if err := backuppolicy.ValidateReplacementInput(ctx, backuppolicy.BackupPolicyReplacementInput{
 		EnvironmentID: environmentID, Enabled: policy.Enabled, Frequency: policy.Frequency,
 		Keep: policy.Keep, Encryption: policy.Encryption, ConnectorID: policy.ConnectorID,
 		Sources: selections,

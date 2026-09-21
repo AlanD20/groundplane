@@ -14,7 +14,7 @@ import (
 
 func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	ctx context.Context,
-	input BackupPolicyReplacementInput,
+	input backuppolicy.BackupPolicyReplacementInput,
 	projectID string,
 	tenantID string,
 	now time.Time,

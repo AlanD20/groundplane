@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"time"
 
@@ -31,7 +32,7 @@ func (repository *durableBackupPolicyRepository) GetBackupPolicyProjection(
 
 func (repository *durableBackupPolicyRepository) PrepareBackupPolicyReplacement(
 	ctx context.Context,
-	input etcd.BackupPolicyReplacementInput,
+	input backuppolicy.BackupPolicyReplacementInput,
 ) (etcd.PreparedBackupPolicyReplacement, bool, error) {
 	prepared, err := repository.repository.PrepareBackupPolicyReplacement(ctx, input)
 	return prepared, prepared.RequiresInitialKey(), err

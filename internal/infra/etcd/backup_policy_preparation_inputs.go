@@ -9,74 +9,12 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"time"
 )
-
-func validateBackupPolicyReplacementInput(
-	ctx context.Context,
-	input BackupPolicyReplacementInput,
-) error {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return err
-	}
-	if err := recordcodec.ValidateID(ids.KindEnvironment, input.EnvironmentID); err != nil {
-		return err
-	}
-	if len(input.Sources) > backuppolicy.MaximumBackupPolicySources {
-		return errs.New(
-			errs.KindValidationFailed,
-			"backup policy may select at most 12 sources",
-		)
-	}
-	configured := input.Frequency != "" || input.Keep != 0 || input.Encryption != "" ||
-		input.ConnectorID != "" || len(input.Sources) != 0
-	if input.Enabled || configured {
-		if input.Frequency == "" || input.Keep <= 0 || input.Keep > backuppolicy.MaximumBackupPolicyKeep ||
-			(input.Encryption != "age" && input.Encryption != "none") ||
-			input.Enabled && (len(input.Sources) == 0 || input.ConnectorID == "") {
-			return errs.New(errs.KindValidationFailed, "configured backup policy is incomplete")
-		}
-		if err := backuppolicy.ValidateFrequency(input.Frequency); err != nil {
-			return err
-		}
-		if err := recordcodec.ValidateID(ids.KindConnector, input.ConnectorID); err != nil {
-			return err
-		}
-	}
-	seen := make(map[struct {
-		kind     core.BackupSourceKind
-		targetID string
-	}]struct{}, len(input.Sources))
-	for _, source := range input.Sources {
-		probe := backuppolicy.BackupSourceRecord{
-			ID:            ids.New(ids.KindBackupSource),
-			EnvironmentID: input.EnvironmentID,
-			Kind:          source.Kind,
-			TargetID:      source.TargetID,
-			CreatedAt:     time.Now().UTC(),
-		}
-		if err := backuppolicy.ValidateBackupSourceRecord(probe); err != nil {
-			return err
-		}
-		identity := struct {
-			kind     core.BackupSourceKind
-			targetID string
-		}{kind: source.Kind, targetID: source.TargetID}
-		if _, duplicate := seen[identity]; duplicate {
-			return errs.New(errs.KindValidationFailed, "backup policy source identities must be unique")
-		}
-		seen[identity] = struct{}{}
-		if source.Kind == core.BackupSourceConfig && input.Encryption != "age" {
-			return errs.New(errs.KindValidationFailed, "config backup source requires age encryption")
-		}
-	}
-	return nil
-}
 
 func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 	ctx context.Context,
 	environmentID string,
-	selection BackupPolicySourceSelection,
+	selection backuppolicy.BackupPolicySourceSelection,
 ) error {
 	if selection.Kind == core.BackupSourceConfig {
 		return nil
