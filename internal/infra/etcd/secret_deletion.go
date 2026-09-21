@@ -93,7 +93,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		task.IdempotencyKey = marker.Locator.Key
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -104,7 +104,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstoneValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

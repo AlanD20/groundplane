@@ -241,7 +241,7 @@ func validateVolumeRemovalInitialBinding(
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {

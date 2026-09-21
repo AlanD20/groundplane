@@ -103,7 +103,7 @@ func (repository *TaskRepository) prepareTaskTerminalJournal(
 	if err != nil {
 		return taskTerminalJournalPreparation{}, err
 	}
-	terminalValue, err := encodeTaskRecord(terminal)
+	terminalValue, err := EncodeTaskRecord(terminal)
 	if err != nil {
 		return taskTerminalJournalPreparation{}, err
 	}

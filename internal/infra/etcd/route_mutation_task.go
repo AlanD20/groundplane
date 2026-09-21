@@ -141,7 +141,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	defer configuration.clear()
 	defer func() { publicationErr = configuration.finish(ctx, repository.store, publicationErr) }()
 
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

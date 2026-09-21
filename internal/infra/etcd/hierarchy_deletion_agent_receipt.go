@@ -38,7 +38,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 	if taskRead.Entry == nil {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	task, err := decodeTaskRecord(taskRead.Entry.Value)
+	task, err := DecodeTaskRecord(taskRead.Entry.Value)
 	clear(taskRead.Entry.Value)
 	if err != nil || task.ID != entry.CurrentTaskID || task.OperationID != entry.ChildOperationID {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
@@ -146,7 +146,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 		task.Params[taskjournal.TaskHierarchyDeletionParentParam] != operation.Tombstone.OperationID {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return err
 	}

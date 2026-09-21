@@ -23,7 +23,7 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 		!execution.ActiveReference || execution.ReconciliationRequired {
 		return scriptTerminalSourceRelease{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
 	}
-	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, status, *terminalAt)
+	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusRunning, status, *terminalAt)
 	if err != nil || terminal.RetainUntil == nil || terminal.FinishedAt == nil {
 		return scriptTerminalSourceRelease{}, taskassignments.CorruptTaskAssignment()
 	}

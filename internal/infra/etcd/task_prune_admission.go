@@ -57,7 +57,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	defer etcdstore.ClearValues(taskResult.Values)
 	taskValue := taskResult.Values[0]
-	task, err := decodeTaskRecord(taskValue.Value)
+	task, err := DecodeTaskRecord(taskValue.Value)
 	if err != nil || task.ID != taskID || !taskjournal.IsTerminalTaskStatus(task.Status) ||
 		task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(retainUntil) {

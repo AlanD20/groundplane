@@ -87,7 +87,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		if previousTaskRead.Entry == nil {
 			return hierarchydeletion.HierarchyDeletionChildEntry{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
-		previousTask, decodeErr := decodeTaskRecord(previousTaskRead.Entry.Value)
+		previousTask, decodeErr := DecodeTaskRecord(previousTaskRead.Entry.Value)
 		clear(previousTaskRead.Entry.Value)
 		if decodeErr != nil || previousTask.ID != previous.CurrentTaskID ||
 			previousTask.OperationID != previous.ChildOperationID {
@@ -171,7 +171,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, errs.New(errs.KindStateConflict, "hierarchy deletion parent Task changed")
 	}
 	defer clear(parentTask.Entry.Value)
-	parent, err := decodeTaskRecord(parentTask.Entry.Value)
+	parent, err := DecodeTaskRecord(parentTask.Entry.Value)
 	if err != nil || parent.ID != operation.Tombstone.CurrentTaskID || parent.Executor != taskjournal.TaskExecutorController ||
 		parent.Status != taskjournal.TaskStatusRunning || parent.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion ||
 		parent.Params[taskjournal.TaskHierarchyDeletionOperationParam] != operation.Tombstone.OperationID {
@@ -199,10 +199,10 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		Steps: taskSteps, TimeoutSeconds: action.AgentProcedure.TimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}

@@ -121,7 +121,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		task.IdempotencyKey = marker.Locator.Key
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -147,7 +147,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstoneValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -403,7 +403,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		parentResult.Values[4] == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing Zone parent Task is missing")
 	}
-	parent, err := decodeTaskRecord(parentResult.Values[0].Value)
+	parent, err := DecodeTaskRecord(parentResult.Values[0].Value)
 	if err != nil || parent.ID != parentTaskID || parent.Executor != taskjournal.TaskExecutorController ||
 		parent.Status != taskjournal.TaskStatusRunning || parent.Target != zone.Record.Desired.ID ||
 		parent.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone {
@@ -444,7 +444,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		task.IdempotencyKey = marker.Locator.Key
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -457,7 +457,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstoneValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

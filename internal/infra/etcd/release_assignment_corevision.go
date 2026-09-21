@@ -14,7 +14,7 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 	current TaskAssignment,
 	evidenceConditions []etcdstore.Condition,
 ) error {
-	taskValue, err := encodeTaskRecord(current.Task.Record)
+	taskValue, err := EncodeTaskRecord(current.Task.Record)
 	if err != nil {
 		return err
 	}

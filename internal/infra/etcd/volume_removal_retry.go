@@ -29,7 +29,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 			"Volume removal attempt is not retryable",
 		)
 	}
-	retry, err := cloneRetryTask(source.Record, retryID, actor, marker.CreatedAt)
+	retry, err := CloneRetryTask(source.Record, retryID, actor, marker.CreatedAt)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -138,7 +138,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 				return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 			}
 			defer etcdstore.ClearValues(prior.Values)
-			origin, err = decodeTaskRecord(prior.Values[0].Value)
+			origin, err = DecodeTaskRecord(prior.Values[0].Value)
 			if err != nil {
 				return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 			}
@@ -188,7 +188,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	runtime.AttemptOrdinal, runtime.UpdatedAt = attempt.Ordinal, retry.CreatedAt
 	retry.Params = EnvironmentVolumeRemovalTaskParams(runtime, attempt.Ordinal)
 	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	taskValue, err := encodeTaskRecord(retry)
+	taskValue, err := EncodeTaskRecord(retry)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

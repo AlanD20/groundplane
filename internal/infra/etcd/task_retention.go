@@ -13,7 +13,7 @@ import (
 )
 
 func prepareTaskRetentionIndex(task TaskRecord) (string, []byte, error) {
-	if validateTaskRecord(task) != nil || !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil {
+	if ValidateTaskRecord(task) != nil || !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil {
 		return "", nil, errs.New(errs.KindInternal, "terminal Task retention metadata is invalid")
 	}
 	key := taskjournal.TaskRetentionIndexKey(task.ID, *task.RetainUntil)

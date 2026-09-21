@@ -40,7 +40,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		)
 	}
 	defer etcdstore.ClearValues(taskRead.Values)
-	task, err := decodeTaskRecord(taskRead.Values[0].Value)
+	task, err := DecodeTaskRecord(taskRead.Values[0].Value)
 	if err != nil || task.ID != input.TaskID {
 		return backupCheckpointPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 	}

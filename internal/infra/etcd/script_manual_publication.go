@@ -64,7 +64,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err := validateTaskInitiation(task, initiation, true); err != nil {
 		return result, err
 	}
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return result, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -138,7 +138,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	defer clear(executionValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return result, err
 	}

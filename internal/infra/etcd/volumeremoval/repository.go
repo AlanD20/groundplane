@@ -530,7 +530,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) pendingRecoveryFenc
 		return nil, errs.New(errs.KindStateConflict, "volume removal pending attempt is missing")
 	}
 	defer clearKeyValues(read.Values)
-	origin, err := etcd.DecodeCapabilityTaskRecord(read.Values[0].Value)
+	origin, err := etcd.DecodeTaskRecord(read.Values[0].Value)
 	if err != nil || etcd.ValidateEnvironmentVolumeRemovalPendingRecovery(
 		state.Runtime.Record, state.Progress.Record, pending, origin,
 	) != nil {

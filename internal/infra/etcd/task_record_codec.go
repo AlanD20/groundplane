@@ -48,8 +48,8 @@ type taskRecordData struct {
 	ManagedComponentTeardownSources []projectionrecord.ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
 }
 
-func encodeTaskRecord(record TaskRecord) ([]byte, error) {
-	if err := validateTaskRecord(record); err != nil {
+func EncodeTaskRecord(record TaskRecord) ([]byte, error) {
+	if err := ValidateTaskRecord(record); err != nil {
 		return nil, err
 	}
 	value, err := recordcodec.Encode("task", taskRecordToData(record))
@@ -66,9 +66,9 @@ func encodeTaskRecord(record TaskRecord) ([]byte, error) {
 	return value, nil
 }
 
-func EncodeTaskStorageRecord(record TaskRecord) ([]byte, error) { return encodeTaskRecord(record) }
+func EncodeTaskStorageRecord(record TaskRecord) ([]byte, error) { return EncodeTaskRecord(record) }
 
-func decodeTaskRecord(value []byte) (TaskRecord, error) {
+func DecodeTaskRecord(value []byte) (TaskRecord, error) {
 	data, err := recordcodec.Decode[taskRecordData](value, "task")
 	if err != nil {
 		return TaskRecord{}, err
@@ -77,13 +77,13 @@ func decodeTaskRecord(value []byte) (TaskRecord, error) {
 	if err != nil {
 		return TaskRecord{}, errs.New(errs.KindInternal, "task record has invalid timestamps")
 	}
-	if err := validateTaskRecord(record); err != nil {
+	if err := ValidateTaskRecord(record); err != nil {
 		return TaskRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
 
-func DecodeTaskStorageRecord(value []byte) (TaskRecord, error) { return decodeTaskRecord(value) }
+func DecodeTaskStorageRecord(value []byte) (TaskRecord, error) { return DecodeTaskRecord(value) }
 
 func taskRecordToData(record TaskRecord) taskRecordData {
 	return taskRecordData{

@@ -45,7 +45,7 @@ func validateEnvironmentVolumeRemovalTask(
 	runtime removalrecord.Runtime,
 	attempt removalrecord.Attempt,
 ) error {
-	if err := etcd.ValidateCapabilityTaskRecord(task); err != nil {
+	if err := etcd.ValidateTaskRecord(task); err != nil {
 		return err
 	}
 	if err := removalrecord.ValidateRuntime(runtime); err != nil {

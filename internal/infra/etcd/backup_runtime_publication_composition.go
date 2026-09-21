@@ -132,11 +132,11 @@ func prepareBackupTaskIdempotencyPlan(
 		record.IdempotencyKey = marker.Locator.Key
 	}
 	record.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if validateTaskRecord(record) != nil || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil ||
+	if ValidateTaskRecord(record) != nil || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil ||
 		validateTaskInitiation(record, initiation, true) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "backup Task publication is invalid")
 	}
-	taskValue, err := encodeTaskRecord(record)
+	taskValue, err := EncodeTaskRecord(record)
 	if err != nil {
 		return nil, err
 	}

@@ -70,7 +70,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		if blueprintAbortChange.applies {
 			terminalAt = blueprintAbortChange.terminalAt
 		}
-		terminal, err := transitionTaskStatus(current.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, terminalAt)
+		terminal, err := TransitionTaskStatus(current.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, terminalAt)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -118,7 +118,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		terminalValue, err := encodeTaskRecord(terminal)
+		terminalValue, err := EncodeTaskRecord(terminal)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}

@@ -185,7 +185,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		!creation.Marker.UpdatedAt.Equal(creation.Marker.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation marker is invalid")
 	}
-	if err := validateTaskRecord(creation.Task); err != nil {
+	if err := ValidateTaskRecord(creation.Task); err != nil {
 		return err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(creation.Marker); err != nil {

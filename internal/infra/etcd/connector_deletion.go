@@ -115,7 +115,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 
 	task = cloneTaskRecord(task)
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -131,7 +131,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

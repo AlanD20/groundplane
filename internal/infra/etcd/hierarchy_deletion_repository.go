@@ -271,7 +271,7 @@ func (repository *HierarchyDeletionRepository) Begin(
 		return HierarchyDeletionBeginResult{}, err
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&begin.Marker.Locator)
-	encodedTask, err := encodeTaskRecord(task)
+	encodedTask, err := EncodeTaskRecord(task)
 	if err != nil {
 		return HierarchyDeletionBeginResult{}, err
 	}
@@ -383,7 +383,7 @@ func hierarchyDeletionTask(
 		}, TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout / time.Second),
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
 	}
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return TaskRecord{}, err
 	}
 	return task, nil

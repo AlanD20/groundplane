@@ -121,7 +121,7 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	}
 	defer etcdstore.ClearValues(primary.Values)
 	execution, executionErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](primary.Values[0].Value, "script-execution")
-	task, taskErr := decodeTaskRecord(primary.Values[1].Value)
+	task, taskErr := DecodeTaskRecord(primary.Values[1].Value)
 	assignment, assignmentErr := taskassignments.DecodeTaskAssignment(primary.Values[2].Value)
 	if executionErr != nil || taskErr != nil || assignmentErr != nil ||
 		scriptexecutions.ValidateScriptExecutionRecord(execution) != nil {

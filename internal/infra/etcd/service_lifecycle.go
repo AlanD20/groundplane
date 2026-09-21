@@ -128,7 +128,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	defer publication.clear()
 	defer func() { returnErr = publication.finish(ctx, repository.store, returnErr) }()
 	task = publication.task
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	serviceValue, err := servicerecord.EncodeServiceRuntimeRecord(servicerecord.NewServiceRuntimeRecord(replacement))
@@ -136,7 +136,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(serviceValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

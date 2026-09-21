@@ -162,7 +162,7 @@ func (repository *TaskRepository) GetTask(
 	if result.Entry == nil {
 		return etcdstore.Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 	}
-	record, err := decodeTaskRecord(result.Entry.Value)
+	record, err := DecodeTaskRecord(result.Entry.Value)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
@@ -297,7 +297,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		}
 		page, err := recordquery.ListPrimary(
 			ctx, repository.store, "tasks", "global", "-", taskjournal.TaskPrefix, ids.KindTask,
-			request, decodeTaskRecord, identity, func(TaskRecord) bool { return true },
+			request, DecodeTaskRecord, identity, func(TaskRecord) bool { return true },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopePlatformWorkspace:
@@ -309,7 +309,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		}
 		page, err := recordquery.ListIndex(
 			ctx, repository.store, "tasks", "workspace", "platform", taskjournal.TaskWorkspacePlatformPrefix,
-			taskjournal.TaskStorageKey, ids.KindTask, request, decodeTaskRecord, identity,
+			taskjournal.TaskStorageKey, ids.KindTask, request, DecodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
@@ -320,7 +320,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		page, err := recordquery.ListIndex(
 			ctx, repository.store, "tasks", "workspace", scope.ID,
 			taskjournal.TaskWorkspaceTenantPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
-			decodeTaskRecord, identity,
+			DecodeTaskRecord, identity,
 			func(record TaskRecord) bool {
 				return record.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant && record.Owner.TenantID == scope.ID
 			},
@@ -339,7 +339,7 @@ func (repository *TaskRepository) ListTasksByScope(
 			taskjournal.TaskPrefix,
 			ids.KindTask,
 			request,
-			decodeTaskRecord,
+			DecodeTaskRecord,
 			identity,
 			func(record TaskRecord) bool { return record.Owner.ProjectID == scope.ID },
 		)
@@ -351,7 +351,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		page, err := recordquery.ListIndex(
 			ctx, repository.store, "tasks", "environment", scope.ID,
 			taskjournal.TaskEnvironmentIndexPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
-			decodeTaskRecord, identity,
+			DecodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.EnvironmentID == scope.ID },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
@@ -492,7 +492,7 @@ func (repository *TaskRepository) ListTaskEvents(
 	if taskResult.Values[0] == nil {
 		return TaskEventSnapshot{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 	}
-	task, err := decodeTaskRecord(taskResult.Values[0].Value)
+	task, err := DecodeTaskRecord(taskResult.Values[0].Value)
 	if err != nil {
 		return TaskEventSnapshot{}, err
 	}

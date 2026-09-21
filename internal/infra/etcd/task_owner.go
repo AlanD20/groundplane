@@ -194,7 +194,7 @@ func newInheritedTaskInitiation(
 	parent etcdstore.Versioned[TaskRecord],
 	actor taskjournal.TaskActor,
 ) (TaskInitiation, error) {
-	if err := validateTaskRecord(parent.Record); err != nil {
+	if err := ValidateTaskRecord(parent.Record); err != nil {
 		return TaskInitiation{}, err
 	}
 	if parent.Revision <= 0 {
@@ -283,7 +283,7 @@ func prepareTaskOwnerIndexPlan(
 	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
-	if err := validateTaskRecord(record); err != nil {
+	if err := ValidateTaskRecord(record); err != nil {
 		return nil, nil, nil, err
 	}
 	if classify == nil {
@@ -301,7 +301,7 @@ func prepareTaskOwnerIndexPlan(
 	if taskConditionIndex < 0 {
 		return nil, nil, nil, errs.New(errs.KindInternal, "task publication compare is missing")
 	}
-	encoded, err := encodeTaskRecord(record)
+	encoded, err := EncodeTaskRecord(record)
 	if err != nil {
 		return nil, nil, nil, err
 	}

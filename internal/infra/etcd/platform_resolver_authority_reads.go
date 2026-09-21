@@ -159,7 +159,7 @@ func (repository *TaskRepository) platformResolverActiveAtRevision(
 	if state == nil || state.ReadRevision != revision || len(state.Values) != 1 || state.Values[0] == nil {
 		return nil, errs.New(errs.KindStateConflict, "platform resolver active Task is missing")
 	}
-	activeTask, err := decodeTaskRecord(state.Values[0].Value)
+	activeTask, err := DecodeTaskRecord(state.Values[0].Value)
 	if err != nil || !isPlatformDNSResolverTaskAttempt(activeTask) || activeTask.ID != string(active.Value) ||
 		activeTask.Target != componentID || (activeTask.Status != taskjournal.TaskStatusPending && activeTask.Status != taskjournal.TaskStatusRunning) {
 		return nil, errs.New(errs.KindStateConflict, "platform resolver active Task is invalid")

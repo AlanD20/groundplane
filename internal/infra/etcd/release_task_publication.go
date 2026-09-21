@@ -22,7 +22,7 @@ func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
 	if repository == nil || repository.store == nil {
 		return releaseTaskPublicationFragment{}, errs.New(errs.KindInternal, "task repository is not configured")
 	}
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return releaseTaskPublicationFragment{}, err
 	}
 	if task.Executor != taskjournal.TaskExecutorAgent || task.Status != taskjournal.TaskStatusPending ||
@@ -32,7 +32,7 @@ func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
 			"release task publication shape is invalid",
 		)
 	}
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return releaseTaskPublicationFragment{}, err
 	}

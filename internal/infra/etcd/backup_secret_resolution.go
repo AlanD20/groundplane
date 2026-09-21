@@ -161,7 +161,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 			"backup task assignment evidence changed",
 		)
 	}
-	task, err := decodeTaskRecord(base.Values[0].Value)
+	task, err := DecodeTaskRecord(base.Values[0].Value)
 	if err != nil {
 		return BackupSecretResolutionEvidence{}, errs.New(
 			errs.KindInternal,

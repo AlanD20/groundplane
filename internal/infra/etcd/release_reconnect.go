@@ -58,7 +58,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 					Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 					ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
 				}
-				taskBytes, _ := encodeTaskRecord(task)
+				taskBytes, _ := EncodeTaskRecord(task)
 				assignmentBytes, _ := taskassignments.EncodeTaskAssignment(assignment)
 				transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
 					ctx,

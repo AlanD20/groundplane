@@ -26,7 +26,7 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
 	}
 	defer etcdstore.ClearValues(taskResult.Values)
-	task, err := decodeTaskRecord(taskResult.Values[0].Value)
+	task, err := DecodeTaskRecord(taskResult.Values[0].Value)
 	if err != nil || task.ID != current.Record.TaskID || !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
 	}

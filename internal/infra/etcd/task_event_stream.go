@@ -198,7 +198,7 @@ func (stream *TaskEventStream) consumeTask(event etcdstore.Event) (int64, bool, 
 	if event.Key != taskjournal.TaskStorageKey(stream.taskID) {
 		return 0, false, errs.New(errs.KindInternal, "watched Task primary does not match its key")
 	}
-	record, err := decodeTaskRecord(event.Value)
+	record, err := DecodeTaskRecord(event.Value)
 	if err != nil {
 		return 0, false, err
 	}

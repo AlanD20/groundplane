@@ -52,7 +52,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 				input.Identity.TaskID,
 			)
 		}
-		task, err := decodeTaskRecord(taskValue.Value)
+		task, err := DecodeTaskRecord(taskValue.Value)
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
@@ -169,7 +169,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		encodedTask, err := encodeTaskRecord(prepared.Task)
+		encodedTask, err := EncodeTaskRecord(prepared.Task)
 		if err != nil {
 			return TaskEventAppend{}, err
 		}

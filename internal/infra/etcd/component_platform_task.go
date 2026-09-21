@@ -90,7 +90,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err := validateTaskInitiation(task, initiation, true); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -117,7 +117,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(componentValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

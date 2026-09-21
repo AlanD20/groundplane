@@ -204,7 +204,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	executions []scriptexecutions.ScriptExecutionRecord,
 	values []*etcdstore.KeyValue,
 ) (pendingScriptAbortChange, error) {
-	terminal, err := transitionTaskStatus(task.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, requestedTerminalAt)
+	terminal, err := TransitionTaskStatus(task.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, requestedTerminalAt)
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}

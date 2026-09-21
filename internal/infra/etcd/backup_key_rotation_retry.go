@@ -25,7 +25,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 			"backup key rotation retry actor must be operator",
 		)
 	}
-	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
+	retry, err := CloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -110,7 +110,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		clear(rotationValue)
 		return IdempotencyTransactionResult{}, err
 	}
-	taskValue, err := encodeTaskRecord(retry)
+	taskValue, err := EncodeTaskRecord(retry)
 	if err != nil {
 		clear(rotationValue)
 		clear(lockValue)

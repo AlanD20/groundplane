@@ -45,7 +45,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	if sourceResult == nil || sourceResult.Entry == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "runner create task is missing")
 	}
-	source, err := decodeTaskRecord(sourceResult.Entry.Value)
+	source, err := DecodeTaskRecord(sourceResult.Entry.Value)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -101,13 +101,13 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		CreatedAt: task.CreatedAt,
 	}
 	task = bindRunnerTaskMarker(task, marker)
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

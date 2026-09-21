@@ -43,7 +43,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	retry = bindRunnerTaskMarker(retry, marker)
-	if err := validateTaskRecord(retry); err != nil {
+	if err := ValidateTaskRecord(retry); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	idempotency, err := NewIdempotencyRepository(repository.store)
@@ -67,7 +67,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if sourceResult == nil || sourceResult.Entry == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindTaskNotFound, "source task was not found")
 	}
-	source, err := decodeTaskRecord(sourceResult.Entry.Value)
+	source, err := DecodeTaskRecord(sourceResult.Entry.Value)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -126,7 +126,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(recordValue)
-	taskValue, err := encodeTaskRecord(retry)
+	taskValue, err := EncodeTaskRecord(retry)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

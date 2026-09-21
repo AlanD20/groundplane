@@ -147,7 +147,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epochValue)
-	taskValue, err := encodeTaskRecord(creation.Task)
+	taskValue, err := EncodeTaskRecord(creation.Task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

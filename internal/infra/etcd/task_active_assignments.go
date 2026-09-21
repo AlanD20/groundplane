@@ -107,7 +107,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 			!bytes.Equal(lifecycleValue.Value, assignmentValue.Value) {
 			return nil, errs.New(errs.KindInternal, "durable Task assignment copies do not match")
 		}
-		task, err := decodeTaskRecord(taskValue.Value)
+		task, err := DecodeTaskRecord(taskValue.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +230,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		!bytes.Equal(companions.Values[2].Value, claimValue.Value) {
 		return nil, errs.New(errs.KindInternal, "Controller Task assignment copies do not match")
 	}
-	task, err := decodeTaskRecord(taskValue.Value)
+	task, err := DecodeTaskRecord(taskValue.Value)
 	if err != nil {
 		return nil, err
 	}

@@ -36,7 +36,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
 	defer etcdstore.ClearValues(taskResult.Values)
-	task, err := decodeTaskRecord(taskResult.Values[0].Value)
+	task, err := DecodeTaskRecord(taskResult.Values[0].Value)
 	if err != nil || task.ID != input.TaskID {
 		return nil, backupruntime.CorruptBackupRuntimeRecord()
 	}

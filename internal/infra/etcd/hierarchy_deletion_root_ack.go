@@ -76,7 +76,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		return etcdstore.Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 	}
 	taskValue := read.Values[0]
-	task, err := decodeTaskRecord(taskValue.Value)
+	task, err := DecodeTaskRecord(taskValue.Value)
 	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorController ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(
@@ -136,11 +136,11 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
+	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	terminalValue, err := encodeTaskRecord(terminal)
+	terminalValue, err := EncodeTaskRecord(terminal)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}

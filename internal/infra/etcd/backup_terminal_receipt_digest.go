@@ -6,7 +6,7 @@ import (
 )
 
 func backupTerminalTaskDigest(task TaskRecord) (string, error) {
-	value, err := encodeTaskRecord(task)
+	value, err := EncodeTaskRecord(task)
 	if err != nil {
 		return "", err
 	}

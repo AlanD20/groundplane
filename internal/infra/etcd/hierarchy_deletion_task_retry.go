@@ -19,7 +19,7 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 	provided *TaskInitiation,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
+	retry, err := CloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -56,13 +56,13 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 		)
 	}
 	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskRecord(retry); err != nil {
+	if err := ValidateTaskRecord(retry); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
 		return existing, err
 	}
-	taskValue, err := encodeTaskRecord(retry)
+	taskValue, err := EncodeTaskRecord(retry)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

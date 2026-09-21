@@ -52,7 +52,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		return err
 	}
 	task.Params[TaskPlatformComponentDesiredSHA256Param] = desiredDigest
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return err
 	}
 	if err := platformcomponents.ValidatePlatformComponentTaskRenderInput(renderInput); err != nil {
@@ -68,7 +68,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		return err
 	}
 	defer clear(renderValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 				"platform resolver predecessor Task is missing",
 			)
 		}
-		predecessor, decodeErr := decodeTaskRecord(predecessorRead.Values[0].Value)
+		predecessor, decodeErr := DecodeTaskRecord(predecessorRead.Values[0].Value)
 		if decodeErr != nil {
 			return hostResolutionReconciliationChange{}, decodeErr
 		}
@@ -262,7 +262,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		}
 	}
 	task.PlanHash = renderInput.ExecutionPlanSHA256
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
 	if task.Params[TaskPlatformComponentDesiredSHA256Param] != renderInput.DesiredSHA256 ||
@@ -306,7 +306,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		clear(renderValue)
 		return hostResolutionReconciliationChange{}, err

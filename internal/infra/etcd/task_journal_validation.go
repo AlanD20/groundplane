@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 )
 
-func validateTaskRecord(record TaskRecord) error {
+func ValidateTaskRecord(record TaskRecord) error {
 	if _, _, err := taskConfigurationCondition(record); err != nil {
 		return err
 	}

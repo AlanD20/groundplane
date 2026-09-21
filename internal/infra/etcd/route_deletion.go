@@ -97,7 +97,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		task.IdempotencyKey = marker.Locator.Key
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -122,7 +122,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

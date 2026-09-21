@@ -24,7 +24,7 @@ func prepareTaskEvent(
 	existing *taskjournal.TaskEventDedupRecord,
 	receivedAt time.Time,
 ) (PreparedTaskEvent, error) {
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return PreparedTaskEvent{}, err
 	}
 	if err := taskjournal.ValidateTaskEventIdentity(input.Identity); err != nil {
@@ -96,7 +96,7 @@ func prepareTaskEvent(
 	updated.EventCount = min(updated.EventCount+1, taskjournal.MaximumTaskEvents)
 	updated.NextEventSequence++
 	updated.UpdatedAt = eventAt
-	if err := validateTaskRecord(updated); err != nil {
+	if err := ValidateTaskRecord(updated); err != nil {
 		return PreparedTaskEvent{}, err
 	}
 	dedup := taskjournal.TaskEventDedupRecord{Identity: input.Identity, Sequence: sequence, PayloadSHA256: hash}

@@ -69,13 +69,13 @@ func newTaskRecord(
 	}
 }
 
-func transitionTaskStatus(
+func TransitionTaskStatus(
 	record TaskRecord,
 	expected taskjournal.TaskStatus,
 	next taskjournal.TaskStatus,
 	at time.Time,
 ) (TaskRecord, error) {
-	if err := validateTaskRecord(record); err != nil {
+	if err := ValidateTaskRecord(record); err != nil {
 		return TaskRecord{}, err
 	}
 	if record.Status != expected {
@@ -115,7 +115,7 @@ func transitionTaskStatus(
 		retention := at.Add(taskjournal.TaskRetention)
 		replacement.RetainUntil = &retention
 	}
-	if err := validateTaskRecord(replacement); err != nil {
+	if err := ValidateTaskRecord(replacement); err != nil {
 		return TaskRecord{}, err
 	}
 	return replacement, nil

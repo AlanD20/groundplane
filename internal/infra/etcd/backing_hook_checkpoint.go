@@ -92,7 +92,7 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Backing hook assignment is unavailable")
 	}
 	defer etcdstore.ClearValues(primary.Values)
-	task, taskErr := decodeTaskRecord(primary.Values[0].Value)
+	task, taskErr := DecodeTaskRecord(primary.Values[0].Value)
 	assignment, assignmentErr := taskassignments.DecodeTaskAssignment(primary.Values[1].Value)
 	if taskErr != nil || assignmentErr != nil {
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindInternal, "Backing hook assignment is corrupt")

@@ -73,7 +73,7 @@ func (repository *TaskRepository) retryTask(
 	if source.Record.Type == taskjournal.TaskRemove && source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		return repository.retryVolumeRemovalTask(ctx, source, retryTaskID, actor, marker)
 	}
-	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
+	retry, err := CloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -111,7 +111,7 @@ func (repository *TaskRepository) retryTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskRecord(retry); err != nil {
+	if err := ValidateTaskRecord(retry); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(
@@ -122,7 +122,7 @@ func (repository *TaskRepository) retryTask(
 		return existing, err
 	}
 
-	taskValue, err := encodeTaskRecord(retry)
+	taskValue, err := EncodeTaskRecord(retry)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

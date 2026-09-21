@@ -41,14 +41,14 @@ func (repository *TaskRepository) CreateTask(
 		record.IdempotencyKey = marker.Locator.Key
 	}
 	record.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if err := validateTaskRecord(record); err != nil {
+	if err := ValidateTaskRecord(record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 
-	taskValue, err := encodeTaskRecord(record)
+	taskValue, err := EncodeTaskRecord(record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -120,7 +120,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 			"backup retry source is not atomically terminal",
 		)
 	}
-	task, taskErr := decodeTaskRecord(read.Values[0].Value)
+	task, taskErr := DecodeTaskRecord(read.Values[0].Value)
 	run, runErr := backupruntime.DecodeBackupRunRecord(read.Values[1].Value)
 	receipt, receiptErr := backupruntime.DecodeBackupTerminalReceiptRecord(read.Values[2].Value)
 	if taskErr != nil || runErr != nil || receiptErr != nil || task.ID != taskID ||

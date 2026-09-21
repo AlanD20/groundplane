@@ -62,7 +62,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		return false, taskjournal.CorruptPruneIntent()
 	}
 	defer etcdstore.ClearValues(read.Values)
-	task, err := decodeTaskRecord(read.Values[0].Value)
+	task, err := DecodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != taskID || !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(deadline) {
 		return false, taskjournal.CorruptPruneIntent()

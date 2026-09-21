@@ -67,7 +67,7 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 			"backup key rotation Task publication is invalid",
 		)
 	}
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -79,7 +79,7 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	}
 	task = cloneTaskRecord(task)
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

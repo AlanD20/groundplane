@@ -60,7 +60,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
-	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
+	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
@@ -69,7 +69,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 		AssignmentID: assignment.AssignmentID,
 		AgentID:      assignment.AgentID, AgentGeneration: assignment.AgentGeneration,
 	}
-	if err := validateTaskRecord(terminal); err != nil {
+	if err := ValidateTaskRecord(terminal); err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
 	transitionedMarker, markerKey, retentionKey, err := prepareTerminalTaskMarker(
@@ -102,7 +102,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 		)
 	}
 	defer etcdstore.ClearValues(anchor.Values)
-	currentTaskValue, err := encodeTaskRecord(task)
+	currentTaskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
@@ -118,7 +118,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 			"backup Task terminal authority changed",
 		)
 	}
-	storedTask, taskErr := decodeTaskRecord(anchor.Values[0].Value)
+	storedTask, taskErr := DecodeTaskRecord(anchor.Values[0].Value)
 	storedAssignment, assignmentErr := taskassignments.DecodeTaskAssignment(anchor.Values[1].Value)
 	if taskErr != nil || assignmentErr != nil || !bytes.Equal(anchor.Values[0].Value, currentTaskValue) ||
 		storedTask.ID != task.ID ||
@@ -137,7 +137,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
-	terminalValue, err := encodeTaskRecord(terminal)
+	terminalValue, err := EncodeTaskRecord(terminal)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}

@@ -186,7 +186,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 		return TaskAssignment{}, false, errs.New(errs.KindInternal, "backup Task assignment read is incomplete")
 	}
 	defer etcdstore.ClearValues(read.Values)
-	task, err := decodeTaskRecord(read.Values[0].Value)
+	task, err := DecodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorAgent ||
 		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune) {
 		return TaskAssignment{}, false, errs.New(errs.KindInternal, "backup Task assignment is corrupt")

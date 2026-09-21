@@ -48,7 +48,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			return etcdstore.Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 		}
 		taskValue := primaryAndAssignment.Values[0]
-		task, err := decodeTaskRecord(taskValue.Value)
+		task, err := DecodeTaskRecord(taskValue.Value)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -181,7 +181,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				continue
 			}
 		}
-		terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
+		terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -191,7 +191,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 			}
 		}
-		if err := validateTaskRecord(terminal); err != nil {
+		if err := ValidateTaskRecord(terminal); err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		journal, err := repository.prepareTaskTerminalJournal(

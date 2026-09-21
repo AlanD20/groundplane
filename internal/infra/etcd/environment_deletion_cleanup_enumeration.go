@@ -48,7 +48,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		)
 	}
 	defer etcdstore.ClearValues(state.Values)
-	persistedTask, err := decodeTaskRecord(state.Values[1].Value)
+	persistedTask, err := DecodeTaskRecord(state.Values[1].Value)
 	if err != nil || persistedTask.ID != task.ID || persistedTask.OperationID != task.OperationID ||
 		persistedTask.Executor != task.Executor || persistedTask.Type != task.Type ||
 		persistedTask.Target != task.Target || persistedTask.Status != task.Status {

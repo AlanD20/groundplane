@@ -103,7 +103,7 @@ func (repository *TaskRepository) claimNextTask(
 			}
 			continue
 		}
-		running, err := transitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, claimAt)
+		running, err := TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, claimAt)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
@@ -113,7 +113,7 @@ func (repository *TaskRepository) claimNextTask(
 			ClaimedTaskRevision: taskValue.ModRevision, AssignedAt: claimAt, Deadline: deadline,
 			RecoveryDeadline: recoveryDeadline, ExecutionMode: taskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
 		}
-		runningValue, err := encodeTaskRecord(running)
+		runningValue, err := EncodeTaskRecord(running)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
@@ -348,7 +348,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task primary is missing")
 			}
 			taskValue := taskRead.Values[0]
-			task, err := decodeTaskRecord(taskValue.Value)
+			task, err := DecodeTaskRecord(taskValue.Value)
 			if err != nil {
 				return taskClaimCandidate{}, false, err
 			}

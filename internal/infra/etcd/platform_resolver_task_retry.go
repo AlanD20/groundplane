@@ -69,7 +69,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 				"platform resolver retry origin is missing",
 			)
 		}
-		originRecord, decodeErr := decodeTaskRecord(originRead.Values[0].Value)
+		originRecord, decodeErr := DecodeTaskRecord(originRead.Values[0].Value)
 		if decodeErr != nil {
 			return hostResolutionReconciliationChange{}, decodeErr
 		}

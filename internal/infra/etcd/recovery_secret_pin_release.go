@@ -174,7 +174,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	if read.Values[4] == nil {
 		return true, taskjournal.CorruptPruneIntent()
 	}
-	latest, decodeErr := decodeTaskRecord(read.Values[4].Value)
+	latest, decodeErr := DecodeTaskRecord(read.Values[4].Value)
 	if decodeErr != nil || latest.ID != root.AttemptID() || latest.OperationID != task.OperationID ||
 		latest.Configuration == nil || latest.Configuration.SecretPins == nil ||
 		*latest.Configuration.SecretPins != *task.Configuration.SecretPins {

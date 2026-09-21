@@ -99,7 +99,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 		)
 	}
 	defer clearKeyValues(primary.Values)
-	task, err := etcd.DecodeCapabilityTaskRecord(primary.Values[0].Value)
+	task, err := etcd.DecodeTaskRecord(primary.Values[0].Value)
 	if err != nil || task.ID != input.TaskID || task.Status != taskjournal.TaskStatusRunning ||
 		validateEnvironmentVolumeRemovalTask(task, runtime, attempt) != nil {
 		return etcd.TaskRecord{}, nil, errs.New(

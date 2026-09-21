@@ -42,7 +42,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 			"runner readiness task is unavailable",
 		)
 	}
-	task, err := decodeTaskRecord(initial.Values[0].Value)
+	task, err := DecodeTaskRecord(initial.Values[0].Value)
 	if err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, err
 	}

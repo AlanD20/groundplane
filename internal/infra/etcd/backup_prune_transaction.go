@@ -94,7 +94,7 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 		source.Record.Target != plan.authority.environmentID {
 		return nil, errs.New(errs.KindValidationFailed, "backup prune Task retry authority is invalid")
 	}
-	expected, err := cloneRetryTask(
+	expected, err := CloneRetryTask(
 		source.Record,
 		authority.taskID,
 		taskjournal.TaskActorSystem,
@@ -131,12 +131,12 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 }
 
 func backupTaskRecordsEqual(left TaskRecord, right TaskRecord) bool {
-	leftValue, leftErr := encodeTaskRecord(left)
+	leftValue, leftErr := EncodeTaskRecord(left)
 	if leftErr != nil {
 		return false
 	}
 	defer clear(leftValue)
-	rightValue, rightErr := encodeTaskRecord(right)
+	rightValue, rightErr := EncodeTaskRecord(right)
 	if rightErr != nil {
 		return false
 	}

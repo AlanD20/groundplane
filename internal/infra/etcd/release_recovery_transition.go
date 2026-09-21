@@ -450,7 +450,7 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 		!bytes.Equal(read.Values[3].Value, assignmentValue) {
 		return false, taskassignments.CorruptTaskAssignment()
 	}
-	task, err := decodeTaskRecord(read.Values[0].Value)
+	task, err := DecodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != assignment.TaskID || task.OperationID != assignment.RestorationAuthority.OperationID ||
 		task.PlanHash != assignment.RestorationAuthority.PlanHash || task.Status != taskjournal.TaskStatusRunning {
 		return false, taskassignments.CorruptTaskAssignment()

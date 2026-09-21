@@ -100,7 +100,7 @@ func compileBlueprintTaskTerminalTransaction(
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) (BlueprintTaskTerminalTransaction, error) {
-	if !isBlueprintCandidateTerminalTask(task) || validateTaskRecord(task) != nil ||
+	if !isBlueprintCandidateTerminalTask(task) || ValidateTaskRecord(task) != nil ||
 		task.TerminalAssignment == nil || task.Owner.EnvironmentID == "" ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Owner.EnvironmentID {
 		return BlueprintTaskTerminalTransaction{}, errs.New(
@@ -108,7 +108,7 @@ func compileBlueprintTaskTerminalTransaction(
 			"Blueprint terminal Task authority is invalid",
 		)
 	}
-	value, err := encodeTaskRecord(task)
+	value, err := EncodeTaskRecord(task)
 	if err != nil {
 		return BlueprintTaskTerminalTransaction{}, err
 	}

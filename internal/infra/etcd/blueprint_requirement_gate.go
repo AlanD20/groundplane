@@ -356,7 +356,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 			if taskRead.Values[0] == nil {
 				return blueprintRequirementGateClaimEvidence{}, true, false, nil
 			}
-			producer, decodeErr := decodeTaskRecord(taskRead.Values[0].Value)
+			producer, decodeErr := DecodeTaskRecord(taskRead.Values[0].Value)
 			if decodeErr != nil || producer.ID != attach.TaskID {
 				return blueprintRequirementGateClaimEvidence{}, true, false, corruptBlueprintRequirementGate()
 			}
@@ -426,7 +426,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 		candidateRead.Values[1].ModRevision != epochRevision {
 		return nil, nil, nil
 	}
-	candidate, err := decodeTaskRecord(candidateRead.Values[0].Value)
+	candidate, err := DecodeTaskRecord(candidateRead.Values[0].Value)
 	if err != nil || candidate.Status != taskjournal.TaskStatusPending ||
 		candidate.Owner.EnvironmentID != fence.EnvironmentID() || candidate.Target != fence.EnvironmentID() ||
 		candidate.Params[blueprints.EnvironmentDesiredRevisionParam] != candidateTaskID ||

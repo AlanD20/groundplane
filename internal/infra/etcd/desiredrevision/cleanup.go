@@ -383,7 +383,7 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	if err != nil || root != blueprints.EnvironmentBlueprintSealFromDescriptor(stored) {
 		return false, blueprints.CorruptEnvironmentBlueprintStage()
 	}
-	task, err := etcd.DecodeCapabilityTaskRecord(evidence.Values[4].Value)
+	task, err := etcd.DecodeTaskRecord(evidence.Values[4].Value)
 	if err != nil || task.ID != stored.Claim.TaskID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != stored.Claim.RevisionID {
 		return false, blueprints.CorruptEnvironmentBlueprintStage()

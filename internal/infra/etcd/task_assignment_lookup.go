@@ -42,7 +42,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 		return TaskAssignment{}, errs.New(errs.KindStateConflict, "Task has no active assignment")
 	}
 	defer clear(indexValue.Value)
-	task, err := decodeTaskRecord(taskValue.Value)
+	task, err := DecodeTaskRecord(taskValue.Value)
 	if err != nil {
 		return TaskAssignment{}, err
 	}

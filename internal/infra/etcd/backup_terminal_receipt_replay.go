@@ -31,7 +31,7 @@ func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 	if read.Values[1] == nil || read.Values[1].ModRevision != task.Revision {
 		return errs.New(errs.KindInternal, "backup terminal receipt is not atomic with its Task")
 	}
-	storedTask, err := decodeTaskRecord(read.Values[0].Value)
+	storedTask, err := DecodeTaskRecord(read.Values[0].Value)
 	if err != nil {
 		return err
 	}

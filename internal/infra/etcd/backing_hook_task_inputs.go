@@ -60,7 +60,7 @@ func (repository *AttachRepository) GetBackingHookTaskInputs(
 	ctx context.Context,
 	task TaskRecord,
 ) (taskconfiguration.BackingHookEncryptedInputs, error) {
-	if err := validateTaskRecord(task); err != nil || task.Configuration == nil ||
+	if err := ValidateTaskRecord(task); err != nil || task.Configuration == nil ||
 		task.Configuration.BackingHookInputs == nil {
 		return taskconfiguration.BackingHookEncryptedInputs{}, errs.New(
 			errs.KindValidationFailed,

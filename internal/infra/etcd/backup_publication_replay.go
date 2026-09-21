@@ -41,7 +41,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	if len(read.Values) != 3 || read.Values[1] == nil {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	task, taskErr := decodeTaskRecord(read.Values[1].Value)
+	task, taskErr := DecodeTaskRecord(read.Values[1].Value)
 	if taskErr != nil || task.ID != marker.TaskID || task.Type != taskjournal.TaskBackup ||
 		(task.Actor != taskjournal.TaskActorOperator && task.Actor != taskjournal.TaskActorSystem) || task.Executor != taskjournal.TaskExecutorAgent ||
 		(task.RetryOf == "" && task.IdempotencyKey != marker.Locator.Key) ||

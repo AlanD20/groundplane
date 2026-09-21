@@ -93,7 +93,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	defer publication.clear()
 	defer func() { returnErr = publication.finish(ctx, repository.store, returnErr) }()
 	task = publication.task
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -114,7 +114,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(environmentValue)
-	taskValue, err := encodeTaskRecord(task)
+	taskValue, err := EncodeTaskRecord(task)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -165,7 +165,7 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 			"pending Backup Task terminal identity is invalid",
 		)
 	}
-	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, terminalAt)
+	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, terminalAt)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
@@ -215,7 +215,7 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
-	terminalValue, err := encodeTaskRecord(terminal)
+	terminalValue, err := EncodeTaskRecord(terminal)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}

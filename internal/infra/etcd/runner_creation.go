@@ -41,7 +41,7 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	task = bindRunnerTaskMarker(task, marker)
-	if err := validateTaskRecord(task); err != nil {
+	if err := ValidateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	idempotency, err := NewIdempotencyRepository(repository.store)
@@ -152,7 +152,7 @@ func encodeRunnerCreateValues(
 		result.clear()
 		return runnerCreateValues{}, err
 	}
-	result.task, err = encodeTaskRecord(task)
+	result.task, err = EncodeTaskRecord(task)
 	if err != nil {
 		result.clear()
 		return runnerCreateValues{}, err

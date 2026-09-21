@@ -11,8 +11,8 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func cloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, createdAt time.Time) (TaskRecord, error) {
-	if err := validateTaskRecord(source); err != nil {
+func CloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, createdAt time.Time) (TaskRecord, error) {
+	if err := ValidateTaskRecord(source); err != nil {
 		return TaskRecord{}, err
 	}
 	if source.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController {
@@ -50,7 +50,7 @@ func cloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, c
 		Configuration:                   taskconfiguration.CloneTaskConfiguration(source.Configuration),
 		Status:                          taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
-	if err := validateTaskRecord(retry); err != nil {
+	if err := ValidateTaskRecord(retry); err != nil {
 		return TaskRecord{}, err
 	}
 	return retry, nil
