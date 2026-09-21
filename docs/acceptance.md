@@ -14,6 +14,12 @@ promote a historical result.
 
 ## Local migration delivery gate
 
+On 2026-09-21, `make ci` passed for `eec4aa4ea` after retiring the temporary
+architecture deferrals. All 40 relocated integration tests were retained. CI now
+calls the architecture checker directly, which reported zero findings against
+the unchanged baseline. Existing legacy baseline allowances remain; no live-host
+qualification or deployment was performed.
+
 On 2026-09-21, the unchanged `make ci` passed on Linux amd64 for code through
 `4816c7cb3`, with documentation through `968c3c48d`. This includes generated-file
 parity, formatting, static analysis, race-enabled behavior tests and Controller,
