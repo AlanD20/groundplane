@@ -169,7 +169,7 @@ func publicationConditions(
 	if err != nil {
 		return nil, corruptProof()
 	}
-	task, err := base.DecodeTaskStorageRecord(values[4].Value)
+	task, err := base.DecodeTaskRecord(values[4].Value)
 	if err != nil {
 		return nil, corruptProof()
 	}

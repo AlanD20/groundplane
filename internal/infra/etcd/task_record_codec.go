@@ -66,8 +66,6 @@ func EncodeTaskRecord(record TaskRecord) ([]byte, error) {
 	return value, nil
 }
 
-func EncodeTaskStorageRecord(record TaskRecord) ([]byte, error) { return EncodeTaskRecord(record) }
-
 func DecodeTaskRecord(value []byte) (TaskRecord, error) {
 	data, err := recordcodec.Decode[taskRecordData](value, "task")
 	if err != nil {
@@ -82,8 +80,6 @@ func DecodeTaskRecord(value []byte) (TaskRecord, error) {
 	}
 	return record, nil
 }
-
-func DecodeTaskStorageRecord(value []byte) (TaskRecord, error) { return DecodeTaskRecord(value) }
 
 func taskRecordToData(record TaskRecord) taskRecordData {
 	return taskRecordData{
