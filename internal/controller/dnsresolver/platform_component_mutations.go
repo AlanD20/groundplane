@@ -530,7 +530,7 @@ func newPlatformComponentConfigTask(
 		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskUpdate, Target: componentID,
-		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceComponent},
+		Params:         map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceComponent},
 		Steps:          steps,
 		TimeoutSeconds: platformComponentTaskTimeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,

@@ -108,8 +108,8 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 	task.TimeoutSeconds = 120
 	task.RenderGeneration = int32(candidate.RenderGeneration)
 	task.Params = map[string]string{
-		etcd.TaskResourceKindParam:                      etcd.TaskResourceRoute,
-		etcd.TaskRouteEnvironmentParam:                  intent.EnvironmentID,
+		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceRoute,
+		taskjournal.TaskRouteEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
 		etcd.EnvironmentDesiredRevisionParam:            candidate.RevisionID,
 		EnvironmentBlueprintArtifactParam:               procedure.ArtifactID,
@@ -155,8 +155,8 @@ func prepareNativeRouteMutation(
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = int32(intent.Route.DesiredGeneration)
 	task.Params = map[string]string{
-		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
-		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
+		taskjournal.TaskResourceKindParam:     taskjournal.TaskResourceRoute,
+		taskjournal.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
 	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	value, err := json.Marshal(struct {
@@ -214,8 +214,8 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	candidate := *intent.CandidateProjection
 	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
-	if task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceRoute ||
-		task.Params[etcd.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
+	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceRoute ||
+		task.Params[taskjournal.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
 		revisionID != candidate.RevisionID ||
 		uint64(task.RenderGeneration) != candidate.RenderGeneration {

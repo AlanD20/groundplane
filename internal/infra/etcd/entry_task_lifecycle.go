@@ -462,23 +462,23 @@ func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
 func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) error {
 	expectedExecutor := taskjournal.TaskExecutorController
 	validParams := len(task.Params) == 2 &&
-		task.Params[TaskResourceKindParam] == TaskResourceEntry &&
-		task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry &&
+		task.Params[taskjournal.TaskEntryEnvironmentParam] == intent.EnvironmentID
 	if intent.Desired != nil && intent.CurrentProjection == nil {
-		validParams = len(task.Params) == 3 && task.Params[TaskResourceKindParam] == TaskResourceEntry &&
-			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID
+		validParams = len(task.Params) == 3 && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry &&
+			task.Params[taskjournal.TaskEntryEnvironmentParam] == intent.EnvironmentID
 	}
 	if intent.CurrentProjection != nil {
 		expectedExecutor = taskjournal.TaskExecutorAgent
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 8 &&
-			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID &&
+			task.Params[taskjournal.TaskEntryEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[taskjournal.TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&
-			recordcodec.ValidateID(ids.KindConfig, task.Params[TaskComposeArtifactParam]) == nil &&
-			task.Params[TaskEntryProjectSlugParam] != "" && task.Params[TaskEntryEnvironmentNameParam] != "" &&
-			task.Params[TaskEntryAuthorizedVolumeDirParam] != "" &&
-			(task.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform && task.Params[TaskEntryTenantSlugParam] == "" ||
-				task.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant && task.Params[TaskEntryTenantSlugParam] != "")
+			recordcodec.ValidateID(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) == nil &&
+			task.Params[taskjournal.TaskEntryProjectSlugParam] != "" && task.Params[taskjournal.TaskEntryEnvironmentNameParam] != "" &&
+			task.Params[taskjournal.TaskEntryAuthorizedVolumeDirParam] != "" &&
+			(task.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform && task.Params[taskjournal.TaskEntryTenantSlugParam] == "" ||
+				task.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant && task.Params[taskjournal.TaskEntryTenantSlugParam] != "")
 	}
 	if intent.Desired != nil && (task.Params[EnvironmentDesiredRevisionParam] != intent.Desired.RevisionID ||
 		uint64(task.RenderGeneration) != intent.Desired.RenderGeneration) {

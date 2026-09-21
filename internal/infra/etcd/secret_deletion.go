@@ -40,7 +40,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 			tombstone.CreatedAt,
 		) || task.Executor != taskjournal.TaskExecutorController ||
 		task.Type != taskjournal.TaskRemove || task.Target != secretID || task.Status != taskjournal.TaskStatusPending ||
-		len(task.Params) != 1 || task.Params[TaskResourceKindParam] != TaskResourceSecret {
+		len(task.Params) != 1 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceSecret {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret deletion Task and tombstone do not match",

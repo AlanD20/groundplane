@@ -373,9 +373,9 @@ func hierarchyDeletionTask(
 		PlanID: "plan_" + suffix, PlanHash: hierarchydeletion.HierarchyDeletionDigest(intentValue), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: begin.TargetID,
 		Params: map[string]string{
-			TaskResourceKindParam:                TaskResourceHierarchyDeletion,
-			TaskHierarchyDeletionOperationParam:  begin.OperationID,
-			TaskHierarchyDeletionTargetKindParam: string(begin.TargetKind),
+			taskjournal.TaskResourceKindParam:                taskjournal.TaskResourceHierarchyDeletion,
+			taskjournal.TaskHierarchyDeletionOperationParam:  begin.OperationID,
+			taskjournal.TaskHierarchyDeletionTargetKindParam: string(begin.TargetKind),
 		},
 		Steps: []taskjournal.TaskStepRecord{
 			{Kind: taskjournal.TaskStepOperation, ID: "step_" + suffix},

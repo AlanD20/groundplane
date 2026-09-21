@@ -179,13 +179,13 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 	}
 	resourceRemoval := record.Type == taskjournal.TaskRemove &&
 		(recordcodec.ValidateID(ids.KindRoute, record.Target) == nil || recordcodec.ValidateID(ids.KindEnvEntry, record.Target) == nil)
-	volumeMutation := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
+	volumeMutation := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume &&
 		recordcodec.ValidateID(ids.KindVolume, record.Target) == nil &&
 		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate || record.Type == taskjournal.TaskRemove)
-	routeMutation := record.Params[TaskResourceKindParam] == TaskResourceRoute &&
+	routeMutation := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute &&
 		recordcodec.ValidateID(ids.KindRoute, record.Target) == nil &&
 		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate) &&
-		record.Params[TaskRouteEnvironmentParam] == environmentID && record.Owner.EnvironmentID == environmentID
+		record.Params[taskjournal.TaskRouteEnvironmentParam] == environmentID && record.Owner.EnvironmentID == environmentID
 	if record.Executor != taskjournal.TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
 		(record.Target != environmentID && !resourceRemoval && !volumeMutation && !routeMutation) {
 		return "", false, errs.New(errs.KindValidationFailed, "task materialization Environment is invalid")
@@ -284,9 +284,9 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	}
 	// Metadata edits and Volume identity Tasks do not execute desired runtime.
 	// Blueprint Apply can execute Components even without native Releases.
-	volumeIdentity := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
+	volumeIdentity := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume &&
 		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate)
-	entryMutation := record.Params[TaskResourceKindParam] == TaskResourceEntry && record.Type == taskjournal.TaskUpdate
+	entryMutation := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry && record.Type == taskjournal.TaskUpdate
 	configuredApply := record.Params[componentTaskBlueprintProcedureParam] == componentTaskBlueprintProcedureNone
 	if volumeIdentity ||
 		record.Type == taskjournal.TaskUpdate && !entryMutation && !configuredApply && !taskHasBlueprintCandidateAppliedAuthority(record) &&

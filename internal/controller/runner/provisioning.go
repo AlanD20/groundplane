@@ -422,7 +422,7 @@ func newRunnerCreateTask(
 		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
 		Type: taskjournal.TaskCreate, Target: desired.ID,
 		Params: map[string]string{
-			etcd.TaskResourceKindParam:               etcd.TaskResourceRunner,
+			taskjournal.TaskResourceKindParam:        etcd.TaskResourceRunner,
 			etcd.RunnerRegistrationTokenPresentParam: "true",
 		},
 		Steps: []taskjournal.TaskStepRecord{

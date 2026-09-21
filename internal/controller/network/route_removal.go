@@ -390,8 +390,8 @@ func prepareControllerRouteRemovalTask(
 	task.Executor = taskjournal.TaskExecutorController
 	task.RenderGeneration = int32(renderGeneration)
 	task.Params = map[string]string{
-		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
-		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
+		taskjournal.TaskResourceKindParam:     taskjournal.TaskResourceRoute,
+		taskjournal.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
 	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	task.TimeoutSeconds = routeRemovalControllerTimeoutSeconds

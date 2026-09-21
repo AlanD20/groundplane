@@ -346,8 +346,8 @@ func validateServiceLifecycleProjection(
 ) error {
 	if projection == nil && input == nil {
 		if task.Executor != taskjournal.TaskExecutorController || task.RenderGeneration != 1 ||
-			len(task.Params) != 2 || task.Params[TaskResourceKindParam] != TaskResourceService ||
-			task.Params[TaskServiceEnvironmentParam] == "" {
+			len(task.Params) != 2 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
+			task.Params[taskjournal.TaskServiceEnvironmentParam] == "" {
 			return errs.New(errs.KindValidationFailed, "unapplied Service lifecycle Task is invalid")
 		}
 		return nil
@@ -357,8 +357,8 @@ func validateServiceLifecycleProjection(
 		input.PlanID != task.PlanID || input.ServiceID != task.Target ||
 		input.EnvironmentID != projection.Record.EnvironmentID ||
 		!sameRouteRemovalProjection(input.Projection, projection.Record) ||
-		len(task.Params) != 2 || task.Params[TaskServiceEnvironmentParam] != input.EnvironmentID ||
-		task.Params[TaskComposeArtifactParam] != input.ArtifactID {
+		len(task.Params) != 2 || task.Params[taskjournal.TaskServiceEnvironmentParam] != input.EnvironmentID ||
+		task.Params[taskjournal.TaskComposeArtifactParam] != input.ArtifactID {
 		return errs.New(errs.KindValidationFailed, "applied Service lifecycle Task is invalid")
 	}
 	wantSteps := 1

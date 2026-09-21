@@ -52,7 +52,7 @@ func NewTask(now time.Time, idempotencyKey string, input Input) (etcd.TaskRecord
 		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: string(upgrade.Hash(canonical))[7:], RenderGeneration: 1,
 		Type: taskjournal.TaskUpdate, Target: Target, Params: map[string]string{
-			etcd.TaskResourceKindParam: etcd.TaskResourceController, InputParam: string(canonical),
+			taskjournal.TaskResourceKindParam: taskjournal.TaskResourceController, InputParam: string(canonical),
 		},
 		TimeoutSeconds: upgrade.TaskTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
@@ -69,7 +69,7 @@ func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Jour
 		ids.Validate(ids.KindOperation, task.OperationID) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
 		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds || task.RenderGeneration != 1 || task.RetryOf != "" || len(task.Steps) != 0 ||
 		len(task.Materializations) != 0 ||
-		len(task.Params) != 2 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceController ||
+		len(task.Params) != 2 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceController ||
 		deadline.Sub(started) != upgrade.TaskTimeoutSeconds*time.Second {
 		return upgrade.Journal{}, errs.New(errs.KindValidationFailed, "controller update Task authority is invalid")
 	}

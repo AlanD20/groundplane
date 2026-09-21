@@ -296,7 +296,7 @@ func (service *MutationService) apply(
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: key,
 		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskType, Target: desired.ID,
-		Params: map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceReleaseGroup},
+		Params: map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceReleaseGroup},
 		Steps: []taskjournal.TaskStepRecord{
 			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		}, TimeoutSeconds: releaseGroupTaskTimeout,

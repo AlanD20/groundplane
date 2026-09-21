@@ -140,10 +140,10 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 			ctx, operation, action, entry, receipt, receiptKey, entry.RetrySharedOwner.ReceiptDigest,
 		)
 	}
-	generation, err := strconv.ParseInt(task.Params[TaskHierarchyDeletionGenerationParam], 10, 64)
-	if err != nil || generation <= 0 || task.Params[TaskHierarchyDeletionAttemptParam] != entry.CurrentAttemptID ||
-		task.Params[TaskHierarchyDeletionChildParam] != entry.ChildOperationID ||
-		task.Params[TaskHierarchyDeletionParentParam] != operation.Tombstone.OperationID {
+	generation, err := strconv.ParseInt(task.Params[taskjournal.TaskHierarchyDeletionGenerationParam], 10, 64)
+	if err != nil || generation <= 0 || task.Params[taskjournal.TaskHierarchyDeletionAttemptParam] != entry.CurrentAttemptID ||
+		task.Params[taskjournal.TaskHierarchyDeletionChildParam] != entry.ChildOperationID ||
+		task.Params[taskjournal.TaskHierarchyDeletionParentParam] != operation.Tombstone.OperationID {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	taskValue, err := encodeTaskRecord(task)

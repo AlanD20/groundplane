@@ -52,8 +52,8 @@ func prepareControllerServiceLifecycleTask(
 	task.Executor = taskjournal.TaskExecutorController
 	task.RenderGeneration = 1
 	task.Params = map[string]string{
-		etcd.TaskResourceKindParam:       etcd.TaskResourceService,
-		etcd.TaskServiceEnvironmentParam: environmentID,
+		taskjournal.TaskResourceKindParam:       taskjournal.TaskResourceService,
+		taskjournal.TaskServiceEnvironmentParam: environmentID,
 	}
 	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	task.TimeoutSeconds = serviceLifecycleControlTimeoutSeconds

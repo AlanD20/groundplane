@@ -31,7 +31,7 @@ type TaskRecord struct {
 	Params             map[string]string                         `json:"params,omitempty"`
 	Steps              []taskjournal.TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record            `json:"materializations,omitempty"`
-	EntryRuntime       *EntryTaskRuntime                         `json:"entry_runtime,omitempty"`
+	EntryRuntime       *taskjournal.EntryTaskRuntime             `json:"entry_runtime,omitempty"`
 	Configuration      *taskconfiguration.TaskConfiguration      `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
 	Status             taskjournal.TaskStatus                    `json:"status"`
@@ -39,7 +39,7 @@ type TaskRecord struct {
 	TerminalAssignment *taskjournal.TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                                    `json:"next_event_sequence"`
 	EventCount         uint32                                    `json:"event_count"`
-	EventCheckpoints   []TaskEventCheckpoint                     `json:"event_checkpoints,omitempty"`
+	EventCheckpoints   []taskjournal.TaskEventCheckpoint         `json:"event_checkpoints,omitempty"`
 	CreatedAt          time.Time                                 `json:"created_at"`
 	UpdatedAt          time.Time                                 `json:"updated_at"`
 	StartedAt          *time.Time                                `json:"started_at,omitempty"`

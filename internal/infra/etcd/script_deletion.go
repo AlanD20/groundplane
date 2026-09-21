@@ -53,7 +53,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Executor != taskjournal.TaskExecutorController ||
 		task.Type != taskjournal.TaskRemove || task.Target != scriptID || task.Status != taskjournal.TaskStatusPending ||
-		len(task.Params) != 1 || task.Params[TaskResourceKindParam] != TaskResourceScript {
+		len(task.Params) != 1 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceScript {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Script deletion Task and tombstone do not match",
 		)

@@ -104,13 +104,13 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		return HierarchyDeletionOperation{}, errs.New(errs.KindTaskNotFound, "hierarchy deletion Task was not found")
 	}
 	task, err := decodeTaskRecord(taskResult.Values[0].Value)
-	if err != nil || task.ID != taskID || task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
+	if err != nil || task.ID != taskID || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
 		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if task.idempotencyMarker == nil || idempotencyrecord.ValidateIdempotencyLocator(*task.idempotencyMarker) != nil {
 		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	operationID := task.Params[TaskHierarchyDeletionOperationParam]
+	operationID := task.Params[taskjournal.TaskHierarchyDeletionOperationParam]
 	if !hierarchydeletion.ValidHierarchyDeletionPrivateID(operationID, "del") {
 		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}

@@ -33,8 +33,8 @@ func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRec
 		Owner: taskjournal.PlatformTaskOwner(), Actor: taskjournal.TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskjournal.TaskUpdate, Target: componentID,
 		Params: map[string]string{
-			TaskResourceKindParam:       TaskResourceComponent,
-			TaskAutomaticReconcileParam: "true",
+			taskjournal.TaskResourceKindParam: taskjournal.TaskResourceComponent,
+			TaskAutomaticReconcileParam:       "true",
 		},
 		Steps: []taskjournal.TaskStepRecord{
 			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}, {Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
@@ -60,14 +60,14 @@ func platformResolverTaskSteps(input PlatformComponentTaskRenderInput) []taskjou
 func isPlatformDNSResolverTask(task TaskRecord) bool {
 	return task.Owner == taskjournal.PlatformTaskOwner() && task.Actor == taskjournal.TaskActorSystem &&
 		task.Executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskUpdate &&
-		task.Params[TaskResourceKindParam] == TaskResourceComponent &&
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent &&
 		task.Params[TaskAutomaticReconcileParam] == "true" &&
 		ids.Validate(ids.KindComponent, task.Target) == nil
 }
 
 func isPlatformDNSResolverTaskAttempt(task TaskRecord) bool {
 	if task.Owner != taskjournal.PlatformTaskOwner() || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate ||
-		task.Params[TaskResourceKindParam] != TaskResourceComponent ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return false
 	}
@@ -93,8 +93,8 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	baseConditions []etcdstore.Condition,
 	platformChange platformComponentTaskChange,
 ) (hostResolutionReconciliationChange, error) {
-	resource := task.Params[TaskResourceKindParam]
-	if resource != TaskResourceRoute && resource != TaskResourceComponent {
+	resource := task.Params[taskjournal.TaskResourceKindParam]
+	if resource != taskjournal.TaskResourceRoute && resource != taskjournal.TaskResourceComponent {
 		return hostResolutionReconciliationChange{}, nil
 	}
 	if revision <= 0 {

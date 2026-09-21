@@ -38,7 +38,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	}
 	runtimes, err := executionplan.PrepareBlueprintRuntimeInputs(
 		evidence.Plan,
-		evidence.Task.Params[TaskComposeArtifactParam],
+		evidence.Task.Params[taskjournal.TaskComposeArtifactParam],
 	)
 	if err != nil {
 		return BlueprintReleasePublication{}, err

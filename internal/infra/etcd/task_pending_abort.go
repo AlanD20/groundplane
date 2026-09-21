@@ -45,7 +45,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
 		zoneRemoval := current.Record.Executor == taskjournal.TaskExecutorAgent && current.Record.Type == taskjournal.TaskRemove &&
 			recordcodec.ValidateID(ids.KindNetwork, current.Record.Target) == nil &&
-			current.Record.Params[TaskZoneRemovalOperationParam] != ""
+			current.Record.Params[taskjournal.TaskZoneRemovalOperationParam] != ""
 		if current.Record.Status == taskjournal.TaskStatusAborted {
 			if err := repository.validatePendingAbortReplay(
 				ctx, current, environmentCreation, environmentRemoval, zoneRemoval,
@@ -494,7 +494,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations,
 			false,
 			attachChange.applies,
-			routeChange.applies && current.Record.Params[TaskEntryEnvironmentParam] != "",
+			routeChange.applies && current.Record.Params[taskjournal.TaskEntryEnvironmentParam] != "",
 			serviceChange.applies,
 			connectorChange.applies,
 		)

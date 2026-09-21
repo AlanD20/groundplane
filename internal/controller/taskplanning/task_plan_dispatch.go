@@ -82,7 +82,7 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		}
 		return resolver.scriptPlans.GetScriptExecutionPlan(ctx, task)
 	}
-	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceComponent {
+	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent {
 		if resolver.componentPlans == nil {
 			return nil, errs.New(errs.KindInternal, "Component Task plan resolver is not configured")
 		}
@@ -91,10 +91,10 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if task.Type == taskjournal.TaskBackup {
 		return resolver.resolveBackupRunPlan(ctx, task)
 	}
-	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceHierarchyDeletion {
+	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {
 		return resolver.resolveHierarchyDeletionPlan(ctx, task)
 	}
-	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceVolume {
+	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		return resolver.resolveVolumePlan(ctx, task)
 	}
 	if task.Type == taskjournal.TaskAttach || task.Type == taskjournal.TaskDetach {

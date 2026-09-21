@@ -28,7 +28,7 @@ type taskRecordData struct {
 	Params             map[string]string                         `json:"params,omitempty"`
 	Steps              []taskjournal.TaskStepRecord              `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record            `json:"materializations,omitempty"`
-	EntryRuntime       *EntryTaskRuntime                         `json:"entry_runtime,omitempty"`
+	EntryRuntime       *taskjournal.EntryTaskRuntime             `json:"entry_runtime,omitempty"`
 	Configuration      *taskconfiguration.TaskConfiguration      `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
 	Status             taskjournal.TaskStatus                    `json:"status"`
@@ -36,7 +36,7 @@ type taskRecordData struct {
 	TerminalAssignment *taskjournal.TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                                    `json:"next_event_sequence"`
 	EventCount         uint32                                    `json:"event_count"`
-	EventCheckpoints   []TaskEventCheckpoint                     `json:"event_checkpoints,omitempty"`
+	EventCheckpoints   []taskjournal.TaskEventCheckpoint         `json:"event_checkpoints,omitempty"`
 	CreatedAt          string                                    `json:"created_at"`
 	UpdatedAt          string                                    `json:"updated_at"`
 	StartedAt          string                                    `json:"started_at,omitempty"`
@@ -92,14 +92,14 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		Executor: record.Executor, PlanID: record.PlanID,
 		PlanHash: record.PlanHash, RenderGeneration: record.RenderGeneration,
 		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
-		Steps: cloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
+		Steps: taskjournal.CloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
 		ComponentActionStepIDs:          append([]string(nil), record.ComponentActionStepIDs...),
 		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources),
 		Materializations:                materializationrecord.Clone(record.Materializations),
-		EntryRuntime:                    cloneEntryTaskRuntime(record.EntryRuntime),
+		EntryRuntime:                    taskjournal.CloneEntryTaskRuntime(record.EntryRuntime),
 		Configuration:                   taskconfiguration.CloneTaskConfiguration(record.Configuration),
 		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
-		EventCheckpoints:   append([]TaskEventCheckpoint(nil), record.EventCheckpoints...),
+		EventCheckpoints:   append([]taskjournal.TaskEventCheckpoint(nil), record.EventCheckpoints...),
 		Result:             taskjournal.TaskResultToData(record.Result),
 		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(record.TerminalAssignment),
 		EventCount:         record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
@@ -137,7 +137,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		return TaskRecord{}, err
 	}
 	return TaskRecord{
-		EventCheckpoints: append([]TaskEventCheckpoint(nil), data.EventCheckpoints...),
+		EventCheckpoints: append([]taskjournal.TaskEventCheckpoint(nil), data.EventCheckpoints...),
 		ID:               data.ID, OperationID: data.OperationID, RetryOf: data.RetryOf,
 		IdempotencyKey: data.IdempotencyKey, Owner: data.Owner, Actor: data.Actor,
 		Executor: data.Executor, PlanID: data.PlanID,
@@ -159,13 +159,13 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 
 func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned := record
-	cloned.EventCheckpoints = append([]TaskEventCheckpoint(nil), record.EventCheckpoints...)
+	cloned.EventCheckpoints = append([]taskjournal.TaskEventCheckpoint(nil), record.EventCheckpoints...)
 	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
 	cloned.ManagedComponentTeardownSources = cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
 	cloned.Params = cloneStringMap(record.Params)
-	cloned.Steps = cloneTaskSteps(record.Steps)
+	cloned.Steps = taskjournal.CloneTaskSteps(record.Steps)
 	cloned.Materializations = materializationrecord.Clone(record.Materializations)
-	cloned.EntryRuntime = cloneEntryTaskRuntime(record.EntryRuntime)
+	cloned.EntryRuntime = taskjournal.CloneEntryTaskRuntime(record.EntryRuntime)
 	cloned.Configuration = taskconfiguration.CloneTaskConfiguration(record.Configuration)
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)
 	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)

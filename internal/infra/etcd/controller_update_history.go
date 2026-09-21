@@ -14,7 +14,7 @@ const controllerUpdateHistoryPrefix = "/v1/indexes/tasks/controller-updates/"
 
 func isNativeControllerUpdate(task TaskRecord) bool {
 	return task.Executor == taskjournal.TaskExecutorController && task.Type == taskjournal.TaskUpdate && task.Target == "controller" &&
-		task.Owner == taskjournal.PlatformTaskOwner() && task.Params[TaskResourceKindParam] == TaskResourceController
+		task.Owner == taskjournal.PlatformTaskOwner() && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController
 }
 
 // taskJournalIndexKeys includes the closed native history index in ordinary

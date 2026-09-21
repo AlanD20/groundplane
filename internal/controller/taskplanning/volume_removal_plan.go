@@ -66,10 +66,10 @@ func (resolver *TaskPlanResolver) volumeRemovalPlanParams(
 		}
 	}
 	return map[string]string{
-		etcd.TaskResourceKindParam:                      etcd.TaskResourceVolume,
+		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceVolume,
 		taskjournal.TaskMaterializationEnvironmentParam: manifest.EnvironmentID,
 		etcd.EnvironmentDesiredRevisionParam:            manifest.DesiredRevisionID,
-		etcd.TaskComposeArtifactParam:                   "cfg_" + strings.TrimPrefix(origin, "task_"),
+		taskjournal.TaskComposeArtifactParam:            "cfg_" + strings.TrimPrefix(origin, "task_"),
 		VolumeTaskActionParam:                           VolumeTaskActionRemove, VolumeTaskComposeKeyParam: manifest.Key,
 		VolumeTaskIntentSHA256Param: hex.EncodeToString(
 			intent,

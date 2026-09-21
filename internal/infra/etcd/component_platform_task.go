@@ -50,7 +50,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if task.Target != replacement.Desired.ID || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskUpdate || task.Status != taskjournal.TaskStatusPending ||
 		task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorOperator ||
-		task.Params[TaskResourceKindParam] != TaskResourceComponent {
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"platform Component Task shape is invalid",

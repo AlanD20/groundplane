@@ -131,7 +131,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		if task.Executor != executor {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task execution authority changed")
 		}
-		if task.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion {
+		if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {
 			if executor == taskjournal.TaskExecutorController {
 				return repository.acknowledgeHierarchyDeletionControllerTask(
 					ctx, taskID, terminalStatus, terminalAt,
@@ -173,7 +173,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		environmentRemoval := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&
 			recordcodec.ValidateID(ids.KindEnvironment, task.Target) == nil
 		zoneRemoval := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&
-			recordcodec.ValidateID(ids.KindNetwork, task.Target) == nil && task.Params[TaskZoneRemovalOperationParam] != ""
+			recordcodec.ValidateID(ids.KindNetwork, task.Target) == nil && task.Params[taskjournal.TaskZoneRemovalOperationParam] != ""
 		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
@@ -836,7 +836,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			mutations,
 			materializationProjectionChange.applies,
 			attachChange.applies,
-			routeChange.applies && task.Params[TaskEntryEnvironmentParam] != "",
+			routeChange.applies && task.Params[taskjournal.TaskEntryEnvironmentParam] != "",
 			serviceChange.applies,
 			connectorChange.applies,
 		)

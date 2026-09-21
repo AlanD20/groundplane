@@ -55,11 +55,11 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
 		ids.Validate(ids.KindVolume, task.Target) != nil || task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 || task.RenderGeneration <= 0 || len(params) != expectedParams ||
-		params[etcd.TaskResourceKindParam] != etcd.TaskResourceVolume ||
+		params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceVolume ||
 		ids.Validate(ids.KindEnvironment, params[taskjournal.TaskMaterializationEnvironmentParam]) != nil ||
 		params[taskjournal.TaskMaterializationEnvironmentParam] == "" ||
 		ids.Validate(ids.KindTask, params[etcd.EnvironmentDesiredRevisionParam]) != nil ||
-		ids.Validate(ids.KindConfig, params[etcd.TaskComposeArtifactParam]) != nil ||
+		ids.Validate(ids.KindConfig, params[taskjournal.TaskComposeArtifactParam]) != nil ||
 		!composerender.ValidVolumeArtifactKey(params[VolumeTaskComposeKeyParam]) {
 		return nil, errs.New(errs.KindInternal, "durable Volume Task shape is invalid")
 	}
@@ -75,7 +75,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 	}
 	environmentID := params[taskjournal.TaskMaterializationEnvironmentParam]
 	candidateRevisionID := params[etcd.EnvironmentDesiredRevisionParam]
-	candidateArtifactID := params[etcd.TaskComposeArtifactParam]
+	candidateArtifactID := params[taskjournal.TaskComposeArtifactParam]
 	candidateProjection, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
 		ctx, environmentID, candidateRevisionID,
 	)

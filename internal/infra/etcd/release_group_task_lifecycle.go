@@ -70,7 +70,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 		return releaseGroupTaskChange{}, err
 	}
 	if retry.Type != taskjournal.TaskRemove || retry.Target != source.Target ||
-		retry.Params[TaskResourceKindParam] != TaskResourceReleaseGroup {
+		retry.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceReleaseGroup {
 		return releaseGroupTaskChange{}, errs.New(errs.KindInternal, "release group retry changed its durable target")
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
@@ -278,7 +278,7 @@ func (repository *TaskRepository) validateReleaseGroupTaskAcknowledgementReplay(
 }
 
 func taskOwnsReleaseGroupRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceReleaseGroup {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceReleaseGroup {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindReleaseGroup, task.Target) != nil {

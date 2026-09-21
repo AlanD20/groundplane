@@ -32,10 +32,10 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 	prepared := task
 	prepared.RenderGeneration = int32(intent.CurrentProjection.RenderGeneration)
 	prepared.Params = map[string]string{
-		etcd.TaskResourceKindParam:           etcd.TaskResourceService,
-		etcd.TaskServiceEnvironmentParam:     intent.EnvironmentID,
-		etcd.TaskComposeArtifactParam:        artifactID,
-		etcd.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
+		taskjournal.TaskResourceKindParam:       taskjournal.TaskResourceService,
+		taskjournal.TaskServiceEnvironmentParam: intent.EnvironmentID,
+		taskjournal.TaskComposeArtifactParam:    artifactID,
+		etcd.EnvironmentDesiredRevisionParam:    intent.Claim.RevisionID,
 	}
 	prepared.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}
 	plan, err := resolver.buildServiceRemovalPlan(ctx, prepared, intent)
@@ -84,7 +84,7 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
-	artifactID := task.Params[etcd.TaskComposeArtifactParam]
+	artifactID := task.Params[taskjournal.TaskComposeArtifactParam]
 	artifact, err := resolver.renderPinnedEnvironmentArtifact(
 		ctx, task,
 		pinnedEnvironmentIdentity{
@@ -114,10 +114,10 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent etcd.ServiceRemovalIntent) error {
 	if task.ID != intent.TaskID || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.ServiceID || len(task.Params) != 4 || len(task.Steps) != 1 ||
-		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceService ||
-		task.Params[etcd.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
+		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[etcd.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||
-		ids.Validate(ids.KindConfig, task.Params[etcd.TaskComposeArtifactParam]) != nil ||
+		ids.Validate(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) != nil ||
 		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil || task.TimeoutSeconds <= 0 ||
 		uint64(task.RenderGeneration) != intent.CurrentProjection.RenderGeneration {
 		return errs.New(errs.KindInternal, "durable Service removal Task changed")

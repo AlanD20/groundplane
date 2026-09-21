@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -55,7 +56,7 @@ func (repository *TaskRepository) transactZoneRemovalTaskLifecycle(
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) (etcdstore.TransactionResult, error) {
-	if task.Params[TaskZoneRemovalOperationParam] != "" {
+	if task.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
 		if err := validateZoneRemovalTransactionBudget(phase, conditions, mutations); err != nil {
 			return etcdstore.TransactionResult{}, err
 		}

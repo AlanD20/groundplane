@@ -236,7 +236,7 @@ func newAgentRemovalTask(
 		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: agentID,
-		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceAgent},
+		Params:         map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceAgent},
 		TimeoutSeconds: agentRemovalTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil

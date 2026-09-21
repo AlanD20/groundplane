@@ -45,8 +45,8 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	}
 	candidate := *intent.CandidateProjection
 	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
-	artifactID := task.Params[etcd.TaskComposeArtifactParam]
-	if task.Params[etcd.TaskEntryEnvironmentParam] != intent.EnvironmentID ||
+	artifactID := task.Params[taskjournal.TaskComposeArtifactParam]
+	if task.Params[taskjournal.TaskEntryEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
 		revisionID != candidate.RevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
 		ids.Validate(ids.KindConfig, artifactID) != nil || uint64(task.RenderGeneration) != candidate.RenderGeneration {
@@ -104,11 +104,11 @@ func pinnedEntryRemovalIdentity(
 	intent etcd.EntryRemovalIntent,
 ) (pinnedEnvironmentIdentity, error) {
 	identity := pinnedEnvironmentIdentity{
-		TenantID: task.Owner.TenantID, TenantSlug: task.Params[etcd.TaskEntryTenantSlugParam],
-		ProjectID: task.Owner.ProjectID, ProjectSlug: task.Params[etcd.TaskEntryProjectSlugParam],
+		TenantID: task.Owner.TenantID, TenantSlug: task.Params[taskjournal.TaskEntryTenantSlugParam],
+		ProjectID: task.Owner.ProjectID, ProjectSlug: task.Params[taskjournal.TaskEntryProjectSlugParam],
 		EnvironmentID:       task.Owner.EnvironmentID,
-		EnvironmentName:     task.Params[etcd.TaskEntryEnvironmentNameParam],
-		AuthorizedVolumeDir: task.Params[etcd.TaskEntryAuthorizedVolumeDirParam],
+		EnvironmentName:     task.Params[taskjournal.TaskEntryEnvironmentNameParam],
+		AuthorizedVolumeDir: task.Params[taskjournal.TaskEntryAuthorizedVolumeDirParam],
 	}
 	validWorkspace := task.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant &&
 		ids.Validate(ids.KindTenant, identity.TenantID) == nil && identity.TenantSlug != ""

@@ -51,14 +51,14 @@ func (runtime EntryMutationRuntime) PrepareTask(
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
-	task.EntryRuntime = &etcd.EntryTaskRuntime{RunningServiceIDs: running, Updates: updates}
+	task.EntryRuntime = &taskjournal.EntryTaskRuntime{RunningServiceIDs: running, Updates: updates}
 	task.Params = map[string]string{
-		etcd.TaskResourceKindParam:                      etcd.TaskResourceEntry,
+		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceEntry,
 		taskjournal.TaskMaterializationEnvironmentParam: candidate.EnvironmentID,
 		etcd.EnvironmentDesiredRevisionParam:            candidate.RevisionID,
-		etcd.TaskComposeArtifactParam:                   artifact.ArtifactId,
+		taskjournal.TaskComposeArtifactParam:            artifact.ArtifactId,
 		EntryMutationBaselineRevisionParam:              baseline.RevisionID,
-		etcd.TaskEntryRuntimeEpochParam:                 strconv.FormatInt(runtime.EpochRevision, 10),
+		taskjournal.TaskEntryRuntimeEpochParam:          strconv.FormatInt(runtime.EpochRevision, 10),
 	}
 	references := append([]materializationrecord.Record(nil), task.Materializations...)
 	sort.Slice(
@@ -84,8 +84,8 @@ func prepareEntryRuntimeUpdates(
 	artifact *agentpb.ComposeArtifact,
 	selected []string,
 	sources []etcdstore.Versioned[serviceruntimerecord.Record],
-) ([]etcd.EntryRuntimeUpdate, error) {
-	updates := make([]etcd.EntryRuntimeUpdate, 0, len(selected))
+) ([]taskjournal.EntryRuntimeUpdate, error) {
+	updates := make([]taskjournal.EntryRuntimeUpdate, 0, len(selected))
 	for _, serviceID := range selected {
 		var source *etcdstore.Versioned[serviceruntimerecord.Record]
 		for index := range sources {
@@ -100,7 +100,7 @@ func prepareEntryRuntimeUpdates(
 		if source == nil || source.Revision <= 0 {
 			return nil, errs.New(errs.KindStateConflict, "selected Entry runtime source is unavailable")
 		}
-		update := etcd.EntryRuntimeUpdate{ServiceID: serviceID, PreviousRevision: source.Revision,
+		update := taskjournal.EntryRuntimeUpdate{ServiceID: serviceID, PreviousRevision: source.Revision,
 			CurrentArtifactID: ids.New(ids.KindConfig)}
 		if len(source.Record.Runtime.RetainedPriorArtifact) != 0 {
 			update.RetainedPriorArtifactID = ids.New(ids.KindConfig)
@@ -113,7 +113,7 @@ func prepareEntryRuntimeUpdates(
 		updates = append(updates, update)
 	}
 	if len(updates) == 0 {
-		return []etcd.EntryRuntimeUpdate{}, nil
+		return []taskjournal.EntryRuntimeUpdate{}, nil
 	}
 	return updates, nil
 }
@@ -125,7 +125,7 @@ func (resolver *TaskPlanResolver) resolveUpdatePlan(
 	if ids.Validate(ids.KindRoute, task.Target) == nil {
 		return resolver.resolveRouteMutationPlan(ctx, task)
 	}
-	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceEntry {
+	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry {
 		return resolver.resolveEntryMutationPlan(ctx, task)
 	}
 	return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
@@ -164,7 +164,7 @@ func buildEntryMutationPlan(
 ) (*agentpb.ExecutionPlan, error) {
 	if task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent || task.RenderGeneration <= 0 ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 6 ||
-		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceEntry ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry ||
 		task.Target != candidate.EnvironmentID || baseline.EnvironmentID != candidate.EnvironmentID ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != candidate.EnvironmentID ||
 		task.Params[etcd.EnvironmentDesiredRevisionParam] != candidate.RevisionID ||
@@ -192,7 +192,7 @@ func buildEntryMutationPlan(
 	if err != nil {
 		return nil, err
 	}
-	if newArtifact.ArtifactId != task.Params[etcd.TaskComposeArtifactParam] {
+	if newArtifact.ArtifactId != task.Params[taskjournal.TaskComposeArtifactParam] {
 		return nil, errs.New(errs.KindInternal, "Entry mutation candidate artifact changed")
 	}
 	selected, err := entryMutationConsumerIDs(baseline, candidate, newArtifact, task.EntryRuntime.RunningServiceIDs)

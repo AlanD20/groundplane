@@ -149,8 +149,8 @@ func prepareControllerRouteMutationTask(
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = int32(intent.Route.DesiredGeneration)
 	task.Params = map[string]string{
-		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
-		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
+		taskjournal.TaskResourceKindParam:     taskjournal.TaskResourceRoute,
+		taskjournal.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
 	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	value, err := json.Marshal(struct {

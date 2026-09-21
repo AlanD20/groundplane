@@ -15,7 +15,7 @@ func cloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, c
 	if err := validateTaskRecord(source); err != nil {
 		return TaskRecord{}, err
 	}
-	if source.Params[TaskResourceKindParam] == TaskResourceController {
+	if source.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController {
 		return TaskRecord{}, errs.New(
 			errs.KindTaskNotRetryable,
 			"Controller update requires a fresh explicit release selection",
@@ -42,11 +42,11 @@ func cloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, c
 		Executor: source.Executor, PlanID: source.PlanID,
 		PlanHash: source.PlanHash, RenderGeneration: source.RenderGeneration,
 		Type: source.Type, Target: source.Target, Params: cloneStringMap(source.Params),
-		Steps: cloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
+		Steps: taskjournal.CloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
 		ComponentActionStepIDs:          append([]string(nil), source.ComponentActionStepIDs...),
 		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(source.ManagedComponentTeardownSources),
 		Materializations:                materializationrecord.Clone(source.Materializations),
-		EntryRuntime:                    cloneEntryTaskRuntime(source.EntryRuntime),
+		EntryRuntime:                    taskjournal.CloneEntryTaskRuntime(source.EntryRuntime),
 		Configuration:                   taskconfiguration.CloneTaskConfiguration(source.Configuration),
 		Status:                          taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}

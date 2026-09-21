@@ -452,7 +452,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 }
 
 func taskOwnsConnectorRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceConnector {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceConnector {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskRemove || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||

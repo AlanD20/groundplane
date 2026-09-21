@@ -77,8 +77,8 @@ func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 	if cleanup == nil {
 		task.Executor, task.TimeoutSeconds = taskjournal.TaskExecutorController, 30
 		task.RenderGeneration = int32(claim.RenderGeneration)
-		task.Params = map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceEntry,
-			etcd.TaskEntryEnvironmentParam: claim.EnvironmentID, etcd.EnvironmentDesiredRevisionParam: claim.RevisionID}
+		task.Params = map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceEntry,
+			taskjournal.TaskEntryEnvironmentParam: claim.EnvironmentID, etcd.EnvironmentDesiredRevisionParam: claim.RevisionID}
 		task.Materializations = nil
 		task.Steps = []taskjournal.TaskStepRecord{{ID: ids.New(ids.KindStep), Kind: taskjournal.TaskStepOperation}}
 		digest := sha256.Sum256(

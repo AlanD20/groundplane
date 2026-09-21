@@ -434,11 +434,11 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if backing {
 		task.Executor = taskjournal.TaskExecutorController
 		task.Params = map[string]string{
-			etcd.TaskResourceKindParam:           etcd.TaskResourceBackingZone,
-			etcd.TaskZoneEnvironmentParam:        environment.Record.ID,
-			etcd.TaskZoneImpactTokenParam:        impactToken,
-			etcd.TaskZoneRemovalOperationParam:   task.OperationID,
-			etcd.EnvironmentDesiredRevisionParam: claim.RevisionID,
+			taskjournal.TaskResourceKindParam:         taskjournal.TaskResourceBackingZone,
+			taskjournal.TaskZoneEnvironmentParam:      environment.Record.ID,
+			taskjournal.TaskZoneImpactTokenParam:      impactToken,
+			taskjournal.TaskZoneRemovalOperationParam: task.OperationID,
+			etcd.EnvironmentDesiredRevisionParam:      claim.RevisionID,
 		}
 		task.RenderGeneration = int32(candidate.RenderGeneration)
 		task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}

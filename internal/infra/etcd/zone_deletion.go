@@ -403,7 +403,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	parent, err := decodeTaskRecord(parentResult.Values[0].Value)
 	if err != nil || parent.ID != parentTaskID || parent.Executor != taskjournal.TaskExecutorController ||
 		parent.Status != taskjournal.TaskStatusRunning || parent.Target != zone.Record.Desired.ID ||
-		parent.Params[TaskResourceKindParam] != TaskResourceBackingZone {
+		parent.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
 			"backing Zone parent Task is not running",

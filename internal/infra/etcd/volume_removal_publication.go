@@ -170,7 +170,7 @@ func (publication volumeRemovalInitialPublication) classifyConflict(
 // immutable references plus standard Task routing/materialization authority.
 func EnvironmentVolumeRemovalTaskParams(runtime removalrecord.Runtime, attemptOrdinal uint32) map[string]string {
 	return map[string]string{
-		TaskResourceKindParam:                           TaskResourceVolume,
+		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceVolume,
 		taskjournal.TaskMaterializationEnvironmentParam: runtime.EnvironmentID,
 		EnvironmentDesiredRevisionParam:                 runtime.DesiredRevisionID,
 		removalrecord.EnvironmentParam:                  runtime.EnvironmentID,

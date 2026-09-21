@@ -30,7 +30,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	}
 	if task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorSystem || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskUpdate || task.Status != taskjournal.TaskStatusPending || task.Target != current.Record.Desired.ID ||
-		task.Params[TaskResourceKindParam] != TaskResourceComponent ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		task.Params[TaskAutomaticReconcileParam] != "true" || len(task.Params) != 2 {
 		return errs.New(errs.KindValidationFailed, "platform DNS resolver Task shape is invalid")
 	}

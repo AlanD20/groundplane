@@ -293,7 +293,7 @@ func (service *scriptDeletionService) deleteScriptOnce(
 		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: scriptID,
-		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceScript},
+		Params:         map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceScript},
 		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: scriptDeletionTimeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,

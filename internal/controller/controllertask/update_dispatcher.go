@@ -31,7 +31,7 @@ func (dispatcher *UpdateDispatcher) owner(task etcd.TaskRecord) (UpdateExecutor,
 	if task.Executor != taskjournal.TaskExecutorController || !isPlatformUpdate(task) {
 		return nil, errs.New(errs.KindValidationFailed, "platform update Task is invalid")
 	}
-	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceAgent {
+	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceAgent {
 		return dispatcher.agent, nil
 	}
 	if dispatcher.controller == nil {

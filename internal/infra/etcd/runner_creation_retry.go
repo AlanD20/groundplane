@@ -31,7 +31,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	}
 	if retry.RetryOf != sourceTaskID || retry.Executor != taskjournal.TaskExecutorController || retry.Type != taskjournal.TaskCreate ||
 		retry.Status != taskjournal.TaskStatusPending || retry.IdempotencyKey == "" || len(retry.Params) != 2 ||
-		retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
+		retry.Params[taskjournal.TaskResourceKindParam] != TaskResourceRunner ||
 		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -98,7 +98,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		retry.PlanHash != source.PlanHash || retry.RenderGeneration != source.RenderGeneration ||
 		retry.TimeoutSeconds != source.TimeoutSeconds || !runnerTaskStepsEqual(retry.Steps, source.Steps) ||
 		!runnerTaskMaterializationsEqual(retry.Materializations, source.Materializations) ||
-		len(retry.Params) != 2 || retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
+		len(retry.Params) != 2 || retry.Params[taskjournal.TaskResourceKindParam] != TaskResourceRunner ||
 		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,

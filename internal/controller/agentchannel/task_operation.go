@@ -26,7 +26,7 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_REMOVE
 	case taskjournal.TaskCreate:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE ||
-			task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceVolume &&
+			task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume &&
 				operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
 	case taskjournal.TaskAttach:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH
@@ -35,11 +35,11 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 	case taskjournal.TaskUpdate:
 		// Direct resource mutations have their own sealed plan procedures. They
 		// are not unmarked Environment reconciliation or Blueprint Apply.
-		switch task.Params[etcd.TaskResourceKindParam] {
-		case etcd.TaskResourceVolume:
+		switch task.Params[taskjournal.TaskResourceKindParam] {
+		case taskjournal.TaskResourceVolume:
 			return ids.Validate(ids.KindVolume, task.Target) == nil &&
 				operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
-		case etcd.TaskResourceEntry:
+		case taskjournal.TaskResourceEntry:
 			return ids.Validate(ids.KindEnvironment, task.Target) == nil &&
 				operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
 		}
@@ -55,7 +55,7 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 			return ids.Validate(ids.KindEnvironment, task.Target) == nil && validProcedure &&
 				procedure == taskcontract.BlueprintComposeProcedureFullReconcile
 		}
-		if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceComponent {
+		if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent {
 			return operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
 		}
 		_, backingCreation := task.Params[taskjournal.TaskBackingServiceCreationParam]

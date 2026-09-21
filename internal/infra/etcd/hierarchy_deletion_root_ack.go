@@ -78,7 +78,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	taskValue := read.Values[0]
 	task, err := decodeTaskRecord(taskValue.Value)
 	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorController ||
-		task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion root Task identity changed",

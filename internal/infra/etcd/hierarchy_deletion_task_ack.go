@@ -37,7 +37,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	taskValue := read.Values[0]
 	task, err := decodeTaskRecord(taskValue.Value)
 	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorAgent ||
-		task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion child Task identity changed",
@@ -186,9 +186,9 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 	task TaskRecord,
 	taskRevision int64,
 ) error {
-	parentOperationID := task.Params[TaskHierarchyDeletionParentParam]
-	childOperationID := task.Params[TaskHierarchyDeletionChildParam]
-	ordinal, err := strconv.ParseInt(task.Params[TaskHierarchyDeletionOrdinalParam], 10, 64)
+	parentOperationID := task.Params[taskjournal.TaskHierarchyDeletionParentParam]
+	childOperationID := task.Params[taskjournal.TaskHierarchyDeletionChildParam]
+	ordinal, err := strconv.ParseInt(task.Params[taskjournal.TaskHierarchyDeletionOrdinalParam], 10, 64)
 	if err != nil || ordinal < 0 {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
@@ -218,11 +218,11 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 	if action.ParentOperationID != parentOperationID || action.Ordinal != ordinal ||
 		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureAgent || action.AgentProcedure == nil ||
 		action.AgentProcedure.ChildOperationID != childOperationID ||
-		string(action.ActionKind) != task.Params[TaskHierarchyDeletionActionKindParam] ||
-		action.AgentProcedure.TypedProcedure != task.Params[TaskHierarchyDeletionProcedureParam] ||
-		action.AgentProcedure.InputDigest != task.Params[TaskHierarchyDeletionInputParam] ||
+		string(action.ActionKind) != task.Params[taskjournal.TaskHierarchyDeletionActionKindParam] ||
+		action.AgentProcedure.TypedProcedure != task.Params[taskjournal.TaskHierarchyDeletionProcedureParam] ||
+		action.AgentProcedure.InputDigest != task.Params[taskjournal.TaskHierarchyDeletionInputParam] ||
 		entry.ParentOperationID != parentOperationID || entry.ChildOperationID != childOperationID ||
-		entry.CurrentTaskID != task.ID || entry.CurrentAttemptID != task.Params[TaskHierarchyDeletionAttemptParam] {
+		entry.CurrentTaskID != task.ID || entry.CurrentAttemptID != task.Params[taskjournal.TaskHierarchyDeletionAttemptParam] {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	hierarchy, err := newHierarchyDeletionRepository(repository.store)

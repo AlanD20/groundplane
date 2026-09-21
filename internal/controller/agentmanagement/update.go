@@ -263,10 +263,10 @@ func newAgentUpdateTask(
 		)
 	}
 	params := map[string]string{
-		etcd.TaskResourceKindParam:     etcd.TaskResourceAgent,
-		agentTaskPreviousImageKey:      previousImage,
-		agentTaskImageKey:              desiredImage,
-		agentTaskStartingGenerationKey: strconv.FormatUint(startingGeneration, 10),
+		taskjournal.TaskResourceKindParam: taskjournal.TaskResourceAgent,
+		agentTaskPreviousImageKey:         previousImage,
+		agentTaskImageKey:                 desiredImage,
+		agentTaskStartingGenerationKey:    strconv.FormatUint(startingGeneration, 10),
 	}
 	planHash, err := agentUpdatePlanHash(agentID, params)
 	if err != nil {

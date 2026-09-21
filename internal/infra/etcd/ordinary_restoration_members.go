@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -84,7 +85,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 			intent.ID != member.ReleaseID || intent.ServiceID != member.ServiceID || intent.OperationID != task.OperationID ||
 			intent.EnvironmentID != task.Owner.EnvironmentID || render.ReleaseID != member.ReleaseID ||
 			render.ServiceID != member.ServiceID || render.EnvironmentID != task.Owner.EnvironmentID ||
-			render.PlanID != task.PlanID || render.ArtifactID != task.Params[TaskComposeArtifactParam] ||
+			render.PlanID != task.PlanID || render.ArtifactID != task.Params[taskjournal.TaskComposeArtifactParam] ||
 			(intent.PriorServingReleaseID == "") != (render.PriorRuntime == nil) {
 			return nil, nil, releases.CorruptReleaseRecord()
 		}

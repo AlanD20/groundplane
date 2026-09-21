@@ -345,7 +345,7 @@ func newConnectorDeletionTask(
 		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: connector.ID,
 		Params: map[string]string{
-			etcd.TaskResourceKindParam:         etcd.TaskResourceConnector,
+			taskjournal.TaskResourceKindParam:  taskjournal.TaskResourceConnector,
 			etcd.TaskConnectorEnvironmentParam: connector.EnvironmentID,
 			etcd.TaskConnectorNameParam:        connector.Name,
 		},

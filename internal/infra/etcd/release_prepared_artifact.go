@@ -41,7 +41,7 @@ func releasePreparedArtifact(evidence ReleasePublicationEvidence) ([]byte, error
 			return nil, errs.New(errs.KindValidationFailed, "release Task steps do not match prepared execution plan")
 		}
 	}
-	artifactID := evidence.Task.Params[TaskComposeArtifactParam]
+	artifactID := evidence.Task.Params[taskjournal.TaskComposeArtifactParam]
 	for _, artifact := range plan.GetArtifacts() {
 		if artifact.GetArtifactId() != artifactID {
 			continue

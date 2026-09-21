@@ -210,7 +210,7 @@ func (repository *TaskRepository) transactTaskTerminal(
 	if isVolumeRemovalTerminalTask(task) {
 		return repository.transactVolumeRemovalTerminal(ctx, task, conditions, mutations)
 	}
-	if task.Type == taskjournal.TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
+	if task.Type == taskjournal.TaskRemove && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		return repository.transactVolumeRemovalAttemptTerminal(ctx, task, conditions, mutations)
 	}
 	if !isBlueprintCandidateTerminalTask(task) {

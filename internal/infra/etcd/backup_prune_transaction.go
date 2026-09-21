@@ -106,7 +106,7 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 	expected.PlanID = retry.PlanID
 	expected.PlanHash = retry.PlanHash
 	expected.RenderGeneration = retry.RenderGeneration
-	expected.Steps = cloneTaskSteps(retry.Steps)
+	expected.Steps = taskjournal.CloneTaskSteps(retry.Steps)
 	expected.TimeoutSeconds = retry.TimeoutSeconds
 	if !backupTaskRecordsEqual(expected, retry) {
 		return nil, errs.New(errs.KindValidationFailed, "backup prune retry Task is invalid")

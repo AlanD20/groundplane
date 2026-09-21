@@ -72,17 +72,17 @@ func (handler *ResourceHandler) Execute(
 	if task.Executor != taskjournal.TaskExecutorController || ids.Validate(ids.KindTask, task.ID) != nil {
 		return errs.New(errs.KindValidationFailed, "Controller Task identity is invalid")
 	}
-	switch task.Params[etcd.TaskResourceKindParam] {
-	case etcd.TaskResourceAgent:
+	switch task.Params[taskjournal.TaskResourceKindParam] {
+	case taskjournal.TaskResourceAgent:
 		if ids.Validate(ids.KindAgent, task.Target) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Agent target is invalid")
 		}
-	case etcd.TaskResourceSecret:
+	case taskjournal.TaskResourceSecret:
 		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindSecret, task.Target) != nil || len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "Controller Task Secret removal is invalid")
 		}
 		return nil
-	case etcd.TaskResourceConnector:
+	case taskjournal.TaskResourceConnector:
 		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindConnector, task.Target) != nil ||
 			len(task.Params) != 3 ||
 			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskConnectorEnvironmentParam]) != nil ||
@@ -90,39 +90,39 @@ func (handler *ResourceHandler) Execute(
 			return errs.New(errs.KindValidationFailed, "controller Task Connector removal is invalid")
 		}
 		return nil
-	case etcd.TaskResourceScript:
+	case taskjournal.TaskResourceScript:
 		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindScript, task.Target) != nil || len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "Controller Task Script removal is invalid")
 		}
 		return nil
-	case etcd.TaskResourceEntry:
+	case taskjournal.TaskResourceEntry:
 		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
 			len(task.Params) != 2 ||
-			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskEntryEnvironmentParam]) != nil {
+			ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskEntryEnvironmentParam]) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Entry removal is invalid")
 		}
 		return nil
-	case etcd.TaskResourceRoute:
+	case taskjournal.TaskResourceRoute:
 		if (task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate && task.Type != taskjournal.TaskRemove) ||
 			ids.Validate(ids.KindRoute, task.Target) != nil || len(task.Params) != 2 ||
-			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskRouteEnvironmentParam]) != nil {
+			ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskRouteEnvironmentParam]) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Route mutation is invalid")
 		}
 		return nil
-	case etcd.TaskResourceService:
+	case taskjournal.TaskResourceService:
 		if (task.Type != taskjournal.TaskStart && task.Type != taskjournal.TaskStop && task.Type != taskjournal.TaskDestroy) ||
 			ids.Validate(ids.KindService, task.Target) != nil || len(task.Params) != 2 ||
-			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskServiceEnvironmentParam]) != nil {
+			ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskServiceEnvironmentParam]) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Service lifecycle is invalid")
 		}
 		return nil
-	case etcd.TaskResourceReleaseGroup:
+	case taskjournal.TaskResourceReleaseGroup:
 		if (task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate && task.Type != taskjournal.TaskRemove) ||
 			ids.Validate(ids.KindReleaseGroup, task.Target) != nil || len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "controller Task release group mutation is invalid")
 		}
 		return nil
-	case etcd.TaskResourceBackingZone:
+	case taskjournal.TaskResourceBackingZone:
 		return handler.backingZones.Execute(ctx, task)
 	case etcd.TaskResourceRunner:
 		if task.Type == taskjournal.TaskCreate {
@@ -204,7 +204,7 @@ func (handler *ResourceHandler) executeRemoval(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) error {
-	if len(task.Params) != 1 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceAgent {
+	if len(task.Params) != 1 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceAgent {
 		return errs.New(errs.KindValidationFailed, "Agent removal Task parameters are invalid")
 	}
 	return handler.agents.Remove(ctx, task.Target)

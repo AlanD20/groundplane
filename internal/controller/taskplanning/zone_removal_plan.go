@@ -43,10 +43,10 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 	prepared := task
 	prepared.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	prepared.Params = map[string]string{
-		etcd.TaskZoneEnvironmentParam:        intent.EnvironmentID,
-		etcd.TaskZoneRemovalOperationParam:   intent.OperationID,
-		etcd.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
-		etcd.TaskComposeArtifactParam:        procedure.ArtifactID,
+		taskjournal.TaskZoneEnvironmentParam:      intent.EnvironmentID,
+		taskjournal.TaskZoneRemovalOperationParam: intent.OperationID,
+		etcd.EnvironmentDesiredRevisionParam:      intent.Claim.RevisionID,
+		taskjournal.TaskComposeArtifactParam:      procedure.ArtifactID,
 	}
 	prepared.Steps = make([]taskjournal.TaskStepRecord, 0, len(procedure.ServiceStepIDs)+1)
 	for _, stepID := range procedure.ServiceStepIDs {
@@ -75,7 +75,7 @@ func (resolver *TaskPlanResolver) resolveZoneRemovalPlan(
 	if !ok || reader == nil {
 		return nil, errs.New(errs.KindInternal, "Zone removal intent reader is not configured")
 	}
-	operationID := task.Params[etcd.TaskZoneRemovalOperationParam]
+	operationID := task.Params[taskjournal.TaskZoneRemovalOperationParam]
 	stored, found, err := reader.GetZoneRemovalIntent(ctx, operationID)
 	if err != nil {
 		return nil, err
@@ -95,12 +95,12 @@ func (resolver *TaskPlanResolver) buildZoneRemovalPlan(
 		len(task.Params) != 4 || len(task.Materializations) != 0 ||
 		len(task.Steps) != len(intent.AffectedServiceIDs)+1 || task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 || uint64(task.RenderGeneration) != intent.CandidateProjection.RenderGeneration ||
-		task.Params[etcd.TaskZoneEnvironmentParam] != intent.EnvironmentID ||
-		task.Params[etcd.TaskZoneRemovalOperationParam] != intent.OperationID ||
+		task.Params[taskjournal.TaskZoneEnvironmentParam] != intent.EnvironmentID ||
+		task.Params[taskjournal.TaskZoneRemovalOperationParam] != intent.OperationID ||
 		task.Params[etcd.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID {
 		return nil, errs.New(errs.KindInternal, "durable Zone removal Task shape is invalid")
 	}
-	artifactID := task.Params[etcd.TaskComposeArtifactParam]
+	artifactID := task.Params[taskjournal.TaskComposeArtifactParam]
 	artifact := &agentpb.ComposeArtifact{}
 	if ids.Validate(ids.KindConfig, artifactID) != nil ||
 		(proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(

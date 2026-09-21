@@ -14,7 +14,7 @@ func (repository *TaskRepository) preparedTaskTimeoutResult(
 	assignment TaskAssignment,
 ) (taskjournal.TaskResultRecord, bool, error) {
 	if assignment.Task.Record.Type == taskjournal.TaskRemove &&
-		assignment.Task.Record.Params[TaskResourceKindParam] == TaskResourceVolume {
+		assignment.Task.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		return taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultEnvironmentDirectory, Diagnostic: taskjournal.TaskResultDiagnosticNone}, true, nil
 	}
 	if assignment.Task.Record.Type != taskjournal.TaskScript {

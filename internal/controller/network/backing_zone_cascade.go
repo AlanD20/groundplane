@@ -132,7 +132,7 @@ func (service *backingZoneCascadeService) Execute(ctx context.Context, task etcd
 			return err
 		}
 		if zone.Record.Desired.OwnerKind != core.ZoneOwnerBackingProject ||
-			zone.Record.EnvironmentID != task.Params[etcd.TaskZoneEnvironmentParam] {
+			zone.Record.EnvironmentID != task.Params[taskjournal.TaskZoneEnvironmentParam] {
 			return errs.New(errs.KindStateConflict, "backing Zone cascade target changed")
 		}
 		attaches, err := service.repository.ListAttachesByBackingNetworkAtRevision(
@@ -285,7 +285,7 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
-	operationID := parent.Params[etcd.TaskZoneRemovalOperationParam]
+	operationID := parent.Params[taskjournal.TaskZoneRemovalOperationParam]
 	storedIntent, found, err := service.repository.GetZoneRemovalIntent(ctx, operationID)
 	if err != nil {
 		return "", err
@@ -320,7 +320,7 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 		ctx,
 		locator,
 		parent.Target,
-		parent.Params[etcd.TaskZoneImpactTokenParam],
+		parent.Params[taskjournal.TaskZoneImpactTokenParam],
 	)
 	if err != nil {
 		return "", err
@@ -460,15 +460,15 @@ func requireCascadeChildSuccess(task etcd.TaskRecord) error {
 // isBackingZoneCascadeTask validates the closed Controller executor contract.
 func isBackingZoneCascadeTask(task etcd.TaskRecord) (bool, error) {
 	if task.Executor != taskjournal.TaskExecutorController ||
-		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceBackingZone {
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 3 ||
-		ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskZoneEnvironmentParam]) != nil ||
-		len(task.Params[etcd.TaskZoneImpactTokenParam]) != sha256.Size*2 {
+		ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskZoneEnvironmentParam]) != nil ||
+		len(task.Params[taskjournal.TaskZoneImpactTokenParam]) != sha256.Size*2 {
 		return false, errs.New(errs.KindValidationFailed, "backing Zone cascade Task parameters are invalid")
 	}
-	if _, err := hex.DecodeString(task.Params[etcd.TaskZoneImpactTokenParam]); err != nil {
+	if _, err := hex.DecodeString(task.Params[taskjournal.TaskZoneImpactTokenParam]); err != nil {
 		return false, errs.New(errs.KindValidationFailed, "backing Zone cascade impact token is invalid")
 	}
 	return true, nil

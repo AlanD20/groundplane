@@ -268,8 +268,8 @@ func projectionContainsZone(projection projectionrecord.EnvironmentComposeProjec
 }
 
 func zoneRemovalTaskIdentity(task TaskRecord) (string, string, error) {
-	environmentID := task.Params[TaskZoneEnvironmentParam]
-	operationID := task.Params[TaskZoneRemovalOperationParam]
+	environmentID := task.Params[taskjournal.TaskZoneEnvironmentParam]
+	operationID := task.Params[taskjournal.TaskZoneRemovalOperationParam]
 	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil ||
 		ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindOperation, operationID) != nil {
 		return "", "", errs.New(errs.KindInternal, "durable Zone removal Task shape is invalid")

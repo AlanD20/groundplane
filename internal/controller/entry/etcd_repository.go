@@ -403,20 +403,20 @@ func applyRemovalTaskPlan(task etcd.TaskRecord, plan RemovalTaskPlan) (etcd.Task
 		identity := plan.Identity
 		task.Executor = taskjournal.TaskExecutorAgent
 		task.Params = map[string]string{
-			etcd.TaskEntryEnvironmentParam:                  plan.EnvironmentID,
+			taskjournal.TaskEntryEnvironmentParam:           plan.EnvironmentID,
 			taskjournal.TaskMaterializationEnvironmentParam: plan.EnvironmentID,
 			etcd.EnvironmentDesiredRevisionParam:            plan.BlueprintRevisionID,
-			etcd.TaskComposeArtifactParam:                   plan.ArtifactID,
-			etcd.TaskEntryTenantSlugParam:                   identity.TenantSlug,
-			etcd.TaskEntryProjectSlugParam:                  identity.ProjectSlug,
-			etcd.TaskEntryEnvironmentNameParam:              identity.EnvironmentName,
-			etcd.TaskEntryAuthorizedVolumeDirParam:          identity.AuthorizedVolumeDir,
+			taskjournal.TaskComposeArtifactParam:            plan.ArtifactID,
+			taskjournal.TaskEntryTenantSlugParam:            identity.TenantSlug,
+			taskjournal.TaskEntryProjectSlugParam:           identity.ProjectSlug,
+			taskjournal.TaskEntryEnvironmentNameParam:       identity.EnvironmentName,
+			taskjournal.TaskEntryAuthorizedVolumeDirParam:   identity.AuthorizedVolumeDir,
 		}
 	case RemovalExecutorController:
 		task.Executor = taskjournal.TaskExecutorController
 		task.Params = map[string]string{
-			etcd.TaskResourceKindParam:     etcd.TaskResourceEntry,
-			etcd.TaskEntryEnvironmentParam: plan.EnvironmentID,
+			taskjournal.TaskResourceKindParam:     taskjournal.TaskResourceEntry,
+			taskjournal.TaskEntryEnvironmentParam: plan.EnvironmentID,
 		}
 	default:
 		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "entry removal executor is invalid")

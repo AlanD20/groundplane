@@ -26,13 +26,13 @@ func ordinaryTaskEnvironmentMutationTarget(
 		targets = append(targets, task.Params[taskjournal.TaskMutationEnvironmentParam])
 	}
 	if entryChange {
-		targets = append(targets, task.Params[TaskEntryEnvironmentParam])
+		targets = append(targets, task.Params[taskjournal.TaskEntryEnvironmentParam])
 	}
 	if serviceChange {
-		targets = append(targets, task.Params[TaskServiceEnvironmentParam])
+		targets = append(targets, task.Params[taskjournal.TaskServiceEnvironmentParam])
 	}
-	if task.Params[TaskZoneRemovalOperationParam] != "" {
-		targets = append(targets, task.Params[TaskZoneEnvironmentParam])
+	if task.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
+		targets = append(targets, task.Params[taskjournal.TaskZoneEnvironmentParam])
 	}
 	if connectorChange {
 		targets = append(targets, task.Params[TaskConnectorEnvironmentParam])

@@ -435,10 +435,10 @@ func (service *MutationService) mutateOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	params := map[string]string{
-		etcd.TaskResourceKindParam:                      etcd.TaskResourceVolume,
+		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceVolume,
 		taskjournal.TaskMaterializationEnvironmentParam: request.environmentID,
 		etcd.EnvironmentDesiredRevisionParam:            claim.RevisionID,
-		etcd.TaskComposeArtifactParam:                   artifactID,
+		taskjournal.TaskComposeArtifactParam:            artifactID,
 		volumeActionParam:                               request.action, volumeComposeKeyParam: request.key,
 		taskplanning.VolumeTaskIntentSHA256Param: hex.EncodeToString(intentDigest),
 	}

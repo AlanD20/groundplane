@@ -87,7 +87,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 	}
 	task.Executor = taskjournal.TaskExecutorAgent
 	task.Params = map[string]string{
-		etcd.TaskRouteEnvironmentParam:                  intent.EnvironmentID,
+		taskjournal.TaskRouteEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
 		etcd.EnvironmentDesiredRevisionParam:            intent.CandidateProjection.RevisionID,
 		EnvironmentBlueprintArtifactParam:               procedure.ArtifactID,
@@ -172,7 +172,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	candidate := *intent.CandidateProjection
 	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
-	if task.Params[etcd.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
+	if task.Params[taskjournal.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
 		revisionID != candidate.RevisionID ||
 		ids.Validate(ids.KindTask, revisionID) != nil ||

@@ -138,8 +138,8 @@ func startupResolverTask(componentID string, createdAt time.Time, ensureService 
 		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskUpdate, Target: componentID,
 		Params: map[string]string{
-			etcd.TaskResourceKindParam:       etcd.TaskResourceComponent,
-			etcd.TaskAutomaticReconcileParam: "true",
+			taskjournal.TaskResourceKindParam: taskjournal.TaskResourceComponent,
+			etcd.TaskAutomaticReconcileParam:  "true",
 		},
 		Steps:          steps,
 		TimeoutSeconds: 480, Status: taskjournal.TaskStatusPending, NextEventSequence: 1,

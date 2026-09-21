@@ -276,7 +276,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 		Owner: taskOwner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: secretID,
-		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceSecret},
+		Params:         map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceSecret},
 		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: secretDeletionTimeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,

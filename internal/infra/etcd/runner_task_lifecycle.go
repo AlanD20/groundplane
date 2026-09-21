@@ -34,19 +34,19 @@ type runnerRemovalTaskEvidence struct {
 // removal Task. Publication and validation must share this representation.
 func RunnerRemovalTaskParams(record runnerrecord.RunnerRecord) map[string]string {
 	return map[string]string{
-		TaskResourceKindParam:  TaskResourceRunner,
-		RunnerTenantIDParam:    record.Desired.TenantID,
-		RunnerOwnerKindParam:   string(record.Desired.OwnerKind),
-		RunnerOwnerIDParam:     record.Desired.OwnerID,
-		RunnerHostSlotParam:    runnerHostSlotSegment(record.Allocation.Slot),
-		RunnerNetworkCIDRParam: record.Allocation.NetworkCIDR,
+		taskjournal.TaskResourceKindParam: TaskResourceRunner,
+		RunnerTenantIDParam:               record.Desired.TenantID,
+		RunnerOwnerKindParam:              string(record.Desired.OwnerKind),
+		RunnerOwnerIDParam:                record.Desired.OwnerID,
+		RunnerHostSlotParam:               runnerHostSlotSegment(record.Allocation.Slot),
+		RunnerNetworkCIDRParam:            record.Allocation.NetworkCIDR,
 	}
 }
 
 func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence, error) {
 	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindRunner, task.Target) != nil || len(task.Params) != 6 ||
-		task.Params[TaskResourceKindParam] != TaskResourceRunner ||
+		task.Params[taskjournal.TaskResourceKindParam] != TaskResourceRunner ||
 		ids.Validate(ids.KindTenant, task.Params[RunnerTenantIDParam]) != nil {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
 	}
@@ -174,7 +174,7 @@ func runnerStringMapsEqual(left map[string]string, right map[string]string) bool
 }
 
 func taskOwnsRunner(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceRunner {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != TaskResourceRunner {
 		return false, nil
 	}
 	switch task.Type {
@@ -189,7 +189,7 @@ func taskOwnsRunner(task TaskRecord) (bool, error) {
 }
 
 func taskOwnsRunnerCreation(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceRunner {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != TaskResourceRunner {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskCreate || ids.Validate(ids.KindRunner, task.Target) != nil ||

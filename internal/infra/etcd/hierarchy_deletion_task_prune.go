@@ -23,7 +23,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	if err != nil {
 		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	operationID := task.Params[TaskHierarchyDeletionOperationParam]
+	operationID := task.Params[taskjournal.TaskHierarchyDeletionOperationParam]
 	if !hierarchydeletion.ValidHierarchyDeletionPrivateID(operationID, "del") {
 		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}

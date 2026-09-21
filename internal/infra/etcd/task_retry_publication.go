@@ -67,10 +67,10 @@ func (repository *TaskRepository) retryTask(
 	if source.Record.Type == taskjournal.TaskRotate {
 		return repository.retryBackupKeyRotationTask(ctx, source, retryTaskID, actor, marker)
 	}
-	if source.Record.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion {
+	if source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {
 		return repository.retryHierarchyDeletionTask(ctx, source, retryTaskID, actor, provided, marker)
 	}
-	if source.Record.Type == taskjournal.TaskRemove && source.Record.Params[TaskResourceKindParam] == TaskResourceVolume {
+	if source.Record.Type == taskjournal.TaskRemove && source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		return repository.retryVolumeRemovalTask(ctx, source, retryTaskID, actor, marker)
 	}
 	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
@@ -322,7 +322,7 @@ func (repository *TaskRepository) retryTask(
 		mutations,
 		false,
 		attachChange.applies,
-		routeChange.applies && source.Record.Params[TaskEntryEnvironmentParam] != "",
+		routeChange.applies && source.Record.Params[taskjournal.TaskEntryEnvironmentParam] != "",
 		serviceChange.applies,
 		connectorChange.applies,
 	)
@@ -349,7 +349,7 @@ func (repository *TaskRepository) retryTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if retry.Params[TaskZoneRemovalOperationParam] != "" {
+	if retry.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
 		if err := plan.enforceTransactionBounds(
 			zoneRemovalTransactionBudgetValidator(zoneRemovalTransactionRetry),
 		); err != nil {

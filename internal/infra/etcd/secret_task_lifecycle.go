@@ -32,7 +32,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 		return secretTaskChange{}, err
 	}
 	if retry.Type != source.Type || retry.Target != source.Target ||
-		retry.Params[TaskResourceKindParam] != TaskResourceSecret {
+		retry.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceSecret {
 		return secretTaskChange{}, errs.New(errs.KindInternal, "Secret retry changed its durable target")
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -268,7 +268,7 @@ func (repository *TaskRepository) validateSecretTaskAcknowledgementReplay(
 }
 
 func taskOwnsSecretRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceSecret {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceSecret {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindSecret, task.Target) != nil {

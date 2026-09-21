@@ -31,7 +31,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	result *taskjournal.TaskResultRecord,
 	revision int64,
 ) (platformComponentTaskChange, error) {
-	if task.Params[TaskResourceKindParam] != TaskResourceComponent ||
+	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return platformComponentTaskChange{}, nil
 	}
@@ -262,7 +262,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 	task TaskRecord,
 	revision int64,
 ) error {
-	if task.Params[TaskResourceKindParam] != TaskResourceComponent ||
+	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return nil
 	}

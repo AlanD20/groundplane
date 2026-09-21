@@ -48,8 +48,8 @@ func validateRouteMutationTaskOwner(task TaskRecord, intent RouteMutationIntent)
 	if task.ID != intent.TaskID || task.OperationID != intent.OperationID || task.Executor != executor ||
 		(task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate) || task.Target != intent.RouteID ||
 		!task.CreatedAt.Equal(intent.CreatedAt) || len(task.Params) < 2 ||
-		task.Params[TaskResourceKindParam] != TaskResourceRoute ||
-		task.Params[TaskRouteEnvironmentParam] != intent.EnvironmentID {
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceRoute ||
+		task.Params[taskjournal.TaskRouteEnvironmentParam] != intent.EnvironmentID {
 		return errs.New(errs.KindStateConflict, "Route mutation intent does not belong to its Task")
 	}
 	return nil
@@ -62,12 +62,12 @@ func sameRouteDesiredVersion(left routerecord.Record, right routerecord.Record) 
 
 func validateRouteRemovalTaskOwner(task TaskRecord, intent RouteRemovalIntent) error {
 	expectedExecutor := taskjournal.TaskExecutorController
-	validParams := len(task.Params) == 2 && task.Params[TaskResourceKindParam] == TaskResourceRoute &&
-		task.Params[TaskRouteEnvironmentParam] == intent.EnvironmentID
+	validParams := len(task.Params) == 2 && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute &&
+		task.Params[taskjournal.TaskRouteEnvironmentParam] == intent.EnvironmentID
 	if intent.Provider != nil {
 		expectedExecutor = taskjournal.TaskExecutorAgent
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 4 &&
-			task.Params[TaskRouteEnvironmentParam] == intent.EnvironmentID &&
+			task.Params[taskjournal.TaskRouteEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[taskjournal.TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID
 	}

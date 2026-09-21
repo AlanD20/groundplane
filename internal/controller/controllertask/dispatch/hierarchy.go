@@ -40,7 +40,7 @@ func (dispatcher *HierarchyDispatcher) Execute(
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "hierarchy deletion Task context is required")
 	}
-	if task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceHierarchyDeletion {
+	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
 		return dispatcher.fallback.Execute(ctx, task)
 	}
 	if err := validateHierarchyDeletionTask(task); err != nil {
@@ -52,10 +52,10 @@ func (dispatcher *HierarchyDispatcher) Execute(
 func validateHierarchyDeletionTask(task etcd.TaskRecord) error {
 	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindTask, task.ID) != nil || len(task.Params) != 3 ||
-		task.Params[etcd.TaskHierarchyDeletionOperationParam] == "" {
+		task.Params[taskjournal.TaskHierarchyDeletionOperationParam] == "" {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion Controller Task is invalid")
 	}
-	targetKind := hierarchydeletion.TargetKind(task.Params[etcd.TaskHierarchyDeletionTargetKindParam])
+	targetKind := hierarchydeletion.TargetKind(task.Params[taskjournal.TaskHierarchyDeletionTargetKindParam])
 	var idKind ids.Kind
 	switch targetKind {
 	case hierarchydeletion.TargetTenant:

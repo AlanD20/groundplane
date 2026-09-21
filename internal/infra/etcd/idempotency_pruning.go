@@ -422,7 +422,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	if err != nil || task.ID != marker.TaskID {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	if task.Type != taskjournal.TaskRemove || task.Params[TaskResourceKindParam] != TaskResourceVolume {
+	if task.Type != taskjournal.TaskRemove || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceVolume {
 		return nil, false, nil
 	}
 	root := removalrecord.Root(task.OperationID)

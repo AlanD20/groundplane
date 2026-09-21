@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -176,7 +177,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 			intent.ServiceID != reference.ServiceID || intent.OperationID != task.OperationID ||
 			intent.EnvironmentID != task.Owner.EnvironmentID || intent.OperationKind != domain.OperationBlueprintApply ||
 			render.ReleaseID != intent.ID || render.ServiceID != intent.ServiceID || render.PlanID != task.PlanID ||
-			render.EnvironmentID != task.Owner.EnvironmentID || render.ArtifactID != task.Params[TaskComposeArtifactParam] {
+			render.EnvironmentID != task.Owner.EnvironmentID || render.ArtifactID != task.Params[taskjournal.TaskComposeArtifactParam] {
 			return nil, nil, releases.CorruptReleaseRecord()
 		}
 		members[index] = ReleaseTaskRenderMember{Intent: intent, Render: render}

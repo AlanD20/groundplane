@@ -193,7 +193,7 @@ func (service *taskRetryService) retryTask(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if source.Record.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceController {
+	if source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindTaskNotRetryable, "Controller update requires a fresh explicit release selection after recovery",
 		)

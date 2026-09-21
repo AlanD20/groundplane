@@ -296,8 +296,8 @@ func validateCompletedRouteHeadReplay(
 	task TaskRecord,
 	revision int64,
 ) error {
-	environmentID := task.Params[TaskRouteEnvironmentParam]
-	if task.Type != taskjournal.TaskRemove || task.Params[TaskResourceKindParam] != TaskResourceRoute ||
+	environmentID := task.Params[taskjournal.TaskRouteEnvironmentParam]
+	if task.Type != taskjournal.TaskRemove || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceRoute ||
 		recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 		return nil
 	}

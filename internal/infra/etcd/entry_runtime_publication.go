@@ -9,7 +9,6 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"slices"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -20,32 +19,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const TaskEntryRuntimeEpochParam = "entry_runtime_epoch_revision"
-
-// EntryTaskRuntime pins operational intent separately from desired input. An
-// explicit empty set means materialization only; absent capture is not authority
-// to reconstruct or publish an Entry update.
-type EntryTaskRuntime struct {
-	RunningServiceIDs []string             `json:"running_service_ids"`
-	Updates           []EntryRuntimeUpdate `json:"updates"`
-}
-
-// EntryRuntimeUpdate is the bounded durable recipe for one selected Service.
-// Runtime bytes remain in the prior receipt and immutable Entry projection.
-type EntryRuntimeUpdate struct {
-	ServiceID               string `json:"service_id"`
-	PreviousRevision        int64  `json:"previous_revision"`
-	CurrentArtifactID       string `json:"current_artifact_id"`
-	RetainedPriorArtifactID string `json:"retained_prior_artifact_id,omitempty"`
-}
-
 func validateTaskEntryRuntime(task TaskRecord) error {
 	if task.EntryRuntime == nil {
 		// Historical Tasks remain readable without inventing capture authority.
 		return nil
 	}
 	if task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent ||
-		task.Params[TaskResourceKindParam] != TaskResourceEntry || task.EntryRuntime.RunningServiceIDs == nil ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry || task.EntryRuntime.RunningServiceIDs == nil ||
 		task.EntryRuntime.Updates == nil {
 		return errs.New(errs.KindValidationFailed, "Entry runtime capture shape is invalid")
 	}
@@ -70,15 +50,6 @@ func validateTaskEntryRuntime(task TaskRecord) error {
 	return nil
 }
 
-func cloneEntryTaskRuntime(runtime *EntryTaskRuntime) *EntryTaskRuntime {
-	if runtime == nil {
-		return nil
-	}
-	cloned := &EntryTaskRuntime{RunningServiceIDs: slices.Clone(runtime.RunningServiceIDs),
-		Updates: slices.Clone(runtime.Updates)}
-	return cloned
-}
-
 func EntryRuntimeEpochRevision(task TaskRecord) (int64, error) {
 	if task.EntryRuntime == nil {
 		return 0, errs.New(errs.KindValidationFailed, "Entry runtime capture is absent")
@@ -86,18 +57,18 @@ func EntryRuntimeEpochRevision(task TaskRecord) (int64, error) {
 	if err := validateTaskEntryRuntime(task); err != nil {
 		return 0, err
 	}
-	value := task.Params[TaskEntryRuntimeEpochParam]
+	value := task.Params[taskjournal.TaskEntryRuntimeEpochParam]
 	epoch, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || epoch <= 0 || strconv.FormatInt(epoch, 10) != value ||
-		task.Type != taskjournal.TaskUpdate || task.Params[TaskResourceKindParam] != TaskResourceEntry {
+		task.Type != taskjournal.TaskUpdate || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry {
 		return 0, errs.New(errs.KindValidationFailed, "Entry runtime capture epoch is invalid")
 	}
 	return epoch, nil
 }
 
 func validateEntryRuntimePublication(task TaskRecord, fence environmentMutationFenceEvidence) error {
-	entryMutation := task.Type == taskjournal.TaskUpdate && task.Params[TaskResourceKindParam] == TaskResourceEntry
-	if !entryMutation && task.Params[TaskEntryRuntimeEpochParam] == "" && task.EntryRuntime == nil {
+	entryMutation := task.Type == taskjournal.TaskUpdate && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry
+	if !entryMutation && task.Params[taskjournal.TaskEntryRuntimeEpochParam] == "" && task.EntryRuntime == nil {
 		return nil
 	}
 	epoch, err := EntryRuntimeEpochRevision(task)
@@ -183,7 +154,7 @@ func (repository *TaskRepository) entryRuntimeClaimConditions(
 func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 	ctx context.Context, terminal TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
-	if terminal.Type != taskjournal.TaskUpdate || terminal.Params[TaskResourceKindParam] != TaskResourceEntry ||
+	if terminal.Type != taskjournal.TaskUpdate || terminal.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry ||
 		terminal.Status != taskjournal.TaskStatusCompleted || terminal.EntryRuntime == nil || len(terminal.EntryRuntime.Updates) == 0 {
 		return taskMaterializationProjectionChange{}, nil
 	}
@@ -234,8 +205,8 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 	}
 	defer clearKeyValues(read.Values)
 	proof, err := json.Marshal(struct {
-		Updates []EntryRuntimeUpdate        `json:"updates"`
-		Result  *taskjournal.TaskResultData `json:"result"`
+		Updates []taskjournal.EntryRuntimeUpdate `json:"updates"`
+		Result  *taskjournal.TaskResultData      `json:"result"`
 	}{terminal.EntryRuntime.Updates, taskjournal.TaskResultToData(result)})
 	if err != nil {
 		return taskMaterializationProjectionChange{}, errs.Wrap(errs.KindInternal, err)

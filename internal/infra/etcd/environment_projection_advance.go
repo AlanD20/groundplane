@@ -28,7 +28,7 @@ func validateEnvironmentComposeProjectionPublicationAdvance(
 	task TaskRecord,
 ) error {
 	removedVolumeID := ""
-	if task.Type == taskjournal.TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
+	if task.Type == taskjournal.TaskRemove && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		removedVolumeID = task.Target
 		if recordcodec.ValidateID(ids.KindVolume, removedVolumeID) != nil {
 			return errs.New(errs.KindValidationFailed, "Volume removal Task target is invalid")

@@ -231,7 +231,7 @@ func (updates *TaskUpdates) settle(
 func DecodeUpdateTask(task etcd.TaskRecord) (UpdateRequest, error) {
 	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskUpdate ||
 		ids.Validate(ids.KindTask, task.ID) != nil || len(task.Params) != 4 ||
-		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceAgent {
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceAgent {
 		return UpdateRequest{}, invalidUpdateTask()
 	}
 	previous, desired := task.Params["previous_image"], task.Params["image"]

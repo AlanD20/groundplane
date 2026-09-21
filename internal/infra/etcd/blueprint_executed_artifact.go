@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,7 +23,7 @@ func blueprintExecutedArtifact(evidence BlueprintReleasePublicationEvidence) ([]
 		return nil, errs.New(errs.KindValidationFailed, "Blueprint executed artifact scope differs from Task")
 	}
 	for _, artifact := range evidence.Plan.GetArtifacts() {
-		if artifact.GetArtifactId() != evidence.Task.Params[TaskComposeArtifactParam] {
+		if artifact.GetArtifactId() != evidence.Task.Params[taskjournal.TaskComposeArtifactParam] {
 			continue
 		}
 		if artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
@@ -60,7 +61,7 @@ func (repository *TaskRepository) blueprintAcknowledgedArtifact(
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(marker.ExecutedComposeArtifact, artifact); err != nil ||
-		artifact.GetArtifactId() != task.Params[TaskComposeArtifactParam] || artifact.GetOwnerId() != task.Owner.EnvironmentID ||
+		artifact.GetArtifactId() != task.Params[taskjournal.TaskComposeArtifactParam] || artifact.GetOwnerId() != task.Owner.EnvironmentID ||
 		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT {
 		return nil, etcdstore.Condition{}, releases.CorruptReleaseRecord()
 	}

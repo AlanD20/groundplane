@@ -58,7 +58,7 @@ func validateReleaseCandidateDescriptor(
 		if manifestMembers[member.GetServiceId()] != member.GetCandidateReleaseId() {
 			return nil, releases.CorruptReleaseRecord()
 		}
-		if member.GetCandidateArtifactId() != task.Params[TaskComposeArtifactParam] {
+		if member.GetCandidateArtifactId() != task.Params[taskjournal.TaskComposeArtifactParam] {
 			return nil, releases.CorruptReleaseRecord()
 		}
 		stepIDs := append([]string(nil), member.GetForwardStepIds()...)

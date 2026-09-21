@@ -222,7 +222,7 @@ func validateReleaseGroupPreparedMutation(prepared ReleaseGroupPreparedMutation,
 	if ids.Validate(ids.KindEnvironment, prepared.environmentID) != nil ||
 		ids.Validate(ids.KindReleaseGroup, prepared.groupID) != nil || prepared.taskType != task.Type ||
 		task.Executor != taskjournal.TaskExecutorController || task.Target != prepared.groupID ||
-		task.Status != taskjournal.TaskStatusPending || task.Params[TaskResourceKindParam] != TaskResourceReleaseGroup ||
+		task.Status != taskjournal.TaskStatusPending || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceReleaseGroup ||
 		len(task.Params) != 1 ||
 		(prepared.taskType != taskjournal.TaskCreate && prepared.taskType != taskjournal.TaskUpdate && prepared.taskType != taskjournal.TaskRemove) {
 		return errs.New(errs.KindValidationFailed, "release group prepared mutation is invalid")

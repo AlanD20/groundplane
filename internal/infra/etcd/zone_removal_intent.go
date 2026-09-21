@@ -249,19 +249,19 @@ func validateZoneRemovalTaskOwner(task TaskRecord, intent ZoneRemovalIntent) err
 	if task.ID != intent.ActiveTaskID || task.Target != intent.ZoneID || task.Type != taskjournal.TaskRemove ||
 		!task.CreatedAt.Equal(
 			intent.ActiveTaskCreatedAt,
-		) || task.Params[TaskZoneRemovalOperationParam] != intent.OperationID ||
-		task.Params[TaskZoneEnvironmentParam] != intent.EnvironmentID ||
+		) || task.Params[taskjournal.TaskZoneRemovalOperationParam] != intent.OperationID ||
+		task.Params[taskjournal.TaskZoneEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID {
 		return errs.New(errs.KindStateConflict, "Zone removal intent does not belong to its Task")
 	}
 	if task.Executor == taskjournal.TaskExecutorAgent {
-		if len(task.Params) != 4 || ids.Validate(ids.KindConfig, task.Params[TaskComposeArtifactParam]) != nil {
+		if len(task.Params) != 4 || ids.Validate(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) != nil {
 			return errs.New(errs.KindStateConflict, "Zone removal Agent Task input changed")
 		}
 		return nil
 	}
 	if task.Executor != taskjournal.TaskExecutorController || len(task.Params) != 5 ||
-		task.Params[TaskResourceKindParam] != TaskResourceBackingZone || !recordcodec.ValidSHA256(task.Params[TaskZoneImpactTokenParam]) {
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone || !recordcodec.ValidSHA256(task.Params[taskjournal.TaskZoneImpactTokenParam]) {
 		return errs.New(errs.KindStateConflict, "Zone removal Controller Task input changed")
 	}
 	return nil

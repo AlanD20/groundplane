@@ -20,10 +20,10 @@ type entryDesiredRemovalPublication struct {
 func desiredRevisionTaskEnvironment(task TaskRecord) (string, bool, error) {
 	if task.Executor == taskjournal.TaskExecutorController && task.Type == taskjournal.TaskRemove &&
 		ids.Validate(ids.KindEnvEntry, task.Target) == nil && len(task.Params) == 3 &&
-		task.Params[TaskResourceKindParam] == TaskResourceEntry && len(task.Materializations) == 0 &&
-		ids.Validate(ids.KindEnvironment, task.Params[TaskEntryEnvironmentParam]) == nil &&
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry && len(task.Materializations) == 0 &&
+		ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskEntryEnvironmentParam]) == nil &&
 		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) == nil {
-		return task.Params[TaskEntryEnvironmentParam], true, nil
+		return task.Params[taskjournal.TaskEntryEnvironmentParam], true, nil
 	}
 	return taskMaterializationEnvironment(task)
 }
@@ -171,7 +171,7 @@ func entryRemovalControllerWriter(task TaskRecord) ([]etcdstore.Mutation, error)
 	if task.Executor != taskjournal.TaskExecutorController {
 		return nil, nil
 	}
-	environmentID := task.Params[TaskEntryEnvironmentParam]
+	environmentID := task.Params[taskjournal.TaskEntryEnvironmentParam]
 	value, err := encodeTaskMaterializationWriter(taskMaterializationWriter(task, environmentID, nil))
 	if err != nil {
 		return nil, err

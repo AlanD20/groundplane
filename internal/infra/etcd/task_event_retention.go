@@ -12,18 +12,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// TaskEventCheckpoint retains bounded step progress and mutation facts, not a
-// second history. Its identity is the replay watermark of evicted events.
-type TaskEventCheckpoint struct {
-	Identity       taskjournal.TaskEventIdentity `json:"identity"`
-	Sequence       uint64                        `json:"sequence"`
-	PayloadSHA256  string                        `json:"payload_sha256"`
-	State          taskjournal.TaskEventState    `json:"state"`
-	Running        bool                          `json:"running"`
-	Completed      bool                          `json:"completed"`
-	EffectPossible bool                          `json:"effect_possible"`
-}
-
 func firstTaskEventSequence(task TaskRecord) uint64 {
 	return task.NextEventSequence - uint64(task.EventCount)
 }
@@ -38,7 +26,7 @@ func nextTaskControllerTimestamp(previous time.Time, supplied time.Time) (time.T
 	return previous.Add(time.Nanosecond), nil
 }
 
-func taskCheckpointAssignmentMatches(checkpoint TaskEventCheckpoint, assignment taskassignments.TaskAssignmentRecord) bool {
+func taskCheckpointAssignmentMatches(checkpoint taskjournal.TaskEventCheckpoint, assignment taskassignments.TaskAssignmentRecord) bool {
 	identity := checkpoint.Identity
 	return identity.AssignmentID == assignment.AssignmentID && identity.AgentID == assignment.AgentID &&
 		identity.AgentGeneration == assignment.AgentGeneration && identity.Attempt > 0 && identity.Attempt <= assignment.ExecutionEpoch
@@ -125,13 +113,15 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		dedup.PayloadSHA256 != event.PayloadSHA256 {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
-	checkpoint := TaskEventCheckpoint{Identity: event.Identity, Sequence: event.Sequence,
+	checkpoint := taskjournal.TaskEventCheckpoint{Identity: event.Identity, Sequence: event.Sequence,
 		PayloadSHA256: event.PayloadSHA256, State: event.State,
 		Running:   event.State == taskjournal.TaskEventStateRunning || event.State == taskjournal.TaskEventStateCompleted,
 		Completed: event.State == taskjournal.TaskEventStateCompleted, EffectPossible: event.State != taskjournal.TaskEventStatePending}
 	index := slices.IndexFunc(
 		prepared.Task.EventCheckpoints,
-		func(value TaskEventCheckpoint) bool { return value.Identity.StepID == event.Identity.StepID },
+		func(value taskjournal.TaskEventCheckpoint) bool {
+			return value.Identity.StepID == event.Identity.StepID
+		},
 	)
 	if index >= 0 {
 		prior := prepared.Task.EventCheckpoints[index]
@@ -148,7 +138,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		prepared.Task.EventCheckpoints[index] = checkpoint
 	} else {
 		prepared.Task.EventCheckpoints = append(prepared.Task.EventCheckpoints, checkpoint)
-		slices.SortFunc(prepared.Task.EventCheckpoints, func(a, b TaskEventCheckpoint) int {
+		slices.SortFunc(prepared.Task.EventCheckpoints, func(a, b taskjournal.TaskEventCheckpoint) int {
 			if a.Identity.StepID < b.Identity.StepID {
 				return -1
 			}

@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"sort"
 	"time"
@@ -81,7 +82,7 @@ func buildBlueprintNativeRestorationAuthority(
 		OperationID:         task.OperationID,
 		PlanHash:            task.PlanHash,
 		EnvironmentID:       task.Owner.EnvironmentID,
-		CandidateArtifactID: task.Params[TaskComposeArtifactParam],
+		CandidateArtifactID: task.Params[taskjournal.TaskComposeArtifactParam],
 	}
 	if predecessor.Present {
 		if _, err := taskassignments.OpenRestorationWitness(task.Owner.EnvironmentID, applied); err != nil {

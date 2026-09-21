@@ -94,7 +94,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 			return hierarchydeletion.HierarchyDeletionChildEntry{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		previousGeneration, parseErr := strconv.ParseInt(
-			previousTask.Params[TaskHierarchyDeletionGenerationParam], 10, 64,
+			previousTask.Params[taskjournal.TaskHierarchyDeletionGenerationParam], 10, 64,
 		)
 		if parseErr != nil || previousGeneration <= 0 {
 			return hierarchydeletion.HierarchyDeletionChildEntry{}, hierarchydeletion.CorruptHierarchyDeletion()
@@ -173,8 +173,8 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	defer clear(parentTask.Entry.Value)
 	parent, err := decodeTaskRecord(parentTask.Entry.Value)
 	if err != nil || parent.ID != operation.Tombstone.CurrentTaskID || parent.Executor != taskjournal.TaskExecutorController ||
-		parent.Status != taskjournal.TaskStatusRunning || parent.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion ||
-		parent.Params[TaskHierarchyDeletionOperationParam] != operation.Tombstone.OperationID {
+		parent.Status != taskjournal.TaskStatusRunning || parent.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion ||
+		parent.Params[taskjournal.TaskHierarchyDeletionOperationParam] != operation.Tombstone.OperationID {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion parent Task is not running",
@@ -186,15 +186,15 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		PlanID: planID, PlanHash: planHash, RenderGeneration: 1,
 		Type: action.AgentProcedure.TaskType, Target: action.TargetID,
 		Params: map[string]string{
-			TaskResourceKindParam:                TaskResourceHierarchyDeletion,
-			TaskHierarchyDeletionParentParam:     operation.Tombstone.OperationID,
-			TaskHierarchyDeletionChildParam:      action.AgentProcedure.ChildOperationID,
-			TaskHierarchyDeletionAttemptParam:    attemptID,
-			TaskHierarchyDeletionGenerationParam: strconv.FormatInt(generation, 10),
-			TaskHierarchyDeletionOrdinalParam:    strconv.FormatInt(action.Ordinal, 10),
-			TaskHierarchyDeletionActionKindParam: string(action.ActionKind),
-			TaskHierarchyDeletionProcedureParam:  action.AgentProcedure.TypedProcedure,
-			TaskHierarchyDeletionInputParam:      action.AgentProcedure.InputDigest,
+			taskjournal.TaskResourceKindParam:                taskjournal.TaskResourceHierarchyDeletion,
+			taskjournal.TaskHierarchyDeletionParentParam:     operation.Tombstone.OperationID,
+			taskjournal.TaskHierarchyDeletionChildParam:      action.AgentProcedure.ChildOperationID,
+			taskjournal.TaskHierarchyDeletionAttemptParam:    attemptID,
+			taskjournal.TaskHierarchyDeletionGenerationParam: strconv.FormatInt(generation, 10),
+			taskjournal.TaskHierarchyDeletionOrdinalParam:    strconv.FormatInt(action.Ordinal, 10),
+			taskjournal.TaskHierarchyDeletionActionKindParam: string(action.ActionKind),
+			taskjournal.TaskHierarchyDeletionProcedureParam:  action.AgentProcedure.TypedProcedure,
+			taskjournal.TaskHierarchyDeletionInputParam:      action.AgentProcedure.InputDigest,
 		},
 		Steps: taskSteps, TimeoutSeconds: action.AgentProcedure.TimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,

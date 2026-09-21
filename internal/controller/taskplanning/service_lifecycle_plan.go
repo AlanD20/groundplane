@@ -100,8 +100,8 @@ func (resolver *TaskPlanResolver) prepareServiceLifecycleTask(
 	prepared := task
 	prepared.RenderGeneration = int32(input.Projection.RenderGeneration)
 	prepared.Params = map[string]string{
-		etcd.TaskServiceEnvironmentParam: input.EnvironmentID,
-		etcd.TaskComposeArtifactParam:    input.ArtifactID,
+		taskjournal.TaskServiceEnvironmentParam: input.EnvironmentID,
+		taskjournal.TaskComposeArtifactParam:    input.ArtifactID,
 	}
 	prepared.Steps = make([]taskjournal.TaskStepRecord, len(stepIDs))
 	for index, stepID := range stepIDs {
@@ -157,8 +157,8 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 		wantSteps++
 	}
 	if len(task.Steps) != wantSteps ||
-		task.Params[etcd.TaskServiceEnvironmentParam] != input.EnvironmentID ||
-		task.Params[etcd.TaskComposeArtifactParam] != input.ArtifactID {
+		task.Params[taskjournal.TaskServiceEnvironmentParam] != input.EnvironmentID ||
+		task.Params[taskjournal.TaskComposeArtifactParam] != input.ArtifactID {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle Task procedure changed")
 	}
 	phase := core.ServiceLifecyclePhase("")

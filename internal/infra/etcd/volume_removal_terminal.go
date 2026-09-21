@@ -222,7 +222,7 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 }
 
 func isVolumeRemovalTerminalTask(task TaskRecord) bool {
-	return task.Type == taskjournal.TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume &&
+	return task.Type == taskjournal.TaskRemove && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume &&
 		task.Status == taskjournal.TaskStatusCompleted
 }
 

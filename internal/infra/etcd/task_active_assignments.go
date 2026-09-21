@@ -173,7 +173,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 
 func isMarkerlessHierarchyDeletionAgentChild(task TaskRecord) bool {
 	return task.Executor == taskjournal.TaskExecutorAgent && task.Actor == taskjournal.TaskActorSystem &&
-		task.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion
 }
 
 // ListControllerTaskClaims restores the single native Controller execution

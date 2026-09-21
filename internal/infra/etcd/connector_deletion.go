@@ -221,7 +221,7 @@ func validateConnectorDeletionEnvelope(
 		task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove || task.Target != connector.ID ||
 		task.Status != taskjournal.TaskStatusPending || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
 		task.IdempotencyKey == "" || task.IdempotencyKey != marker.Locator.Key || len(task.Params) != 3 ||
-		task.Params[TaskResourceKindParam] != TaskResourceConnector ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceConnector ||
 		task.Params[TaskConnectorEnvironmentParam] != connector.EnvironmentID ||
 		task.Params[TaskConnectorNameParam] != connector.Name {
 		return errs.New(

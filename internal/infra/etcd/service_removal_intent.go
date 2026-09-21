@@ -468,10 +468,10 @@ func sameServiceRemovalEntrySource(left, right core.EntrySource) bool {
 func validateServiceRemovalTaskOwner(task TaskRecord, intent ServiceRemovalIntent) error {
 	if task.ID != intent.TaskID || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.ServiceID || !task.CreatedAt.Equal(intent.CreatedAt) || len(task.Params) != 4 ||
-		task.Params[TaskResourceKindParam] != TaskResourceService ||
-		task.Params[TaskServiceEnvironmentParam] != intent.EnvironmentID ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
+		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||
-		task.Params[TaskComposeArtifactParam] == "" {
+		task.Params[taskjournal.TaskComposeArtifactParam] == "" {
 		return errs.New(errs.KindStateConflict, "Service removal intent does not belong to its Task")
 	}
 	return nil

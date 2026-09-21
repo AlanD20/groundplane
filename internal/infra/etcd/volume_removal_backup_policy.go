@@ -189,7 +189,7 @@ func (prepared VolumeRemovalBackupPolicyPreparation) validateDesiredPublication(
 	if state == nil || claim.SourceKind != EnvironmentBlueprintSourceMutation ||
 		state.environmentID != claim.EnvironmentID || state.volumeID != removedVolumeID ||
 		task.Type != taskjournal.TaskRemove || task.Target != state.volumeID ||
-		task.Params[TaskResourceKindParam] != TaskResourceVolume ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceVolume ||
 		marker.Locator.Method != "DELETE" || marker.Locator.Route != "/volumes/{id}" ||
 		!equalEnvironmentBlueprintBackupPolicy(prepared.Projection(), projection.Backup) {
 		return errs.New(errs.KindValidationFailed, "Volume policy preparation does not match desired removal")

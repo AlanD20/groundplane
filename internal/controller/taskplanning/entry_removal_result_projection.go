@@ -4,6 +4,7 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -11,15 +12,15 @@ func entryRemovalTaskPlan(task etcd.TaskRecord) (entrycapability.RemovalTaskPlan
 	plan := entrycapability.RemovalTaskPlan{
 		Executor: entrycapability.RemovalExecutorAgent, PlanHash: task.PlanHash,
 		RenderGeneration:    task.RenderGeneration,
-		EnvironmentID:       task.Params[etcd.TaskEntryEnvironmentParam],
+		EnvironmentID:       task.Params[taskjournal.TaskEntryEnvironmentParam],
 		BlueprintRevisionID: task.Params[etcd.EnvironmentDesiredRevisionParam],
-		ArtifactID:          task.Params[etcd.TaskComposeArtifactParam], TimeoutSeconds: task.TimeoutSeconds,
+		ArtifactID:          task.Params[taskjournal.TaskComposeArtifactParam], TimeoutSeconds: task.TimeoutSeconds,
 		Identity: entrycapability.RemovalEnvironmentIdentity{
-			TenantID: task.Owner.TenantID, TenantSlug: task.Params[etcd.TaskEntryTenantSlugParam],
-			ProjectID: task.Owner.ProjectID, ProjectSlug: task.Params[etcd.TaskEntryProjectSlugParam],
+			TenantID: task.Owner.TenantID, TenantSlug: task.Params[taskjournal.TaskEntryTenantSlugParam],
+			ProjectID: task.Owner.ProjectID, ProjectSlug: task.Params[taskjournal.TaskEntryProjectSlugParam],
 			EnvironmentID:       task.Owner.EnvironmentID,
-			EnvironmentName:     task.Params[etcd.TaskEntryEnvironmentNameParam],
-			AuthorizedVolumeDir: task.Params[etcd.TaskEntryAuthorizedVolumeDirParam],
+			EnvironmentName:     task.Params[taskjournal.TaskEntryEnvironmentNameParam],
+			AuthorizedVolumeDir: task.Params[taskjournal.TaskEntryAuthorizedVolumeDirParam],
 		},
 		Steps:            make([]entrycapability.RemovalStep, len(task.Steps)),
 		Materializations: make([]entrycapability.RemovalMaterialization, len(task.Materializations)),

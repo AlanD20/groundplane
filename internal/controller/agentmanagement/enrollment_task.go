@@ -1,6 +1,7 @@
 package agentmanagement
 
 import (
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 	"strings"
 
@@ -24,14 +25,14 @@ func DecodeEnrollmentTask(task etcd.TaskRecord) (localagent.EnrollRequest, error
 		Config:  localagent.Config{Labels: map[string]string{}},
 	}
 	required := map[string]bool{
-		etcd.TaskResourceKindParam: false, agentTaskImageKey: false,
+		taskjournal.TaskResourceKindParam: false, agentTaskImageKey: false,
 		agentTaskEnrollmentKey: false, agentTaskPullIntervalKey: false,
 		agentTaskMaxConcurrentKey: false,
 	}
 	for key, value := range task.Params {
 		switch key {
-		case etcd.TaskResourceKindParam:
-			if value != etcd.TaskResourceAgent {
+		case taskjournal.TaskResourceKindParam:
+			if value != taskjournal.TaskResourceAgent {
 				return localagent.EnrollRequest{}, invalidAgentEnrollmentTask()
 			}
 			required[key] = true
@@ -80,11 +81,11 @@ func agentEnrollmentTaskParams(
 	config localagent.Config,
 ) map[string]string {
 	params := map[string]string{
-		etcd.TaskResourceKindParam: etcd.TaskResourceAgent,
-		agentTaskImageKey:          image,
-		agentTaskEnrollmentKey:     enrollmentTaskID,
-		agentTaskPullIntervalKey:   strconv.FormatInt(int64(config.PullIntervalSeconds), 10),
-		agentTaskMaxConcurrentKey:  strconv.FormatInt(int64(config.MaxConcurrentTasks), 10),
+		taskjournal.TaskResourceKindParam: taskjournal.TaskResourceAgent,
+		agentTaskImageKey:                 image,
+		agentTaskEnrollmentKey:            enrollmentTaskID,
+		agentTaskPullIntervalKey:          strconv.FormatInt(int64(config.PullIntervalSeconds), 10),
+		agentTaskMaxConcurrentKey:         strconv.FormatInt(int64(config.MaxConcurrentTasks), 10),
 	}
 	for key, value := range config.Labels {
 		params[agentTaskLabelPrefix+key] = value

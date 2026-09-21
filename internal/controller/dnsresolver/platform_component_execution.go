@@ -193,7 +193,7 @@ func (planner *PlatformExecutionPlanner) resolve(
 ) (resolvedPlatformComponent, error) {
 	if ctx == nil || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate ||
 		ids.Validate(ids.KindComponent, task.Target) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
-		task.RenderGeneration <= 0 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceComponent ||
+		task.RenderGeneration <= 0 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		!validPlatformComponentTaskParams(task) {
 		return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "Platform Component Task shape is invalid")
 	}

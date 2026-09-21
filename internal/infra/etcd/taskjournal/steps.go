@@ -1,14 +1,13 @@
-package etcd
+package taskjournal
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateTaskSteps(steps []taskjournal.TaskStepRecord) error {
+func ValidateTaskSteps(steps []TaskStepRecord) error {
 	seenSteps := make(map[string]struct{}, len(steps))
 	seenScriptIDs := make(map[string]struct{}, len(steps))
 	seenScriptSlugs := make(map[string]struct{}, len(steps))
@@ -24,12 +23,12 @@ func validateTaskSteps(steps []taskjournal.TaskStepRecord) error {
 		hasScriptID := step.ScriptID != ""
 		hasScriptSlug := step.ScriptSlug != ""
 		switch step.Kind {
-		case taskjournal.TaskStepOperation:
+		case TaskStepOperation:
 			if hasScriptID || hasScriptSlug {
 				return errs.New(errs.KindValidationFailed, "task operation step cannot carry Script identity")
 			}
 			continue
-		case taskjournal.TaskStepScript:
+		case TaskStepScript:
 			if !hasScriptID || !hasScriptSlug {
 				return errs.New(errs.KindValidationFailed, "task Script step identity must include both id and slug")
 			}
@@ -54,11 +53,11 @@ func validateTaskSteps(steps []taskjournal.TaskStepRecord) error {
 	return nil
 }
 
-func cloneTaskSteps(steps []taskjournal.TaskStepRecord) []taskjournal.TaskStepRecord {
+func CloneTaskSteps(steps []TaskStepRecord) []TaskStepRecord {
 	if steps == nil {
 		return nil
 	}
-	cloned := make([]taskjournal.TaskStepRecord, len(steps))
+	cloned := make([]TaskStepRecord, len(steps))
 	copy(cloned, steps)
 	return cloned
 }

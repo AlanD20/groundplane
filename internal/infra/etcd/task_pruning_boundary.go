@@ -26,7 +26,7 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	if task.Type == taskjournal.TaskScript {
 		return repository.prepareManualScriptExpiry(ctx, task, taskRevision, retentionEntry, readRevision, now)
 	}
-	if task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
+	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
 		return false, nil
 	}
 	changed, ready, err := repository.prepareHierarchyDeletionTaskPrune(

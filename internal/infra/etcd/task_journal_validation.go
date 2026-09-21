@@ -105,7 +105,7 @@ func validateTaskRecord(record TaskRecord) error {
 	if record.Status == taskjournal.TaskStatusPending && record.EventCount == 0 && !record.UpdatedAt.Equal(record.CreatedAt) {
 		return errs.New(errs.KindInternal, "new pending task timestamps are inconsistent")
 	}
-	if err := validateTaskSteps(record.Steps); err != nil {
+	if err := taskjournal.ValidateTaskSteps(record.Steps); err != nil {
 		return err
 	}
 	if err := executionplan.ValidateComponentActionStepIDs(record.ComponentActionStepIDs); err != nil {

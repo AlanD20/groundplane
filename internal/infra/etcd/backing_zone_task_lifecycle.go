@@ -28,7 +28,7 @@ func (repository *TaskRepository) prepareBackingZoneTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (backingZoneTaskChange, error) {
-	if source.Params[TaskZoneRemovalOperationParam] != "" {
+	if source.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
 		return repository.prepareZoneRemovalTaskRetry(ctx, source, retry, revision)
 	}
 	_, err := taskOwnsBackingZoneCascade(source)
@@ -38,7 +38,7 @@ func (repository *TaskRepository) prepareBackingZoneTaskRetry(
 func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	ctx context.Context, source TaskRecord, retry TaskRecord, revision int64,
 ) (backingZoneTaskChange, error) {
-	operationID := source.Params[TaskZoneRemovalOperationParam]
+	operationID := source.Params[taskjournal.TaskZoneRemovalOperationParam]
 	if ids.Validate(ids.KindOperation, operationID) != nil || source.FinishedAt == nil || retry.RetryOf != source.ID ||
 		retry.Executor != source.Executor || retry.Type != source.Type || retry.Target != source.Target ||
 		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash ||
@@ -47,9 +47,9 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	}
 	keys := []string{
 		zoneRemovalIntentKey(operationID), deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
-		environmentBlueprintHeadKey(source.Params[TaskZoneEnvironmentParam]),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[TaskZoneEnvironmentParam]),
-		componentTaskActiveEnvironmentKey(source.Params[TaskZoneEnvironmentParam]),
+		environmentBlueprintHeadKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
+		componentTaskActiveEnvironmentKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -147,7 +147,7 @@ func (repository *TaskRepository) prepareBackingZoneTaskAcknowledgement(
 	terminalAt time.Time,
 	revision int64,
 ) (backingZoneTaskChange, error) {
-	if task.Params[TaskZoneRemovalOperationParam] != "" {
+	if task.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
 		conditions, mutations, err := repository.prepareZoneRemovalAcknowledgement(
 			ctx, task, terminalStatus, terminalAt, revision,
 		)
@@ -163,7 +163,7 @@ func (repository *TaskRepository) validateBackingZoneTaskAcknowledgementReplay(
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
-	if task.Params[TaskZoneRemovalOperationParam] != "" {
+	if task.Params[taskjournal.TaskZoneRemovalOperationParam] != "" {
 		return repository.validateZoneRemovalReplay(ctx, task, terminalStatus, revision)
 	}
 	_, err := taskOwnsBackingZoneCascade(task)
@@ -171,14 +171,14 @@ func (repository *TaskRepository) validateBackingZoneTaskAcknowledgementReplay(
 }
 
 func taskOwnsBackingZoneCascade(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceBackingZone {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 5 ||
-		ids.Validate(ids.KindEnvironment, task.Params[TaskZoneEnvironmentParam]) != nil ||
-		ids.Validate(ids.KindOperation, task.Params[TaskZoneRemovalOperationParam]) != nil ||
+		ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskZoneEnvironmentParam]) != nil ||
+		ids.Validate(ids.KindOperation, task.Params[taskjournal.TaskZoneRemovalOperationParam]) != nil ||
 		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) != nil ||
-		!recordcodec.ValidSHA256(task.Params[TaskZoneImpactTokenParam]) {
+		!recordcodec.ValidSHA256(task.Params[taskjournal.TaskZoneImpactTokenParam]) {
 		return false, errs.New(errs.KindInternal, "backing Zone cascade Task has invalid durable input")
 	}
 	return true, nil

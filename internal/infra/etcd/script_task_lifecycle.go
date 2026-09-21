@@ -36,7 +36,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		return scriptTaskChange{}, err
 	}
 	if retry.Type != source.Type || retry.Target != source.Target ||
-		retry.Params[TaskResourceKindParam] != TaskResourceScript {
+		retry.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceScript {
 		return scriptTaskChange{}, errs.New(errs.KindInternal, "Script retry changed its durable target")
 	}
 	storage, err := readActiveScriptStorage(ctx, repository.store, source.Target, revision)
@@ -308,7 +308,7 @@ func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 }
 
 func taskOwnsScriptRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceScript {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceScript {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindScript, task.Target) != nil {

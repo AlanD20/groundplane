@@ -104,14 +104,14 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "entry removal procedure ids are invalid")
 	}
 	task.Params = map[string]string{
-		etcd.TaskEntryEnvironmentParam:                  intent.EnvironmentID,
+		taskjournal.TaskEntryEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
 		etcd.EnvironmentDesiredRevisionParam:            intent.CandidateProjection.RevisionID,
-		etcd.TaskComposeArtifactParam:                   procedure.ArtifactID,
-		etcd.TaskEntryTenantSlugParam:                   identity.TenantSlug,
-		etcd.TaskEntryProjectSlugParam:                  identity.ProjectSlug,
-		etcd.TaskEntryEnvironmentNameParam:              identity.EnvironmentName,
-		etcd.TaskEntryAuthorizedVolumeDirParam:          identity.AuthorizedVolumeDir,
+		taskjournal.TaskComposeArtifactParam:            procedure.ArtifactID,
+		taskjournal.TaskEntryTenantSlugParam:            identity.TenantSlug,
+		taskjournal.TaskEntryProjectSlugParam:           identity.ProjectSlug,
+		taskjournal.TaskEntryEnvironmentNameParam:       identity.EnvironmentName,
+		taskjournal.TaskEntryAuthorizedVolumeDirParam:   identity.AuthorizedVolumeDir,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Steps = make([]taskjournal.TaskStepRecord, len(templates))

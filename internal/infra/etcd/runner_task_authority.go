@@ -34,7 +34,7 @@ func validateRunnerCreateTask(desired runnerrecord.RunnerDesiredRecord, task Tas
 	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCreate || task.Target != desired.ID ||
 		task.Owner != owner ||
 		task.Status != taskjournal.TaskStatusPending || task.IdempotencyKey == "" || len(task.Params) != 2 ||
-		task.Params[TaskResourceKindParam] != TaskResourceRunner ||
+		task.Params[taskjournal.TaskResourceKindParam] != TaskResourceRunner ||
 		task.Params[RunnerRegistrationTokenPresentParam] != "true" {
 		return errs.New(errs.KindValidationFailed, "runner creation task has invalid durable input")
 	}

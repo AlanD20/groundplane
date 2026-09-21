@@ -1,4 +1,4 @@
-package etcd
+package taskjournal
 
 const (
 	// TaskResourceKindParam closes the durable Controller Task dispatch catalog.

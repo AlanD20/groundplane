@@ -79,8 +79,8 @@ func (service *Service) publish(
 		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: planID, Type: taskType, Target: desiredID,
 		Params: map[string]string{
-			etcd.TaskReleasePublicationParam: publicationID,
-			etcd.TaskComposeArtifactParam:    artifactID,
+			etcd.TaskReleasePublicationParam:     publicationID,
+			taskjournal.TaskComposeArtifactParam: artifactID,
 		},
 		Steps: make([]taskjournal.TaskStepRecord, len(candidates)*5), TimeoutSeconds: configured,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
