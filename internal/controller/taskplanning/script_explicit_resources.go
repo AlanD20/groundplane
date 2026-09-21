@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"strings"
 	"unicode/utf8"
 
@@ -9,13 +10,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/scriptpolicy"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // selectedScriptEntries validates the complete resource selection before the
 // caller resolves any value. Inherited selection keeps its existing exposure rule.
-func selectedScriptEntries(sources etcd.ScriptExecutionSources) ([]entryrecord.Record, error) {
+func selectedScriptEntries(sources scriptsourcequeries.ScriptExecutionSources) ([]entryrecord.Record, error) {
 	execution := sources.Script.Record.Desired.Execution
 	if execution != nil {
 		if err := execution.Validate(); err != nil {
@@ -35,7 +36,7 @@ func selectedScriptEntries(sources etcd.ScriptExecutionSources) ([]entryrecord.R
 }
 
 func explicitScriptEntries(
-	sources etcd.ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 	execution core.ScriptExecution,
 ) ([]entryrecord.Record, error) {
 	environmentID, serviceID := sources.Environment.Record.ID, sources.Service.Record.Desired.ID

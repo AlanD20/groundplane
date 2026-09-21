@@ -9,6 +9,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"path"
 	"sort"
 	"unicode/utf8"
@@ -56,7 +57,7 @@ func NewScriptArtifactService(
 
 func (service *ScriptArtifactService) BuildScriptEntryBindings(
 	ctx context.Context,
-	sources etcd.ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 ) ([]*agentpb.ScriptRunnerEntryBinding, error) {
 	if ctx == nil || service == nil || service.values == nil {
 		return nil, errs.New(errs.KindInternal, "Script Entry binding service is not configured")
@@ -69,7 +70,7 @@ func (service *ScriptArtifactService) BuildScriptEntryBindings(
 }
 
 func (service *ScriptArtifactService) buildScriptEntryBindings(
-	ctx context.Context, sources etcd.ScriptExecutionSources, entries []entryrecord.Record,
+	ctx context.Context, sources scriptsourcequeries.ScriptExecutionSources, entries []entryrecord.Record,
 ) ([]*agentpb.ScriptRunnerEntryBinding, error) {
 	if service.values == nil {
 		return nil, errs.New(errs.KindInternal, "Script Entry values are not configured")

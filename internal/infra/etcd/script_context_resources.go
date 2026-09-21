@@ -2,6 +2,7 @@ package etcd
 
 import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
@@ -12,7 +13,7 @@ import (
 
 // validateScriptContextResources binds selected resource identities and Entry
 // metadata to the same fixed projection that final publication fences.
-func validateScriptContextResources(sources ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) error {
+func validateScriptContextResources(sources scriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) error {
 	context := snapshot.ExplicitExecution.Context
 	projection := sources.DesiredProjection.Record
 	environmentID, serviceID := sources.Environment.Record.ID, sources.Service.Record.Desired.ID

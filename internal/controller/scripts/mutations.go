@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"net/http"
 	"time"
@@ -51,10 +52,10 @@ type scriptMutationRepository interface {
 		core.Script,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	LoadExecutionSources(context.Context, string) (etcd.ScriptExecutionSources, error)
+	LoadExecutionSources(context.Context, string) (scriptsourcequeries.ScriptExecutionSources, error)
 	PublishExecutionWithTask(
 		context.Context,
-		etcd.ScriptExecutionSources,
+		scriptsourcequeries.ScriptExecutionSources,
 		scriptexecutions.ScriptExecutionRecord,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
@@ -85,13 +86,13 @@ func NewMutationRepository(
 func (repository *MutationRepository) LoadExecutionSources(
 	ctx context.Context,
 	scriptID string,
-) (etcd.ScriptExecutionSources, error) {
-	return repository.scripts.LoadExecutionSources(ctx, repository.releases, scriptID)
+) (scriptsourcequeries.ScriptExecutionSources, error) {
+	return repository.scripts.LoadExecutionSources(ctx, repository.releases.Reader, scriptID)
 }
 
 func (repository *MutationRepository) PublishExecutionWithTask(
 	ctx context.Context,
-	sources etcd.ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 	execution scriptexecutions.ScriptExecutionRecord,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,

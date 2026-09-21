@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"math"
 	"sort"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	release "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -29,7 +30,7 @@ type ManualScriptPlanInput struct {
 	StepID      string
 	ExecutionID string
 	SnapshotID  string
-	Sources     etcd.ScriptExecutionSources
+	Sources     scriptsourcequeries.ScriptExecutionSources
 	Preparation ScriptRunnerPreparation
 	Candidate   *BlueprintScriptCandidateSources
 }
@@ -188,7 +189,7 @@ func blueprintScriptStagedSourceAuthority(
 	}}
 }
 
-func validateScriptRunnerReleaseSource(sources etcd.ScriptExecutionSources) error {
+func validateScriptRunnerReleaseSource(sources scriptsourcequeries.ScriptExecutionSources) error {
 	if sources.RenderInput.Record.CandidateWorkload != sources.Release.Intent.CandidateWorkload ||
 		sources.RenderInput.Record.Projection.RevisionID == "" ||
 		sources.RenderInput.Record.Projection.RenderGeneration == 0 ||
@@ -198,7 +199,7 @@ func validateScriptRunnerReleaseSource(sources etcd.ScriptExecutionSources) erro
 	return nil
 }
 
-func scriptRunnerReleaseImage(sources etcd.ScriptExecutionSources) (string, error) {
+func scriptRunnerReleaseImage(sources scriptsourcequeries.ScriptExecutionSources) (string, error) {
 	if err := validateScriptRunnerReleaseSource(sources); err != nil {
 		return "", err
 	}
@@ -277,7 +278,7 @@ func projectScriptRunner(
 
 func projectScriptMounts(
 	service composetypes.ServiceConfig,
-	sources etcd.ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 	candidate *BlueprintScriptCandidateSources,
 ) ([]*agentpb.ScriptRunnerMount, error) {
 	volumeIDByTarget := make(map[string]string)

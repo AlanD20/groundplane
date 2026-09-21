@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -14,7 +15,7 @@ import (
 func preparedScriptPrimary(
 	ctx context.Context,
 	store hierarchyStore,
-	sources ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 ) (etcdstore.Condition, error) {
 	expected := sources.Script.Record
 	key := scriptrecord.ScriptSetScriptKey(expected.EnvironmentID, expected.ScriptSetGeneration, expected.Desired.ID)

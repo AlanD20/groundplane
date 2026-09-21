@@ -10,6 +10,7 @@ import (
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
@@ -25,7 +26,7 @@ import (
 // prepared later; its exact revision is supplied by snapshot preparation.
 func (repository *ScriptRepository) manualScriptSourceMembers(
 	ctx context.Context,
-	sources ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 	execution scriptexecutions.ScriptExecutionRecord,
 	snapshotRevision int64,
 ) ([]scriptsourceevidence.ScriptSourcePreparationMember, error) {
@@ -107,7 +108,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 
 func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 	ctx context.Context,
-	sources ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 	base sourceref.Reference,
 	bindings []*agentpb.ScriptRunnerEntryBinding,
 ) ([]scriptsourceevidence.ScriptSourcePreparationMember, error) {
@@ -200,7 +201,7 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 
 func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	ctx context.Context,
-	sources ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 	base sourceref.Reference,
 	reference string,
 ) (scriptsourceevidence.ScriptSourcePreparationMember, error) {

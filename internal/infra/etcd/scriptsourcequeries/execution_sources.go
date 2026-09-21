@@ -1,4 +1,4 @@
-package etcd
+package scriptsourcequeries
 
 import (
 	"context"
@@ -49,7 +49,7 @@ type ScriptExecutionSources struct {
 // LoadBlueprintReleaseHookExecutionSources loads exact prepublished Script/body
 // and candidate Release records while the same-Blueprint Service and projection
 // remain visible only through their sealed candidate.
-func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
+func (repository *SourceReader) LoadBlueprintReleaseHookExecutionSources(
 	ctx context.Context,
 	publicationID string,
 	script scriptrecord.Record,
@@ -203,9 +203,9 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 // LoadExecutionSources captures one Script execution from one fixed MVCC
 // revision. The successful Release, rather than mutable Service desired state,
 // is the image and service-definition authority.
-func (repository *ScriptRepository) LoadExecutionSources(
+func (repository *SourceReader) LoadExecutionSources(
 	ctx context.Context,
-	ledger *ReleaseLedger,
+	ledger *releasequeries.Reader,
 	scriptID string,
 ) (ScriptExecutionSources, error) {
 	return repository.loadExecutionSources(ctx, ledger, scriptID, "", 0)
@@ -214,9 +214,9 @@ func (repository *ScriptRepository) LoadExecutionSources(
 // LoadReleaseHookExecutionSources binds a Script to one policy-selected sealed
 // Release at one exact revision. It never substitutes mutable serving state or
 // desired image text for the supplied Release identity.
-func (repository *ScriptRepository) LoadReleaseHookExecutionSources(
+func (repository *SourceReader) LoadReleaseHookExecutionSources(
 	ctx context.Context,
-	ledger *ReleaseLedger,
+	ledger *releasequeries.Reader,
 	scriptID string,
 	releaseID string,
 	revision int64,
@@ -227,9 +227,9 @@ func (repository *ScriptRepository) LoadReleaseHookExecutionSources(
 	return repository.loadExecutionSources(ctx, ledger, scriptID, releaseID, revision)
 }
 
-func (repository *ScriptRepository) loadExecutionSources(
+func (repository *SourceReader) loadExecutionSources(
 	ctx context.Context,
-	ledger *ReleaseLedger,
+	ledger *releasequeries.Reader,
 	scriptID string,
 	releaseID string,
 	revision int64,
@@ -412,7 +412,7 @@ func sameReleaseHookAuthoredInputs(root, captured projectionrecord.EnvironmentCo
 
 func loadScriptExecutionDesiredProjection(
 	ctx context.Context,
-	store hierarchyStore,
+	store readStore,
 	environmentID string,
 	pinnedRevisionID string,
 	revision int64,

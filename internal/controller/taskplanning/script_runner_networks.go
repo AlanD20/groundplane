@@ -1,10 +1,11 @@
 package taskplanning
 
 import (
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/networkname"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -12,7 +13,7 @@ import (
 
 func projectScriptNetworks(
 	service composetypes.ServiceConfig,
-	sources etcd.ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 	candidate *BlueprintScriptCandidateSources,
 ) ([]*agentpb.ScriptRunnerNetwork, error) {
 	identityByName := make(map[string]string, len(sources.DesiredProjection.Record.DesiredZones))

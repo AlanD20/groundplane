@@ -1,4 +1,4 @@
-package etcd
+package scriptsourcequeries
 
 import (
 	"context"
@@ -23,7 +23,7 @@ type ScriptAttachSources struct {
 // resources in another Environment, never staged candidate-owned Zones.
 func resolveScriptAttachNetworks(
 	ctx context.Context,
-	store hierarchyStore,
+	store readStore,
 	environmentID, serviceID string,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 	revision int64,
@@ -98,7 +98,7 @@ func resolveScriptAttachNetworks(
 	return result, nil
 }
 
-func scriptAttachSourceConditions(sources ScriptAttachSources) []etcdstore.Condition {
+func ScriptAttachSourceConditions(sources ScriptAttachSources) []etcdstore.Condition {
 	byKey := make(map[string]etcdstore.Condition)
 	for _, attach := range sources.Attaches {
 		key := attachrecord.AttachKey(attach.Record.ID)

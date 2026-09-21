@@ -4,6 +4,7 @@ import (
 	"context"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 
@@ -18,7 +19,7 @@ import (
 type preparedReleaseHooks struct {
 	task       etcd.TaskRecord
 	members    []releaserender.ReleaseTaskRenderMember
-	sources    map[string]etcd.ScriptExecutionSources
+	sources    map[string]scriptsourcequeries.ScriptExecutionSources
 	executions int
 }
 
@@ -36,7 +37,7 @@ func (service *Service) prepareReleaseHooks(
 	selectionScope := scope.Clone()
 	selectionScope.ReadRevision = revision
 	preSteps, postSteps, failureSteps := []taskjournal.TaskStepRecord{}, []taskjournal.TaskStepRecord{}, []taskjournal.TaskStepRecord{}
-	sourcesByExecution := make(map[string]etcd.ScriptExecutionSources)
+	sourcesByExecution := make(map[string]scriptsourcequeries.ScriptExecutionSources)
 	bodyBytes := uint64(0)
 	for memberIndex := range members {
 		member := &members[memberIndex]
@@ -48,7 +49,7 @@ func (service *Service) prepareReleaseHooks(
 		}
 		for _, scriptID := range scriptIDs {
 			sources, err := service.scripts.LoadReleaseHookExecutionSources(
-				ctx, service.ledger, scriptID, member.Intent.ID, revision,
+				ctx, service.ledger.Reader, scriptID, member.Intent.ID, revision,
 			)
 			if err != nil {
 				return preparedReleaseHooks{}, err
@@ -57,7 +58,7 @@ func (service *Service) prepareReleaseHooks(
 				targetReleaseID := domain.FailureHookTargetReleaseID(member.Intent)
 				if targetReleaseID != member.Intent.ID {
 					sources, err = service.scripts.LoadReleaseHookExecutionSources(
-						ctx, service.ledger, scriptID, targetReleaseID, revision,
+						ctx, service.ledger.Reader, scriptID, targetReleaseID, revision,
 					)
 					if err != nil {
 						return preparedReleaseHooks{}, err

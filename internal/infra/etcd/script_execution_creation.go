@@ -7,6 +7,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -119,7 +120,7 @@ func NewScriptExecutionRecords(
 	return records, nil
 }
 
-func validateScriptExecutionSources(sources ScriptExecutionSources, execution scriptexecutions.ScriptExecutionRecord) error {
+func validateScriptExecutionSources(sources scriptsourcequeries.ScriptExecutionSources, execution scriptexecutions.ScriptExecutionRecord) error {
 	if sources.Revision <= 0 || sources.Tenant.ReadRevision != sources.Revision ||
 		sources.Project.ReadRevision != sources.Revision || sources.Environment.ReadRevision != sources.Revision ||
 		sources.Service.ReadRevision != sources.Revision || sources.ScriptSet.ReadRevision != sources.Revision ||
@@ -165,7 +166,7 @@ func validateScriptExecutionSources(sources ScriptExecutionSources, execution sc
 	return validateStoredScriptContext(sources, execution)
 }
 
-func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []etcdstore.Condition {
+func scriptExecutionProjectionConditions(sources scriptsourcequeries.ScriptExecutionSources) []etcdstore.Condition {
 	conditions := []etcdstore.Condition{
 		{
 			Key:         blueprints.EnvironmentBlueprintHeadKey(sources.Environment.Record.ID),
@@ -183,6 +184,6 @@ func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []etcds
 			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), network.Record.Desired.ID),
 		})
 	}
-	conditions = append(conditions, scriptAttachSourceConditions(sources.AttachSources)...)
+	conditions = append(conditions, scriptsourcequeries.ScriptAttachSourceConditions(sources.AttachSources)...)
 	return conditions
 }

@@ -6,6 +6,7 @@ import (
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"math"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type ReleaseHookExecutionPublication struct {
-	Sources          ScriptExecutionSources
+	Sources          scriptsourcequeries.ScriptExecutionSources
 	Execution        scriptexecutions.ScriptExecutionRecord
 	SnapshotRevision int64
 }

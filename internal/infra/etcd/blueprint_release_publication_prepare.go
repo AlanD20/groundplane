@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -129,7 +130,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			etcdstore.Condition{Key: evidence.HookPrepared.key, ModRevision: evidence.HookPrepared.revision},
 		)
 		for _, hook := range evidence.Hooks {
-			conditions = append(conditions, scriptAttachSourceConditions(hook.Sources.AttachSources)...)
+			conditions = append(conditions, scriptsourcequeries.ScriptAttachSourceConditions(hook.Sources.AttachSources)...)
 		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: evidence.HookPrepared.key})
 	}

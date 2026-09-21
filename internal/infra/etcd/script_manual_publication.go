@@ -10,6 +10,7 @@ import (
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -22,7 +23,7 @@ import (
 // alone changes membership counts, including the Script-wide body aggregate.
 func (repository *ScriptRepository) PublishExecutionWithTask(
 	ctx context.Context,
-	sources ScriptExecutionSources,
+	sources scriptsourcequeries.ScriptExecutionSources,
 	execution scriptexecutions.ScriptExecutionRecord,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -201,7 +202,7 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 
 // manualScriptSourceConditions fences the desired sources captured for a manual
 // execution. Release image and render-input fences are owned by its publication.
-func manualScriptSourceConditions(sources ScriptExecutionSources) ([]etcdstore.Condition, error) {
+func manualScriptSourceConditions(sources scriptsourcequeries.ScriptExecutionSources) ([]etcdstore.Condition, error) {
 	conditions := []etcdstore.Condition{servicerecord.ServiceDesiredCondition(sources.Service)}
 	byKey := map[string]etcdstore.Condition{conditions[0].Key: conditions[0]}
 	for _, condition := range scriptExecutionProjectionConditions(sources) {

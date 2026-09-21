@@ -14,6 +14,7 @@ import (
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -26,7 +27,7 @@ type preparedHooks struct {
 	task        etcd.TaskRecord
 	members     []releaserender.ReleaseTaskRenderMember
 	postStepIDs [][]string
-	sources     map[string]etcd.ScriptExecutionSources
+	sources     map[string]scriptsourcequeries.ScriptExecutionSources
 	executions  int
 }
 
@@ -39,7 +40,7 @@ func (service *Service) prepareDeployHooks(
 ) (preparedHooks, error) {
 	result := preparedHooks{
 		task: task, members: members, preStepIDs: make([][]string, len(members)), postStepIDs: make([][]string, len(members)),
-		sources: make(map[string]etcd.ScriptExecutionSources),
+		sources: make(map[string]scriptsourcequeries.ScriptExecutionSources),
 	}
 	candidateByService := make(map[string]blueprints.EnvironmentBlueprintServiceChange, len(input.ServiceChanges))
 	for _, change := range input.ServiceChanges {

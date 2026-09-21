@@ -7,13 +7,14 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
 	release "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -47,7 +48,7 @@ func NewScriptRunnerPreparationService(
 }
 
 func (service *ScriptRunnerPreparationService) Prepare(
-	ctx context.Context, sources etcd.ScriptExecutionSources,
+	ctx context.Context, sources scriptsourcequeries.ScriptExecutionSources,
 ) (ScriptRunnerPreparation, error) {
 	if ctx == nil || service == nil || service.artifacts == nil || service.agents == nil || service.images == nil {
 		return ScriptRunnerPreparation{}, errs.New(errs.KindInternal, "Script runner preparation is not configured")
@@ -85,7 +86,7 @@ func (service *ScriptRunnerPreparationService) Prepare(
 	return prepared, nil
 }
 
-func (prepared ScriptRunnerPreparation) validateSources(sources etcd.ScriptExecutionSources) error {
+func (prepared ScriptRunnerPreparation) validateSources(sources scriptsourcequeries.ScriptExecutionSources) error {
 	entries, err := selectedScriptEntries(sources)
 	if err != nil {
 		return err
@@ -108,7 +109,7 @@ func (prepared ScriptRunnerPreparation) validateSources(sources etcd.ScriptExecu
 	return nil
 }
 
-func scriptExplicitAuthority(sources etcd.ScriptExecutionSources) (*agentpb.ScriptExplicitExecutionAuthority, error) {
+func scriptExplicitAuthority(sources scriptsourcequeries.ScriptExecutionSources) (*agentpb.ScriptExplicitExecutionAuthority, error) {
 	desired := sources.Script.Record.Desired.Execution
 	if desired == nil || desired.Mode == core.ScriptExecutionInherited {
 		return nil, nil
@@ -141,7 +142,7 @@ func scriptExplicitAuthority(sources etcd.ScriptExecutionSources) (*agentpb.Scri
 }
 
 func scriptPreparationSourceDigest(
-	sources etcd.ScriptExecutionSources, entries []entryrecord.Record, explicit *agentpb.ScriptExplicitExecutionAuthority,
+	sources scriptsourcequeries.ScriptExecutionSources, entries []entryrecord.Record, explicit *agentpb.ScriptExplicitExecutionAuthority,
 ) ([sha256.Size]byte, error) {
 	metadata := make([]*agentpb.ScriptRunnerEntryBinding, 0, len(entries))
 	for _, entry := range entries {
