@@ -6,6 +6,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,7 +14,7 @@ import (
 
 func blueprintScriptTaskShape(task TaskRecord) bool {
 	return task.Type == taskjournal.TaskUpdate && task.Executor == taskjournal.TaskExecutorAgent &&
-		validatePublicationID(task.Params[TaskReleasePublicationParam]) == nil &&
+		releases.ValidatePublicationID(task.Params[TaskReleasePublicationParam]) == nil &&
 		task.Owner.EnvironmentID != "" && task.Target == task.Owner.EnvironmentID &&
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] == task.Owner.EnvironmentID &&
 		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) == nil
@@ -43,7 +44,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script execution does not match its Task")
 	}
 	publicationID := task.Params[TaskReleasePublicationParam]
-	keys := []string{releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID)}
+	keys := []string{releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
@@ -52,15 +53,15 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 		read.Values[0] == nil || read.Values[1] == nil {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script publication authority is unavailable")
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
 	if err != nil {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script publication authority is corrupt")
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script manifest authority is corrupt")
 	}
-	var selected ReleaseStagedMemberRef
+	var selected releases.ReleaseStagedMemberRef
 	memberBound := false
 	for _, member := range manifest.Members {
 		if member.ReleaseID == execution.ReleaseID && member.ServiceID == execution.ServiceID {
@@ -72,7 +73,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 	if !memberBound {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script execution is outside the candidate manifest")
 	}
-	intentKey := releaseIntentStagingKey(publicationID, selected.ReleaseID)
+	intentKey := releases.ReleaseIntentStagingKey(publicationID, selected.ReleaseID)
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{intentKey}, Revision: revision})
 	if err != nil {
 		return nil, err
@@ -81,7 +82,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 		len(intentRead.Values) != 1 || intentRead.Values[0] == nil {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script candidate Intent is unavailable")
 	}
-	intent, err := decodeReleaseRecord[domain.Intent](intentRead.Values[0].Value, "release-intent")
+	intent, err := releases.DecodeReleaseRecord[domain.Intent](intentRead.Values[0].Value, "release-intent")
 	intentDigest, _ := domain.Digest(intent)
 	if err != nil || domain.ValidateIntent(intent) != nil || intentDigest != selected.IntentDigest ||
 		intent.ID != execution.ReleaseID || intent.ServiceID != execution.ServiceID ||
@@ -106,7 +107,7 @@ func validateScriptBodyReference(value []byte, execution ScriptExecutionRecord) 
 	if err != nil || reference.ExecutionID != execution.ID || reference.ScriptID != execution.ScriptID ||
 		reference.Generation != execution.ScriptGeneration ||
 		reference.ScriptSetGeneration != execution.ScriptSetGeneration {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }
@@ -114,7 +115,7 @@ func validateScriptBodyReference(value []byte, execution ScriptExecutionRecord) 
 func decrementStoredScriptActiveReferences(value []byte, scriptID string) ([]byte, error) {
 	stored, err := recordcodec.Decode[scriptrecord.StoredRecord](value, "script")
 	if err != nil || stored.Desired.ID != scriptID || stored.ActiveReferences == 0 {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	stored.ActiveReferences--
 	encoded, err := recordcodec.Encode("script", stored)

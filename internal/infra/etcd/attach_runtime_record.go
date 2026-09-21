@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -92,7 +93,7 @@ func decodeAcknowledgedServiceRuntime(
 	value []byte,
 	environmentID, serviceID string,
 ) (serviceruntimerecord.Record, error) {
-	record, err := decodeReleaseRecord[serviceruntimerecord.Record](value, "service-acknowledged-runtime")
+	record, err := releases.DecodeReleaseRecord[serviceruntimerecord.Record](value, "service-acknowledged-runtime")
 	if err != nil {
 		return serviceruntimerecord.Record{}, err
 	}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -53,11 +54,11 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 		return ScriptSourceReleaseFragment{}, false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
+		return ScriptSourceReleaseFragment{}, false, releases.CorruptReleaseRecord()
 	}
 	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.OperationID {
-		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
+		return ScriptSourceReleaseFragment{}, false, releases.CorruptReleaseRecord()
 	}
 	if root.Phase == ScriptOperationSourceReleasing && root.ReleasePath == ScriptSourceReleaseNormal &&
 		(root.RetryDisposition == sourceref.RetryDispositionAbandoned ||
@@ -68,7 +69,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 		(root.RetryDisposition != sourceref.RetryDispositionUndecided &&
 			root.RetryDisposition != sourceref.RetryDispositionTransferred) ||
 		read.Values[0].ModRevision != taskRevision {
-		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
+		return ScriptSourceReleaseFragment{}, false, releases.CorruptReleaseRecord()
 	}
 	change := ScriptSourceReleaseFragment{conditions: []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
 	if task.Type == taskjournal.TaskScript {
@@ -125,11 +126,11 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	}
 	if read == nil || read.ReadRevision != task.ReadRevision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil {
-		return pendingScriptAbortChange{}, corruptReleaseRecord()
+		return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 	}
 	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.Record.OperationID {
-		return pendingScriptAbortChange{}, corruptReleaseRecord()
+		return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 	}
 	executions, err := decodePendingScriptAbortExecutions(task.Record, steps, read.Values[1:])
 	if err != nil {
@@ -146,13 +147,13 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 			(root.RetryDisposition != sourceref.RetryDispositionUndecided &&
 				root.RetryDisposition != sourceref.RetryDispositionTransferred) ||
 			read.Values[0].ModRevision != task.Revision {
-			return pendingScriptAbortChange{}, corruptReleaseRecord()
+			return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 		}
 		return repository.beginPendingScriptAbort(ctx, task, requestedTerminalAt, steps, executions, read.Values)
 	}
 	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
 		root.RetryDisposition != sourceref.RetryDispositionAbandoned {
-		return pendingScriptAbortChange{}, corruptReleaseRecord()
+		return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 	}
 	terminalAt, err := pendingScriptAbortTerminalAt(task.Record, steps, executions)
 	if err != nil {
@@ -178,7 +179,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 		return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 	}
 	if !drained {
-		return pendingScriptAbortChange{}, corruptReleaseRecord()
+		return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 	}
 	final, err := authority.PrepareReleaseFinalization(ctx, task.Record.OperationID)
 	if err != nil {
@@ -253,18 +254,18 @@ func decodePendingScriptAbortExecutions(
 	values []*etcdstore.KeyValue,
 ) ([]ScriptExecutionRecord, error) {
 	if len(values) != len(steps) {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	result := make([]ScriptExecutionRecord, len(steps))
 	for index, value := range values {
 		if value == nil {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		record, err := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 		if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
 			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		result[index] = record
 	}
@@ -307,7 +308,7 @@ func abortScriptExecutionBeforeStart(
 	next.ActiveReference = false
 	next.UpdatedAt = terminalAt
 	if validateScriptExecutionRecord(next) != nil {
-		return ScriptExecutionRecord{}, corruptReleaseRecord()
+		return ScriptExecutionRecord{}, releases.CorruptReleaseRecord()
 	}
 	return next, nil
 }
@@ -322,18 +323,18 @@ func pendingScriptAbortTerminalAt(
 		if execution.Outcome == nil || !pendingScriptAbortExecutionMatches(
 			execution, task, steps[index], execution.Outcome.ObservedAt,
 		) {
-			return time.Time{}, corruptReleaseRecord()
+			return time.Time{}, releases.CorruptReleaseRecord()
 		}
 		if terminalAt.IsZero() {
 			terminalAt = execution.Outcome.ObservedAt
 			continue
 		}
 		if !terminalAt.Equal(execution.Outcome.ObservedAt) {
-			return time.Time{}, corruptReleaseRecord()
+			return time.Time{}, releases.CorruptReleaseRecord()
 		}
 	}
 	if terminalAt.IsZero() {
-		return time.Time{}, corruptReleaseRecord()
+		return time.Time{}, releases.CorruptReleaseRecord()
 	}
 	return terminalAt, nil
 }
@@ -398,7 +399,7 @@ func (repository *TaskRepository) validatePendingScriptAbortReplay(
 		return err
 	}
 	if read == nil || read.ReadRevision != task.ReadRevision || len(read.Values) != len(keys) || read.Values[0] != nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	executions, err := decodePendingScriptAbortExecutions(task.Record, steps, read.Values[1:])
 	if err != nil {
@@ -406,7 +407,7 @@ func (repository *TaskRepository) validatePendingScriptAbortReplay(
 	}
 	terminalAt, err := pendingScriptAbortTerminalAt(task.Record, steps, executions)
 	if err != nil || task.Record.FinishedAt == nil || !terminalAt.Equal(*task.Record.FinishedAt) {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }

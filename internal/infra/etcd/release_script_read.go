@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,7 +26,7 @@ func (ledger *ReleaseLedger) GetReleaseRenderInputAt(
 		)
 	}
 	read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{releaseRenderInputStagingKey("", releaseID)}, Revision: revision,
+		Keys: []string{releases.ReleaseRenderInputStagingKey("", releaseID)}, Revision: revision,
 	})
 	if err != nil {
 		return etcdstore.Versioned[ReleaseRenderInput]{}, err
@@ -36,13 +37,13 @@ func (ledger *ReleaseLedger) GetReleaseRenderInputAt(
 			"successful Release render input was not found",
 		)
 	}
-	raw, err := decodeReleaseRecord[json.RawMessage](read.Values[0].Value, "release-render-input")
+	raw, err := releases.DecodeReleaseRecord[json.RawMessage](read.Values[0].Value, "release-render-input")
 	if err != nil {
-		return etcdstore.Versioned[ReleaseRenderInput]{}, corruptReleaseRecord()
+		return etcdstore.Versioned[ReleaseRenderInput]{}, releases.CorruptReleaseRecord()
 	}
 	input, err := decodeReleaseRenderInput(raw)
 	if err != nil || input.ReleaseID != releaseID {
-		return etcdstore.Versioned[ReleaseRenderInput]{}, corruptReleaseRecord()
+		return etcdstore.Versioned[ReleaseRenderInput]{}, releases.CorruptReleaseRecord()
 	}
 	return etcdstore.Versioned[ReleaseRenderInput]{
 		Record: input, Revision: read.Values[0].ModRevision, ReadRevision: revision,

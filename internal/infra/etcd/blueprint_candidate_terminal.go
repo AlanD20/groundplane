@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
@@ -110,7 +111,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	if task.Executor != taskjournal.TaskExecutorAgent || task.Owner.EnvironmentID == "" ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Owner.EnvironmentID ||
 		task.Params[EnvironmentDesiredRevisionParam] == "" {
-		return blueprintCandidateTerminalChange{}, corruptReleaseRecord()
+		return blueprintCandidateTerminalChange{}, releases.CorruptReleaseRecord()
 	}
 	if validateTaskMaterializationWriterForTask(writer, task, task.Owner.EnvironmentID) != nil {
 		return blueprintCandidateTerminalChange{}, corruptTaskMaterializationWriter()
@@ -167,7 +168,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		}, nil
 	}
 	if result.ReconciliationRequired {
-		return blueprintCandidateTerminalChange{}, corruptReleaseRecord()
+		return blueprintCandidateTerminalChange{}, releases.CorruptReleaseRecord()
 	}
 	capture := &blueprintCandidateTerminalCaptureStore{
 		taskRepositoryStore: repository.store,
@@ -184,7 +185,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	}
 	if !processed || !capture.called {
 		clearMutations(capture.mutations)
-		return blueprintCandidateTerminalChange{}, corruptReleaseRecord()
+		return blueprintCandidateTerminalChange{}, releases.CorruptReleaseRecord()
 	}
 	combinedConditions, combinedMutations, err := mergeBlueprintCandidateTerminalChange(
 		capture.conditions,
@@ -209,19 +210,19 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 	ctx context.Context,
 	task TaskRecord,
 	publicationID string,
-	manifest ReleaseStagedManifest,
+	manifest releases.ReleaseStagedManifest,
 	compensationResult *taskjournal.TaskResultRecord,
 	revision int64,
 ) ([]etcdstore.Condition, error) {
 	keys := make([]string, 0, len(manifest.Members)*6)
 	for _, member := range manifest.Members {
 		keys = append(keys,
-			releaseIntentStagingKey(publicationID, member.ReleaseID),
-			releaseRenderInputStagingKey(publicationID, member.ReleaseID),
-			releaseCheckpointStagingKey(publicationID, member.ReleaseID),
-			releaseProjectionKey(member.ServiceID),
-			releaseTerminalKey(member.ReleaseID),
-			releaseRetentionKey(member.ReleaseID),
+			releases.ReleaseIntentStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseRenderInputStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseCheckpointStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseProjectionKey(member.ServiceID),
+			releases.ReleaseTerminalKey(member.ReleaseID),
+			releases.ReleaseRetentionKey(member.ReleaseID),
 		)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -229,23 +230,23 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 		return nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	conditions := make([]etcdstore.Condition, 0, len(keys))
 	for index, member := range manifest.Members {
 		values := read.Values[index*6 : index*6+6]
 		if values[0] == nil || values[1] == nil || values[2] == nil || values[4] != nil || values[5] != nil {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
-		intent, decodeErr := decodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
+		intent, decodeErr := releases.DecodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
 		intentDigest, _ := domain.Digest(intent)
 		if decodeErr != nil || domain.ValidateIntent(intent) != nil ||
 			intentDigest != member.IntentDigest || intent.ID != member.ReleaseID ||
 			intent.ServiceID != member.ServiceID || intent.EnvironmentID != task.Owner.EnvironmentID ||
 			intent.OperationID != task.OperationID || intent.OperationKind != domain.OperationBlueprintApply {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
-		rawRender, decodeErr := decodeReleaseRecord[json.RawMessage](values[1].Value, "release-render-input")
+		rawRender, decodeErr := releases.DecodeReleaseRecord[json.RawMessage](values[1].Value, "release-render-input")
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
@@ -255,14 +256,14 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 			renderDigest != intent.RenderInputDigest || render.ReleaseID != intent.ID ||
 			render.ServiceID != intent.ServiceID || render.PlanID != task.PlanID ||
 			render.EnvironmentID != task.Owner.EnvironmentID || render.Strategy != intent.Strategy {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
-		checkpoint, decodeErr := decodeReleaseRecord[domain.Checkpoint](values[2].Value, "release-checkpoint")
+		checkpoint, decodeErr := releases.DecodeReleaseRecord[domain.Checkpoint](values[2].Value, "release-checkpoint")
 		checkpointDigest, _ := domain.Digest(checkpoint)
 		if decodeErr != nil || domain.ValidateCheckpoint(checkpoint) != nil ||
 			checkpointDigest != member.CheckpointDigest || checkpoint.ReleaseID != member.ReleaseID ||
 			checkpoint.State != domain.StatePending {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		projection, decodeErr := decodeReleaseProjection(values[3], task.Owner.EnvironmentID, member.ServiceID)
 		if decodeErr != nil || projection.ServingReleaseID != intent.PriorServingReleaseID ||
@@ -296,8 +297,8 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	}
 	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
 	keys := []string{
-		releasePublicationKey(publicationID),
-		releaseManifestStagingKey(publicationID),
+		releases.ReleasePublicationKey(publicationID),
+		releases.ReleaseManifestStagingKey(publicationID),
 		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -306,24 +307,24 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
 	if err != nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	if _, err := validateReleaseCandidateMarker(task, marker, manifest); err != nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(read.Values[2].Value)
 	if err != nil || seal.EnvironmentID != task.Owner.EnvironmentID ||
 		seal.RevisionID != desiredRevisionID || seal.SourceKind != EnvironmentBlueprintSourceApply ||
 		seal.RenderGeneration != uint64(task.RenderGeneration) {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	attempts, _, err := repository.blueprintCandidateAttempts(ctx, task, seal, revision)
 	if err != nil {
@@ -332,7 +333,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	if task.RetryOf == "" {
 		authority, _, authorityErr := repository.blueprintCandidateAttemptAuthority(ctx, task, revision)
 		if authorityErr != nil || validateBlueprintCandidateAttempts(authority, task, seal) != nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		attempts = slices.Clone(authority.Attempts)
 	}
@@ -344,14 +345,14 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	detailKeys := make([]string, 0, len(manifest.Members)*detailWidth)
 	for _, member := range manifest.Members {
 		detailKeys = append(detailKeys,
-			releaseIntentStagingKey(publicationID, member.ReleaseID),
-			releaseRenderInputStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseIntentStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseRenderInputStagingKey(publicationID, member.ReleaseID),
 		)
 		if terminalStatus == taskjournal.TaskStatusCompleted {
 			detailKeys = append(detailKeys,
-				releaseCheckpointStagingKey(publicationID, member.ReleaseID),
-				releaseTerminalKey(member.ReleaseID),
-				releaseRetentionKey(member.ReleaseID),
+				releases.ReleaseCheckpointStagingKey(publicationID, member.ReleaseID),
+				releases.ReleaseTerminalKey(member.ReleaseID),
+				releases.ReleaseRetentionKey(member.ReleaseID),
 			)
 		}
 	}
@@ -360,34 +361,34 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 		return err
 	}
 	if details == nil || details.ReadRevision != revision || len(details.Values) != len(detailKeys) {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	for index, member := range manifest.Members {
 		values := details.Values[index*detailWidth : index*detailWidth+detailWidth]
 		if values[0] == nil || values[1] == nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
-		intent, decodeErr := decodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
+		intent, decodeErr := releases.DecodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
 		intentDigest, _ := domain.Digest(intent)
 		if decodeErr != nil || domain.ValidateIntent(intent) != nil ||
 			intentDigest != member.IntentDigest || intent.ID != member.ReleaseID ||
 			intent.ServiceID != member.ServiceID || intent.EnvironmentID != task.Owner.EnvironmentID ||
 			intent.OperationID != task.OperationID || intent.OperationKind != domain.OperationBlueprintApply {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
-		rawRender, decodeErr := decodeReleaseRecord[json.RawMessage](values[1].Value, "release-render-input")
+		rawRender, decodeErr := releases.DecodeReleaseRecord[json.RawMessage](values[1].Value, "release-render-input")
 		render, renderErr := decodeReleaseRenderInput(rawRender)
 		renderDigest, _ := domain.Digest(rawRender)
 		if decodeErr != nil || renderErr != nil || renderDigest != member.RenderDigest ||
 			renderDigest != intent.RenderInputDigest || render.ReleaseID != intent.ID ||
 			render.ServiceID != intent.ServiceID || render.PlanID != task.PlanID ||
 			render.EnvironmentID != task.Owner.EnvironmentID || render.Strategy != intent.Strategy {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		if terminalStatus != taskjournal.TaskStatusCompleted {
 			if task.Result == nil || task.Result.ReconciliationRequired ||
 				task.Result.Kind != taskjournal.TaskResultCompose {
-				return corruptReleaseRecord()
+				return releases.CorruptReleaseRecord()
 			}
 			compensationResult, proofErr := blueprintCandidateCompensationResult(task, *task.Result)
 			if proofErr != nil {
@@ -401,20 +402,20 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			continue
 		}
 		if values[2] == nil || values[3] == nil || values[4] == nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
-		checkpoint, decodeErr := decodeReleaseRecord[domain.Checkpoint](values[2].Value, "release-checkpoint")
+		checkpoint, decodeErr := releases.DecodeReleaseRecord[domain.Checkpoint](values[2].Value, "release-checkpoint")
 		if decodeErr != nil || domain.ValidateCheckpoint(checkpoint) != nil || checkpoint.ReleaseID != intent.ID {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		if task.FinishedAt == nil || checkpoint.State != domain.StateCompleted ||
 			task.Result == nil || task.Result.Kind != taskjournal.TaskResultCompose || task.Result.ReconciliationRequired {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
-		terminal, decodeErr := decodeReleaseRecord[domain.TerminalSummary](
+		terminal, decodeErr := releases.DecodeReleaseRecord[domain.TerminalSummary](
 			values[3].Value, "release-terminal-summary",
 		)
-		retention, retentionErr := decodeReleaseRecord[domain.RollbackMaterial](
+		retention, retentionErr := releases.DecodeReleaseRecord[domain.RollbackMaterial](
 			values[4].Value, "release-retention",
 		)
 		expectedEffectDigests := make([]string, len(checkpoint.Evidence))
@@ -427,11 +428,11 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			!sameBlueprintAttachStrings(terminal.AttemptIDs, expectedAttemptIDs) ||
 			terminal.RollbackMaterialDigest != retention.Digest ||
 			!terminal.CompletedAt.Equal(*task.FinishedAt) {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		expectedRetention := releaseRollbackMaterial(intent, domain.StateCompleted, *task.FinishedAt)
 		if !blueprintCompletedRollbackMaterialEqual(retention, expectedRetention) {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 	}
 	return nil
@@ -480,11 +481,11 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	baseConditions, manifest, epochValue := authority.conditions, authority.manifest, authority.epochValue
 	descriptor, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, source, revision)
 	if err != nil {
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
 	for _, member := range procedure.GetMembers() {
 		if member.GetServingPredecessor() == nil || member.GetCandidateAbsence() == nil {
-			return releaseTaskRetryChange{}, corruptReleaseRecord()
+			return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 		}
 	}
 	if _, err := validateReleaseCandidateDescriptor(descriptor, retry, manifest); err != nil {
@@ -509,14 +510,14 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		if err != nil {
 			return releaseTaskRetryChange{}, err
 		}
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
 	if validateBlueprintCandidateAttempts(sourceAuthority, source, seal) != nil {
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
 	attempts := slices.Clone(sourceAuthority.Attempts)
 	attempts = append(attempts, domain.Attempt{
@@ -530,7 +531,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		Attempts:           attempts,
 	}
 	if validateBlueprintCandidateAttempts(attemptAuthority, retry, seal) != nil {
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
 	attemptAuthorityValue, err := recordcodec.Encode(
 		"blueprint-candidate-attempt-authority", attemptAuthority,

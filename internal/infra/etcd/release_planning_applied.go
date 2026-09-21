@@ -4,6 +4,7 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -33,14 +34,14 @@ func (ledger *ReleaseLedger) GetPlanningAppliedProjection(
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if read == nil || read.ReadRevision != scope.ReadRevision || len(read.Values) != 1 {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, corruptReleaseRecord()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, releases.CorruptReleaseRecord()
 	}
 	if read.Values[0] == nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: scope.ReadRevision}, false, nil
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[0].Value)
 	if err != nil || projection.EnvironmentID != scope.Environment.Record.ID {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, corruptReleaseRecord()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, releases.CorruptReleaseRecord()
 	}
 	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record:       projection,

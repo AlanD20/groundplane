@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"strconv"
@@ -277,7 +278,7 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 			clearTaskMaterializationProjectionChange(change)
 			return taskMaterializationProjectionChange{}, validateErr
 		}
-		encoded, encodeErr := encodeReleaseRecord("service-acknowledged-runtime", record)
+		encoded, encodeErr := releases.EncodeReleaseRecord("service-acknowledged-runtime", record)
 		if encodeErr != nil {
 			clearTaskMaterializationProjectionChange(change)
 			return taskMaterializationProjectionChange{}, encodeErr

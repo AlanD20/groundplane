@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"slices"
@@ -79,7 +80,7 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 			return ReleasePlanningScope{}, loadErr
 		}
 		if loaded == nil || loaded.ReadRevision != revision || len(loaded.Values) != 1 {
-			return ReleasePlanningScope{}, corruptReleaseRecord()
+			return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 		}
 		initial = &etcdstore.GetResult{Entry: loaded.Values[0], ReadRevision: loaded.ReadRevision}
 	}
@@ -87,14 +88,14 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		return ReleasePlanningScope{}, err
 	}
 	if initial == nil || initial.ReadRevision <= 0 {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	if initial.Entry == nil {
 		return ReleasePlanningScope{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
 	environment, err := hierarchyrecord.DecodeEnvironment(initial.Entry.Value)
 	if err != nil || environment.ID != environmentID || environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	projectRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{hierarchyrecord.ProjectKey(environment.ProjectID)}, Revision: initial.ReadRevision,
@@ -104,11 +105,11 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	}
 	if projectRead == nil || projectRead.ReadRevision != initial.ReadRevision || len(projectRead.Values) != 1 ||
 		projectRead.Values[0] == nil {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	hierarchy, err := newHierarchyRepository(ledger.store)
 	if err != nil {
@@ -119,12 +120,12 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		return ReleasePlanningScope{}, err
 	}
 	if !found || compose.ReadRevision != initial.ReadRevision {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	keys := []string{
 		hierarchyrecord.EnvironmentKey(environmentID), hierarchyrecord.ProjectKey(project.ID), hierarchyrecord.TenantKey(project.TenantID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
-		hierarchyrecord.EnvironmentOperationLockKey(environmentID), releaseFenceSetKey(environmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(environmentID), releases.ReleaseFenceSetKey(environmentID),
 		deletionTombstoneKey("environment", environmentID), deletionTombstoneKey("project", project.ID),
 		deletionTombstoneKey("tenant", project.TenantID),
 	}
@@ -133,11 +134,11 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		return ReleasePlanningScope{}, err
 	}
 	if loaded == nil || loaded.ReadRevision != initial.ReadRevision || len(loaded.Values) != len(keys) {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	for _, index := range []int{0, 1, 2, 3} {
 		if loaded.Values[index] == nil {
-			return ReleasePlanningScope{}, corruptReleaseRecord()
+			return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 		}
 	}
 	if loaded.Values[4] != nil || loaded.Values[5] != nil || loaded.Values[6] != nil || loaded.Values[7] != nil ||
@@ -146,19 +147,19 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	}
 	environment, err = hierarchyrecord.DecodeEnvironment(loaded.Values[0].Value)
 	if err != nil || environment.ID != environmentID || environment.ProjectID != project.ID {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	project, err = hierarchyrecord.DecodeProject(loaded.Values[1].Value)
 	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	tenant, err := hierarchyrecord.DecodeTenant(loaded.Values[2].Value)
 	if err != nil || tenant.ID != project.TenantID {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(loaded.Values[3].Value)
 	if err != nil || epoch.EnvironmentID != environmentID {
-		return ReleasePlanningScope{}, corruptReleaseRecord()
+		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	return ReleasePlanningScope{
 		Environment: etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
@@ -188,7 +189,7 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 	serviceIDs []string,
 ) ([]ReleasePlanningService, error) {
 	if ctx == nil || ledger == nil || scope.ReadRevision <= 0 || len(serviceIDs) == 0 ||
-		len(serviceIDs) > maximumReleasePublicationMembers {
+		len(serviceIDs) > releases.MaximumReleasePublicationMembers {
 		return nil, errs.New(errs.KindValidationFailed, "release planning service selection is invalid")
 	}
 	keys := make([]string, 0, len(serviceIDs)*2)
@@ -201,14 +202,14 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 			return nil, errs.New(errs.KindValidationFailed, "release planning service is duplicated")
 		}
 		seen[serviceID] = struct{}{}
-		keys = append(keys, deletionTombstoneKey("service", serviceID), releaseProjectionKey(serviceID))
+		keys = append(keys, deletionTombstoneKey("service", serviceID), releases.ReleaseProjectionKey(serviceID))
 	}
 	loaded, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
 	if err != nil {
 		return nil, err
 	}
 	if loaded == nil || loaded.ReadRevision != scope.ReadRevision || len(loaded.Values) != len(keys) {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	projected := make(map[string]struct{}, len(scope.Compose.Record.DesiredServices))
 	for _, desired := range scope.Compose.Record.DesiredServices {
@@ -233,13 +234,13 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 		}
 		planning := ReleasePlanningService{Service: service}
 		if loaded.Values[base+1] != nil {
-			projection, err := decodeReleaseRecord[domain.ServiceProjection](
+			projection, err := releases.DecodeReleaseRecord[domain.ServiceProjection](
 				loaded.Values[base+1].Value,
 				"service-release-projection",
 			)
 			if err != nil || projection.EnvironmentID != scope.Environment.Record.ID ||
 				projection.ServiceID != serviceID {
-				return nil, corruptReleaseRecord()
+				return nil, releases.CorruptReleaseRecord()
 			}
 			planning.Projection = projection
 			planning.ProjectionRevision = loaded.Values[base+1].ModRevision
@@ -269,7 +270,7 @@ func (ledger *ReleaseLedger) GetPlanningServingIntent(
 		return domain.Intent{}, false, nil
 	}
 	index, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		releaseServiceIndexKey(
+		releases.ReleaseServiceIndexKey(
 			scope.Environment.Record.ID,
 			service.Service.Record.Desired.ID,
 			service.Projection.ServingReleaseID,
@@ -279,7 +280,7 @@ func (ledger *ReleaseLedger) GetPlanningServingIntent(
 		return domain.Intent{}, false, err
 	}
 	if index == nil || index.ReadRevision != scope.ReadRevision || len(index.Values) != 1 || index.Values[0] == nil {
-		return domain.Intent{}, false, corruptReleaseRecord()
+		return domain.Intent{}, false, releases.CorruptReleaseRecord()
 	}
 	publicationID, err := decodeReleaseIndex(index.Values[0].Value, service.Service.Record.Desired.ID)
 	if err != nil {
@@ -311,7 +312,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 			return err
 		}
 		if page == nil || page.ReadRevision != scope.ReadRevision {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		if len(page.Values) != 0 {
 			keys := make([]string, len(page.Values))
@@ -319,7 +320,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 				scriptID := strings.TrimPrefix(value.Key, prefix)
 				if strings.Contains(scriptID, "/") || ids.Validate(ids.KindScript, scriptID) != nil ||
 					!bytes.Equal(value.Value, []byte(scriptID)) {
-					return corruptReleaseRecord()
+					return releases.CorruptReleaseRecord()
 				}
 				keys[index] = scriptrecord.ScriptSetScriptKey(scope.Environment.Record.ID, active.Record.GenerationID, scriptID)
 			}
@@ -328,15 +329,15 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 				return err
 			}
 			if records == nil || records.ReadRevision != scope.ReadRevision || len(records.Values) != len(keys) {
-				return corruptReleaseRecord()
+				return releases.CorruptReleaseRecord()
 			}
 			for _, value := range records.Values {
 				if value == nil {
-					return corruptReleaseRecord()
+					return releases.CorruptReleaseRecord()
 				}
 				record, err := scriptrecord.DecodeRecord(value.Value)
 				if err != nil || record.EnvironmentID != scope.Environment.Record.ID {
-					return corruptReleaseRecord()
+					return releases.CorruptReleaseRecord()
 				}
 				if _, selected := services[record.ServiceID]; selected && record.Desired.When != "manual" {
 					return errs.New(

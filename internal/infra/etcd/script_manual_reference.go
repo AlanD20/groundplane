@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -56,7 +57,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 	service.Source = sourceref.SourceIdentity{Kind: sourceref.SourceService, ServiceID: execution.ServiceID}
 	service.SourceModRevision, service.SourceDigest = snapshotRevision, execution.SnapshotSHA256
 	members = append(members, manualScriptExistingMember(service, snapshotKey))
-	releaseKey := releaseIntentStagingKey("", execution.ReleaseID)
+	releaseKey := releases.ReleaseIntentStagingKey("", execution.ReleaseID)
 	releaseValue, err := scriptExecutionValueAt(ctx, repository.store, releaseKey, sources.Revision)
 	if err != nil {
 		return nil, err

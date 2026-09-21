@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -20,11 +21,11 @@ func validateOrdinaryPriorRuntime(render ReleaseRenderInput) error {
 	if witness.ServiceID != render.ServiceID || render.PriorWorkload == nil ||
 		executionplan.ValidateNativePredecessorWitness(render.EnvironmentID, render.ServiceID,
 			witness.CurrentArtifact, witness.RetainedPriorArtifact) != nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	artifact, err := openRestorationWitness(render.EnvironmentID, witness.CurrentArtifact)
 	if err != nil || artifact.ArtifactId != render.PriorArtifactID || artifact.ArtifactId == render.ArtifactID {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }
@@ -32,7 +33,7 @@ func validateOrdinaryPriorRuntime(render ReleaseRenderInput) error {
 func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 	ctx context.Context,
 	task TaskRecord,
-	manifest ReleaseStagedManifest,
+	manifest releases.ReleaseStagedManifest,
 	procedure *agentpb.CandidateReleaseProcedure,
 	revision int64,
 ) ([]ReleaseNativePredecessorAuthority, []etcdstore.Condition, error) {
@@ -45,8 +46,8 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 		if !selected[member.ServiceID] {
 			continue
 		}
-		keys = append(keys, releaseIntentStagingKey(manifest.PublicationID, member.ReleaseID),
-			releaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID))
+		keys = append(keys, releases.ReleaseIntentStagingKey(manifest.PublicationID, member.ReleaseID),
+			releases.ReleaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID))
 	}
 	read := &etcdstore.GetManyResult{ReadRevision: revision}
 	var err error
@@ -57,7 +58,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 		return nil, nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return nil, nil, corruptReleaseRecord()
+		return nil, nil, releases.CorruptReleaseRecord()
 	}
 	defer clearKeyValues(read.Values)
 	witnesses := make([]ReleaseNativePredecessorAuthority, 0, len(manifest.Members))
@@ -70,10 +71,10 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 		}
 		intentValue, renderValue := read.Values[2*index], read.Values[2*index+1]
 		if intentValue == nil || renderValue == nil {
-			return nil, nil, corruptReleaseRecord()
+			return nil, nil, releases.CorruptReleaseRecord()
 		}
-		intent, intentErr := decodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
-		raw, rawErr := decodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
+		intent, intentErr := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
+		raw, rawErr := releases.DecodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
 		render, renderErr := decodeReleaseRenderInput(raw)
 		intentDigest, intentDigestErr := domain.Digest(intent)
 		renderDigest, renderDigestErr := domain.Digest(raw)
@@ -84,20 +85,20 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 			render.ServiceID != member.ServiceID || render.EnvironmentID != task.Owner.EnvironmentID ||
 			render.PlanID != task.PlanID || render.ArtifactID != task.Params[TaskComposeArtifactParam] ||
 			(intent.PriorServingReleaseID == "") != (render.PriorRuntime == nil) {
-			return nil, nil, corruptReleaseRecord()
+			return nil, nil, releases.CorruptReleaseRecord()
 		}
 		witness := ReleaseNativePredecessorAuthority{ServiceID: member.ServiceID}
 		if render.PriorRuntime != nil {
 			witness = *render.PriorRuntime
 			if witness.ServiceID != member.ServiceID {
-				return nil, nil, corruptReleaseRecord()
+				return nil, nil, releases.CorruptReleaseRecord()
 			}
 			witness.CurrentArtifact = slices.Clone(witness.CurrentArtifact)
 			witness.RetainedPriorArtifact = slices.Clone(witness.RetainedPriorArtifact)
 			if !recoveryRenderMatchesPredecessor(render, intent, &ReleaseRestorationAuthority{
 				NativePredecessors: []ReleaseNativePredecessorAuthority{witness},
 			}) {
-				return nil, nil, corruptReleaseRecord()
+				return nil, nil, releases.CorruptReleaseRecord()
 			}
 		}
 		witnesses = append(witnesses, witness)

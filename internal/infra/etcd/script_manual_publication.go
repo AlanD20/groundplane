@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -119,9 +120,9 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		{Key: scriptrecord.ScriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration,
 			execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
 		{Key: scriptrecord.ScriptSetActiveKey(execution.EnvironmentID), ModRevision: sources.ScriptSet.Revision},
-		{Key: releaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
-		{Key: releaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
-		{Key: releaseRenderInputStagingKey("", execution.ReleaseID), ModRevision: sources.RenderInput.Revision},
+		{Key: releases.ReleaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
+		{Key: releases.ReleaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
+		{Key: releases.ReleaseRenderInputStagingKey("", execution.ReleaseID), ModRevision: sources.RenderInput.Revision},
 		{Key: scriptRunnerSnapshotKey(execution.SnapshotID), ModRevision: snapshotRevision},
 	}
 	sourceConditions, err := manualScriptSourceConditions(sources)

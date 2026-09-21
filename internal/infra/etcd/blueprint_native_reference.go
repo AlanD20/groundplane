@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -11,25 +12,13 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// BlueprintNativePredecessorReference binds the compact marker to the exact
-// prior-runtime bytes in its candidate's immutable, manifest-owned render input.
-// No reference points at a separately prunable predecessor Release input.
-type BlueprintNativePredecessorReference struct {
-	ServiceID          string                             `json:"service_id"`
-	FixedReadRevision  int64                              `json:"fixed_read_revision"`
-	ProjectionRevision int64                              `json:"projection_revision"`
-	RuntimeRevision    int64                              `json:"runtime_revision,omitempty"`
-	Serving            *BlueprintNativeServingPredecessor `json:"serving,omitempty"`
-	PriorRuntimeSHA256 string                             `json:"prior_runtime_sha256,omitempty"`
-}
-
 func blueprintNativePredecessorReferences(
 	captures []BlueprintNativePredecessorCapture,
-) ([]BlueprintNativePredecessorReference, error) {
-	result := make([]BlueprintNativePredecessorReference, len(captures))
+) ([]releases.BlueprintNativePredecessorReference, error) {
+	result := make([]releases.BlueprintNativePredecessorReference, len(captures))
 	for index, captured := range captures {
 		runtime := captured.Runtime()
-		reference := BlueprintNativePredecessorReference{
+		reference := releases.BlueprintNativePredecessorReference{
 			ServiceID: runtime.ServiceID, FixedReadRevision: runtime.FixedReadRevision,
 			ProjectionRevision: runtime.ProjectionRevision, RuntimeRevision: runtime.RuntimeRevision,
 			Serving: runtime.Serving,
@@ -48,30 +37,30 @@ func blueprintNativePredecessorReferences(
 }
 
 func validateBlueprintNativePredecessorReferences(
-	references []BlueprintNativePredecessorReference,
+	references []releases.BlueprintNativePredecessorReference,
 	procedure *agentpb.CandidateReleaseProcedure,
 ) error {
-	if len(references) > maximumReleasePublicationMembers {
-		return corruptReleaseRecord()
+	if len(references) > releases.MaximumReleasePublicationMembers {
+		return releases.CorruptReleaseRecord()
 	}
-	byService := make(map[string]BlueprintNativePredecessorReference, len(references))
+	byService := make(map[string]releases.BlueprintNativePredecessorReference, len(references))
 	for index, reference := range references {
 		if ids.Validate(ids.KindService, reference.ServiceID) != nil || reference.FixedReadRevision <= 0 ||
 			reference.ProjectionRevision < 0 || reference.ProjectionRevision > reference.FixedReadRevision ||
 			index > 0 && (references[index-1].ServiceID >= reference.ServiceID ||
 				references[index-1].FixedReadRevision != reference.FixedReadRevision) {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		if reference.Serving == nil {
 			if reference.RuntimeRevision != 0 || reference.PriorRuntimeSHA256 != "" {
-				return corruptReleaseRecord()
+				return releases.CorruptReleaseRecord()
 			}
 		} else if !validLowerSHA256(reference.PriorRuntimeSHA256) || reference.ProjectionRevision <= 0 ||
 			reference.RuntimeRevision <= 0 || reference.RuntimeRevision > reference.FixedReadRevision ||
 			ids.Validate(ids.KindDeployment, reference.Serving.ServingReleaseID) != nil ||
 			reference.Serving.Target.Validate() != nil || reference.Serving.RetainedPriorReleaseID != "" &&
 			ids.Validate(ids.KindDeployment, reference.Serving.RetainedPriorReleaseID) != nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		byService[reference.ServiceID] = reference
 	}
@@ -82,22 +71,22 @@ func validateBlueprintNativePredecessorReferences(
 		if reference.Serving == nil {
 			if prior.GetPriorArtifactId() != "" || prior.GetPriorReleaseId() != "" || prior.GetPriorTarget() != "" ||
 				prior.GetRetainedPriorArtifactId() != "" {
-				return corruptReleaseRecord()
+				return releases.CorruptReleaseRecord()
 			}
 		} else if prior.GetPriorReleaseId() != reference.Serving.ServingReleaseID ||
 			prior.GetPriorTarget() != string(reference.Serving.Target) || prior.GetPriorArtifactId() == "" ||
 			(reference.Serving.RetainedPriorReleaseID != "") != (prior.GetRetainedPriorArtifactId() != "") {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 	}
 	if len(byService) != 0 {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }
 
 func resolveBlueprintNativePredecessors(
-	references []BlueprintNativePredecessorReference,
+	references []releases.BlueprintNativePredecessorReference,
 	members []ReleaseTaskRenderMember,
 ) ([]BlueprintNativePredecessor, error) {
 	result := make([]BlueprintNativePredecessor, len(references))
@@ -107,12 +96,12 @@ func resolveBlueprintNativePredecessors(
 			return member.Intent.ServiceID == reference.ServiceID
 		})
 		if memberIndex < 0 {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		member := members[memberIndex]
 		witness := member.Render.PriorRuntime
 		if (reference.Serving == nil) != (witness == nil) || matched[reference.ServiceID] {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		matched[reference.ServiceID] = true
 		runtime := BlueprintNativePredecessor{ServiceID: reference.ServiceID,
@@ -126,19 +115,19 @@ func resolveBlueprintNativePredecessors(
 				!recoveryRenderMatchesPredecessor(member.Render, member.Intent, &ReleaseRestorationAuthority{
 					NativePredecessors: []ReleaseNativePredecessorAuthority{*witness},
 				}) {
-				return nil, corruptReleaseRecord()
+				return nil, releases.CorruptReleaseRecord()
 			}
 			runtime.CurrentArtifact = witness.CurrentArtifact
 			runtime.RetainedPriorArtifact = witness.RetainedPriorArtifact
 		} else if reference.PriorRuntimeSHA256 != "" || member.Intent.PriorServingReleaseID != "" {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		result[index] = runtime
 	}
 	for _, member := range members {
 		if !matched[member.Intent.ServiceID] &&
 			(member.Render.PriorRuntime != nil || member.Intent.PriorServingReleaseID != "") {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 	}
 	return result, nil
@@ -147,8 +136,8 @@ func resolveBlueprintNativePredecessors(
 func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 	ctx context.Context,
 	task TaskRecord,
-	marker ReleasePublicationMarker,
-	manifest ReleaseStagedManifest,
+	marker releases.ReleasePublicationMarker,
+	manifest releases.ReleaseStagedManifest,
 	revision int64,
 ) ([]BlueprintNativePredecessor, []etcdstore.Condition, error) {
 	if len(marker.NativePredecessors) == 0 {
@@ -156,15 +145,15 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 	}
 	keys := make([]string, 0, len(manifest.Members)*2)
 	for _, member := range manifest.Members {
-		keys = append(keys, releaseIntentStagingKey(manifest.PublicationID, member.ReleaseID),
-			releaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID))
+		keys = append(keys, releases.ReleaseIntentStagingKey(manifest.PublicationID, member.ReleaseID),
+			releases.ReleaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return nil, nil, corruptReleaseRecord()
+		return nil, nil, releases.CorruptReleaseRecord()
 	}
 	defer clearKeyValues(read.Values)
 	members := make([]ReleaseTaskRenderMember, len(manifest.Members))
@@ -172,10 +161,10 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 	for index, reference := range manifest.Members {
 		intentValue, renderValue := read.Values[index*2], read.Values[index*2+1]
 		if intentValue == nil || renderValue == nil {
-			return nil, nil, corruptReleaseRecord()
+			return nil, nil, releases.CorruptReleaseRecord()
 		}
-		intent, intentErr := decodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
-		raw, rawErr := decodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
+		intent, intentErr := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
+		raw, rawErr := releases.DecodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
 		render, renderErr := decodeReleaseRenderInput(raw)
 		intentDigest, digestErr := domain.Digest(intent)
 		renderDigest, renderDigestErr := domain.Digest(raw)
@@ -187,7 +176,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 			intent.EnvironmentID != task.Owner.EnvironmentID || intent.OperationKind != domain.OperationBlueprintApply ||
 			render.ReleaseID != intent.ID || render.ServiceID != intent.ServiceID || render.PlanID != task.PlanID ||
 			render.EnvironmentID != task.Owner.EnvironmentID || render.ArtifactID != task.Params[TaskComposeArtifactParam] {
-			return nil, nil, corruptReleaseRecord()
+			return nil, nil, releases.CorruptReleaseRecord()
 		}
 		members[index] = ReleaseTaskRenderMember{Intent: intent, Render: render}
 		conditions[index*2] = etcdstore.Condition{Key: keys[index*2], ModRevision: intentValue.ModRevision}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -44,10 +45,10 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	}
 	conditions := []etcdstore.Condition{
 		{
-			Key:         releaseManifestStagingKey(evidence.Manifest.Record.PublicationID),
+			Key:         releases.ReleaseManifestStagingKey(evidence.Manifest.Record.PublicationID),
 			ModRevision: evidence.Manifest.Revision,
 		},
-		{Key: releasePublicationKey(evidence.Manifest.Record.PublicationID)},
+		{Key: releases.ReleasePublicationKey(evidence.Manifest.Record.PublicationID)},
 	}
 	nativeConditions, err := ledger.blueprintNativePredecessorConditions(ctx, evidence)
 	if err != nil {
@@ -63,7 +64,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if err != nil {
 		return BlueprintReleasePublication{}, err
 	}
-	publicationValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
+	publicationValue, err := releases.EncodeReleaseRecord("release-publication", releases.ReleasePublicationMarker{
 		PublicationID:              evidence.Manifest.Record.PublicationID,
 		OperationID:                evidence.Manifest.Record.OperationID,
 		ManifestDigest:             evidence.Manifest.Record.Digest,
@@ -79,12 +80,12 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	mutations := []etcdstore.Mutation{
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   releasePublicationKey(evidence.Manifest.Record.PublicationID),
+			Key:   releases.ReleasePublicationKey(evidence.Manifest.Record.PublicationID),
 			Value: publicationValue,
 		},
 	}
 	for _, member := range evidence.Manifest.Record.Members {
-		environmentValue, encodeErr := json.Marshal(releaseEnvironmentIndexValue{
+		environmentValue, encodeErr := json.Marshal(releases.ReleaseEnvironmentIndexValue{
 			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,
 		})
 		if encodeErr != nil {
@@ -92,7 +93,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			return BlueprintReleasePublication{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
 		serviceValue, encodeErr := json.Marshal(
-			releaseServiceIndexValue{Schema: 1, PublicationID: evidence.Manifest.Record.PublicationID},
+			releases.ReleaseServiceIndexValue{Schema: 1, PublicationID: evidence.Manifest.Record.PublicationID},
 		)
 		if encodeErr != nil {
 			clear(environmentValue)
@@ -103,12 +104,12 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			mutations,
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   releaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID),
+				Key:   releases.ReleaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID),
 				Value: environmentValue,
 			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   releaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID),
+				Key:   releases.ReleaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID),
 				Value: serviceValue,
 			},
 		)

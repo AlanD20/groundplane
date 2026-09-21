@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -76,7 +77,7 @@ func (authority *ReleaseGroupExecutionAuthority) advanceProgress(
 	defer prepared.clear()
 	head := prepared.head
 	if head.Progress == nil || head.ReleaseGroupID == "" {
-		return domain.GroupProgress{}, corruptReleaseRecord()
+		return domain.GroupProgress{}, releases.CorruptReleaseRecord()
 	}
 	manifest := domain.GroupManifest{
 		OperationID: head.OperationID, ReleaseGroupID: head.ReleaseGroupID,
@@ -86,7 +87,7 @@ func (authority *ReleaseGroupExecutionAuthority) advanceProgress(
 	}
 	executor, err := domain.NewGroupExecutor(manifest)
 	if err != nil {
-		return domain.GroupProgress{}, corruptReleaseRecord()
+		return domain.GroupProgress{}, releases.CorruptReleaseRecord()
 	}
 	var next domain.GroupProgress
 	if failure {
@@ -103,7 +104,7 @@ func (authority *ReleaseGroupExecutionAuthority) advanceProgress(
 				return *head.Progress, nil
 			}
 		}
-		return domain.GroupProgress{}, corruptReleaseRecord()
+		return domain.GroupProgress{}, releases.CorruptReleaseRecord()
 	}
 	nextHead := cloneReleaseOperationHead(head)
 	nextHead.Progress = &next
@@ -111,13 +112,13 @@ func (authority *ReleaseGroupExecutionAuthority) advanceProgress(
 	if failure && next.Compensating {
 		nextHead.State = domain.StateCompensating
 	}
-	headValue, err := encodeReleaseRecord("release-operation", nextHead)
+	headValue, err := releases.EncodeReleaseRecord("release-operation", nextHead)
 	if err != nil {
 		return domain.GroupProgress{}, err
 	}
 	defer clear(headValue)
 	prepared.mutations = append(prepared.mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: releaseOperationKey(input.OperationID), Value: headValue,
+		Type: etcdstore.MutationPut, Key: releases.ReleaseOperationKey(input.OperationID), Value: headValue,
 	})
 	result, err := authority.store.Transact(ctx, prepared.conditions, prepared.mutations)
 	if err != nil {

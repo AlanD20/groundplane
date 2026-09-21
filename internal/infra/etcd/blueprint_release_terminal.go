@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -24,7 +25,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 ) (bool, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	baseKeys := []string{
-		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
+		releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID),
 		hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: readRevision})
@@ -33,15 +34,15 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	}
 	if base == nil || base.ReadRevision != readRevision || len(base.Values) != len(baseKeys) ||
 		base.Values[0] == nil || base.Values[1] == nil || base.Values[2] == nil {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](base.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](base.Values[0].Value, "release-publication")
 	if err != nil {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](base.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](base.Values[1].Value, "release-staged-manifest")
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	rootRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintRootKey(
@@ -53,7 +54,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		if err != nil {
 			return false, err
 		}
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
 	if err != nil {
@@ -65,14 +66,14 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	}
 	terminalKeys := make([]string, len(manifest.Members))
 	for index, member := range manifest.Members {
-		terminalKeys[index] = releaseTerminalKey(member.ReleaseID)
+		terminalKeys[index] = releases.ReleaseTerminalKey(member.ReleaseID)
 	}
 	terminals, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: terminalKeys, Revision: readRevision})
 	if err != nil {
 		return false, err
 	}
 	if terminals == nil || terminals.ReadRevision != readRevision || len(terminals.Values) != len(terminalKeys) {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	pending := make([]int, 0, len(manifest.Members))
 	for index, value := range terminals.Values {
@@ -87,11 +88,11 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	for _, index := range pending {
 		member := manifest.Members[index]
 		detailKeys = append(detailKeys,
-			releaseIntentStagingKey(publicationID, member.ReleaseID),
-			releaseCheckpointStagingKey(publicationID, member.ReleaseID),
-			releaseProjectionKey(member.ServiceID),
-			releaseTerminalKey(member.ReleaseID),
-			releaseRetentionKey(member.ReleaseID),
+			releases.ReleaseIntentStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseCheckpointStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseProjectionKey(member.ServiceID),
+			releases.ReleaseTerminalKey(member.ReleaseID),
+			releases.ReleaseRetentionKey(member.ReleaseID),
 		)
 	}
 	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: readRevision})
@@ -99,7 +100,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		return false, err
 	}
 	if details == nil || details.ReadRevision != readRevision || len(details.Values) != len(detailKeys) {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	conditions := []etcdstore.Condition{
 		{Key: base.Values[0].Key, ModRevision: base.Values[0].ModRevision},
@@ -111,24 +112,24 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	for offset, index := range pending {
 		keys, values := detailKeys[offset*5:offset*5+5], details.Values[offset*5:offset*5+5]
 		if values[0] == nil || values[1] == nil || values[3] != nil || values[4] != nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		member := manifest.Members[index]
-		intent, decodeErr := decodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
+		intent, decodeErr := releases.DecodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
 		intentDigest, _ := domain.Digest(intent)
 		if decodeErr != nil || domain.ValidateIntent(intent) != nil || intentDigest != member.IntentDigest ||
 			intent.OperationKind != domain.OperationBlueprintApply || intent.ID != member.ReleaseID ||
 			intent.ServiceID != member.ServiceID || intent.EnvironmentID != task.Owner.EnvironmentID ||
 			intent.OperationID != task.OperationID {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
-		checkpoint, decodeErr := decodeReleaseRecord[domain.Checkpoint](values[1].Value, "release-checkpoint")
+		checkpoint, decodeErr := releases.DecodeReleaseRecord[domain.Checkpoint](values[1].Value, "release-checkpoint")
 		checkpointDigest, _ := domain.Digest(checkpoint)
 		if decodeErr != nil || domain.ValidateCheckpoint(checkpoint) != nil ||
 			checkpointDigest != member.CheckpointDigest ||
 			checkpoint.ReleaseID != intent.ID ||
 			checkpoint.State != domain.StatePending {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		projection, decodeErr := decodeReleaseProjection(values[2], task.Owner.EnvironmentID, member.ServiceID)
 		if decodeErr != nil {
@@ -165,16 +166,16 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			retention.Digest,
 			terminalAt,
 		)
-		checkpointValue, encodeErr := encodeReleaseRecord("release-checkpoint", checkpoint)
+		checkpointValue, encodeErr := releases.EncodeReleaseRecord("release-checkpoint", checkpoint)
 		if encodeErr != nil {
 			return false, encodeErr
 		}
-		terminalValue, encodeErr := encodeReleaseRecord("release-terminal-summary", terminal)
+		terminalValue, encodeErr := releases.EncodeReleaseRecord("release-terminal-summary", terminal)
 		if encodeErr != nil {
 			clear(checkpointValue)
 			return false, encodeErr
 		}
-		retentionValue, encodeErr := encodeReleaseRecord("release-retention", retention)
+		retentionValue, encodeErr := releases.EncodeReleaseRecord("release-retention", retention)
 		if encodeErr != nil {
 			clear(checkpointValue)
 			clear(terminalValue)
@@ -192,7 +193,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[4], Value: retentionValue},
 		)
 		if successful {
-			projectionValue, encodeErr := encodeReleaseRecord("service-release-projection", projection)
+			projectionValue, encodeErr := releases.EncodeReleaseRecord("service-release-projection", projection)
 			if encodeErr != nil {
 				return false, encodeErr
 			}

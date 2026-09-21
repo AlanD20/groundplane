@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"sort"
@@ -41,15 +42,9 @@ type BlueprintNativePredecessor struct {
 	FixedReadRevision     int64
 	ProjectionRevision    int64
 	RuntimeRevision       int64
-	Serving               *BlueprintNativeServingPredecessor
+	Serving               *releases.BlueprintNativeServingPredecessor
 	CurrentArtifact       []byte
 	RetainedPriorArtifact []byte
-}
-
-type BlueprintNativeServingPredecessor struct {
-	ServingReleaseID       string                `json:"serving_release_id"`
-	Target                 domain.WorkloadTarget `json:"target"`
-	RetainedPriorReleaseID string                `json:"retained_prior_release_id,omitempty"`
 }
 
 func (capture BlueprintNativePredecessorCapture) Runtime() BlueprintNativePredecessor {
@@ -60,7 +55,7 @@ func (capture BlueprintNativePredecessorCapture) Runtime() BlueprintNativePredec
 		RetainedPriorArtifact: capture.RetainedPriorArtifact,
 	}
 	if capture.Serving != nil {
-		runtime.Serving = &BlueprintNativeServingPredecessor{
+		runtime.Serving = &releases.BlueprintNativeServingPredecessor{
 			ServingReleaseID: capture.Serving.ServingReleaseID, Target: capture.Serving.Current.CandidateTarget,
 			RetainedPriorReleaseID: capture.RetainedPriorReleaseID,
 		}
@@ -87,7 +82,7 @@ func buildBlueprintNativeRestorationAuthority(
 	task TaskRecord,
 	predecessor taskMaterializationAppliedPredecessor,
 	native []BlueprintNativePredecessor,
-	manifest ReleaseStagedManifest,
+	manifest releases.ReleaseStagedManifest,
 	procedure *agentpb.CandidateReleaseProcedure,
 	applied []byte,
 ) (ReleaseRestorationAuthority, string, error) {
@@ -152,7 +147,7 @@ func buildBlueprintNativeRestorationAuthority(
 
 func validateNativeRestorationMemberWitness(authority ReleaseRestorationAuthority) error {
 	if len(authority.NativePredecessors) != len(authority.Candidates) ||
-		len(authority.NativePredecessors) > maximumReleasePublicationMembers {
+		len(authority.NativePredecessors) > releases.MaximumReleasePublicationMembers {
 		return corruptTaskAssignment()
 	}
 	if authority.AppliedPredecessor != nil {
@@ -285,12 +280,12 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 	for index, capture := range evidence.NativePredecessors {
 		native[index] = capture.Runtime()
 		if capture.Serving == nil && capture.RetainedPriorReleaseID != "" {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		if capture.Serving != nil && (validateServiceLifecycleRelease(*capture.Serving,
 			ServiceLifecycleRenderInput{ServiceID: capture.ServiceID, EnvironmentID: evidence.EnvironmentID}) != nil ||
 			capture.Serving.ProjectionRevision != capture.ProjectionRevision) {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 	}
 	if err := validateBlueprintNativePredecessors(native, evidence.Plan.GetCandidateReleaseProcedure(), evidence.EnvironmentID); err != nil {
@@ -301,7 +296,7 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 		return nil, err
 	}
 	_, conditions, err := ledger.tasks.blueprintNativePredecessorsAtRevision(ctx, evidence.Task,
-		ReleasePublicationMarker{NativePredecessors: references}, evidence.Manifest.Record, evidence.Manifest.Revision)
+		releases.ReleasePublicationMarker{NativePredecessors: references}, evidence.Manifest.Record, evidence.Manifest.Revision)
 	if err != nil {
 		return nil, err
 	}
@@ -345,12 +340,12 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 			return nil, err
 		}
 		if captured.Serving != nil && !present {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		conditions = append(conditions, guards...)
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: releaseProjectionKey(captured.ServiceID), ModRevision: captured.ProjectionRevision},
+			etcdstore.Condition{Key: releases.ReleaseProjectionKey(captured.ServiceID), ModRevision: captured.ProjectionRevision},
 			etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(evidence.EnvironmentID), ModRevision: applied.Revision},
 		)
 		if captured.Serving != nil {
@@ -386,24 +381,24 @@ func validateBlueprintNativeIntent(intent domain.Intent, snapshots []BlueprintNa
 		}
 	}
 	if intent.PriorServingReleaseID != expected {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }
 
 func validateBlueprintNativeRenderInput(
 	input ReleaseTaskRenderInput,
-	marker ReleasePublicationMarker,
+	marker releases.ReleasePublicationMarker,
 	task TaskRecord,
 ) error {
 	procedure, err := executionplan.OpenCandidateReleaseDescriptor(marker.CandidateReleaseDescriptor)
 	if err != nil ||
 		validateBlueprintNativePredecessors(input.NativePredecessors, procedure, task.Owner.EnvironmentID) != nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	for _, member := range input.Members {
 		if validateBlueprintNativeIntent(member.Intent, input.NativePredecessors) != nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		expected := ""
 		for _, selected := range procedure.GetMembers() {
@@ -412,7 +407,7 @@ func validateBlueprintNativeRenderInput(
 			}
 		}
 		if member.Render.PriorArtifactID != expected {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 	}
 	return nil
@@ -430,12 +425,12 @@ func validateBlueprintNativePredecessors(
 			captured.ProjectionRevision > captured.FixedReadRevision ||
 			index > 0 && snapshots[index-1].ServiceID >= captured.ServiceID ||
 			index > 0 && snapshots[index-1].FixedReadRevision != captured.FixedReadRevision {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		if captured.Serving == nil {
 			if captured.RuntimeRevision != 0 || len(captured.CurrentArtifact) != 0 ||
 				len(captured.RetainedPriorArtifact) != 0 {
-				return corruptReleaseRecord()
+				return releases.CorruptReleaseRecord()
 			}
 		} else if ids.Validate(ids.KindDeployment, captured.Serving.ServingReleaseID) != nil ||
 			captured.ProjectionRevision <= 0 || captured.RuntimeRevision <= 0 ||
@@ -444,7 +439,7 @@ func validateBlueprintNativePredecessors(
 			(captured.Serving.RetainedPriorReleaseID != "") != (len(captured.RetainedPriorArtifact) != 0) ||
 			captured.Serving.RetainedPriorReleaseID != "" && ids.Validate(ids.KindDeployment, captured.Serving.RetainedPriorReleaseID) != nil ||
 			executionplan.ValidateNativePredecessorWitness(environmentID, captured.ServiceID, captured.CurrentArtifact, captured.RetainedPriorArtifact) != nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		byService[captured.ServiceID] = captured
 	}
@@ -455,7 +450,7 @@ func validateBlueprintNativePredecessors(
 		if !found || captured.Serving == nil {
 			if prior.GetPriorArtifactId() != "" || prior.GetPriorReleaseId() != "" || prior.GetPriorTarget() != "" ||
 				prior.GetRetainedPriorArtifactId() != "" {
-				return corruptReleaseRecord()
+				return releases.CorruptReleaseRecord()
 			}
 			continue
 		}
@@ -463,25 +458,25 @@ func validateBlueprintNativePredecessors(
 		if err != nil || prior.GetPriorArtifactId() != artifact.GetArtifactId() ||
 			prior.GetPriorReleaseId() != captured.Serving.ServingReleaseID ||
 			prior.GetPriorTarget() != string(captured.Serving.Target) {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		if len(captured.RetainedPriorArtifact) != 0 {
 			retained, err := openRestorationWitness(environmentID, captured.RetainedPriorArtifact)
 			if err != nil || prior.GetRetainedPriorArtifactId() != retained.GetArtifactId() {
-				return corruptReleaseRecord()
+				return releases.CorruptReleaseRecord()
 			}
 			for _, service := range retained.Services {
 				if service.Role != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY &&
 					composeServiceReleaseID(service) != captured.Serving.RetainedPriorReleaseID {
-					return corruptReleaseRecord()
+					return releases.CorruptReleaseRecord()
 				}
 			}
 		} else if prior.GetRetainedPriorArtifactId() != "" {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 	}
 	if len(byService) != 0 {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }

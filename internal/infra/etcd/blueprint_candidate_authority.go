@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
@@ -34,31 +35,31 @@ func blueprintCandidateAttemptAuthorityKey(taskID string) string {
 	return blueprintCandidateAttemptAuthorityPrefix + taskID
 }
 
-func blueprintCandidateManifestDigest(manifest ReleaseStagedManifest) (string, error) {
+func blueprintCandidateManifestDigest(manifest releases.ReleaseStagedManifest) (string, error) {
 	return domain.Digest(struct {
-		PublicationID string                   `json:"publication_id"`
-		OperationID   string                   `json:"operation_id"`
-		Members       []ReleaseStagedMemberRef `json:"members"`
+		PublicationID string                            `json:"publication_id"`
+		OperationID   string                            `json:"operation_id"`
+		Members       []releases.ReleaseStagedMemberRef `json:"members"`
 	}{manifest.PublicationID, manifest.OperationID, manifest.Members})
 }
 
 func validateBlueprintCandidateManifest(
 	task TaskRecord,
-	marker ReleasePublicationMarker,
-	manifest ReleaseStagedManifest,
+	marker releases.ReleasePublicationMarker,
+	manifest releases.ReleaseStagedManifest,
 ) error {
 	publicationID := task.Params[TaskReleasePublicationParam]
-	if validatePublicationID(publicationID) != nil || marker.PublicationID != publicationID ||
+	if releases.ValidatePublicationID(publicationID) != nil || marker.PublicationID != publicationID ||
 		marker.OperationID != task.OperationID || manifest.PublicationID != publicationID ||
 		manifest.OperationID != task.OperationID || marker.ManifestDigest != manifest.Digest ||
 		marker.PublishedAt.IsZero() || marker.PublishedAt.Location() != time.UTC ||
 		manifest.CreatedAt.IsZero() || manifest.CreatedAt.Location() != time.UTC ||
-		len(manifest.Members) == 0 || len(manifest.Members) > maximumReleasePublicationMembers {
-		return corruptReleaseRecord()
+		len(manifest.Members) == 0 || len(manifest.Members) > releases.MaximumReleasePublicationMembers {
+		return releases.CorruptReleaseRecord()
 	}
 	digest, err := blueprintCandidateManifestDigest(manifest)
 	if err != nil || digest != manifest.Digest {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	releases := make(map[string]struct{}, len(manifest.Members))
 	services := make(map[string]struct{}, len(manifest.Members))
@@ -67,13 +68,13 @@ func validateBlueprintCandidateManifest(
 			ids.Validate(ids.KindService, member.ServiceID) != nil ||
 			!recordcodec.ValidSHA256(member.IntentDigest) || !recordcodec.ValidSHA256(member.RenderDigest) ||
 			!recordcodec.ValidSHA256(member.CheckpointDigest) {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		if _, duplicate := releases[member.ReleaseID]; duplicate {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		if _, duplicate := services[member.ServiceID]; duplicate {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		releases[member.ReleaseID] = struct{}{}
 		services[member.ServiceID] = struct{}{}
@@ -128,7 +129,7 @@ func validateBlueprintCandidateCompensation(
 			return errs.New(errs.KindReleaseRecoveryRequired, "Blueprint recreate predecessor restoration is unproven")
 		}
 	default:
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }
@@ -142,7 +143,7 @@ func validateBlueprintCandidateAttempts(
 		seal.RevisionID != task.Params[EnvironmentDesiredRevisionParam] ||
 		seal.RenderGeneration != uint64(task.RenderGeneration) ||
 		validateBlueprintCandidateAttemptAuthorityRecord(record, task) != nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }
@@ -161,19 +162,19 @@ func validateBlueprintCandidateAttemptAuthorityRecord(
 		validateTaskMaterializationWriter(taskMaterializationWriter(
 			task, task.Owner.EnvironmentID, &record.AppliedPredecessor,
 		)) != nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	for index, attempt := range record.Attempts {
 		if ids.Validate(ids.KindTask, attempt.ID) != nil || attempt.TaskID != attempt.ID ||
 			attempt.StartedAt.IsZero() || attempt.StartedAt.Location() != time.UTC ||
 			(index == 0 && attempt.RetryOf != "") ||
 			(index > 0 && attempt.RetryOf != record.Attempts[index-1].TaskID) {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 	}
 	last := record.Attempts[len(record.Attempts)-1]
 	if last.TaskID != task.ID || last.RetryOf != task.RetryOf {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }
@@ -189,13 +190,13 @@ func (repository *TaskRepository) blueprintCandidateAttemptAuthority(
 		return blueprintCandidateAttemptAuthorityRecord{}, etcdstore.Condition{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return blueprintCandidateAttemptAuthorityRecord{}, etcdstore.Condition{}, corruptReleaseRecord()
+		return blueprintCandidateAttemptAuthorityRecord{}, etcdstore.Condition{}, releases.CorruptReleaseRecord()
 	}
 	record, err := recordcodec.Decode[blueprintCandidateAttemptAuthorityRecord](
 		read.Values[0].Value, "blueprint-candidate-attempt-authority",
 	)
 	if err != nil || validateBlueprintCandidateAttemptAuthorityRecord(record, task) != nil {
-		return blueprintCandidateAttemptAuthorityRecord{}, etcdstore.Condition{}, corruptReleaseRecord()
+		return blueprintCandidateAttemptAuthorityRecord{}, etcdstore.Condition{}, releases.CorruptReleaseRecord()
 	}
 	return record, etcdstore.Condition{Key: key, ModRevision: read.Values[0].ModRevision}, nil
 }
@@ -238,7 +239,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAuthority(
 			if err != nil {
 				return nil, nil, err
 			}
-			return nil, nil, corruptReleaseRecord()
+			return nil, nil, releases.CorruptReleaseRecord()
 		}
 		authority = stored
 		conditions = []etcdstore.Condition{condition}
@@ -256,7 +257,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAuthority(
 		conditions = []etcdstore.Condition{{Key: blueprintCandidateAttemptAuthorityKey(task.ID)}}
 	}
 	if validateBlueprintCandidateAttemptAuthorityRecord(authority, task) != nil {
-		return nil, nil, corruptReleaseRecord()
+		return nil, nil, releases.CorruptReleaseRecord()
 	}
 	value, err := recordcodec.Encode("blueprint-candidate-attempt-authority", authority)
 	if err != nil {
@@ -280,10 +281,10 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 	readyGateRevision int64,
 ) (etcdstore.Condition, etcdstore.Mutation, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
-	if !taskHasBlueprintCandidateAppliedAuthority(task) || validatePublicationID(publicationID) != nil {
-		return etcdstore.Condition{}, etcdstore.Mutation{}, corruptReleaseRecord()
+	if !taskHasBlueprintCandidateAppliedAuthority(task) || releases.ValidatePublicationID(publicationID) != nil {
+		return etcdstore.Condition{}, etcdstore.Mutation{}, releases.CorruptReleaseRecord()
 	}
-	authorityKey := releasePublicationKey(publicationID)
+	authorityKey := releases.ReleasePublicationKey(publicationID)
 	if task.RetryOf != "" {
 		authorityKey = blueprintCandidateAttemptAuthorityKey(task.ID)
 	}
@@ -296,21 +297,21 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 ||
 		read.Values[0] == nil || read.Values[1] == nil {
-		return etcdstore.Condition{}, etcdstore.Mutation{}, corruptReleaseRecord()
+		return etcdstore.Condition{}, etcdstore.Mutation{}, releases.CorruptReleaseRecord()
 	}
 	if task.RetryOf == "" {
-		marker, decodeErr := decodeReleaseRecord[ReleasePublicationMarker](
+		marker, decodeErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
 			read.Values[0].Value, "release-publication",
 		)
 		if decodeErr != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID {
-			return etcdstore.Condition{}, etcdstore.Mutation{}, corruptReleaseRecord()
+			return etcdstore.Condition{}, etcdstore.Mutation{}, releases.CorruptReleaseRecord()
 		}
 	} else {
 		authority, decodeErr := recordcodec.Decode[blueprintCandidateAttemptAuthorityRecord](
 			read.Values[0].Value, "blueprint-candidate-attempt-authority",
 		)
 		if decodeErr != nil || validateBlueprintCandidateAttemptAuthorityRecord(authority, task) != nil {
-			return etcdstore.Condition{}, etcdstore.Mutation{}, corruptReleaseRecord()
+			return etcdstore.Condition{}, etcdstore.Mutation{}, releases.CorruptReleaseRecord()
 		}
 	}
 	epochRevision := read.Values[1].ModRevision
@@ -354,7 +355,7 @@ func (repository *TaskRepository) blueprintCandidateLiveWriterAuthority(
 
 type blueprintCandidateAuthoritySnapshot struct {
 	conditions        []etcdstore.Condition
-	manifest          ReleaseStagedManifest
+	manifest          releases.ReleaseStagedManifest
 	epochValue        []byte
 	epochRevision     int64
 	desiredRevisionID string
@@ -384,8 +385,8 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 ) (blueprintCandidateAuthoritySnapshot, error) {
 	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
 	keys := []string{
-		releasePublicationKey(publicationID),
-		releaseManifestStagingKey(publicationID),
+		releases.ReleasePublicationKey(publicationID),
+		releases.ReleaseManifestStagingKey(publicationID),
 		hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 		environmentBlueprintHeadKey(task.Owner.EnvironmentID),
 		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
@@ -398,19 +399,19 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil ||
 		read.Values[3] == nil || read.Values[4] == nil {
-		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
 	if err != nil {
-		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
-		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
 	headRevisionID, err := idempotencyrecord.DecodeTaskReference(read.Values[3].Value)
 	if err != nil || ids.Validate(ids.KindTask, headRevisionID) != nil {
-		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
 	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(read.Values[2].Value)
 	if err != nil || epoch.EnvironmentID != task.Owner.EnvironmentID {
@@ -423,7 +424,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 	if err != nil || seal.EnvironmentID != task.Owner.EnvironmentID ||
 		seal.RevisionID != desiredRevisionID || seal.SourceKind != EnvironmentBlueprintSourceApply ||
 		seal.RenderGeneration != uint64(task.RenderGeneration) {
-		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
+		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
 	observedPredecessor, predecessorErr := taskMaterializationAppliedPredecessorFromValue(
 		read.Values[5], task.Owner.EnvironmentID, task.RenderGeneration,
@@ -459,7 +460,7 @@ func (repository *TaskRepository) blueprintCandidateAttempts(
 	}
 	record, condition, err := repository.blueprintCandidateAttemptAuthority(ctx, task, revision)
 	if err != nil || validateBlueprintCandidateAttempts(record, task, seal) != nil {
-		return nil, nil, corruptReleaseRecord()
+		return nil, nil, releases.CorruptReleaseRecord()
 	}
 	return slices.Clone(record.Attempts), []etcdstore.Condition{condition}, nil
 }

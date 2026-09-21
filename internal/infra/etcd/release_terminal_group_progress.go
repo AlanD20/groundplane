@@ -2,12 +2,13 @@ package etcd
 
 import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 )
 
 func releaseTerminalGroupProgress(
-	head ReleaseOperationHead,
+	head releases.ReleaseOperationHead,
 	task TaskRecord,
 	terminalStatus taskjournal.TaskStatus,
 	result taskjournal.TaskResultRecord,
@@ -19,7 +20,7 @@ func releaseTerminalGroupProgress(
 		ConfiguredTimeoutSeconds: head.ConfiguredTimeoutSeconds, ComputedBudgetSeconds: head.ComputedBudgetSeconds,
 	})
 	if err != nil || head.Progress == nil {
-		return domain.GroupProgress{}, corruptReleaseRecord()
+		return domain.GroupProgress{}, releases.CorruptReleaseRecord()
 	}
 	progress := *head.Progress
 	progress.Results = nil

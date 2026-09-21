@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"sort"
@@ -20,21 +21,21 @@ import (
 func validateReleaseCandidateDescriptor(
 	descriptor executionplan.CandidateReleaseDescriptor,
 	task TaskRecord,
-	manifest ReleaseStagedManifest,
+	manifest releases.ReleaseStagedManifest,
 ) (*agentpb.CandidateReleaseProcedure, error) {
 	procedure, err := executionplan.OpenCandidateReleaseDescriptor(descriptor)
 	if err != nil {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	planHash, err := hex.DecodeString(task.PlanHash)
 	if err != nil || descriptor.PlanID != task.PlanID || !bytes.Equal(descriptor.PlanHash, planHash) ||
 		descriptor.Operation != candidateReleaseTaskOperation(task) ||
 		manifest.PublicationID != task.Params[TaskReleasePublicationParam] || manifest.OperationID != task.OperationID ||
 		len(procedure.GetMembers()) != len(manifest.Members) {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	if !slices.Equal(descriptor.ComponentActionStepIDs, task.ComponentActionStepIDs) {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	manifestMembers := make(map[string]string, len(manifest.Members))
 	for _, member := range manifest.Members {
@@ -49,15 +50,15 @@ func validateReleaseCandidateDescriptor(
 	}
 	for _, id := range descriptor.ComponentActionStepIDs {
 		if _, exists := taskSteps[id]; !exists {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 	}
 	for _, member := range procedure.GetMembers() {
 		if manifestMembers[member.GetServiceId()] != member.GetCandidateReleaseId() {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		if member.GetCandidateArtifactId() != task.Params[TaskComposeArtifactParam] {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		stepIDs := append([]string(nil), member.GetForwardStepIds()...)
 		if serving := member.GetServingPredecessor(); serving != nil {
@@ -67,7 +68,7 @@ func validateReleaseCandidateDescriptor(
 		}
 		for _, stepID := range stepIDs {
 			if _, exists := taskSteps[stepID]; !exists {
-				return nil, corruptReleaseRecord()
+				return nil, releases.CorruptReleaseRecord()
 			}
 		}
 	}
@@ -84,7 +85,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	}
 	publicationID := task.Params[TaskReleasePublicationParam]
 	keys := []string{
-		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
+		releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -93,13 +94,13 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil || read.Values[1] == nil {
-		return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
+		return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
-	marker, markerErr := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
-	manifest, manifestErr := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	procedure, descriptorErr := validateReleaseCandidateMarker(task, marker, manifest)
 	if markerErr != nil || manifestErr != nil || descriptorErr != nil {
-		return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
+		return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
 	target := ReleaseRestorationTarget("")
 	artifactID := ""
@@ -112,7 +113,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 			target, artifactID = memberTarget, member.GetCandidateArtifactId()
 		}
 		if target != memberTarget || artifactID != member.GetCandidateArtifactId() {
-			return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
+			return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 		}
 	}
 	candidates := make([]ReleaseRestorationCandidate, len(manifest.Members))
@@ -153,12 +154,12 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	}
 	if target == ReleaseRestorationServingPredecessor {
 		if read.Values[2] == nil {
-			return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
+			return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 		}
 		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[2].Value)
 		if decodeErr != nil || projection.EnvironmentID != task.Owner.EnvironmentID ||
 			len(projection.ComposeArtifact) == 0 {
-			return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
+			return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 		}
 		digest := sha256.Sum256(projection.ComposeArtifact)
 		authority.AppliedPredecessor = &ReleaseAppliedPredecessorAuthority{
@@ -200,8 +201,8 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 ) (ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	keys := []string{
-		releasePublicationKey(publicationID),
-		releaseManifestStagingKey(publicationID),
+		releases.ReleasePublicationKey(publicationID),
+		releases.ReleaseManifestStagingKey(publicationID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -210,14 +211,14 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) ||
 		read.Values[0] == nil || read.Values[1] == nil || writer.BlueprintAppliedPredecessor == nil {
-		return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
+		return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
-	marker, markerErr := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
-	manifest, manifestErr := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	procedure, descriptorErr := validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, task, manifest)
 	if markerErr != nil || manifestErr != nil || descriptorErr != nil ||
 		validateBlueprintCandidateManifest(task, marker, manifest) != nil {
-		return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
+		return ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
 	observed, observedErr := taskMaterializationAppliedPredecessorFromValue(
 		read.Values[2], task.Owner.EnvironmentID, task.RenderGeneration,
@@ -298,20 +299,20 @@ func validateSelectedRestorationTargets(
 
 func validateReleaseCandidateMarker(
 	task TaskRecord,
-	marker ReleasePublicationMarker,
-	manifest ReleaseStagedManifest,
+	marker releases.ReleasePublicationMarker,
+	manifest releases.ReleaseStagedManifest,
 ) (*agentpb.CandidateReleaseProcedure, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
-	if validatePublicationID(publicationID) != nil || marker.PublicationID != publicationID ||
+	if releases.ValidatePublicationID(publicationID) != nil || marker.PublicationID != publicationID ||
 		marker.OperationID != task.OperationID || marker.ManifestDigest != manifest.Digest ||
 		manifest.PublicationID != publicationID || manifest.OperationID != task.OperationID ||
 		marker.PublishedAt.IsZero() || marker.PublishedAt.Location() != time.UTC ||
-		len(manifest.Members) == 0 || len(manifest.Members) > maximumReleasePublicationMembers {
-		return nil, corruptReleaseRecord()
+		len(manifest.Members) == 0 || len(manifest.Members) > releases.MaximumReleasePublicationMembers {
+		return nil, releases.CorruptReleaseRecord()
 	}
 	digest, err := blueprintCandidateManifestDigest(manifest)
 	if err != nil || digest != manifest.Digest {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	procedure, err := validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, task, manifest)
 	if err != nil {
@@ -322,7 +323,7 @@ func validateReleaseCandidateMarker(
 			return nil, err
 		}
 	} else if len(marker.NativePredecessors) != 0 {
-		return nil, corruptReleaseRecord()
+		return nil, releases.CorruptReleaseRecord()
 	}
 	return procedure, nil
 }
@@ -334,19 +335,19 @@ func (repository *TaskRepository) candidateReleaseDescriptorAtRevision(
 ) (executionplan.CandidateReleaseDescriptor, *agentpb.CandidateReleaseProcedure, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
+		releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID),
 	}, Revision: revision})
 	if err != nil {
 		return executionplan.CandidateReleaseDescriptor{}, nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 || read.Values[0] == nil ||
 		read.Values[1] == nil {
-		return executionplan.CandidateReleaseDescriptor{}, nil, corruptReleaseRecord()
+		return executionplan.CandidateReleaseDescriptor{}, nil, releases.CorruptReleaseRecord()
 	}
-	marker, markerErr := decodeReleaseRecord[ReleasePublicationMarker](read.Values[0].Value, "release-publication")
-	manifest, manifestErr := decodeReleaseRecord[ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	if markerErr != nil || manifestErr != nil {
-		return executionplan.CandidateReleaseDescriptor{}, nil, corruptReleaseRecord()
+		return executionplan.CandidateReleaseDescriptor{}, nil, releases.CorruptReleaseRecord()
 	}
 	procedure, err := validateReleaseCandidateMarker(task, marker, manifest)
 	if err != nil {

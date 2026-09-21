@@ -5,6 +5,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -14,8 +15,8 @@ import (
 func (repository *TaskRepository) closeReleaseOperation(
 	ctx context.Context,
 	task TaskRecord,
-	head ReleaseOperationHead,
-	fence ReleaseFenceSet,
+	head releases.ReleaseOperationHead,
+	fence releases.ReleaseFenceSet,
 	base *etcdstore.GetManyResult,
 	terminals *etcdstore.GetManyResult,
 	terminalStatus taskjournal.TaskStatus,
@@ -25,7 +26,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 ) (bool, error) {
 	for _, value := range terminals.Values {
 		if value == nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 	}
 	state := releaseOperationTerminalState(terminalStatus)
@@ -48,7 +49,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 		head.FailedMemberOrdinal = 0
 	}
 	head.UpdatedAt = terminalAt
-	headValue, err := encodeReleaseRecord("release-operation", head)
+	headValue, err := releases.EncodeReleaseRecord("release-operation", head)
 	if err != nil {
 		return false, err
 	}
@@ -65,13 +66,13 @@ func (repository *TaskRepository) closeReleaseOperation(
 		conditions = append(conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
+		{Type: etcdstore.MutationPut, Key: releases.ReleaseOperationKey(task.OperationID), Value: headValue},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID), Value: epochValue},
 	}
 	if state != domain.StateRecoveryRequired {
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseFenceSetKey(task.Owner.EnvironmentID)})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releases.ReleaseFenceSetKey(task.Owner.EnvironmentID)})
 	} else if fence.OperationID != task.OperationID {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)
 	if err != nil {
@@ -87,29 +88,29 @@ func (repository *TaskRepository) closeReleaseOperation(
 func (repository *TaskRepository) validateReleaseTerminalMembers(
 	ctx context.Context,
 	task TaskRecord,
-	head ReleaseOperationHead,
+	head releases.ReleaseOperationHead,
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	keys := make([]string, len(head.Members))
 	for index, member := range head.Members {
-		keys[index] = releaseTerminalKey(member.ReleaseID)
+		keys[index] = releases.ReleaseTerminalKey(member.ReleaseID)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return err
 	}
 	if read == nil || len(read.Values) != len(keys) {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	for index, value := range read.Values {
 		if value == nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
-		summary, err := decodeReleaseRecord[domain.TerminalSummary](value.Value, "release-terminal-summary")
+		summary, err := releases.DecodeReleaseRecord[domain.TerminalSummary](value.Value, "release-terminal-summary")
 		if err != nil || summary.ReleaseID != head.Members[index].ReleaseID ||
 			(head.State != domain.StateRecoveryRequired && !slices.Contains(summary.AttemptIDs, task.ID)) {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 	}
 	if head.State != domain.StateRecoveryRequired && task.RetryOf == "" &&

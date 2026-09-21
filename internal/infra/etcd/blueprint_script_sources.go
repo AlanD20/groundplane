@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -99,7 +100,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 		members = append(members, serviceEvidence.withReference(service))
 
-		releaseKey := releaseIntentStagingKey(
+		releaseKey := releases.ReleaseIntentStagingKey(
 			manifest.Record.PublicationID,
 			execution.ReleaseID,
 		)

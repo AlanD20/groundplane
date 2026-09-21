@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
@@ -81,21 +82,21 @@ func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	} else if task.Params[TaskReleasePublicationParam] != "" {
 		headRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
-				releaseOperationKey(task.OperationID),
+				releases.ReleaseOperationKey(task.OperationID),
 			},
 			Revision: readRevision,
 		})
 		if err != nil || headRead == nil || len(headRead.Values) != 1 || headRead.Values[0] == nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
-		head, err := decodeReleaseRecord[ReleaseOperationHead](
+		head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](
 			headRead.Values[0].Value,
 			"release-operation",
 		)
 		if err != nil || repository.validateReleaseTerminalMembers(
 			ctx, task, head, terminalStatus, readRevision,
 		) != nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 	}
 	if err := repository.validateRemovalTaskAcknowledgementReplay(

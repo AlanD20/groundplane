@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -97,16 +98,16 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		return scriptTerminalSourceRelease{}, false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
+		return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 	}
 	for _, value := range read.Values {
 		if value == nil {
-			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 	}
 	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.OperationID {
-		return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
+		return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 	}
 	activeTaskID, err := idempotencyrecord.DecodeTaskReference(read.Values[2].Value)
 	if err != nil || activeTaskID != task.ID {
@@ -125,7 +126,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || !taskOwnsScriptExecution(task, record) ||
 			record.ID != step.executionID || record.StepID != step.stepID || record.CurrentTaskID != task.ID ||
 			record.OperationID != task.OperationID || record.PlanHash != task.PlanHash {
-			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 		executions[index] = record
 		if root.Phase == ScriptOperationSourceActive && terminalStatus == taskjournal.TaskStatusCompleted &&
@@ -193,7 +194,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	if root.Phase == ScriptOperationSourceActive {
 		if root.ReleasePath != ScriptSourceReleaseAbsent ||
 			(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
-			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 		release, releaseErr := repository.beginBlueprintTerminalScriptSourceRelease(
 			ctx, task, executions, read.Values[executionOffset:], *terminalAt,
@@ -221,11 +222,11 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	}
 	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
 		root.RetryDisposition != sourceref.RetryDispositionForbidden {
-		return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
+		return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 	}
 	for _, execution := range executions {
 		if !releaseRecoveryClosedScriptExecutionMatches(execution, assignment.AssignmentID) {
-			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 	}
 	if pending != nil && root.ReleaseCursor != root.MembershipCount {
@@ -247,7 +248,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 			return scriptTerminalSourceRelease{}, true, nil
 		}
 		if !drained {
-			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 	}
 	final, err := authority.PrepareReleaseFinalization(ctx, task.OperationID)
@@ -333,7 +334,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 		if validateScriptExecutionRecord(next) != nil ||
 			!releaseRecoveryClosedScriptExecutionMatches(next, execution.AssignmentID) {
 			clearMutationValues(mutations)
-			return scriptTerminalSourceRelease{}, corruptReleaseRecord()
+			return scriptTerminalSourceRelease{}, releases.CorruptReleaseRecord()
 		}
 		encoded, encodeErr := recordcodec.Encode("script-execution", next)
 		if encodeErr != nil {

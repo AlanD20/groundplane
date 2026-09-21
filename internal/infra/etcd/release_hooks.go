@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"sort"
 	"strings"
@@ -50,13 +51,13 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 			return nil, err
 		}
 		if page == nil || page.ReadRevision != scope.ReadRevision {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		for _, value := range page.Values {
 			scriptID := strings.TrimPrefix(value.Key, prefix)
 			if strings.Contains(scriptID, "/") || ids.Validate(ids.KindScript, scriptID) != nil ||
 				!bytes.Equal(value.Value, []byte(scriptID)) {
-				return nil, corruptReleaseRecord()
+				return nil, releases.CorruptReleaseRecord()
 			}
 			primary, readErr := scriptExecutionValueAt(ctx, ledger.store, scriptrecord.ScriptSetScriptKey(
 				scope.Environment.Record.ID, active.Record.GenerationID, scriptID,
@@ -68,7 +69,7 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 			if decodeErr != nil || record.Desired.ID != scriptID ||
 				record.EnvironmentID != scope.Environment.Record.ID ||
 				record.ScriptSetGeneration != active.Record.GenerationID {
-				return nil, corruptReleaseRecord()
+				return nil, releases.CorruptReleaseRecord()
 			}
 			if record.ServiceID == serviceID {
 				if _, exists := allowed[record.Desired.When]; exists {

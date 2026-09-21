@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -26,7 +27,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 	}
 	for batch := 0; batch < 32; batch++ {
 		task := current.Record
-		keys := []string{taskjournal.TaskAssignmentIndexKey(task.ID), releaseFenceSetKey(task.Owner.EnvironmentID)}
+		keys := []string{taskjournal.TaskAssignmentIndexKey(task.ID), releases.ReleaseFenceSetKey(task.Owner.EnvironmentID)}
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -38,7 +39,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 		if read.Values[1] == nil {
 			return current, nil
 		}
-		fence, err := decodeReleaseRecord[ReleaseFenceSet](read.Values[1].Value, "release-fence-set")
+		fence, err := releases.DecodeReleaseRecord[releases.ReleaseFenceSet](read.Values[1].Value, "release-fence-set")
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -62,7 +63,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if !processed {
-			return etcdstore.Versioned[TaskRecord]{}, corruptReleaseRecord()
+			return etcdstore.Versioned[TaskRecord]{}, releases.CorruptReleaseRecord()
 		}
 		current, err = repository.GetTask(ctx, task.ID)
 		if err != nil {

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
@@ -19,8 +20,8 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	result taskjournal.TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
-	head ReleaseOperationHead,
-	fence ReleaseFenceSet,
+	head releases.ReleaseOperationHead,
+	fence releases.ReleaseFenceSet,
 	base *etcdstore.GetManyResult,
 	terminals *etcdstore.GetManyResult,
 	proofConditions ...etcdstore.Condition,
@@ -31,11 +32,11 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	pending := make([]int, 0, maximumReleaseTerminalBatchMembers)
 	for index, value := range terminals.Values {
 		if value == nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
-		summary, err := decodeReleaseRecord[domain.TerminalSummary](value.Value, "release-terminal-summary")
+		summary, err := releases.DecodeReleaseRecord[domain.TerminalSummary](value.Value, "release-terminal-summary")
 		if err != nil || summary.ReleaseID != head.Members[index].ReleaseID {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		if !slices.Contains(summary.AttemptIDs, task.ID) && len(pending) < maximumReleaseTerminalBatchMembers {
 			pending = append(pending, index)
@@ -48,9 +49,9 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	for _, index := range pending {
 		member := head.Members[index]
 		detailKeys = append(detailKeys,
-			releaseIntentStagingKey(head.PublicationID, member.ReleaseID),
-			releaseCheckpointStagingKey(head.PublicationID, member.ReleaseID),
-			releaseProjectionKey(member.ServiceID),
+			releases.ReleaseIntentStagingKey(head.PublicationID, member.ReleaseID),
+			releases.ReleaseCheckpointStagingKey(head.PublicationID, member.ReleaseID),
+			releases.ReleaseProjectionKey(member.ServiceID),
 		)
 	}
 	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: base.ReadRevision})
@@ -58,7 +59,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		return false, err
 	}
 	if details == nil || details.ReadRevision != base.ReadRevision || len(details.Values) != len(detailKeys) {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	conditions := []etcdstore.Condition{
 		{Key: base.Values[0].Key, ModRevision: base.Values[0].ModRevision},
@@ -73,24 +74,24 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		intentValue, checkpointValue, projectionValue := details.Values[offset*3], details.Values[offset*3+1], details.Values[offset*3+2]
 		terminalValue := terminals.Values[index]
 		if intentValue == nil || checkpointValue == nil || terminalValue == nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
-		intent, err := decodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
+		intent, err := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
 		if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != member.ReleaseID ||
 			intent.ServiceID != member.ServiceID {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
-		checkpoint, err := decodeReleaseRecord[domain.Checkpoint](checkpointValue.Value, "release-checkpoint")
+		checkpoint, err := releases.DecodeReleaseRecord[domain.Checkpoint](checkpointValue.Value, "release-checkpoint")
 		if err != nil || checkpoint.ReleaseID != intent.ID || domain.ValidateCheckpoint(checkpoint) != nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		projection, err := decodeReleaseProjection(projectionValue, task.Owner.EnvironmentID, member.ServiceID)
 		if err != nil {
 			return false, err
 		}
-		summary, err := decodeReleaseRecord[domain.TerminalSummary](terminalValue.Value, "release-terminal-summary")
+		summary, err := releases.DecodeReleaseRecord[domain.TerminalSummary](terminalValue.Value, "release-terminal-summary")
 		if err != nil || summary.ReleaseID != intent.ID {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		proxy, hasProxy := releaseProxyEvidence(result, member.ServiceID)
 		recreate, hasRecreate := releaseRecreateEvidence(result, member.ServiceID)
@@ -159,16 +160,16 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		}
 		summary.AttemptIDs = append(slices.Clone(summary.AttemptIDs), task.ID)
 		summary.CompletedAt = terminalAt
-		encodedCheckpoint, err := encodeReleaseRecord("release-checkpoint", checkpoint)
+		encodedCheckpoint, err := releases.EncodeReleaseRecord("release-checkpoint", checkpoint)
 		if err != nil {
 			return false, err
 		}
-		encodedProjection, err := encodeReleaseRecord("service-release-projection", projection)
+		encodedProjection, err := releases.EncodeReleaseRecord("service-release-projection", projection)
 		if err != nil {
 			clear(encodedCheckpoint)
 			return false, err
 		}
-		encodedTerminal, err := encodeReleaseRecord("release-terminal-summary", summary)
+		encodedTerminal, err := releases.EncodeReleaseRecord("release-terminal-summary", summary)
 		if err != nil {
 			clear(encodedCheckpoint)
 			clear(encodedProjection)
@@ -203,14 +204,14 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 func (repository *TaskRepository) returnReleaseToRecovery(
 	ctx context.Context,
 	task TaskRecord,
-	head ReleaseOperationHead,
+	head releases.ReleaseOperationHead,
 	base *etcdstore.GetManyResult,
 	terminalAt time.Time,
 	proofConditions ...etcdstore.Condition,
 ) (bool, error) {
 	head.State = domain.StateRecoveryRequired
 	head.UpdatedAt = terminalAt
-	headValue, err := encodeReleaseRecord("release-operation", head)
+	headValue, err := releases.EncodeReleaseRecord("release-operation", head)
 	if err != nil {
 		return false, err
 	}
@@ -221,7 +222,7 @@ func (repository *TaskRepository) returnReleaseToRecovery(
 		{Key: base.Values[2].Key, ModRevision: base.Values[2].ModRevision},
 		{Key: base.Values[3].Key, ModRevision: base.Values[3].ModRevision},
 	}, proofConditions...), []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
+		{Type: etcdstore.MutationPut, Key: releases.ReleaseOperationKey(task.OperationID), Value: headValue},
 		{Type: etcdstore.MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
 	})
 	if err != nil {
@@ -237,20 +238,20 @@ func (repository *TaskRepository) returnReleaseToRecovery(
 func (repository *TaskRepository) closeRecoveredRelease(
 	ctx context.Context,
 	task TaskRecord,
-	head ReleaseOperationHead,
-	fence ReleaseFenceSet,
+	head releases.ReleaseOperationHead,
+	fence releases.ReleaseFenceSet,
 	base, terminals *etcdstore.GetManyResult,
 	terminalAt time.Time,
 	proofConditions ...etcdstore.Condition,
 ) (bool, error) {
 	if !head.RecoveryOutcome.Terminal() || fence.AttemptTaskID != task.ID {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	head.State = head.RecoveryOutcome
 	head.RecoveryOutcome = ""
 	head.FailedMemberOrdinal = 0
 	head.UpdatedAt = terminalAt
-	headValue, err := encodeReleaseRecord("release-operation", head)
+	headValue, err := releases.EncodeReleaseRecord("release-operation", head)
 	if err != nil {
 		return false, err
 	}
@@ -265,8 +266,8 @@ func (repository *TaskRepository) closeRecoveredRelease(
 		conditions = append(conditions, etcdstore.Condition{Key: terminal.Key, ModRevision: terminal.ModRevision})
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
-		{Type: etcdstore.MutationDelete, Key: releaseFenceSetKey(task.Owner.EnvironmentID)},
+		{Type: etcdstore.MutationPut, Key: releases.ReleaseOperationKey(task.OperationID), Value: headValue},
+		{Type: etcdstore.MutationDelete, Key: releases.ReleaseFenceSetKey(task.Owner.EnvironmentID)},
 		{Type: etcdstore.MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
 	}
 	defer clearMutations(mutations)

@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
@@ -59,7 +60,7 @@ type ReleaseRenderInput struct {
 type ReleaseTaskRenderInput struct {
 	NativePredecessors []BlueprintNativePredecessor
 	PublicationID      string
-	Operation          ReleaseOperationHead
+	Operation          releases.ReleaseOperationHead
 	Members            []ReleaseTaskRenderMember
 }
 
@@ -77,7 +78,7 @@ func EncodeReleaseRenderInput(input ReleaseRenderInput) (json.RawMessage, error)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	if len(value) > maximumReleaseRenderInputBytes {
+	if len(value) > releases.MaximumReleaseRenderInputBytes {
 		clear(value)
 		return nil, errs.New(errs.KindReleasePlanTooLarge, "release render input exceeds the durable size limit")
 	}
@@ -86,14 +87,14 @@ func EncodeReleaseRenderInput(input ReleaseRenderInput) (json.RawMessage, error)
 
 func decodeReleaseRenderInput(value []byte) (ReleaseRenderInput, error) {
 	if recordcodec.RejectDuplicateFields(value) != nil {
-		return ReleaseRenderInput{}, corruptReleaseRecord()
+		return ReleaseRenderInput{}, releases.CorruptReleaseRecord()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var input ReleaseRenderInput
 	if err := decoder.Decode(&input); err != nil || recordcodec.RequireEOF(decoder) != nil ||
 		validateReleaseRenderInput(input) != nil {
-		return ReleaseRenderInput{}, corruptReleaseRecord()
+		return ReleaseRenderInput{}, releases.CorruptReleaseRecord()
 	}
 	return cloneReleaseRenderInput(input), nil
 }
@@ -241,7 +242,7 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 	task TaskRecord,
 ) (ReleaseTaskRenderInput, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
-	if ctx == nil || ledger == nil || validatePublicationID(publicationID) != nil ||
+	if ctx == nil || ledger == nil || releases.ValidatePublicationID(publicationID) != nil ||
 		(task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback) || ids.Validate(ids.KindPlan, task.PlanID) != nil {
 		return ReleaseTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
@@ -249,9 +250,9 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 		)
 	}
 	keys := []string{
-		releaseManifestStagingKey(
+		releases.ReleaseManifestStagingKey(
 			publicationID,
-		), releasePublicationKey(publicationID), releaseOperationKey(task.OperationID),
+		), releases.ReleasePublicationKey(publicationID), releases.ReleaseOperationKey(task.OperationID),
 	}
 	loaded, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
@@ -259,33 +260,33 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 	}
 	if loaded == nil || len(loaded.Values) != len(keys) || loaded.Values[0] == nil || loaded.Values[1] == nil ||
 		loaded.Values[2] == nil {
-		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](loaded.Values[0].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](loaded.Values[0].Value, "release-staged-manifest")
 	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != task.OperationID {
-		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](loaded.Values[1].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](loaded.Values[1].Value, "release-publication")
 	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID ||
 		marker.ManifestDigest != manifest.Digest {
-		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
-	head, err := decodeReleaseRecord[ReleaseOperationHead](loaded.Values[2].Value, "release-operation")
+	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](loaded.Values[2].Value, "release-operation")
 	if err != nil || head.OperationID != task.OperationID || head.PublicationID != publicationID ||
 		head.LatestTaskID != task.ID {
-		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
 	memberKeys := make([]string, 0, len(manifest.Members)*2)
 	for _, member := range manifest.Members {
-		memberKeys = append(memberKeys, releaseIntentStagingKey(publicationID, member.ReleaseID),
-			releaseRenderInputStagingKey(publicationID, member.ReleaseID))
+		memberKeys = append(memberKeys, releases.ReleaseIntentStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseRenderInputStagingKey(publicationID, member.ReleaseID))
 	}
 	members, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: memberKeys, Revision: loaded.ReadRevision})
 	if err != nil {
 		return ReleaseTaskRenderInput{}, err
 	}
 	if members == nil || members.ReadRevision != loaded.ReadRevision || len(members.Values) != len(memberKeys) {
-		return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
 	result := ReleaseTaskRenderInput{
 		PublicationID: publicationID, Operation: cloneReleaseOperationHead(head),
@@ -295,15 +296,15 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 		intentValue := members.Values[index*2]
 		renderValue := members.Values[index*2+1]
 		if intentValue == nil || renderValue == nil {
-			return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+			return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 		}
-		intent, err := decodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
+		intent, err := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
 		if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != reference.ReleaseID ||
 			intent.ServiceID != reference.ServiceID || intent.OperationID != task.OperationID ||
 			(len(head.Attempts) == 0 || intent.OriginatingTaskID != head.Attempts[0].TaskID) || intent.RenderInputID == "" {
-			return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+			return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 		}
-		raw, err := decodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
+		raw, err := releases.DecodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
 		if err != nil {
 			return ReleaseTaskRenderInput{}, err
 		}
@@ -311,11 +312,11 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 		if err != nil || render.ReleaseID != intent.ID || render.PlanID != task.PlanID ||
 			render.ArtifactID != intent.RenderInputID || render.ServiceID != intent.ServiceID ||
 			render.CandidateWorkload != intent.CandidateWorkload || render.Strategy != intent.Strategy || render.Slot != intent.Slot {
-			return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+			return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 		}
 		digest, _ := domain.Digest(raw)
 		if digest != intent.RenderInputDigest || digest != reference.RenderDigest {
-			return ReleaseTaskRenderInput{}, corruptReleaseRecord()
+			return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 		}
 		result.Members[index] = ReleaseTaskRenderMember{Intent: intent, Render: render}
 	}

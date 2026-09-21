@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
@@ -39,7 +40,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	if source.Type == taskjournal.TaskUpdate {
 		return repository.prepareBlueprintCandidateRetry(ctx, source, retry, revision)
 	}
-	if validatePublicationID(publicationID) != nil || source.Executor != taskjournal.TaskExecutorAgent ||
+	if releases.ValidatePublicationID(publicationID) != nil || source.Executor != taskjournal.TaskExecutorAgent ||
 		(source.Type != taskjournal.TaskDeploy && source.Type != taskjournal.TaskRollback) || retry.Type != source.Type ||
 		retry.OperationID != source.OperationID || retry.Params[TaskReleasePublicationParam] != publicationID ||
 		source.Result == nil || !source.Result.ReconciliationRequired {
@@ -49,8 +50,8 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 		)
 	}
 	baseKeys := []string{
-		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
-		releaseOperationKey(source.OperationID), releaseFenceSetKey(source.Owner.EnvironmentID),
+		releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID),
+		releases.ReleaseOperationKey(source.OperationID), releases.ReleaseFenceSetKey(source.Owner.EnvironmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(source.Owner.EnvironmentID),
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: revision})
@@ -58,21 +59,21 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 		return releaseTaskRetryChange{}, err
 	}
 	if base == nil || base.ReadRevision != revision || len(base.Values) != len(baseKeys) {
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
 	for _, value := range base.Values {
 		if value == nil {
-			return releaseTaskRetryChange{}, corruptReleaseRecord()
+			return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 		}
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](base.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](base.Values[0].Value, "release-publication")
 	if err != nil || marker.PublicationID != publicationID || marker.OperationID != source.OperationID {
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
-	manifest, err := decodeReleaseRecord[ReleaseStagedManifest](base.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](base.Values[1].Value, "release-staged-manifest")
 	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != source.OperationID ||
 		len(manifest.Members) == 0 {
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
 	if _, err := validateReleaseCandidateMarker(source, marker, manifest); err != nil {
 		return releaseTaskRetryChange{}, err
@@ -80,7 +81,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	if _, err := validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, retry, manifest); err != nil {
 		return releaseTaskRetryChange{}, err
 	}
-	head, err := decodeReleaseRecord[ReleaseOperationHead](base.Values[2].Value, "release-operation")
+	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](base.Values[2].Value, "release-operation")
 	if err != nil || head.OperationID != source.OperationID || head.PublicationID != publicationID ||
 		head.EnvironmentID != source.Owner.EnvironmentID || head.LatestTaskID != source.ID ||
 		head.State != domain.StateRecoveryRequired || len(head.Members) != len(manifest.Members) ||
@@ -90,17 +91,17 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 			"release operation is not awaiting recovery",
 		)
 	}
-	fence, err := decodeReleaseRecord[ReleaseFenceSet](base.Values[3].Value, "release-fence-set")
+	fence, err := releases.DecodeReleaseRecord[releases.ReleaseFenceSet](base.Values[3].Value, "release-fence-set")
 	if err != nil || fence.OperationID != source.OperationID || fence.AttemptTaskID != source.ID ||
 		fence.EnvironmentID != source.Owner.EnvironmentID || len(fence.Members) != len(manifest.Members) {
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
 	memberKeys := make([]string, 0, len(manifest.Members)*2)
 	for _, member := range manifest.Members {
 		memberKeys = append(
 			memberKeys,
-			releaseIntentStagingKey(publicationID, member.ReleaseID),
-			releaseRenderInputStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseIntentStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseRenderInputStagingKey(publicationID, member.ReleaseID),
 		)
 	}
 	members, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: memberKeys, Revision: revision})
@@ -108,7 +109,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 		return releaseTaskRetryChange{}, err
 	}
 	if members == nil || members.ReadRevision != revision || len(members.Values) != len(memberKeys) {
-		return releaseTaskRetryChange{}, corruptReleaseRecord()
+		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
 	conditions := make([]etcdstore.Condition, 0, len(baseKeys)+len(memberKeys))
 	for index, value := range base.Values {
@@ -117,15 +118,15 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	for index, reference := range manifest.Members {
 		intentValue, renderValue := members.Values[index*2], members.Values[index*2+1]
 		if intentValue == nil || renderValue == nil {
-			return releaseTaskRetryChange{}, corruptReleaseRecord()
+			return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 		}
-		intent, err := decodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
+		intent, err := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
 		if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != reference.ReleaseID ||
 			intent.ServiceID != reference.ServiceID || intent.OperationID != source.OperationID ||
 			len(head.Attempts) == 0 || intent.OriginatingTaskID != head.Attempts[0].TaskID {
-			return releaseTaskRetryChange{}, corruptReleaseRecord()
+			return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 		}
-		raw, err := decodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
+		raw, err := releases.DecodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
 		if err != nil {
 			return releaseTaskRetryChange{}, err
 		}
@@ -133,7 +134,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 		digest, digestErr := domain.Digest(raw)
 		if err != nil || digestErr != nil || render.ReleaseID != intent.ID || render.ServiceID != intent.ServiceID ||
 			render.PlanID != source.PlanID || digest != intent.RenderInputDigest || digest != reference.RenderDigest {
-			return releaseTaskRetryChange{}, corruptReleaseRecord()
+			return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 		}
 		conditions = append(conditions,
 			etcdstore.Condition{Key: memberKeys[index*2], ModRevision: intentValue.ModRevision},
@@ -159,12 +160,12 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	}
 	fence.Generation++
 	fence.AttemptTaskID = retry.ID
-	headValue, err := encodeReleaseRecord("release-operation", head)
+	headValue, err := releases.EncodeReleaseRecord("release-operation", head)
 	if err != nil {
 		hookTransfer.clear()
 		return releaseTaskRetryChange{}, err
 	}
-	fenceValue, err := encodeReleaseRecord("release-fence-set", fence)
+	fenceValue, err := releases.EncodeReleaseRecord("release-fence-set", fence)
 	if err != nil {
 		clear(headValue)
 		hookTransfer.clear()

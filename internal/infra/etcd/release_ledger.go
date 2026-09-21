@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"net/http"
 	"slices"
 	"time"
@@ -30,7 +31,7 @@ func NewReleaseLedger(store etcdstore.Store, tasks *TaskRepository) (*ReleaseLed
 }
 
 type VersionedReleaseManifest struct {
-	Record       ReleaseStagedManifest
+	Record       releases.ReleaseStagedManifest
 	Revision     int64
 	ReadRevision int64
 }
@@ -55,8 +56,8 @@ type ReleasePublicationEvidence struct {
 	FenceRevision              int64
 	Task                       TaskRecord
 	Marker                     idempotencyrecord.IdempotencyMarker
-	Fence                      ReleaseFenceSet
-	Operation                  ReleaseOperationHead
+	Fence                      releases.ReleaseFenceSet
+	Operation                  releases.ReleaseOperationHead
 	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor
 	Plan                       *agentpb.ExecutionPlan
 	Hooks                      []ReleaseHookExecutionPublication
@@ -69,32 +70,32 @@ type ReleasePublicationResult struct {
 	Idempotency IdempotencyTransactionResult
 }
 
-func (ledger *ReleaseLedger) Stage(ctx context.Context, input ReleaseStage) (VersionedReleaseManifest, error) {
+func (ledger *ReleaseLedger) Stage(ctx context.Context, input releases.ReleaseStage) (VersionedReleaseManifest, error) {
 	if ctx == nil || ledger == nil || ledger.store == nil {
 		return VersionedReleaseManifest{}, errs.New(errs.KindInternal, "release staging context or ledger is missing")
 	}
 	if err := ctx.Err(); err != nil {
 		return VersionedReleaseManifest{}, err
 	}
-	input = cloneReleaseStage(input)
-	if err := validateReleaseStage(input); err != nil {
+	input = releases.CloneReleaseStage(input)
+	if err := releases.ValidateReleaseStage(input); err != nil {
 		return VersionedReleaseManifest{}, err
 	}
-	refs := make([]ReleaseStagedMemberRef, len(input.Members))
+	refs := make([]releases.ReleaseStagedMemberRef, len(input.Members))
 	records := make([]releaseStagedWrite, 0, len(input.Members)*3)
 	for index, member := range input.Members {
-		intentValue, err := encodeReleaseRecord("release-intent", member.Intent)
+		intentValue, err := releases.EncodeReleaseRecord("release-intent", member.Intent)
 		if err != nil {
 			clearStagedReleaseRecords(records)
 			return VersionedReleaseManifest{}, err
 		}
-		renderValue, err := encodeReleaseRecord("release-render-input", json.RawMessage(member.RenderInput))
+		renderValue, err := releases.EncodeReleaseRecord("release-render-input", json.RawMessage(member.RenderInput))
 		if err != nil {
 			clear(intentValue)
 			clearStagedReleaseRecords(records)
 			return VersionedReleaseManifest{}, err
 		}
-		checkpointValue, err := encodeReleaseRecord("release-checkpoint", member.Checkpoint)
+		checkpointValue, err := releases.EncodeReleaseRecord("release-checkpoint", member.Checkpoint)
 		if err != nil {
 			clear(intentValue)
 			clear(renderValue)
@@ -104,14 +105,14 @@ func (ledger *ReleaseLedger) Stage(ctx context.Context, input ReleaseStage) (Ver
 		intentDigest, _ := domain.Digest(member.Intent)
 		renderDigest, _ := domain.Digest(json.RawMessage(member.RenderInput))
 		checkpointDigest, _ := domain.Digest(member.Checkpoint)
-		refs[index] = ReleaseStagedMemberRef{
+		refs[index] = releases.ReleaseStagedMemberRef{
 			ReleaseID: member.Intent.ID, ServiceID: member.Intent.ServiceID, IntentDigest: intentDigest,
 			RenderDigest: renderDigest, CheckpointDigest: checkpointDigest,
 		}
 		records = append(records,
-			releaseStagedWrite{releaseIntentStagingKey(input.PublicationID, member.Intent.ID), intentValue},
-			releaseStagedWrite{releaseRenderInputStagingKey(input.PublicationID, member.Intent.ID), renderValue},
-			releaseStagedWrite{releaseCheckpointStagingKey(input.PublicationID, member.Intent.ID), checkpointValue},
+			releaseStagedWrite{releases.ReleaseIntentStagingKey(input.PublicationID, member.Intent.ID), intentValue},
+			releaseStagedWrite{releases.ReleaseRenderInputStagingKey(input.PublicationID, member.Intent.ID), renderValue},
+			releaseStagedWrite{releases.ReleaseCheckpointStagingKey(input.PublicationID, member.Intent.ID), checkpointValue},
 		)
 	}
 	defer clearStagedReleaseRecords(records)
@@ -134,23 +135,23 @@ func (ledger *ReleaseLedger) Stage(ctx context.Context, input ReleaseStage) (Ver
 			)
 		}
 	}
-	manifest := ReleaseStagedManifest{
+	manifest := releases.ReleaseStagedManifest{
 		PublicationID: input.PublicationID, OperationID: input.OperationID, Members: refs,
 		CreatedAt: input.CreatedAt,
 	}
 	manifest.Digest, _ = domain.Digest(struct {
-		PublicationID string                   `json:"publication_id"`
-		OperationID   string                   `json:"operation_id"`
-		Members       []ReleaseStagedMemberRef `json:"members"`
+		PublicationID string                            `json:"publication_id"`
+		OperationID   string                            `json:"operation_id"`
+		Members       []releases.ReleaseStagedMemberRef `json:"members"`
 	}{manifest.PublicationID, manifest.OperationID, manifest.Members})
-	manifestValue, err := encodeReleaseRecord("release-staged-manifest", manifest)
+	manifestValue, err := releases.EncodeReleaseRecord("release-staged-manifest", manifest)
 	if err != nil {
 		return VersionedReleaseManifest{}, err
 	}
 	defer clear(manifestValue)
 	result, err := ledger.store.Transact(ctx,
-		[]etcdstore.Condition{{Key: releaseManifestStagingKey(input.PublicationID)}},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: releaseManifestStagingKey(input.PublicationID), Value: manifestValue}},
+		[]etcdstore.Condition{{Key: releases.ReleaseManifestStagingKey(input.PublicationID)}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: releases.ReleaseManifestStagingKey(input.PublicationID), Value: manifestValue}},
 	)
 	if err != nil {
 		return VersionedReleaseManifest{}, err
@@ -220,7 +221,7 @@ func (ledger *ReleaseLedger) Publish(
 		return ReleasePublicationResult{}, err
 	}
 	defer clear(markerValue)
-	publicationValue, err := encodeReleaseRecord("release-publication", ReleasePublicationMarker{
+	publicationValue, err := releases.EncodeReleaseRecord("release-publication", releases.ReleasePublicationMarker{
 		PublicationID: evidence.Manifest.Record.PublicationID, OperationID: evidence.Manifest.Record.OperationID,
 		ManifestDigest:             evidence.Manifest.Record.Digest,
 		CandidateReleaseDescriptor: executionplan.CloneCandidateReleaseDescriptor(evidence.CandidateReleaseDescriptor),
@@ -232,12 +233,12 @@ func (ledger *ReleaseLedger) Publish(
 		return ReleasePublicationResult{}, err
 	}
 	defer clear(publicationValue)
-	fenceValue, err := encodeReleaseRecord("release-fence-set", evidence.Fence)
+	fenceValue, err := releases.EncodeReleaseRecord("release-fence-set", evidence.Fence)
 	if err != nil {
 		return ReleasePublicationResult{}, err
 	}
 	defer clear(fenceValue)
-	operationValue, err := encodeReleaseRecord("release-operation", evidence.Operation)
+	operationValue, err := releases.EncodeReleaseRecord("release-operation", evidence.Operation)
 	if err != nil {
 		return ReleasePublicationResult{}, err
 	}
@@ -248,14 +249,14 @@ func (ledger *ReleaseLedger) Publish(
 		{Key: deletionTombstoneKey("project", evidence.ProjectID)},
 		{Key: deletionTombstoneKey("tenant", evidence.TenantID)},
 		{Key: desiredKey, ModRevision: evidence.DesiredRevision},
-		{Key: releaseFenceSetKey(evidence.EnvironmentID), ModRevision: evidence.FenceRevision},
+		{Key: releases.ReleaseFenceSetKey(evidence.EnvironmentID), ModRevision: evidence.FenceRevision},
 		{Key: markerKey},
 		{
-			Key:         releaseManifestStagingKey(evidence.Manifest.Record.PublicationID),
+			Key:         releases.ReleaseManifestStagingKey(evidence.Manifest.Record.PublicationID),
 			ModRevision: evidence.Manifest.Revision,
 		},
-		{Key: releasePublicationKey(evidence.Manifest.Record.PublicationID)},
-		{Key: releaseOperationKey(evidence.Manifest.Record.OperationID)},
+		{Key: releases.ReleasePublicationKey(evidence.Manifest.Record.PublicationID)},
+		{Key: releases.ReleaseOperationKey(evidence.Manifest.Record.OperationID)},
 		fragment.condition,
 	}
 	conditions = append(conditions, hookFragment.conditions...)
@@ -270,7 +271,7 @@ func (ledger *ReleaseLedger) Publish(
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(evidence.Manifest.Record.Members)*2+11)
 	for _, member := range evidence.Manifest.Record.Members {
-		environmentValue, encodeErr := json.Marshal(releaseEnvironmentIndexValue{
+		environmentValue, encodeErr := json.Marshal(releases.ReleaseEnvironmentIndexValue{
 			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,
 		})
 		if encodeErr != nil {
@@ -278,7 +279,7 @@ func (ledger *ReleaseLedger) Publish(
 			return ReleasePublicationResult{}, errs.Wrap(errs.KindInternal, encodeErr)
 		}
 		serviceValue, encodeErr := json.Marshal(
-			releaseServiceIndexValue{Schema: 1, PublicationID: evidence.Manifest.Record.PublicationID},
+			releases.ReleaseServiceIndexValue{Schema: 1, PublicationID: evidence.Manifest.Record.PublicationID},
 		)
 		if encodeErr != nil {
 			clear(environmentValue)
@@ -289,12 +290,12 @@ func (ledger *ReleaseLedger) Publish(
 			mutations,
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   releaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID),
+				Key:   releases.ReleaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID),
 				Value: environmentValue,
 			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   releaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID),
+				Key:   releases.ReleaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID),
 				Value: serviceValue,
 			},
 		)
@@ -304,13 +305,13 @@ func (ledger *ReleaseLedger) Publish(
 		mutations,
 		etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   releasePublicationKey(evidence.Manifest.Record.PublicationID),
+			Key:   releases.ReleasePublicationKey(evidence.Manifest.Record.PublicationID),
 			Value: publicationValue,
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releaseFenceSetKey(evidence.EnvironmentID), Value: fenceValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releases.ReleaseFenceSetKey(evidence.EnvironmentID), Value: fenceValue},
 		etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   releaseOperationKey(evidence.Manifest.Record.OperationID),
+			Key:   releases.ReleaseOperationKey(evidence.Manifest.Record.OperationID),
 			Value: operationValue,
 		},
 	)
@@ -387,12 +388,12 @@ func (ledger *ReleaseLedger) GetIntent(
 	ctx context.Context,
 	publicationID, releaseID string,
 ) (etcdstore.Versioned[domain.Intent], error) {
-	if ctx == nil || ledger == nil || validatePublicationID(publicationID) != nil ||
+	if ctx == nil || ledger == nil || releases.ValidatePublicationID(publicationID) != nil ||
 		ids.Validate(ids.KindDeployment, releaseID) != nil {
 		return etcdstore.Versioned[domain.Intent]{}, errs.New(errs.KindValidationFailed, "release read identity is invalid")
 	}
 	result, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		releaseIntentStagingKey(publicationID, releaseID), releasePublicationKey(publicationID),
+		releases.ReleaseIntentStagingKey(publicationID, releaseID), releases.ReleasePublicationKey(publicationID),
 	}})
 	if err != nil {
 		return etcdstore.Versioned[domain.Intent]{}, err
@@ -401,11 +402,11 @@ func (ledger *ReleaseLedger) GetIntent(
 		return etcdstore.Versioned[domain.Intent]{}, errs.New(errs.KindReleaseNotFound, "release was not found")
 	}
 	if result.Values[0] == nil {
-		return etcdstore.Versioned[domain.Intent]{}, corruptReleaseRecord()
+		return etcdstore.Versioned[domain.Intent]{}, releases.CorruptReleaseRecord()
 	}
-	intent, err := decodeReleaseRecord[domain.Intent](result.Values[0].Value, "release-intent")
+	intent, err := releases.DecodeReleaseRecord[domain.Intent](result.Values[0].Value, "release-intent")
 	if err != nil || domain.ValidateIntent(intent) != nil || intent.ID != releaseID {
-		return etcdstore.Versioned[domain.Intent]{}, corruptReleaseRecord()
+		return etcdstore.Versioned[domain.Intent]{}, releases.CorruptReleaseRecord()
 	}
 	return etcdstore.Versioned[domain.Intent]{
 		Record:       intent,
@@ -416,12 +417,12 @@ func (ledger *ReleaseLedger) GetIntent(
 
 func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error {
 	manifest := value.Manifest.Record
-	if validatePublicationID(manifest.PublicationID) != nil ||
+	if releases.ValidatePublicationID(manifest.PublicationID) != nil ||
 		ids.Validate(ids.KindOperation, manifest.OperationID) != nil ||
 		value.Manifest.Revision <= 0 ||
 		value.Manifest.ReadRevision < value.Manifest.Revision ||
 		len(manifest.Members) == 0 ||
-		len(manifest.Members) > maximumReleasePublicationMembers ||
+		len(manifest.Members) > releases.MaximumReleasePublicationMembers ||
 		ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil ||
 		ids.Validate(ids.KindProject, value.ProjectID) != nil ||
 		ids.Validate(ids.KindTenant, value.TenantID) != nil ||
@@ -450,7 +451,7 @@ func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error 
 	if err := validateReleaseOperationHead(value.Operation, manifest, value.Task); err != nil {
 		return err
 	}
-	if err := validateReleaseFenceSet(value.Fence, value.Operation, manifest); err != nil {
+	if err := releases.ValidateReleaseFenceSet(value.Fence, value.Operation, manifest); err != nil {
 		return err
 	}
 	return nil

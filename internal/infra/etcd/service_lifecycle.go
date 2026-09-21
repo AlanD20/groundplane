@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -185,21 +186,21 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 				ModRevision: renderInput.AppliedProjectionRevision,
 			},
 			etcdstore.Condition{
-				Key:         releaseProjectionKey(renderInput.ServiceID),
+				Key:         releases.ReleaseProjectionKey(renderInput.ServiceID),
 				ModRevision: renderInput.Release.ProjectionRevision,
 			},
 			etcdstore.Condition{
-				Key:         releaseIntentStagingKey("", renderInput.Release.ServingReleaseID),
+				Key:         releases.ReleaseIntentStagingKey("", renderInput.Release.ServingReleaseID),
 				ModRevision: renderInput.Release.IntentRevision,
 			},
 			etcdstore.Condition{
-				Key:         releaseRenderInputStagingKey("", renderInput.Release.ServingReleaseID),
+				Key:         releases.ReleaseRenderInputStagingKey("", renderInput.Release.ServingReleaseID),
 				ModRevision: renderInput.Release.RenderRevision,
 			},
 		)
 		if renderInput.Release.RetainedPrior != nil {
 			conditions = append(conditions, etcdstore.Condition{
-				Key:         releaseRenderInputStagingKey("", renderInput.Release.PriorServingReleaseID),
+				Key:         releases.ReleaseRenderInputStagingKey("", renderInput.Release.PriorServingReleaseID),
 				ModRevision: renderInput.Release.RetainedPriorRenderRevision,
 			})
 		}

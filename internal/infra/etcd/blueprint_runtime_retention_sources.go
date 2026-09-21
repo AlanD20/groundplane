@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -86,11 +87,11 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 		conditions = append(
 			conditions,
 			etcdstore.Condition{
-				Key:         releaseIntentStagingKey("", authority.ServingReleaseID),
+				Key:         releases.ReleaseIntentStagingKey("", authority.ServingReleaseID),
 				ModRevision: authority.IntentRevision,
 			},
 			etcdstore.Condition{
-				Key:         releaseRenderInputStagingKey("", authority.ServingReleaseID),
+				Key:         releases.ReleaseRenderInputStagingKey("", authority.ServingReleaseID),
 				ModRevision: authority.RenderRevision,
 			},
 		)
@@ -125,7 +126,7 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 		conditions = append(
 			conditions,
 			etcdstore.Condition{
-				Key:         releaseRenderInputStagingKey("", authority.PriorServingReleaseID),
+				Key:         releases.ReleaseRenderInputStagingKey("", authority.PriorServingReleaseID),
 				ModRevision: authority.RetainedPriorRenderRevision,
 			},
 		)

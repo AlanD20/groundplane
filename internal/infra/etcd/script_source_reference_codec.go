@@ -10,6 +10,7 @@ import (
 	"fmt"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -144,11 +145,11 @@ func validateScriptSourceRecord(key string, value []byte, reference ref.Referenc
 			return errs.New(errs.KindValidationFailed, "Script Service source evidence is invalid")
 		}
 	case ref.SourceRelease:
-		record, err := decodeReleaseRecord[domain.Intent](value, "release-intent")
+		record, err := releases.DecodeReleaseRecord[domain.Intent](value, "release-intent")
 		digest := sha256.Sum256(value)
 		if err != nil || domain.ValidateIntent(record) != nil ||
-			(key != releaseIntentStagingKey("", source.ReleaseID) &&
-				!(strings.HasPrefix(key, releaseStagingPrefix) && strings.HasSuffix(key, "/"+source.ReleaseID))) ||
+			(key != releases.ReleaseIntentStagingKey("", source.ReleaseID) &&
+				!(strings.HasPrefix(key, releases.ReleaseStagingPrefix) && strings.HasSuffix(key, "/"+source.ReleaseID))) ||
 			record.ID != source.ReleaseID ||
 			record.EnvironmentID != reference.SourceOwnerID || hex.EncodeToString(digest[:]) != reference.SourceDigest {
 			return errs.New(errs.KindValidationFailed, "Script Release source evidence is invalid")

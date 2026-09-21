@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"slices"
 	"strconv"
 
@@ -159,7 +160,7 @@ func (ledger *ReleaseLedger) blueprintRuntimePlanningConditions(
 			return nil, false, errs.New(errs.KindStateConflict, "Blueprint retained Release source changed")
 		}
 		conditions[index] = etcdstore.Condition{
-			Key:         releaseProjectionKey(serviceIDs[index]),
+			Key:         releases.ReleaseProjectionKey(serviceIDs[index]),
 			ModRevision: source.ProjectionRevision,
 		}
 		hasNative = hasNative || source.Projection.ServingReleaseID != ""

@@ -5,6 +5,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -36,8 +37,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	}
 	if task.Executor != taskjournal.TaskExecutorAgent ||
 		(task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback && task.Type != taskjournal.TaskUpdate) ||
-		validatePublicationID(publicationID) != nil || task.OperationID == "" || task.RenderGeneration <= 0 {
-		return false, corruptReleaseRecord()
+		releases.ValidatePublicationID(publicationID) != nil || task.OperationID == "" || task.RenderGeneration <= 0 {
+		return false, releases.CorruptReleaseRecord()
 	}
 	if terminalStatus != taskjournal.TaskStatusCompleted && result.FailedStepID == "" &&
 		!unassignedReleaseAbort(task, terminalStatus) &&
@@ -56,8 +57,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		)
 	}
 	baseKeys := []string{
-		releasePublicationKey(publicationID), releaseOperationKey(task.OperationID),
-		releaseFenceSetKey(task.Owner.EnvironmentID), hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
+		releases.ReleasePublicationKey(publicationID), releases.ReleaseOperationKey(task.OperationID),
+		releases.ReleaseFenceSetKey(task.Owner.EnvironmentID), hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: readRevision})
 	if err != nil {
@@ -65,30 +66,30 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	}
 	if base == nil || len(base.Values) != len(baseKeys) || base.Values[0] == nil || base.Values[1] == nil ||
 		base.Values[3] == nil {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
-	marker, err := decodeReleaseRecord[ReleasePublicationMarker](base.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](base.Values[0].Value, "release-publication")
 	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
-	head, err := decodeReleaseRecord[ReleaseOperationHead](base.Values[1].Value, "release-operation")
+	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](base.Values[1].Value, "release-operation")
 	if err != nil || head.OperationID != task.OperationID || head.PublicationID != publicationID ||
 		head.EnvironmentID != task.Owner.EnvironmentID || head.LatestTaskID != task.ID || len(head.Members) == 0 {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	if head.State.Terminal() || head.State == domain.StateRecoveryRequired {
 		if base.Values[2] != nil && head.State != domain.StateRecoveryRequired {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		return false, repository.validateReleaseTerminalMembers(ctx, task, head, terminalStatus, readRevision)
 	}
 	if base.Values[2] == nil {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
-	fence, err := decodeReleaseRecord[ReleaseFenceSet](base.Values[2].Value, "release-fence-set")
+	fence, err := releases.DecodeReleaseRecord[releases.ReleaseFenceSet](base.Values[2].Value, "release-fence-set")
 	if err != nil || fence.OperationID != task.OperationID || fence.AttemptTaskID != task.ID ||
 		fence.EnvironmentID != task.Owner.EnvironmentID || len(fence.Members) != len(head.Members) {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	if !result.ReconciliationRequired {
 		processed, terminalErr := repository.finalizeReleaseHookExecutionBatch(ctx, task, terminalAt, readRevision)
@@ -98,14 +99,14 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	}
 	terminalKeys := make([]string, len(head.Members))
 	for index, member := range head.Members {
-		terminalKeys[index] = releaseTerminalKey(member.ReleaseID)
+		terminalKeys[index] = releases.ReleaseTerminalKey(member.ReleaseID)
 	}
 	terminalRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: terminalKeys, Revision: readRevision})
 	if err != nil {
 		return false, err
 	}
 	if terminalRead == nil || len(terminalRead.Values) != len(terminalKeys) {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	if task.RetryOf != "" && head.State == domain.StateRecovering {
 		return repository.finalizeReleaseRecoveryBatch(
@@ -150,11 +151,11 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	for _, index := range pending {
 		member := head.Members[index]
 		detailKeys = append(detailKeys,
-			releaseIntentStagingKey(publicationID, member.ReleaseID),
-			releaseCheckpointStagingKey(publicationID, member.ReleaseID),
-			releaseProjectionKey(member.ServiceID),
-			releaseTerminalKey(member.ReleaseID),
-			releaseRetentionKey(member.ReleaseID),
+			releases.ReleaseIntentStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseCheckpointStagingKey(publicationID, member.ReleaseID),
+			releases.ReleaseProjectionKey(member.ServiceID),
+			releases.ReleaseTerminalKey(member.ReleaseID),
+			releases.ReleaseRetentionKey(member.ReleaseID),
 			serviceruntimerecord.Key(member.ServiceID),
 		)
 	}
@@ -163,7 +164,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		return false, err
 	}
 	if details == nil || len(details.Values) != len(detailKeys) {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	conditions := []etcdstore.Condition{
 		{Key: baseKeys[0], ModRevision: base.Values[0].ModRevision},
@@ -177,18 +178,18 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		values := details.Values[offset*6 : offset*6+6]
 		keys := detailKeys[offset*6 : offset*6+6]
 		if values[0] == nil || values[1] == nil || values[3] != nil || values[4] != nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		member := head.Members[index]
-		intent, err := decodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
+		intent, err := releases.DecodeReleaseRecord[domain.Intent](values[0].Value, "release-intent")
 		if err != nil || intent.ID != member.ReleaseID || intent.ServiceID != member.ServiceID ||
 			intent.OperationID != task.OperationID || domain.ValidateIntent(intent) != nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
-		checkpoint, err := decodeReleaseRecord[domain.Checkpoint](values[1].Value, "release-checkpoint")
+		checkpoint, err := releases.DecodeReleaseRecord[domain.Checkpoint](values[1].Value, "release-checkpoint")
 		if err != nil || checkpoint.ReleaseID != intent.ID || domain.ValidateCheckpoint(checkpoint) != nil ||
 			checkpoint.State != domain.StatePending {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		projection, err := decodeReleaseProjection(values[2], task.Owner.EnvironmentID, member.ServiceID)
 		if err != nil {

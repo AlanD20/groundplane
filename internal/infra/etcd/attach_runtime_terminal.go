@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -95,7 +96,7 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 		clearAttachTaskChange(change)
 		return attachTaskChange{}, err
 	}
-	value, err := encodeReleaseRecord("service-acknowledged-runtime", record)
+	value, err := releases.EncodeReleaseRecord("service-acknowledged-runtime", record)
 	if err != nil {
 		clearAttachTaskChange(change)
 		return attachTaskChange{}, err

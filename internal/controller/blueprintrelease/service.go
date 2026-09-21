@@ -17,6 +17,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -179,8 +180,8 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	}
 	task.Params[etcd.TaskReleasePublicationParam] = publicationID
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
-	stage := etcd.ReleaseStage{PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: input.CreatedAt,
-		Members: make([]etcd.ReleaseStageMember, len(candidates))}
+	stage := releases.ReleaseStage{PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: input.CreatedAt,
+		Members: make([]releases.ReleaseStageMember, len(candidates))}
 	members := make([]etcd.ReleaseTaskRenderMember, len(candidates))
 	for index, candidate := range candidates {
 		releaseID := input.AllocateNamed(ids.KindDeployment, "blueprint-release/"+candidate.Record.Desired.ID)
@@ -228,7 +229,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		}
 		intent.RenderInputDigest, _ = domain.Digest(json.RawMessage(raw))
 		checkpoint := domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: input.CreatedAt}
-		stage.Members[index] = etcd.ReleaseStageMember{Intent: intent, RenderInput: raw, Checkpoint: checkpoint}
+		stage.Members[index] = releases.ReleaseStageMember{Intent: intent, RenderInput: raw, Checkpoint: checkpoint}
 		members[index] = etcd.ReleaseTaskRenderMember{Intent: intent, Render: render}
 	}
 	manifest, err := service.ledger.Stage(ctx, stage)

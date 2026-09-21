@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"encoding/hex"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -14,8 +15,8 @@ import (
 // blueprintAcknowledgedRuntime contributes only a successful member's sealed
 // input to the same transaction as its terminal Task and serving projection.
 func blueprintAcknowledgedRuntime(
-	marker ReleasePublicationMarker, task TaskRecord, assignment TaskAssignmentRecord,
-	member ReleaseStagedMemberRef, result taskjournal.TaskResultRecord, terminalAt time.Time,
+	marker releases.ReleasePublicationMarker, task TaskRecord, assignment TaskAssignmentRecord,
+	member releases.ReleaseStagedMemberRef, result taskjournal.TaskResultRecord, terminalAt time.Time,
 ) ([]byte, error) {
 	if result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 || result.Diagnostic != taskjournal.TaskResultDiagnosticNone ||
 		result.ReconciliationRequired || result.ExecutionEpoch == 0 || result.ExecutionEpoch != assignment.ExecutionEpoch ||
@@ -74,5 +75,5 @@ func blueprintAcknowledgedRuntime(
 	if err := serviceruntimerecord.Validate(record); err != nil {
 		return nil, err
 	}
-	return encodeReleaseRecord("service-acknowledged-runtime", record)
+	return releases.EncodeReleaseRecord("service-acknowledged-runtime", record)
 }

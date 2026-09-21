@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"encoding/hex"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -14,13 +15,13 @@ func validateTaskConfigurationProcedure(task TaskRecord, procedure *agentpb.Cand
 	configuration := procedure.GetConfigurationRestoration()
 	if configuration == nil {
 		if len(task.Materializations) != 0 {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		return nil
 	}
 	if _, present, err := taskConfigurationCondition(task); err != nil || !present ||
 		len(configuration.GetFiles()) != len(task.Materializations) {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	id := ""
 	var digest []byte
@@ -29,11 +30,11 @@ func validateTaskConfigurationProcedure(task TaskRecord, procedure *agentpb.Cand
 		var err error
 		digest, err = hex.DecodeString(task.Configuration.Prior.SHA256)
 		if err != nil {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 	}
 	if !executionplan.ConfigurationSnapshotMatches(configuration, id, digest) {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	forward := make(map[string]bool, len(task.Materializations))
 	for _, file := range task.Materializations {
@@ -41,17 +42,17 @@ func validateTaskConfigurationProcedure(task TaskRecord, procedure *agentpb.Cand
 	}
 	for _, file := range configuration.GetFiles() {
 		if !forward[file.GetForwardStepId()] {
-			return corruptReleaseRecord()
+			return releases.CorruptReleaseRecord()
 		}
 		delete(forward, file.GetForwardStepId())
 		for _, id := range []string{file.GetForwardStepId(), file.GetProbeStepId(), file.GetCompensateStepId()} {
 			if _, exists := taskSteps[id]; !exists {
-				return corruptReleaseRecord()
+				return releases.CorruptReleaseRecord()
 			}
 		}
 	}
 	if len(forward) != 0 {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }

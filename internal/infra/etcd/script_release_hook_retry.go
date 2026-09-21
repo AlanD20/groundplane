@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -100,10 +101,10 @@ func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, err
 			continue
 		}
 		if !validRawScriptExecutionID(executionID) {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		if _, duplicate := seen[executionID]; duplicate {
-			return nil, corruptReleaseRecord()
+			return nil, releases.CorruptReleaseRecord()
 		}
 		seen[executionID] = struct{}{}
 		steps = append(steps, releaseHookExecutionStep{stepID: step.ID, executionID: executionID})
@@ -135,13 +136,13 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 		return false, nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return false, nil, corruptReleaseRecord()
+		return false, nil, releases.CorruptReleaseRecord()
 	}
 	effect := false
 	conditions := make([]etcdstore.Condition, len(keys))
 	for index, value := range read.Values {
 		if value == nil {
-			return false, nil, corruptReleaseRecord()
+			return false, nil, releases.CorruptReleaseRecord()
 		}
 		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
@@ -149,7 +150,7 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash ||
 			record.State == ScriptExecutionNotStarted && record.AssignmentID != "" ||
 			record.State != ScriptExecutionNotStarted && record.AssignmentID != assignment.AssignmentID {
-			return false, nil, corruptReleaseRecord()
+			return false, nil, releases.CorruptReleaseRecord()
 		}
 		conditions[index] = etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision}
 		effect = effect || record.State != ScriptExecutionNotStarted

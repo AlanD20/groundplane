@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
@@ -87,13 +88,13 @@ func (service *Service) publish(
 	for index := range task.Steps {
 		task.Steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
-	stage := etcd.ReleaseStage{
+	stage := releases.ReleaseStage{
 		PublicationID: publicationID, OperationID: operationID,
-		Members: make([]etcd.ReleaseStageMember, len(candidates)), CreatedAt: now,
+		Members: make([]releases.ReleaseStageMember, len(candidates)), CreatedAt: now,
 	}
 	groupMembers := make([]domain.GroupMember, len(candidates))
 	renderMembers := make([]etcd.ReleaseTaskRenderMember, len(candidates))
-	fenceMembers := make([]etcd.ReleaseFenceMember, len(candidates))
+	fenceMembers := make([]releases.ReleaseFenceMember, len(candidates))
 	for index, candidate := range candidates {
 		releaseID := ids.New(ids.KindDeployment)
 		priorArtifactID := ""
@@ -173,14 +174,14 @@ func (service *Service) publish(
 			intent.GroupMemberOrdinal = uint32(index + 1)
 		}
 		checkpoint := domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: now}
-		stage.Members[index] = etcd.ReleaseStageMember{Intent: intent, RenderInput: raw, Checkpoint: checkpoint}
+		stage.Members[index] = releases.ReleaseStageMember{Intent: intent, RenderInput: raw, Checkpoint: checkpoint}
 		groupMembers[index] = domain.GroupMember{
 			Ordinal:   uint32(index + 1),
 			ServiceID: render.ServiceID,
 			ReleaseID: releaseID,
 		}
 		renderMembers[index] = etcd.ReleaseTaskRenderMember{Intent: intent, Render: render}
-		fenceMembers[index] = etcd.ReleaseFenceMember{
+		fenceMembers[index] = releases.ReleaseFenceMember{
 			ServiceID: render.ServiceID, CandidateReleaseID: releaseID, RenderInputDigest: digest,
 		}
 	}
@@ -200,7 +201,7 @@ func (service *Service) publish(
 			"configured release deadline is below the computed attempt budget",
 		)
 	}
-	head := etcd.ReleaseOperationHead{
+	head := releases.ReleaseOperationHead{
 		OperationID: operationID, PublicationID: publicationID, EnvironmentID: scope.Environment.Record.ID,
 		ReleaseGroupID: groupID, FailurePolicy: policy, State: domain.StatePending,
 		Attempts: []domain.Attempt{{ID: taskID, TaskID: taskID, StartedAt: now}},
@@ -270,7 +271,7 @@ func (service *Service) publish(
 		EnvironmentEpochRevision: scope.EnvironmentEpochRevision,
 		EnvironmentEpochValue:    slices.Clone(scope.EnvironmentEpochValue), FenceRevision: 0,
 		Task: task, Marker: marker,
-		Fence: etcd.ReleaseFenceSet{
+		Fence: releases.ReleaseFenceSet{
 			EnvironmentID: scope.Environment.Record.ID, Generation: 1, OperationID: operationID,
 			AttemptTaskID: taskID, Group: groupID != "", Members: fenceMembers,
 		}, Operation: head, CandidateReleaseDescriptor: candidateDescriptor, Plan: plan,

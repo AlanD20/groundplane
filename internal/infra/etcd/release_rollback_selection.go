@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -28,7 +29,7 @@ func (ledger *ReleaseLedger) SelectRollback(
 		return ReleaseRollbackSelection{}, errs.New(errs.KindValidationFailed, "rollback selection input is invalid")
 	}
 	projectionRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision,
+		Keys: []string{releases.ReleaseProjectionKey(serviceID)}, Revision: revision,
 	})
 	if err != nil {
 		return ReleaseRollbackSelection{}, err
@@ -39,24 +40,24 @@ func (ledger *ReleaseLedger) SelectRollback(
 			"service has no serving release",
 		)
 	}
-	projection, err := decodeReleaseRecord[domain.ServiceProjection](
+	projection, err := releases.DecodeReleaseRecord[domain.ServiceProjection](
 		projectionRead.Values[0].Value,
 		"service-release-projection",
 	)
 	if err != nil || projection.EnvironmentID != environmentID || projection.ServiceID != serviceID {
-		return ReleaseRollbackSelection{}, corruptReleaseRecord()
+		return ReleaseRollbackSelection{}, releases.CorruptReleaseRecord()
 	}
 	servingTag := ""
 	if projection.ServingReleaseID != "" {
 		servingIndex, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-			releaseServiceIndexKey(environmentID, serviceID, projection.ServingReleaseID),
+			releases.ReleaseServiceIndexKey(environmentID, serviceID, projection.ServingReleaseID),
 		}, Revision: revision})
 		if err != nil {
 			return ReleaseRollbackSelection{}, err
 		}
 		if servingIndex == nil || servingIndex.ReadRevision != revision || len(servingIndex.Values) != 1 ||
 			servingIndex.Values[0] == nil {
-			return ReleaseRollbackSelection{}, corruptReleaseRecord()
+			return ReleaseRollbackSelection{}, releases.CorruptReleaseRecord()
 		}
 		publicationID, err := decodeReleaseIndex(servingIndex.Values[0].Value, serviceID)
 		if err != nil {
@@ -67,11 +68,11 @@ func (ledger *ReleaseLedger) SelectRollback(
 			return ReleaseRollbackSelection{}, err
 		}
 		if !rollbackIntentMatches(serving, environmentID, serviceID) {
-			return ReleaseRollbackSelection{}, corruptReleaseRecord()
+			return ReleaseRollbackSelection{}, releases.CorruptReleaseRecord()
 		}
 		servingTag = serving.Intent.Tag
 	}
-	prefix := releaseServiceIndexScope(environmentID, serviceID)
+	prefix := releases.ReleaseServiceIndexScope(environmentID, serviceID)
 	start := ""
 	structural := false
 	materialUnavailable := false
@@ -83,7 +84,7 @@ func (ledger *ReleaseLedger) SelectRollback(
 			return ReleaseRollbackSelection{}, err
 		}
 		if page == nil || page.ReadRevision != revision {
-			return ReleaseRollbackSelection{}, corruptReleaseRecord()
+			return ReleaseRollbackSelection{}, releases.CorruptReleaseRecord()
 		}
 		for _, indexed := range page.Values {
 			releaseID := strings.TrimPrefix(indexed.Key, prefix)
@@ -96,7 +97,7 @@ func (ledger *ReleaseLedger) SelectRollback(
 				return ReleaseRollbackSelection{}, err
 			}
 			if !rollbackIntentMatches(view, environmentID, serviceID) {
-				return ReleaseRollbackSelection{}, corruptReleaseRecord()
+				return ReleaseRollbackSelection{}, releases.CorruptReleaseRecord()
 			}
 			if releaseID == projection.ServingReleaseID || view.Intent.Tag == servingTag ||
 				explicitTag != "" && view.Intent.Tag != explicitTag || view.Checkpoint.State != domain.StateCompleted ||

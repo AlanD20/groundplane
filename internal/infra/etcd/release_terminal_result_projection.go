@@ -2,6 +2,7 @@ package etcd
 
 import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strconv"
@@ -43,7 +44,7 @@ func releaseFailedOrdinalFromResult(task TaskRecord, result taskjournal.TaskResu
 }
 
 func releaseMemberTerminalState(
-	head ReleaseOperationHead,
+	head releases.ReleaseOperationHead,
 	ordinal uint32,
 	terminalStatus taskjournal.TaskStatus,
 	failedOrdinal uint32,

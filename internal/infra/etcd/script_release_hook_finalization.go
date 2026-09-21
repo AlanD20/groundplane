@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -51,7 +52,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		return false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(steps) {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	type activeHook struct {
 		step   releaseHookExecutionStep
@@ -63,16 +64,16 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	for index, step := range steps {
 		value := read.Values[index]
 		if value == nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
 			record.StepID != step.stepID || record.PlanHash != task.PlanHash {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		if _, duplicate := seenScripts[record.ScriptID]; duplicate {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		seenScripts[record.ScriptID] = struct{}{}
 		if !record.ActiveReference {
@@ -113,7 +114,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		return false, err
 	}
 	if details == nil || details.ReadRevision != revision || len(details.Values) != len(detailKeys) {
-		return false, corruptReleaseRecord()
+		return false, releases.CorruptReleaseRecord()
 	}
 	conditions := make([]etcdstore.Condition, 0, len(active)*4)
 	mutations := make([]etcdstore.Mutation, 0, len(active)*4)
@@ -121,23 +122,23 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	for index, hook := range active {
 		values := details.Values[index*3 : index*3+3]
 		if values[0] == nil || values[1] == nil || values[2] == nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		script, decodeErr := scriptrecord.DecodeRecord(values[0].Value)
 		if decodeErr != nil || script.Desired.ID != hook.record.ScriptID ||
 			script.EnvironmentID != hook.record.EnvironmentID ||
 			script.ScriptSetGeneration != hook.record.ScriptSetGeneration || script.ActiveReferences == 0 {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		if err := validateScriptBodyReference(values[1].Value, hook.record); err != nil ||
 			validateScriptBodyReference(values[2].Value, hook.record) != nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		next := hook.record
 		next.ActiveReference = false
 		next.UpdatedAt = terminalAt.UTC()
 		if validateScriptExecutionRecord(next) != nil {
-			return false, corruptReleaseRecord()
+			return false, releases.CorruptReleaseRecord()
 		}
 		executionValue, encodeErr := recordcodec.Encode("script-execution", next)
 		if encodeErr != nil {

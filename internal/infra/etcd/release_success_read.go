@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 )
@@ -14,18 +15,18 @@ func (ledger *ReleaseLedger) verifySuccessfulRelease(
 	revision int64,
 ) error {
 	read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{releaseTerminalKey(intent.ID)},
+		Keys:     []string{releases.ReleaseTerminalKey(intent.ID)},
 		Revision: revision,
 	})
 	if err != nil {
 		return err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
-	terminal, err := decodeReleaseRecord[domain.TerminalSummary](read.Values[0].Value, "release-terminal-summary")
+	terminal, err := releases.DecodeReleaseRecord[domain.TerminalSummary](read.Values[0].Value, "release-terminal-summary")
 	if err != nil || terminal.ReleaseID != intent.ID || terminal.FinalServingReleaseID != intent.ID {
-		return corruptReleaseRecord()
+		return releases.CorruptReleaseRecord()
 	}
 	return nil
 }
