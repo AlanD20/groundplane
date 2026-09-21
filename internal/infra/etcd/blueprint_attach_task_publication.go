@@ -47,14 +47,14 @@ func prepareBlueprintAttachTaskPublication(
 	for _, service := range projection.DesiredServices {
 		serviceIDs[service.Desired.ID] = struct{}{}
 	}
-	intentValue, err := encodeBlueprintAttachTaskIntent(preparation.Intent)
+	intentValue, err := attachrecord.EncodeBlueprintAttachTaskIntent(preparation.Intent)
 	if err != nil {
 		return preparedBlueprintAttachTaskPublication{}, err
 	}
 	publication.values = append(publication.values, intentValue)
-	publication.conditions = append(publication.conditions, etcdstore.Condition{Key: blueprintAttachTaskIntentKey(task.ID)})
+	publication.conditions = append(publication.conditions, etcdstore.Condition{Key: attachrecord.BlueprintAttachTaskIntentKey(task.ID)})
 	publication.mutations = append(publication.mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: blueprintAttachTaskIntentKey(task.ID), Value: intentValue,
+		Type: etcdstore.MutationPut, Key: attachrecord.BlueprintAttachTaskIntentKey(task.ID), Value: intentValue,
 	})
 	candidateIDs := make(map[string]struct{}, len(preparation.candidates))
 	for _, input := range preparation.candidates {

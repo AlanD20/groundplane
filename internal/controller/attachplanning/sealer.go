@@ -174,8 +174,8 @@ func (state *draftAttachPlanState) GetAttachTaskRenderInput(
 func (state *draftAttachPlanState) GetBlueprintAttachTaskIntent(
 	context.Context,
 	string,
-) (etcdstore.Versioned[etcd.BlueprintAttachTaskIntent], bool, error) {
-	return etcdstore.Versioned[etcd.BlueprintAttachTaskIntent]{}, false, nil
+) (etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent], bool, error) {
+	return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, nil
 }
 
 func (state *draftAttachPlanState) ResolveTaskIdentity(

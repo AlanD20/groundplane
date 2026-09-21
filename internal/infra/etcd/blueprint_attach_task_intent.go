@@ -3,25 +3,17 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"slices"
 	"sort"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
-)
-
-const (
-	blueprintAttachTaskIntentPrefix             = "/v1/records/blueprint-attach-task-intents/"
-	MaximumEnvironmentBlueprintAttachCandidates = 2
 )
 
 // EnvironmentBlueprintAttachCandidateInput is one fully resolved Attach that
@@ -37,22 +29,10 @@ type EnvironmentBlueprintAttachCandidateInput struct {
 	RetainedGrantTargets    []etcdstore.Versioned[attachrecord.Record]
 }
 
-// BlueprintAttachTaskIntent is the non-secret, task-owned lifecycle manifest
-// for every Attach introduced by one Blueprint application.
-type BlueprintAttachTaskIntent struct {
-	TaskID               string                 `json:"task_id"`
-	EnvironmentID        string                 `json:"environment_id"`
-	Status               taskjournal.TaskStatus `json:"status"`
-	OwnsEnvironmentFence bool                   `json:"owns_environment_fence"`
-	Candidates           []attachrecord.Record  `json:"candidates"`
-	CreatedAt            time.Time              `json:"created_at"`
-	TerminalAt           *time.Time             `json:"terminal_at,omitempty"`
-}
-
 // BlueprintAttachTaskPreparation is immutable publication input. Ciphertext
 // remains outside the durable intent so retries reuse the original fact set.
 type BlueprintAttachTaskPreparation struct {
-	Intent     BlueprintAttachTaskIntent
+	Intent     attachrecord.BlueprintAttachTaskIntent
 	candidates []EnvironmentBlueprintAttachCandidateInput
 }
 
@@ -85,7 +65,7 @@ func PrepareEnvironmentBlueprintAttachTask(
 	ownsEnvironmentFence bool,
 	createdAt time.Time,
 ) (BlueprintAttachTaskPreparation, error) {
-	if len(inputs) > MaximumEnvironmentBlueprintAttachCandidates {
+	if len(inputs) > attachrecord.MaximumEnvironmentBlueprintAttachCandidates {
 		return BlueprintAttachTaskPreparation{}, errs.New(
 			errs.KindValidationFailed, "Blueprint may introduce at most two Attaches",
 		)
@@ -94,7 +74,7 @@ func PrepareEnvironmentBlueprintAttachTask(
 		return BlueprintAttachTaskPreparation{}, nil
 	}
 	preparation := BlueprintAttachTaskPreparation{
-		Intent: BlueprintAttachTaskIntent{
+		Intent: attachrecord.BlueprintAttachTaskIntent{
 			TaskID: taskID, EnvironmentID: environmentID, Status: taskjournal.TaskStatusPending,
 			OwnsEnvironmentFence: ownsEnvironmentFence, CreatedAt: createdAt.UTC(),
 		},
@@ -105,7 +85,7 @@ func PrepareEnvironmentBlueprintAttachTask(
 	})
 	preparation.Intent.Candidates = make([]attachrecord.Record, 0, len(preparation.candidates))
 	for _, input := range preparation.candidates {
-		preparation.Intent.Candidates = append(preparation.Intent.Candidates, cloneAttachRecord(input.Record))
+		preparation.Intent.Candidates = append(preparation.Intent.Candidates, attachrecord.CloneAttachRecord(input.Record))
 	}
 	if err := validateBlueprintAttachTaskPreparation(preparation); err != nil {
 		clearBlueprintAttachTaskPreparation(&preparation)
@@ -114,86 +94,43 @@ func PrepareEnvironmentBlueprintAttachTask(
 	return preparation, nil
 }
 
-func blueprintAttachTaskIntentKey(taskID string) string {
-	return blueprintAttachTaskIntentPrefix + taskID
-}
-
 func (repository *AttachRepository) GetBlueprintAttachTaskIntent(
 	ctx context.Context,
 	taskID string,
-) (etcdstore.Versioned[BlueprintAttachTaskIntent], bool, error) {
+) (etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent], bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, err
+		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, errs.New(
+		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Attach Task id is invalid",
 		)
 	}
-	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{blueprintAttachTaskIntentKey(taskID)}})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{attachrecord.BlueprintAttachTaskIntentKey(taskID)}})
 	if err != nil {
-		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, err
+		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, err
 	}
 	if result == nil || len(result.Values) != 1 {
-		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, errs.New(
+		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, errs.New(
 			errs.KindInternal,
 			"Blueprint Attach Task intent read is incomplete",
 		)
 	}
 	if result.Values[0] == nil {
-		return etcdstore.Versioned[BlueprintAttachTaskIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{ReadRevision: result.ReadRevision}, false, nil
 	}
-	intent, err := decodeBlueprintAttachTaskIntent(result.Values[0].Value)
+	intent, err := attachrecord.DecodeBlueprintAttachTaskIntent(result.Values[0].Value)
 	if err != nil {
-		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, err
+		return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{}, false, err
 	}
-	return etcdstore.Versioned[BlueprintAttachTaskIntent]{
+	return etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent]{
 		Record: intent, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }
 
-func encodeBlueprintAttachTaskIntent(intent BlueprintAttachTaskIntent) ([]byte, error) {
-	if err := validateBlueprintAttachTaskIntent(intent); err != nil {
-		return nil, err
-	}
-	return recordcodec.Encode("blueprint_attach_task_intent", intent)
-}
-
-func decodeBlueprintAttachTaskIntent(value []byte) (BlueprintAttachTaskIntent, error) {
-	intent, err := recordcodec.Decode[BlueprintAttachTaskIntent](value, "blueprint_attach_task_intent")
-	if err != nil {
-		return BlueprintAttachTaskIntent{}, err
-	}
-	if err := validateBlueprintAttachTaskIntent(intent); err != nil {
-		return BlueprintAttachTaskIntent{}, errs.New(errs.KindInternal, "Blueprint Attach Task intent is corrupt")
-	}
-	return intent, nil
-}
-
-func terminalBlueprintAttachTaskIntent(
-	intent BlueprintAttachTaskIntent,
-	status taskjournal.TaskStatus,
-	terminalAt time.Time,
-) (BlueprintAttachTaskIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) || terminalAt.IsZero() {
-		return BlueprintAttachTaskIntent{}, errs.New(errs.KindStateConflict, "Blueprint Attach intent is not pending")
-	}
-	terminal := intent
-	terminal.Candidates = make([]attachrecord.Record, len(intent.Candidates))
-	for index, record := range intent.Candidates {
-		terminal.Candidates[index] = cloneAttachRecord(record)
-	}
-	terminal.Status = status
-	terminal.TerminalAt = timePointer(terminalAt.UTC())
-	if err := validateBlueprintAttachTaskIntent(terminal); err != nil {
-		return BlueprintAttachTaskIntent{}, err
-	}
-	return terminal, nil
-}
-
 func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPreparation) error {
-	if err := validateBlueprintAttachTaskIntent(preparation.Intent); err != nil {
+	if err := attachrecord.ValidateBlueprintAttachTaskIntent(preparation.Intent); err != nil {
 		return err
 	}
 	if len(preparation.candidates) != len(preparation.Intent.Candidates) {
@@ -202,7 +139,7 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 	byID := make(map[string]EnvironmentBlueprintAttachCandidateInput, len(preparation.candidates))
 	byName := make(map[string]string, len(preparation.candidates))
 	for index, input := range preparation.candidates {
-		if !sameBlueprintAttachCandidateRecord(input.Record, preparation.Intent.Candidates[index]) {
+		if !attachrecord.SameBlueprintAttachCandidateRecord(input.Record, preparation.Intent.Candidates[index]) {
 			return errs.New(errs.KindValidationFailed, "Blueprint Attach preparation changed its durable intent")
 		}
 		if input.BackingProject.Revision <= 0 || input.BackingEnvironment.Revision <= 0 ||
@@ -251,7 +188,7 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 		}
 		if existing, duplicate := retainedByID[retained.Record.ID]; duplicate {
 			if existing.Revision != retained.Revision || existing.ReadRevision != retained.ReadRevision ||
-				!sameBlueprintAttachCandidateRecord(existing.Record, retained.Record) {
+				!attachrecord.SameBlueprintAttachCandidateRecord(existing.Record, retained.Record) {
 				return errs.New(errs.KindValidationFailed, "Blueprint Attach retained reference is ambiguous")
 			}
 		} else {
@@ -318,62 +255,6 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 	return nil
 }
 
-func sameBlueprintAttachCandidateRecord(left, right attachrecord.Record) bool {
-	return left.ID == right.ID && left.EnvironmentID == right.EnvironmentID && left.Name == right.Name &&
-		left.BackingProjectID == right.BackingProjectID && left.BackingEnvironmentID == right.BackingEnvironmentID &&
-		left.BackingServiceID == right.BackingServiceID && left.BackingNetworkID == right.BackingNetworkID &&
-		left.ServiceID == right.ServiceID && left.CredentialAttachID == right.CredentialAttachID &&
-		sameBlueprintAttachStrings(left.GrantAttachIDs, right.GrantAttachIDs) &&
-		left.HookBundle == right.HookBundle && sameBlueprintAttachFactSets(left.FactSets, right.FactSets) &&
-		left.Status == right.Status && left.Operation == right.Operation && left.TaskID == right.TaskID &&
-		left.CreatedAt == right.CreatedAt
-}
-
-func sameBlueprintAttachStrings(left, right []string) bool {
-	return (left == nil) == (right == nil) && slices.Equal(left, right)
-}
-
-func sameBlueprintAttachFactSets(left, right []attachrecord.FactSetMetadata) bool {
-	if (left == nil) != (right == nil) || len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index].GrantAttachID != right[index].GrantAttachID ||
-			(left[index].Facts == nil) != (right[index].Facts == nil) ||
-			!slices.Equal(left[index].Facts, right[index].Facts) {
-			return false
-		}
-	}
-	return true
-}
-
-func validateBlueprintAttachTaskIntent(intent BlueprintAttachTaskIntent) error {
-	if ids.Validate(ids.KindTask, intent.TaskID) != nil ||
-		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil ||
-		intent.CreatedAt.IsZero() ||
-		len(intent.Candidates) == 0 {
-		return errs.New(errs.KindValidationFailed, "Blueprint Attach Task intent is invalid")
-	}
-	if intent.Status == taskjournal.TaskStatusPending {
-		if intent.TerminalAt != nil {
-			return errs.New(errs.KindValidationFailed, "Pending Blueprint Attach intent has a terminal timestamp")
-		}
-	} else if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil ||
-		intent.TerminalAt.Before(intent.CreatedAt) {
-		return errs.New(errs.KindValidationFailed, "Terminal Blueprint Attach intent is invalid")
-	}
-	previousID := ""
-	for _, record := range intent.Candidates {
-		if attachrecord.ValidateAttachRecord(record) != nil || record.EnvironmentID != intent.EnvironmentID ||
-			record.TaskID != intent.TaskID || record.Status != core.AttachPending ||
-			record.Operation != attachrecord.AttachOperationProvision || record.ID <= previousID {
-			return errs.New(errs.KindValidationFailed, "Blueprint Attach Task candidate is invalid or unsorted")
-		}
-		previousID = record.ID
-	}
-	return nil
-}
-
 func blueprintAttachTaskPreparationIsZero(preparation BlueprintAttachTaskPreparation) bool {
 	return preparation.Intent.TaskID == "" && preparation.Intent.EnvironmentID == "" &&
 		preparation.Intent.Status == "" && !preparation.Intent.OwnsEnvironmentFence && len(preparation.Intent.Candidates) == 0 &&
@@ -386,7 +267,7 @@ func cloneEnvironmentBlueprintAttachCandidateInputs(
 	cloned := make([]EnvironmentBlueprintAttachCandidateInput, len(inputs))
 	for index, input := range inputs {
 		cloned[index] = input
-		cloned[index].Record = cloneAttachRecord(input.Record)
+		cloned[index].Record = attachrecord.CloneAttachRecord(input.Record)
 		if input.Facts != nil {
 			facts := *input.Facts
 			facts.Ciphertext = append([]byte(nil), input.Facts.Ciphertext...)
@@ -394,25 +275,19 @@ func cloneEnvironmentBlueprintAttachCandidateInputs(
 		}
 		if input.RetainedCredentialOwner != nil {
 			owner := *input.RetainedCredentialOwner
-			owner.Record = cloneAttachRecord(owner.Record)
+			owner.Record = attachrecord.CloneAttachRecord(owner.Record)
 			cloned[index].RetainedCredentialOwner = &owner
 		}
 		cloned[index].RetainedGrantTargets = append(
 			[]etcdstore.Versioned[attachrecord.Record](nil), input.RetainedGrantTargets...,
 		)
 		for retainedIndex := range cloned[index].RetainedGrantTargets {
-			cloned[index].RetainedGrantTargets[retainedIndex].Record = cloneAttachRecord(
+			cloned[index].RetainedGrantTargets[retainedIndex].Record = attachrecord.CloneAttachRecord(
 				cloned[index].RetainedGrantTargets[retainedIndex].Record,
 			)
 		}
 	}
 	return cloned
-}
-
-func cloneAttachRecord(record attachrecord.Record) attachrecord.Record {
-	record.GrantAttachIDs = append([]string(nil), record.GrantAttachIDs...)
-	record.FactSets = attachrecord.CloneAttachFactSets(record.FactSets)
-	return record
 }
 
 func clearBlueprintAttachTaskPreparation(preparation *BlueprintAttachTaskPreparation) {
@@ -433,7 +308,7 @@ func ClearBlueprintAttachTaskPreparation(preparation *BlueprintAttachTaskPrepara
 	clearBlueprintAttachTaskPreparation(preparation)
 }
 
-func validateBlueprintAttachTaskOwner(task TaskRecord, intent BlueprintAttachTaskIntent) error {
+func validateBlueprintAttachTaskOwner(task TaskRecord, intent attachrecord.BlueprintAttachTaskIntent) error {
 	if task.ID != intent.TaskID || task.Target != intent.EnvironmentID {
 		return errs.New(errs.KindStateConflict, "Blueprint Attach intent has the wrong Task owner")
 	}

@@ -54,7 +54,7 @@ type attachPlanRecordReader interface {
 	GetBlueprintAttachTaskIntent(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.BlueprintAttachTaskIntent], bool, error)
+	) (etcdstore.Versioned[attachrecord.BlueprintAttachTaskIntent], bool, error)
 }
 
 // BuildAttachProvisionSteps compiles one already-resolved credential owner's

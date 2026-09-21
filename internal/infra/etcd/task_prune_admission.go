@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	attachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
@@ -85,7 +86,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		environmentchanges.RouteRemovalIntentKey(task.ID),
 		environmentchanges.RouteMutationIntentKey(task.ID),
 		environmentchanges.EntryRemovalIntentKey(task.ID),
-		blueprintAttachTaskIntentKey(task.ID),
+		attachments.BlueprintAttachTaskIntentKey(task.ID),
 	}
 	environmentDeletionFenceStart := -1
 	var environmentDeletionFenceKeys []string
@@ -198,7 +199,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		}
 	}
 	if companions.Values[8] != nil {
-		attachIntent, decodeErr := decodeBlueprintAttachTaskIntent(companions.Values[8].Value)
+		attachIntent, decodeErr := attachments.DecodeBlueprintAttachTaskIntent(companions.Values[8].Value)
 		if decodeErr != nil || validateBlueprintAttachTaskOwner(task, attachIntent) != nil ||
 			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
@@ -347,10 +348,10 @@ func (repository *TaskRepository) beginTaskPrune(
 	conditions = append(conditions, entryCondition)
 	if companions.Values[8] != nil {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: blueprintAttachTaskIntentKey(task.ID), ModRevision: companions.Values[8].ModRevision,
+			Key: attachments.BlueprintAttachTaskIntentKey(task.ID), ModRevision: companions.Values[8].ModRevision,
 		})
 		mutations = append(mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationDelete, Key: blueprintAttachTaskIntentKey(task.ID),
+			Type: etcdstore.MutationDelete, Key: attachments.BlueprintAttachTaskIntentKey(task.ID),
 		})
 	}
 	if planReferenceIndex >= 0 {

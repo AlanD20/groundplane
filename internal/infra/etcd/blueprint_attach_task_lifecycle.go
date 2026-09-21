@@ -54,7 +54,7 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 	if err != nil || !found {
 		return blueprintAttachTaskChange{}, err
 	}
-	terminalIntent, err := terminalBlueprintAttachTaskIntent(intent, terminalStatus, terminalAt)
+	terminalIntent, err := attachrecord.TerminalBlueprintAttachTaskIntent(intent, terminalStatus, terminalAt)
 	if err != nil {
 		return blueprintAttachTaskChange{}, err
 	}
@@ -71,14 +71,14 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 	if err != nil {
 		return blueprintAttachTaskChange{}, err
 	}
-	intentBytes, err := encodeBlueprintAttachTaskIntent(terminalIntent)
+	intentBytes, err := attachrecord.EncodeBlueprintAttachTaskIntent(terminalIntent)
 	if err != nil {
 		clearBlueprintAttachTaskChange(change)
 		return blueprintAttachTaskChange{}, err
 	}
 	change.values = append(change.values, intentBytes)
 	change.mutations = append(change.mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: blueprintAttachTaskIntentKey(task.ID), Value: intentBytes,
+		Type: etcdstore.MutationPut, Key: attachrecord.BlueprintAttachTaskIntentKey(task.ID), Value: intentBytes,
 	})
 	if intent.OwnsEnvironmentFence {
 		active, activeErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -137,8 +137,8 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 		return blueprintAttachTaskChange{}, errs.New(errs.KindInternal, "Blueprint Attach retry state is incomplete")
 	}
 	change := blueprintAttachTaskChange{applies: true, conditions: []etcdstore.Condition{
-		{Key: blueprintAttachTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
-		{Key: blueprintAttachTaskIntentKey(retry.ID)},
+		{Key: attachrecord.BlueprintAttachTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
+		{Key: attachrecord.BlueprintAttachTaskIntentKey(retry.ID)},
 	}}
 	retryCandidates := make([]attachrecord.Record, 0, len(intent.Candidates))
 	for index, candidate := range intent.Candidates {
@@ -196,18 +196,18 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		})
 	}
-	retryIntent := BlueprintAttachTaskIntent{
+	retryIntent := attachrecord.BlueprintAttachTaskIntent{
 		TaskID: retry.ID, EnvironmentID: intent.EnvironmentID, Status: taskjournal.TaskStatusPending,
 		OwnsEnvironmentFence: intent.OwnsEnvironmentFence, Candidates: retryCandidates, CreatedAt: retry.CreatedAt,
 	}
-	intentBytes, err := encodeBlueprintAttachTaskIntent(retryIntent)
+	intentBytes, err := attachrecord.EncodeBlueprintAttachTaskIntent(retryIntent)
 	if err != nil {
 		clearBlueprintAttachTaskChange(change)
 		return blueprintAttachTaskChange{}, err
 	}
 	change.values = append(change.values, intentBytes)
 	change.mutations = append(change.mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: blueprintAttachTaskIntentKey(retry.ID), Value: intentBytes,
+		Type: etcdstore.MutationPut, Key: attachrecord.BlueprintAttachTaskIntentKey(retry.ID), Value: intentBytes,
 	})
 	return change, nil
 }
@@ -265,7 +265,7 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 	ctx context.Context,
 	task TaskRecord,
 	intentValue *etcdstore.KeyValue,
-	intent BlueprintAttachTaskIntent,
+	intent attachrecord.BlueprintAttachTaskIntent,
 	revision int64,
 	transition func(attachrecord.Record) (attachrecord.Record, error),
 ) (blueprintAttachTaskChange, error) {
@@ -288,7 +288,7 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 	}
 	change := blueprintAttachTaskChange{
 		applies:    true,
-		conditions: []etcdstore.Condition{{Key: blueprintAttachTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision}},
+		conditions: []etcdstore.Condition{{Key: attachrecord.BlueprintAttachTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision}},
 	}
 	for index, candidate := range intent.Candidates {
 		value := state.Values[index]
@@ -301,7 +301,7 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 		}
 		current, decodeErr := attachrecord.DecodeAttachRecord(value.Value)
 		if decodeErr != nil || current.ID != candidate.ID || current.EnvironmentID != intent.EnvironmentID ||
-			current.TaskID != task.ID || !sameBlueprintAttachFactSets(current.FactSets, candidate.FactSets) {
+			current.TaskID != task.ID || !attachrecord.SameBlueprintAttachFactSets(current.FactSets, candidate.FactSets) {
 			clearBlueprintAttachTaskChange(change)
 			return blueprintAttachTaskChange{}, errs.New(errs.KindStateConflict, "Blueprint Attach candidate changed")
 		}
@@ -332,25 +332,25 @@ func (repository *TaskRepository) readBlueprintAttachTaskIntent(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (*etcdstore.KeyValue, BlueprintAttachTaskIntent, bool, error) {
+) (*etcdstore.KeyValue, attachrecord.BlueprintAttachTaskIntent, bool, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{blueprintAttachTaskIntentKey(task.ID)}, Revision: revision,
+		Keys: []string{attachrecord.BlueprintAttachTaskIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
-		return nil, BlueprintAttachTaskIntent{}, false, err
+		return nil, attachrecord.BlueprintAttachTaskIntent{}, false, err
 	}
 	if result == nil || len(result.Values) != 1 {
-		return nil, BlueprintAttachTaskIntent{}, false, errs.New(
+		return nil, attachrecord.BlueprintAttachTaskIntent{}, false, errs.New(
 			errs.KindInternal,
 			"Blueprint Attach intent read is incomplete",
 		)
 	}
 	if result.Values[0] == nil {
-		return nil, BlueprintAttachTaskIntent{}, false, nil
+		return nil, attachrecord.BlueprintAttachTaskIntent{}, false, nil
 	}
-	intent, err := decodeBlueprintAttachTaskIntent(result.Values[0].Value)
+	intent, err := attachrecord.DecodeBlueprintAttachTaskIntent(result.Values[0].Value)
 	if err != nil {
-		return nil, BlueprintAttachTaskIntent{}, false, err
+		return nil, attachrecord.BlueprintAttachTaskIntent{}, false, err
 	}
 	return result.Values[0], intent, true, nil
 }

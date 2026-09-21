@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	attachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -428,8 +429,8 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 		}
 		if decodeErr != nil || retentionErr != nil || terminal.ReleaseID != intent.ID ||
 			terminal.Outcome != domain.StateCompleted || terminal.FinalServingReleaseID != intent.ID ||
-			!sameBlueprintAttachStrings(terminal.EffectDigests, expectedEffectDigests) ||
-			!sameBlueprintAttachStrings(terminal.AttemptIDs, expectedAttemptIDs) ||
+			!attachments.SameBlueprintAttachStrings(terminal.EffectDigests, expectedEffectDigests) ||
+			!attachments.SameBlueprintAttachStrings(terminal.AttemptIDs, expectedAttemptIDs) ||
 			terminal.RollbackMaterialDigest != retention.Digest ||
 			!terminal.CompletedAt.Equal(*task.FinishedAt) {
 			return releases.CorruptReleaseRecord()
@@ -443,7 +444,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 }
 func blueprintCompletedRollbackMaterialEqual(left, right domain.RollbackMaterial) bool {
 	return left.ReleaseID == right.ReleaseID && left.Status == right.Status && left.Digest == right.Digest &&
-		left.Revision == right.Revision && sameBlueprintAttachStrings(left.References, right.References) &&
+		left.Revision == right.Revision && attachments.SameBlueprintAttachStrings(left.References, right.References) &&
 		left.ExpiredAt == nil && right.ExpiredAt == nil
 }
 func (repository *TaskRepository) prepareBlueprintCandidateRetry(
