@@ -12,6 +12,18 @@ this tracked register therefore retains only sanitized, independently useful
 facts. A missing private artifact is a provenance limit, never a reason to
 promote a historical result.
 
+## Local migration delivery gate
+
+On 2026-09-21, the unchanged `make ci` passed on Linux amd64 for code through
+`4816c7cb3`, with documentation through `968c3c48d`. This includes generated-file
+parity, formatting, static analysis, race-enabled behavior tests and Controller,
+embedded Console and Agent-image artifact checks. The architecture release gate
+uses the approved 0.0.1 deferrals; strict compliance is not established.
+
+The retained proxy-cancellation regression also passed 20 race-enabled runs after
+its fake attachment was corrected to match the Docker client's ownership contract.
+No live host, upgrade, traffic or privileged Backup/Restore qualification ran.
+
 ## Minimum record for future runs
 
 Before a qualification run, enumerate every selected matrix case and variant as
