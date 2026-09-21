@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -69,7 +70,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		return false, nil
 	}
 	sources, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		scriptSourceRootKey(task.OperationID), scriptExecutionKey(task.Params[ScriptExecutionIDParam]),
+		scriptSourceRootKey(task.OperationID), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
 	}, Revision: revision})
 	if err != nil {
 		return false, err
@@ -88,8 +89,8 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	if err != nil {
 		return false, err
 	}
-	execution, err := recordcodec.Decode[ScriptExecutionRecord](sources.Values[1].Value, "script-execution")
-	if err != nil || validateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
+	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](sources.Values[1].Value, "script-execution")
+	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		!manualScriptRootMatches(
 			execution,
 			root,

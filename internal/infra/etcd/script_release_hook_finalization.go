@@ -5,6 +5,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -45,7 +46,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	}
 	keys := make([]string, len(steps))
 	for index, step := range steps {
-		keys[index] = scriptExecutionKey(step.executionID)
+		keys[index] = scriptexecutions.ScriptExecutionKey(step.executionID)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -56,18 +57,18 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	}
 	type activeHook struct {
 		step   releaseHookExecutionStep
-		record ScriptExecutionRecord
+		record scriptexecutions.ScriptExecutionRecord
 		value  *etcdstore.KeyValue
 	}
-	active := make([]activeHook, 0, maximumReleaseHookTerminalBatch)
+	active := make([]activeHook, 0, scriptexecutions.MaximumReleaseHookTerminalBatch)
 	seenScripts := make(map[string]struct{}, len(steps))
 	for index, step := range steps {
 		value := read.Values[index]
 		if value == nil {
 			return false, releases.CorruptReleaseRecord()
 		}
-		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
-		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
+		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
+		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
 			record.StepID != step.stepID || record.PlanHash != task.PlanHash {
 			return false, releases.CorruptReleaseRecord()
@@ -79,7 +80,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		if !record.ActiveReference {
 			continue
 		}
-		if record.State != ScriptExecutionNotStarted && record.State != ScriptExecutionCleanupProven {
+		if record.State != scriptexecutions.ScriptExecutionNotStarted && record.State != scriptexecutions.ScriptExecutionCleanupProven {
 			return false, errs.New(
 				errs.KindStateConflict,
 				"release hook execution has not reached a releasable checkpoint",
@@ -88,7 +89,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		if !terminalAt.After(record.UpdatedAt) {
 			return false, errs.New(errs.KindStateConflict, "release hook terminal timestamp is not monotonic")
 		}
-		if len(active) < maximumReleaseHookTerminalBatch {
+		if len(active) < scriptexecutions.MaximumReleaseHookTerminalBatch {
 			active = append(active, activeHook{step: step, record: record, value: value})
 		}
 	}
@@ -99,14 +100,14 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	for _, hook := range active {
 		detailKeys = append(detailKeys,
 			scriptrecord.ScriptSetScriptKey(hook.record.EnvironmentID, hook.record.ScriptSetGeneration, hook.record.ScriptID),
-			scriptSetBodyForwardReferenceKey(
+			scriptexecutions.ScriptSetBodyForwardReferenceKey(
 				hook.record.EnvironmentID,
 				hook.record.ScriptSetGeneration,
 				hook.record.ScriptID,
 				hook.record.ScriptGeneration,
 				hook.record.ID,
 			),
-			scriptBodyReverseReferenceKey(hook.record.ID),
+			scriptexecutions.ScriptBodyReverseReferenceKey(hook.record.ID),
 		)
 	}
 	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: revision})
@@ -137,7 +138,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		next := hook.record
 		next.ActiveReference = false
 		next.UpdatedAt = terminalAt.UTC()
-		if validateScriptExecutionRecord(next) != nil {
+		if scriptexecutions.ValidateScriptExecutionRecord(next) != nil {
 			return false, releases.CorruptReleaseRecord()
 		}
 		executionValue, encodeErr := recordcodec.Encode("script-execution", next)

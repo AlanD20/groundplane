@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
@@ -65,8 +66,8 @@ func (service *scriptMutationService) RunScript(
 		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), Type: taskjournal.TaskScript, Target: scriptID,
 		Params: map[string]string{
-			etcd.ScriptExecutionIDParam: ids.NewULID(),
-			etcd.ScriptGenerationParam:  jsonNumber(sources.BodyGeneration.Record.Generation),
+			scriptexecutions.ScriptExecutionIDParam: ids.NewULID(),
+			scriptexecutions.ScriptGenerationParam:  jsonNumber(sources.BodyGeneration.Record.Generation),
 		},
 		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: executionplan.ScriptExecutionTimeoutSeconds,
@@ -78,7 +79,7 @@ func (service *scriptMutationService) RunScript(
 	}
 	plan, err := taskplanning.BuildManualScriptPlan(ctx, taskplanning.ManualScriptPlanInput{
 		TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID, StepID: task.Steps[0].ID,
-		ExecutionID: task.Params[etcd.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
+		ExecutionID: task.Params[scriptexecutions.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
 		Preparation: prepared,
 	})
 	if err != nil {

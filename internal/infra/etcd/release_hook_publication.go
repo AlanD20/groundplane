@@ -3,6 +3,7 @@ package etcd
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"math"
@@ -12,7 +13,7 @@ import (
 
 type ReleaseHookExecutionPublication struct {
 	Sources          ScriptExecutionSources
-	Execution        ScriptExecutionRecord
+	Execution        scriptexecutions.ScriptExecutionRecord
 	SnapshotRevision int64
 }
 
@@ -48,7 +49,7 @@ func prepareReleaseHookPublicationFragment(
 		// as manual Script publication does before validating the record.
 		execution.ScriptSetGeneration = generation
 		if err := validateScriptExecutionSources(sources, execution); err != nil ||
-			validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionNotStarted ||
+			scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != evidence.Task.ID ||
 			execution.OperationID != evidence.Task.OperationID || execution.PlanHash != evidence.Task.PlanHash ||
 			evidence.Task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID ||
@@ -103,7 +104,7 @@ func prepareReleaseHookPublicationFragment(
 			clearReleaseHookPublicationFragment(fragment)
 			return releaseHookPublicationFragment{}, err
 		}
-		fragment.conditions = append(fragment.conditions, etcdstore.Condition{Key: scriptExecutionKey(execution.ID)})
+		fragment.conditions = append(fragment.conditions, etcdstore.Condition{Key: scriptexecutions.ScriptExecutionKey(execution.ID)})
 		appendRevision(scriptrecord.ScriptSetActiveKey(execution.EnvironmentID), sources.ScriptSet.Revision)
 		appendRevision(scriptrecord.ScriptSetBodyGenerationKey(
 			execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
@@ -114,9 +115,9 @@ func prepareReleaseHookPublicationFragment(
 		}
 		fragment.mutations = append(
 			fragment.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptSetBodyForwardReferenceKey(
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptExecutionKey(execution.ID), Value: executionValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptSetBodyForwardReferenceKey(
 				execution.EnvironmentID,
 				execution.ScriptSetGeneration,
 				execution.ScriptID,
@@ -125,7 +126,7 @@ func prepareReleaseHookPublicationFragment(
 			), Value: bodyReference},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   scriptBodyReverseReferenceKey(execution.ID),
+				Key:   scriptexecutions.ScriptBodyReverseReferenceKey(execution.ID),
 				Value: append([]byte(nil), bodyReference...),
 			},
 		)

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -19,7 +20,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	revision int64, now time.Time,
 ) (bool, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		scriptSourceRootKey(task.OperationID), scriptExecutionKey(task.Params[ScriptExecutionIDParam]),
+		scriptSourceRootKey(task.OperationID), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
 		taskjournal.TaskActiveOperationKey(
 			task.OperationID,
 		), taskjournal.TaskAssignmentIndexKey(task.ID), manualScriptClosingReportKey(task.ID),
@@ -30,14 +31,14 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 5 || read.Values[1] == nil {
 		return false, corruptTaskPruneIntent()
 	}
-	execution, err := recordcodec.Decode[ScriptExecutionRecord](read.Values[1].Value, "script-execution")
-	if err != nil || validateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
+	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](read.Values[1].Value, "script-execution")
+	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		execution.OperationID != task.OperationID || execution.PlanHash != task.PlanHash ||
 		execution.EnvironmentID != task.Owner.EnvironmentID {
 		return false, corruptTaskPruneIntent()
 	}
 	if read.Values[0] == nil {
-		if execution.ActiveReference || execution.State != ScriptExecutionCleanupProven {
+		if execution.ActiveReference || execution.State != scriptexecutions.ScriptExecutionCleanupProven {
 			return false, errs.New(errs.KindInternal, "manual Script source root is missing before cleanup")
 		}
 		return false, nil
@@ -125,30 +126,30 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	return false, errs.New(errs.KindStateConflict, "manual Script source expiry changed pruning authority")
 }
 
-func expireManualScriptExecution(execution ScriptExecutionRecord, now time.Time) (ScriptExecutionRecord, error) {
-	if validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionNotStarted ||
+func expireManualScriptExecution(execution scriptexecutions.ScriptExecutionRecord, now time.Time) (scriptexecutions.ScriptExecutionRecord, error) {
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 		!execution.ActiveReference || execution.StartAuthorized || execution.AssignmentID != "" || !now.After(execution.UpdatedAt) {
-		return ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
 	}
-	outcome := ScriptOutcomeEvidence{Reason: ScriptOutcomeExpiryBeforeStart, ObservedAt: now.UTC()}
-	cleanup := ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
+	outcome := scriptexecutions.ScriptOutcomeEvidence{Reason: scriptexecutions.ScriptOutcomeExpiryBeforeStart, ObservedAt: now.UTC()}
+	cleanup := scriptexecutions.ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
 	digest, err := scriptControllerCleanupSHA256(outcome, cleanup)
 	if err != nil {
-		return ScriptExecutionRecord{}, err
+		return scriptexecutions.ScriptExecutionRecord{}, err
 	}
-	execution.State, execution.ControllerCleanup = ScriptExecutionCleanupProven, ScriptControllerCleanupManualRetryExpiry
+	execution.State, execution.ControllerCleanup = scriptexecutions.ScriptExecutionCleanupProven, scriptexecutions.ScriptControllerCleanupManualRetryExpiry
 	execution.Outcome, execution.Cleanup, execution.LastCheckpointSHA256 = &outcome, &cleanup, digest
 	execution.ActiveReference, execution.UpdatedAt = false, now.UTC()
-	if err := validateScriptExecutionRecord(execution); err != nil {
-		return ScriptExecutionRecord{}, err
+	if err := scriptexecutions.ValidateScriptExecutionRecord(execution); err != nil {
+		return scriptexecutions.ScriptExecutionRecord{}, err
 	}
 	return execution, nil
 }
 
-func manualScriptExpiryExecutionMatches(execution ScriptExecutionRecord, deadline time.Time) bool {
-	if validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionCleanupProven ||
-		execution.ControllerCleanup != ScriptControllerCleanupManualRetryExpiry || execution.ActiveReference ||
-		execution.Outcome == nil || execution.Outcome.Reason != ScriptOutcomeExpiryBeforeStart || execution.Cleanup == nil ||
+func manualScriptExpiryExecutionMatches(execution scriptexecutions.ScriptExecutionRecord, deadline time.Time) bool {
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
+		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualRetryExpiry || execution.ActiveReference ||
+		execution.Outcome == nil || execution.Outcome.Reason != scriptexecutions.ScriptOutcomeExpiryBeforeStart || execution.Cleanup == nil ||
 		!execution.UpdatedAt.Equal(execution.Outcome.ObservedAt) || execution.UpdatedAt.Before(deadline) {
 		return false
 	}

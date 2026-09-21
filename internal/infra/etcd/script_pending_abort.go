@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -78,7 +79,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 			task,
 			revision,
 		)
-		if err != nil || !manualScriptRootMatches(execution, root) || execution.State != ScriptExecutionNotStarted ||
+		if err != nil || !manualScriptRootMatches(execution, root) || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference {
 			return ScriptSourceReleaseFragment{}, false, errs.New(
 				errs.KindInternal,
@@ -118,7 +119,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	keys := make([]string, 1, len(steps)+1)
 	keys[0] = scriptSourceRootKey(task.Record.OperationID)
 	for _, step := range steps {
-		keys = append(keys, scriptExecutionKey(step.executionID))
+		keys = append(keys, scriptexecutions.ScriptExecutionKey(step.executionID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: task.ReadRevision})
 	if err != nil {
@@ -199,7 +200,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	task etcdstore.Versioned[TaskRecord],
 	requestedTerminalAt time.Time,
 	steps []releaseHookExecutionStep,
-	executions []ScriptExecutionRecord,
+	executions []scriptexecutions.ScriptExecutionRecord,
 	values []*etcdstore.KeyValue,
 ) (pendingScriptAbortChange, error) {
 	terminal, err := transitionTaskStatus(task.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, requestedTerminalAt)
@@ -252,17 +253,17 @@ func decodePendingScriptAbortExecutions(
 	task TaskRecord,
 	steps []releaseHookExecutionStep,
 	values []*etcdstore.KeyValue,
-) ([]ScriptExecutionRecord, error) {
+) ([]scriptexecutions.ScriptExecutionRecord, error) {
 	if len(values) != len(steps) {
 		return nil, releases.CorruptReleaseRecord()
 	}
-	result := make([]ScriptExecutionRecord, len(steps))
+	result := make([]scriptexecutions.ScriptExecutionRecord, len(steps))
 	for index, value := range values {
 		if value == nil {
 			return nil, releases.CorruptReleaseRecord()
 		}
-		record, err := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
-		if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
+		record, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
+		if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
 			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash {
 			return nil, releases.CorruptReleaseRecord()
@@ -273,42 +274,42 @@ func decodePendingScriptAbortExecutions(
 }
 
 func abortScriptExecutionBeforeStart(
-	record ScriptExecutionRecord,
+	record scriptexecutions.ScriptExecutionRecord,
 	task TaskRecord,
 	step releaseHookExecutionStep,
 	terminalAt time.Time,
-) (ScriptExecutionRecord, error) {
+) (scriptexecutions.ScriptExecutionRecord, error) {
 	if task.Status != taskjournal.TaskStatusPending ||
 		(task.Type != taskjournal.TaskScript && !blueprintScriptTaskShape(task)) ||
 		!taskOwnsScriptExecution(task, record) ||
-		record.State != ScriptExecutionNotStarted || record.AssignmentID != "" || record.StartAuthorized ||
+		record.State != scriptexecutions.ScriptExecutionNotStarted || record.AssignmentID != "" || record.StartAuthorized ||
 		!record.ActiveReference ||
 		record.CurrentTaskID != task.ID ||
 		record.OperationID != task.OperationID ||
 		record.ID != step.executionID ||
 		record.StepID != step.stepID ||
 		!terminalAt.After(record.UpdatedAt) {
-		return ScriptExecutionRecord{}, errs.New(
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
 			errs.KindStateConflict,
 			"pending Blueprint Script execution is not abortable before start",
 		)
 	}
-	outcome := ScriptOutcomeEvidence{Reason: ScriptOutcomeAbortBeforeStart, ObservedAt: terminalAt}
-	cleanup := ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
+	outcome := scriptexecutions.ScriptOutcomeEvidence{Reason: scriptexecutions.ScriptOutcomeAbortBeforeStart, ObservedAt: terminalAt}
+	cleanup := scriptexecutions.ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
 	digest, err := scriptControllerCleanupSHA256(outcome, cleanup)
 	if err != nil {
-		return ScriptExecutionRecord{}, err
+		return scriptexecutions.ScriptExecutionRecord{}, err
 	}
 	next := record
-	next.State = ScriptExecutionCleanupProven
+	next.State = scriptexecutions.ScriptExecutionCleanupProven
 	next.Outcome = &outcome
 	next.Cleanup = &cleanup
 	next.ControllerCleanup = pendingScriptCleanupAuthority(task)
 	next.LastCheckpointSHA256 = digest
 	next.ActiveReference = false
 	next.UpdatedAt = terminalAt
-	if validateScriptExecutionRecord(next) != nil {
-		return ScriptExecutionRecord{}, releases.CorruptReleaseRecord()
+	if scriptexecutions.ValidateScriptExecutionRecord(next) != nil {
+		return scriptexecutions.ScriptExecutionRecord{}, releases.CorruptReleaseRecord()
 	}
 	return next, nil
 }
@@ -316,7 +317,7 @@ func abortScriptExecutionBeforeStart(
 func pendingScriptAbortTerminalAt(
 	task TaskRecord,
 	steps []releaseHookExecutionStep,
-	executions []ScriptExecutionRecord,
+	executions []scriptexecutions.ScriptExecutionRecord,
 ) (time.Time, error) {
 	var terminalAt time.Time
 	for index, execution := range executions {
@@ -340,17 +341,17 @@ func pendingScriptAbortTerminalAt(
 }
 
 func pendingScriptAbortExecutionMatches(
-	record ScriptExecutionRecord,
+	record scriptexecutions.ScriptExecutionRecord,
 	task TaskRecord,
 	step releaseHookExecutionStep,
 	terminalAt time.Time,
 ) bool {
 	if record.CurrentTaskID != task.ID || record.OperationID != task.OperationID || record.ID != step.executionID ||
-		record.StepID != step.stepID || record.State != ScriptExecutionCleanupProven || record.AssignmentID != "" ||
+		record.StepID != step.stepID || record.State != scriptexecutions.ScriptExecutionCleanupProven || record.AssignmentID != "" ||
 		record.StartAuthorized || record.BodyPrepared != nil || record.ContainerCreated != nil || record.ActiveReference ||
 		record.ReconciliationRequired || record.Outcome == nil || record.Cleanup == nil ||
 		record.ControllerCleanup != pendingScriptCleanupAuthority(task) ||
-		record.Outcome.Reason != ScriptOutcomeAbortBeforeStart || record.Outcome.ExitCode != nil ||
+		record.Outcome.Reason != scriptexecutions.ScriptOutcomeAbortBeforeStart || record.Outcome.ExitCode != nil ||
 		record.Outcome.OutputTruncated || !record.Outcome.ObservedAt.Equal(terminalAt) ||
 		!record.Cleanup.ContainerAbsent || !record.Cleanup.BodyAbsent || !record.Cleanup.ExecutionDirectoryAbsent ||
 		record.Cleanup.ContainerID != "" || record.Cleanup.BodyDevice != 0 || record.Cleanup.BodyInode != 0 ||
@@ -362,13 +363,13 @@ func pendingScriptAbortExecutionMatches(
 }
 
 func scriptControllerCleanupSHA256(
-	outcome ScriptOutcomeEvidence,
-	cleanup ScriptCleanupEvidence,
+	outcome scriptexecutions.ScriptOutcomeEvidence,
+	cleanup scriptexecutions.ScriptCleanupEvidence,
 ) (string, error) {
 	payload, err := json.Marshal(struct {
-		Schema  int                   `json:"schema"`
-		Outcome ScriptOutcomeEvidence `json:"outcome"`
-		Cleanup ScriptCleanupEvidence `json:"cleanup"`
+		Schema  int                                    `json:"schema"`
+		Outcome scriptexecutions.ScriptOutcomeEvidence `json:"outcome"`
+		Cleanup scriptexecutions.ScriptCleanupEvidence `json:"cleanup"`
 	}{Schema: 1, Outcome: outcome, Cleanup: cleanup})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
@@ -392,7 +393,7 @@ func (repository *TaskRepository) validatePendingScriptAbortReplay(
 	keys := make([]string, 1, len(steps)+1)
 	keys[0] = scriptSourceRootKey(task.Record.OperationID)
 	for _, step := range steps {
-		keys = append(keys, scriptExecutionKey(step.executionID))
+		keys = append(keys, scriptexecutions.ScriptExecutionKey(step.executionID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: task.ReadRevision})
 	if err != nil {

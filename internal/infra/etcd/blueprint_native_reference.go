@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -57,7 +58,7 @@ func validateBlueprintNativePredecessorReferences(
 			if reference.RuntimeRevision != 0 || reference.PriorRuntimeSHA256 != "" {
 				return releases.CorruptReleaseRecord()
 			}
-		} else if !validLowerSHA256(reference.PriorRuntimeSHA256) || reference.ProjectionRevision <= 0 ||
+		} else if !scriptexecutions.ValidLowerSHA256(reference.PriorRuntimeSHA256) || reference.ProjectionRevision <= 0 ||
 			reference.RuntimeRevision <= 0 || reference.RuntimeRevision > reference.FixedReadRevision ||
 			ids.Validate(ids.KindDeployment, reference.Serving.ServingReleaseID) != nil ||
 			reference.Serving.Target.Validate() != nil || reference.Serving.RetainedPriorReleaseID != "" &&

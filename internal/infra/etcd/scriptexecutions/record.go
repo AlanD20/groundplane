@@ -1,4 +1,4 @@
-package etcd
+package scriptexecutions
 
 import (
 	"crypto/sha256"
@@ -7,7 +7,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/oklog/ulid/v2"
 	"strings"
 	"time"
 )
@@ -17,10 +16,10 @@ const (
 	ScriptGenerationParam  = "script_generation"
 
 	scriptExecutionPrefix           = "/v1/script-executions/"
-	scriptRunnerSnapshotPrefix      = "/v1/script-runner-snapshots/"
+	ScriptRunnerSnapshotPrefix      = "/v1/script-runner-snapshots/"
 	scriptBodyForwardRefSegment     = "/references/"
 	scriptBodyReverseRefSegment     = "/body-reference"
-	maximumReleaseHookTerminalBatch = 8
+	MaximumReleaseHookTerminalBatch = 8
 )
 
 type ScriptExecutionState string
@@ -80,12 +79,12 @@ type ScriptExecutionRecord struct {
 	UpdatedAt              time.Time                        `json:"updated_at"`
 }
 
-func validateScriptExecutionRecord(record ScriptExecutionRecord) error {
+func ValidateScriptExecutionRecord(record ScriptExecutionRecord) error {
 	if (record.SourceMembershipCount == 0) != (record.SourceMembershipSHA256 == "") ||
-		(record.SourceMembershipCount > 0 && !validLowerSHA256(record.SourceMembershipSHA256)) {
+		(record.SourceMembershipCount > 0 && !ValidLowerSHA256(record.SourceMembershipSHA256)) {
 		return errs.New(errs.KindValidationFailed, "Script execution source membership is invalid")
 	}
-	if !validRawScriptExecutionID(record.ID) || !validRawScriptExecutionID(record.SnapshotID) ||
+	if !ValidRawScriptExecutionID(record.ID) || !ValidRawScriptExecutionID(record.SnapshotID) ||
 		ids.Validate(ids.KindOperation, record.OperationID) != nil ||
 		ids.Validate(ids.KindTask, record.CurrentTaskID) != nil || ids.Validate(ids.KindStep, record.StepID) != nil ||
 		ids.Validate(ids.KindScript, record.ScriptID) != nil ||
@@ -94,8 +93,8 @@ func validateScriptExecutionRecord(record ScriptExecutionRecord) error {
 			ids.KindService,
 			record.ServiceID,
 		) != nil || ids.Validate(ids.KindDeployment, record.ReleaseID) != nil ||
-		record.RenderGeneration == 0 || !validLowerSHA256(record.PlanHash) || !validLowerSHA256(record.SnapshotSHA256) ||
-		!validLowerSHA256(record.BodySHA256) || !validLowerSHA256(record.RunnerProjectionSHA256) ||
+		record.RenderGeneration == 0 || !ValidLowerSHA256(record.PlanHash) || !ValidLowerSHA256(record.SnapshotSHA256) ||
+		!ValidLowerSHA256(record.BodySHA256) || !ValidLowerSHA256(record.RunnerProjectionSHA256) ||
 		len(record.Plan) == 0 || len(record.Plan) > executionplan.MaximumPlanBytes || len(record.Snapshot) == 0 ||
 		!validScriptExecutionState(
 			record.State,
@@ -116,13 +115,13 @@ func validScriptExecutionState(state ScriptExecutionState) bool {
 	}
 }
 
-func scriptExecutionKey(executionID string) string { return scriptExecutionPrefix + executionID }
+func ScriptExecutionKey(executionID string) string { return scriptExecutionPrefix + executionID }
 
-func scriptRunnerSnapshotKey(snapshotID string) string {
-	return scriptRunnerSnapshotPrefix + snapshotID
+func ScriptRunnerSnapshotKey(snapshotID string) string {
+	return ScriptRunnerSnapshotPrefix + snapshotID
 }
 
-func scriptSetBodyForwardReferenceKey(
+func ScriptSetBodyForwardReferenceKey(
 	environmentID, setGeneration, scriptID string,
 	generation uint64,
 	executionID string,
@@ -135,11 +134,11 @@ func scriptSetBodyForwardReferenceKey(
 	) + scriptBodyForwardRefSegment + executionID
 }
 
-func scriptBodyReverseReferenceKey(executionID string) string {
-	return scriptExecutionKey(executionID) + scriptBodyReverseRefSegment
+func ScriptBodyReverseReferenceKey(executionID string) string {
+	return ScriptExecutionKey(executionID) + scriptBodyReverseRefSegment
 }
 
-func validRawScriptExecutionID(value string) bool {
+func ValidRawScriptExecutionID(value string) bool {
 	if len(value) != 26 || value != strings.ToUpper(value) {
 		return false
 	}
@@ -147,7 +146,7 @@ func validRawScriptExecutionID(value string) bool {
 	return err == nil
 }
 
-func validLowerSHA256(value string) bool {
+func ValidLowerSHA256(value string) bool {
 	decoded, err := hex.DecodeString(value)
 	return err == nil && len(decoded) == sha256.Size && value == strings.ToLower(value)
 }

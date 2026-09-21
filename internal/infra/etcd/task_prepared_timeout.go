@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
@@ -30,7 +31,7 @@ func (repository *TaskRepository) preparedTaskTimeoutResult(
 	return taskjournal.TaskResultRecord{
 		Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 		ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch,
-		ReconciliationRequired: execution.State != ScriptExecutionNotStarted ||
+		ReconciliationRequired: execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			execution.StartAuthorized || execution.ReconciliationRequired,
 	}, true, nil
 }

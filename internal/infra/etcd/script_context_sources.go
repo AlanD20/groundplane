@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"bytes"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"sort"
 
@@ -12,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func validateStoredScriptContext(sources ScriptExecutionSources, execution ScriptExecutionRecord) error {
+func validateStoredScriptContext(sources ScriptExecutionSources, execution scriptexecutions.ScriptExecutionRecord) error {
 	var snapshot agentpb.ResolvedRunnerSnapshot
 	if err := proto.Unmarshal(execution.Snapshot, &snapshot); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)

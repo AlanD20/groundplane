@@ -6,6 +6,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -19,17 +20,17 @@ func NewScriptExecutionRecord(
 	task TaskRecord,
 	plan *agentpb.ExecutionPlan,
 	at time.Time,
-) (ScriptExecutionRecord, error) {
+) (scriptexecutions.ScriptExecutionRecord, error) {
 	records, err := NewScriptExecutionRecords(task, plan, at)
 	if err != nil {
-		return ScriptExecutionRecord{}, err
+		return scriptexecutions.ScriptExecutionRecord{}, err
 	}
 	if task.Type != taskjournal.TaskScript || len(records) != 1 {
 		for index := range records {
 			clear(records[index].Plan)
 			clear(records[index].Snapshot)
 		}
-		return ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "manual Script Task must own one execution")
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "manual Script Task must own one execution")
 	}
 	return records[0], nil
 }
@@ -41,7 +42,7 @@ func NewScriptExecutionRecords(
 	task TaskRecord,
 	plan *agentpb.ExecutionPlan,
 	at time.Time,
-) ([]ScriptExecutionRecord, error) {
+) ([]scriptexecutions.ScriptExecutionRecord, error) {
 	validated, err := executionplan.Validate(plan)
 	if err != nil {
 		return nil, err
@@ -72,7 +73,7 @@ func NewScriptExecutionRecords(
 	for _, snapshot := range validated.ScriptRunnerSnapshots {
 		snapshots[snapshot.ScriptExecutionId] = snapshot
 	}
-	records := make([]ScriptExecutionRecord, 0, len(snapshots))
+	records := make([]scriptexecutions.ScriptExecutionRecord, 0, len(snapshots))
 	for _, step := range validated.Steps {
 		run := step.GetRunScript()
 		if run == nil {
@@ -84,15 +85,15 @@ func NewScriptExecutionRecords(
 		}
 		if task.Type == taskjournal.TaskScript && (task.Target != run.ScriptId || len(validated.Steps) != 1 ||
 			task.TimeoutSeconds != executionplan.ScriptExecutionTimeoutSeconds ||
-			task.Params[ScriptExecutionIDParam] != run.ScriptExecutionId ||
-			task.Params[ScriptGenerationParam] != strconv.FormatUint(run.ScriptGeneration, 10)) {
+			task.Params[scriptexecutions.ScriptExecutionIDParam] != run.ScriptExecutionId ||
+			task.Params[scriptexecutions.ScriptGenerationParam] != strconv.FormatUint(run.ScriptGeneration, 10)) {
 			return nil, errs.New(errs.KindValidationFailed, "Script Task does not bind its sealed execution plan")
 		}
 		snapshotBytes, marshalErr := (proto.MarshalOptions{Deterministic: true}).Marshal(snapshot)
 		if marshalErr != nil {
 			return nil, errs.Wrap(errs.KindInternal, marshalErr)
 		}
-		record := ScriptExecutionRecord{
+		record := scriptexecutions.ScriptExecutionRecord{
 			ID: run.ScriptExecutionId, SnapshotID: run.RunnerSnapshotId,
 			OperationID: task.OperationID, CurrentTaskID: task.ID, StepID: step.StepId,
 			ScriptID: run.ScriptId, ScriptGeneration: run.ScriptGeneration,
@@ -103,9 +104,9 @@ func NewScriptExecutionRecords(
 			), BodySHA256: hex.EncodeToString(run.BodySha256),
 			RunnerProjectionSHA256: hex.EncodeToString(snapshot.RunnerProjectionSha256),
 			Plan:                   append([]byte(nil), planBytes...), Snapshot: snapshotBytes,
-			State: ScriptExecutionNotStarted, ActiveReference: true, CreatedAt: at.UTC(), UpdatedAt: at.UTC(),
+			State: scriptexecutions.ScriptExecutionNotStarted, ActiveReference: true, CreatedAt: at.UTC(), UpdatedAt: at.UTC(),
 		}
-		if err := validateScriptExecutionRecord(record); err != nil {
+		if err := scriptexecutions.ValidateScriptExecutionRecord(record); err != nil {
 			clear(record.Plan)
 			clear(record.Snapshot)
 			return nil, err
@@ -118,7 +119,7 @@ func NewScriptExecutionRecords(
 	return records, nil
 }
 
-func validateScriptExecutionSources(sources ScriptExecutionSources, execution ScriptExecutionRecord) error {
+func validateScriptExecutionSources(sources ScriptExecutionSources, execution scriptexecutions.ScriptExecutionRecord) error {
 	if sources.Revision <= 0 || sources.Tenant.ReadRevision != sources.Revision ||
 		sources.Project.ReadRevision != sources.Revision || sources.Environment.ReadRevision != sources.Revision ||
 		sources.Service.ReadRevision != sources.Revision || sources.ScriptSet.ReadRevision != sources.Revision ||

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
@@ -13,7 +14,7 @@ import (
 // manualScriptRootMatches binds the source-set digest to the same durable
 // execution authority that seals the plan bytes and hash. Checkpoints and retry
 // may transfer execution ownership but never change this pair.
-func manualScriptRootMatches(execution ScriptExecutionRecord, root sourceref.OperationSourceRoot) bool {
+func manualScriptRootMatches(execution scriptexecutions.ScriptExecutionRecord, root sourceref.OperationSourceRoot) bool {
 	return execution.SourceMembershipCount > 0 && execution.OperationID == root.OperationID &&
 		execution.SourceMembershipCount == root.MembershipCount &&
 		execution.SourceMembershipSHA256 == root.MembershipSHA256
@@ -23,21 +24,21 @@ func (repository *ScriptRepository) manualScriptExecutionAtRevision(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (ScriptExecutionRecord, *etcdstore.KeyValue, error) {
+) (scriptexecutions.ScriptExecutionRecord, *etcdstore.KeyValue, error) {
 	if task.Type != taskjournal.TaskScript || len(task.Steps) != 1 || revision <= 0 {
-		return ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script Task identity is corrupt")
+		return scriptexecutions.ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script Task identity is corrupt")
 	}
-	key := scriptExecutionKey(task.Params[ScriptExecutionIDParam])
+	key := scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam])
 	value, err := scriptExecutionValueAt(ctx, repository.store, key, revision)
 	if err != nil {
-		return ScriptExecutionRecord{}, nil, err
+		return scriptexecutions.ScriptExecutionRecord{}, nil, err
 	}
-	execution, err := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
-	if err != nil || validateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
+	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
+	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 		execution.EnvironmentID != task.Owner.EnvironmentID || execution.PlanHash != task.PlanHash ||
 		execution.SourceMembershipCount == 0 {
-		return ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script execution authority is corrupt")
+		return scriptexecutions.ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script execution authority is corrupt")
 	}
 	return execution, value, nil
 }
@@ -45,7 +46,7 @@ func (repository *ScriptRepository) manualScriptExecutionAtRevision(
 func (repository *ScriptRepository) manualScriptExecutionAuthority(
 	ctx context.Context,
 	task TaskRecord,
-	execution ScriptExecutionRecord,
+	execution scriptexecutions.ScriptExecutionRecord,
 	revision int64,
 ) ([]etcdstore.Condition, error) {
 	if task.Type != taskjournal.TaskScript || !taskOwnsScriptExecution(task, execution) ||
@@ -74,15 +75,15 @@ func preparedScriptExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, 
 		return releaseHookExecutionSteps(task)
 	}
 	if task.Executor != taskjournal.TaskExecutorAgent || task.Owner.EnvironmentID == "" || len(task.Steps) != 1 ||
-		!validRawScriptExecutionID(task.Params[ScriptExecutionIDParam]) {
+		!scriptexecutions.ValidRawScriptExecutionID(task.Params[scriptexecutions.ScriptExecutionIDParam]) {
 		return nil, errs.New(errs.KindInternal, "manual Script execution step is corrupt")
 	}
-	return []releaseHookExecutionStep{{stepID: task.Steps[0].ID, executionID: task.Params[ScriptExecutionIDParam]}}, nil
+	return []releaseHookExecutionStep{{stepID: task.Steps[0].ID, executionID: task.Params[scriptexecutions.ScriptExecutionIDParam]}}, nil
 }
 
-func pendingScriptCleanupAuthority(task TaskRecord) ScriptControllerCleanupAuthority {
+func pendingScriptCleanupAuthority(task TaskRecord) scriptexecutions.ScriptControllerCleanupAuthority {
 	if task.Type == taskjournal.TaskScript {
-		return ScriptControllerCleanupManualPendingAbort
+		return scriptexecutions.ScriptControllerCleanupManualPendingAbort
 	}
-	return ScriptControllerCleanupBlueprintPendingAbort
+	return scriptexecutions.ScriptControllerCleanupBlueprintPendingAbort
 }

@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -21,7 +22,7 @@ import (
 func (repository *ScriptRepository) PublishExecutionWithTask(
 	ctx context.Context,
 	sources ScriptExecutionSources,
-	execution ScriptExecutionRecord,
+	execution scriptexecutions.ScriptExecutionRecord,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (result IdempotencyTransactionResult, err error) {
@@ -35,7 +36,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err := validateScriptExecutionSources(sources, execution); err != nil {
 		return result, err
 	}
-	if validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionNotStarted ||
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 		!execution.ActiveReference || execution.SourceMembershipCount != 0 {
 		return result, errs.New(errs.KindValidationFailed, "new Script execution record is invalid")
 	}
@@ -111,7 +112,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: scriptExecutionKey(execution.ID)},
+		{Key: scriptexecutions.ScriptExecutionKey(execution.ID)},
 		{Key: taskjournal.TaskStorageKey(task.ID)},
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
@@ -123,7 +124,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		{Key: releases.ReleaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
 		{Key: releases.ReleaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
 		{Key: releases.ReleaseRenderInputStagingKey("", execution.ReleaseID), ModRevision: sources.RenderInput.Revision},
-		{Key: scriptRunnerSnapshotKey(execution.SnapshotID), ModRevision: snapshotRevision},
+		{Key: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID), ModRevision: snapshotRevision},
 	}
 	sourceConditions, err := manualScriptSourceConditions(sources)
 	if err != nil {
@@ -147,7 +148,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	}
 	defer clear(taskReference)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
+		{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptExecutionKey(execution.ID), Value: executionValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
@@ -168,7 +169,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 
 func (repository *ScriptRepository) prepareManualScriptSnapshot(
 	ctx context.Context,
-	execution ScriptExecutionRecord,
+	execution scriptexecutions.ScriptExecutionRecord,
 ) (int64, error) {
 	value, err := recordcodec.Encode("script-runner-snapshot", storedScriptRunnerSnapshot{
 		ExecutionID: execution.ID, SnapshotID: execution.SnapshotID, SHA256: execution.SnapshotSHA256, Payload: execution.Snapshot,
@@ -177,7 +178,7 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 		return 0, err
 	}
 	defer clear(value)
-	key := scriptRunnerSnapshotKey(execution.SnapshotID)
+	key := scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)
 	result, err := repository.store.Transact(
 		ctx,
 		[]etcdstore.Condition{{Key: key}},

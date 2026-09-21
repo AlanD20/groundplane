@@ -5,6 +5,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -34,7 +35,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 	}
 	keys := make([]string, len(steps))
 	for index, step := range steps {
-		keys[index] = scriptExecutionKey(step.executionID)
+		keys[index] = scriptexecutions.ScriptExecutionKey(step.executionID)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -53,8 +54,8 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script execution state is unknown")
 		}
-		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
-		if decodeErr != nil || validateScriptExecutionRecord(record) != nil {
+		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
+		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil {
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script execution state is unknown")
 		}
@@ -65,7 +66,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier lineage changed")
 		}
-		if record.State != ScriptExecutionNotStarted || record.StartAuthorized {
+		if record.State != scriptexecutions.ScriptExecutionNotStarted || record.StartAuthorized {
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script execution may already have started")
 		}
@@ -101,7 +102,7 @@ func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, err
 		if executionID == "" {
 			continue
 		}
-		if !validRawScriptExecutionID(executionID) {
+		if !scriptexecutions.ValidRawScriptExecutionID(executionID) {
 			return nil, releases.CorruptReleaseRecord()
 		}
 		if _, duplicate := seen[executionID]; duplicate {
@@ -130,7 +131,7 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 	}
 	keys := make([]string, len(steps))
 	for index, step := range steps {
-		keys[index] = scriptExecutionKey(step.executionID)
+		keys[index] = scriptexecutions.ScriptExecutionKey(step.executionID)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -145,16 +146,16 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 		if value == nil {
 			return false, nil, releases.CorruptReleaseRecord()
 		}
-		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
-		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
+		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
+		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
 			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash ||
-			record.State == ScriptExecutionNotStarted && record.AssignmentID != "" ||
-			record.State != ScriptExecutionNotStarted && record.AssignmentID != assignment.AssignmentID {
+			record.State == scriptexecutions.ScriptExecutionNotStarted && record.AssignmentID != "" ||
+			record.State != scriptexecutions.ScriptExecutionNotStarted && record.AssignmentID != assignment.AssignmentID {
 			return false, nil, releases.CorruptReleaseRecord()
 		}
 		conditions[index] = etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision}
-		effect = effect || record.State != ScriptExecutionNotStarted
+		effect = effect || record.State != scriptexecutions.ScriptExecutionNotStarted
 	}
 	return effect, conditions, nil
 }

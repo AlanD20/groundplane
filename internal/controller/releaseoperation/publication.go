@@ -6,6 +6,7 @@ import (
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
@@ -237,7 +238,7 @@ func (service *Service) publish(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	var executions []etcd.ScriptExecutionRecord
+	var executions []scriptexecutions.ScriptExecutionRecord
 	if len(plan.GetScriptRunnerSnapshots()) != 0 {
 		executions, err = etcd.NewScriptExecutionRecords(task, plan, now)
 		if err != nil {

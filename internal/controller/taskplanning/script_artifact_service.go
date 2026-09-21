@@ -8,6 +8,7 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"path"
 	"sort"
 	"unicode/utf8"
@@ -27,7 +28,7 @@ type scriptArtifactRepository interface {
 		etcd.TaskRecord,
 		*agentpb.ExecutionPlan,
 	) (*agentpb.ScriptAssignmentArtifacts, error)
-	GetScriptExecution(context.Context, string) (etcdstore.Versioned[etcd.ScriptExecutionRecord], error)
+	GetScriptExecution(context.Context, string) (etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord], error)
 }
 
 type scriptEntryValueResolver interface {
@@ -231,7 +232,7 @@ func (service *ScriptArtifactService) ResolveScriptExecutionCheckpoints(
 	return checkpoints, nil
 }
 
-func scriptExecutionCheckpointMessage(record etcd.ScriptExecutionRecord) (*agentpb.ScriptExecutionCheckpoint, error) {
+func scriptExecutionCheckpointMessage(record scriptexecutions.ScriptExecutionRecord) (*agentpb.ScriptExecutionCheckpoint, error) {
 	state, ok := scriptExecutionCheckpointState(record.State)
 	if !ok {
 		return nil, errs.New(errs.KindInternal, "Script execution state is invalid")
@@ -284,44 +285,44 @@ func scriptExecutionCheckpointMessage(record etcd.ScriptExecutionRecord) (*agent
 	return checkpoint, nil
 }
 
-func scriptExecutionCheckpointState(state etcd.ScriptExecutionState) (agentpb.ScriptExecutionState, bool) {
+func scriptExecutionCheckpointState(state scriptexecutions.ScriptExecutionState) (agentpb.ScriptExecutionState, bool) {
 	switch state {
-	case etcd.ScriptExecutionNotStarted:
+	case scriptexecutions.ScriptExecutionNotStarted:
 		return agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED, true
-	case etcd.ScriptExecutionStartAuthorized:
+	case scriptexecutions.ScriptExecutionStartAuthorized:
 		return agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_START_AUTHORIZED, true
-	case etcd.ScriptExecutionBodyPrepared:
+	case scriptexecutions.ScriptExecutionBodyPrepared:
 		return agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_BODY_PREPARED, true
-	case etcd.ScriptExecutionContainerCreated:
+	case scriptexecutions.ScriptExecutionContainerCreated:
 		return agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CONTAINER_CREATED, true
-	case etcd.ScriptExecutionOutcomeRecorded:
+	case scriptexecutions.ScriptExecutionOutcomeRecorded:
 		return agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_OUTCOME_RECORDED, true
-	case etcd.ScriptExecutionCleanupProven:
+	case scriptexecutions.ScriptExecutionCleanupProven:
 		return agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_CLEANUP_PROVEN, true
 	default:
 		return agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_UNSPECIFIED, false
 	}
 }
 
-func scriptOutcomeCheckpointReason(reason etcd.ScriptOutcomeReason) (agentpb.ScriptOutcomeReason, bool) {
+func scriptOutcomeCheckpointReason(reason scriptexecutions.ScriptOutcomeReason) (agentpb.ScriptOutcomeReason, bool) {
 	switch reason {
-	case etcd.ScriptOutcomeNormalExit:
+	case scriptexecutions.ScriptOutcomeNormalExit:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NORMAL_EXIT, true
-	case etcd.ScriptOutcomeStartFailure:
+	case scriptexecutions.ScriptOutcomeStartFailure:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_START_FAILURE, true
-	case etcd.ScriptOutcomeRuntimeFailure:
+	case scriptexecutions.ScriptOutcomeRuntimeFailure:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RUNTIME_FAILURE, true
-	case etcd.ScriptOutcomeTimeout:
+	case scriptexecutions.ScriptOutcomeTimeout:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_TIMEOUT, true
-	case etcd.ScriptOutcomeAbort:
+	case scriptexecutions.ScriptOutcomeAbort:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT, true
-	case etcd.ScriptOutcomeAbortBeforeStart:
+	case scriptexecutions.ScriptOutcomeAbortBeforeStart:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_ABORT_BEFORE_START, true
-	case etcd.ScriptOutcomeExpiryBeforeStart:
+	case scriptexecutions.ScriptOutcomeExpiryBeforeStart:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_EXPIRY_BEFORE_START, true
-	case etcd.ScriptOutcomeNoServingRelease:
+	case scriptexecutions.ScriptOutcomeNoServingRelease:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_NO_SERVING_RELEASE, true
-	case etcd.ScriptOutcomeRecoveryInvariantFailure:
+	case scriptexecutions.ScriptOutcomeRecoveryInvariantFailure:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_RECOVERY_INVARIANT_FAILURE, true
 	default:
 		return agentpb.ScriptOutcomeReason_SCRIPT_OUTCOME_REASON_UNSPECIFIED, false

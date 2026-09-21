@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"net/http"
@@ -54,7 +55,7 @@ type scriptMutationRepository interface {
 	PublishExecutionWithTask(
 		context.Context,
 		etcd.ScriptExecutionSources,
-		etcd.ScriptExecutionRecord,
+		scriptexecutions.ScriptExecutionRecord,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -91,7 +92,7 @@ func (repository *MutationRepository) LoadExecutionSources(
 func (repository *MutationRepository) PublishExecutionWithTask(
 	ctx context.Context,
 	sources etcd.ScriptExecutionSources,
-	execution etcd.ScriptExecutionRecord,
+	execution scriptexecutions.ScriptExecutionRecord,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

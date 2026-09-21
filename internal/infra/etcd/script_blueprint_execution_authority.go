@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -24,7 +25,7 @@ func blueprintScriptTaskShape(task TaskRecord) bool {
 func (repository *ScriptRepository) validateBlueprintScriptExecutionAuthority(
 	ctx context.Context,
 	task TaskRecord,
-	execution ScriptExecutionRecord,
+	execution scriptexecutions.ScriptExecutionRecord,
 	revision int64,
 ) error {
 	_, err := repository.blueprintScriptExecutionAuthority(ctx, task, execution, revision)
@@ -34,7 +35,7 @@ func (repository *ScriptRepository) validateBlueprintScriptExecutionAuthority(
 func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 	ctx context.Context,
 	task TaskRecord,
-	execution ScriptExecutionRecord,
+	execution scriptexecutions.ScriptExecutionRecord,
 	revision int64,
 ) ([]etcdstore.Condition, error) {
 	if repository == nil || repository.store == nil || !blueprintScriptTaskShape(task) ||
@@ -98,7 +99,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 	}, nil
 }
 
-func validateScriptBodyReference(value []byte, execution ScriptExecutionRecord) error {
+func validateScriptBodyReference(value []byte, execution scriptexecutions.ScriptExecutionRecord) error {
 	reference, err := recordcodec.Decode[struct {
 		ExecutionID         string `json:"script_execution_id"`
 		ScriptID            string `json:"script_id"`

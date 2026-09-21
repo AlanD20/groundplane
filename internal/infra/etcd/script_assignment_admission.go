@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -19,20 +20,20 @@ func (repository *ScriptRepository) GetScriptExecutionPlan(
 	ctx context.Context,
 	task TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
-	executionID := task.Params[ScriptExecutionIDParam]
+	executionID := task.Params[scriptexecutions.ScriptExecutionIDParam]
 	if ctx == nil || repository == nil || repository.store == nil || task.Type != taskjournal.TaskScript ||
-		!validRawScriptExecutionID(executionID) || len(task.Steps) != 1 {
+		!scriptexecutions.ValidRawScriptExecutionID(executionID) || len(task.Steps) != 1 {
 		return nil, errs.New(errs.KindValidationFailed, "Script execution plan request is invalid")
 	}
-	read, err := repository.store.Get(ctx, scriptExecutionKey(executionID))
+	read, err := repository.store.Get(ctx, scriptexecutions.ScriptExecutionKey(executionID))
 	if err != nil {
 		return nil, err
 	}
 	if read == nil || read.Entry == nil {
 		return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
 	}
-	record, err := recordcodec.Decode[ScriptExecutionRecord](read.Entry.Value, "script-execution")
-	if err != nil || validateScriptExecutionRecord(record) != nil || record.CurrentTaskID != task.ID ||
+	record, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](read.Entry.Value, "script-execution")
+	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.CurrentTaskID != task.ID ||
 		record.OperationID != task.OperationID || record.StepID != task.Steps[0].ID || record.PlanHash != task.PlanHash {
 		return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
 	}
@@ -62,7 +63,7 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 	executionIDs := make(map[string]string)
 	for _, step := range task.Steps {
 		if executionID := task.Params[ReleaseHookStepExecutionParam(step.ID)]; executionID != "" {
-			if !validRawScriptExecutionID(executionID) {
+			if !scriptexecutions.ValidRawScriptExecutionID(executionID) {
 				return nil, false, errs.New(errs.KindInternal, "release Script execution identity is corrupt")
 			}
 			executionIDs[step.ID] = executionID
@@ -74,15 +75,15 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 	var sealed *agentpb.ExecutionPlan
 	var sealedBytes []byte
 	for stepID, executionID := range executionIDs {
-		read, err := repository.store.Get(ctx, scriptExecutionKey(executionID))
+		read, err := repository.store.Get(ctx, scriptexecutions.ScriptExecutionKey(executionID))
 		if err != nil {
 			return nil, false, err
 		}
 		if read == nil || read.Entry == nil {
 			return nil, false, errs.New(errs.KindStateConflict, "release Script execution record is missing")
 		}
-		record, err := recordcodec.Decode[ScriptExecutionRecord](read.Entry.Value, "script-execution")
-		if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != executionID ||
+		record, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](read.Entry.Value, "script-execution")
+		if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID || record.StepID != stepID ||
 			record.PlanHash != task.PlanHash {
 			return nil, false, errs.New(errs.KindInternal, "release Script execution record is corrupt")
@@ -149,15 +150,15 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 	}
 	artifacts := &agentpb.ScriptAssignmentArtifacts{}
 	for _, metadata := range validated.ScriptBodyArtifacts {
-		executionRead, readErr := repository.store.Get(ctx, scriptExecutionKey(metadata.ScriptExecutionId))
+		executionRead, readErr := repository.store.Get(ctx, scriptexecutions.ScriptExecutionKey(metadata.ScriptExecutionId))
 		if readErr != nil {
 			return nil, readErr
 		}
 		if executionRead == nil || executionRead.Entry == nil {
 			return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
 		}
-		execution, decodeErr := recordcodec.Decode[ScriptExecutionRecord](executionRead.Entry.Value, "script-execution")
-		if decodeErr != nil || validateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.ID ||
+		execution, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](executionRead.Entry.Value, "script-execution")
+		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.ID ||
 			execution.OperationID != task.OperationID || execution.StepID != steps[metadata.ScriptExecutionId] ||
 			execution.PlanHash != task.PlanHash || !execution.ActiveReference {
 			return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")

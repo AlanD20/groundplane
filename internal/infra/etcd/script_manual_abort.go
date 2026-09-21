@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,32 +11,32 @@ import (
 // durable not-started record. Its caller must atomically fence the execution,
 // current Task/assignment, and source root when committing this replacement.
 func abortAssignedManualScriptBeforeStart(
-	execution ScriptExecutionRecord,
+	execution scriptexecutions.ScriptExecutionRecord,
 	at time.Time,
-) (ScriptExecutionRecord, error) {
-	if validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionNotStarted ||
+) (scriptexecutions.ScriptExecutionRecord, error) {
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 		execution.StartAuthorized || execution.AssignmentID != "" || !execution.ActiveReference || !at.After(execution.UpdatedAt) {
-		return ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
 	}
-	outcome := ScriptOutcomeEvidence{Reason: ScriptOutcomeAbortBeforeStart, ObservedAt: at.UTC()}
-	cleanup := ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
+	outcome := scriptexecutions.ScriptOutcomeEvidence{Reason: scriptexecutions.ScriptOutcomeAbortBeforeStart, ObservedAt: at.UTC()}
+	cleanup := scriptexecutions.ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
 	digest, err := scriptControllerCleanupSHA256(outcome, cleanup)
 	if err != nil {
-		return ScriptExecutionRecord{}, err
+		return scriptexecutions.ScriptExecutionRecord{}, err
 	}
-	execution.State, execution.ControllerCleanup = ScriptExecutionCleanupProven, ScriptControllerCleanupManualAssignedAbort
+	execution.State, execution.ControllerCleanup = scriptexecutions.ScriptExecutionCleanupProven, scriptexecutions.ScriptControllerCleanupManualAssignedAbort
 	execution.Outcome, execution.Cleanup, execution.LastCheckpointSHA256 = &outcome, &cleanup, digest
 	execution.ActiveReference, execution.UpdatedAt = false, at.UTC()
-	if err := validateScriptExecutionRecord(execution); err != nil {
-		return ScriptExecutionRecord{}, err
+	if err := scriptexecutions.ValidateScriptExecutionRecord(execution); err != nil {
+		return scriptexecutions.ScriptExecutionRecord{}, err
 	}
 	return execution, nil
 }
 
-func manualScriptAssignedAbortMatches(execution ScriptExecutionRecord) bool {
-	if validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionCleanupProven ||
-		execution.ControllerCleanup != ScriptControllerCleanupManualAssignedAbort || execution.Outcome == nil ||
-		execution.Outcome.Reason != ScriptOutcomeAbortBeforeStart || execution.Cleanup == nil ||
+func manualScriptAssignedAbortMatches(execution scriptexecutions.ScriptExecutionRecord) bool {
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
+		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualAssignedAbort || execution.Outcome == nil ||
+		execution.Outcome.Reason != scriptexecutions.ScriptOutcomeAbortBeforeStart || execution.Cleanup == nil ||
 		!execution.UpdatedAt.Equal(execution.Outcome.ObservedAt) {
 		return false
 	}

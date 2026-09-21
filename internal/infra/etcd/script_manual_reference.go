@@ -7,6 +7,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -24,7 +25,7 @@ import (
 func (repository *ScriptRepository) manualScriptSourceMembers(
 	ctx context.Context,
 	sources ScriptExecutionSources,
-	execution ScriptExecutionRecord,
+	execution scriptexecutions.ScriptExecutionRecord,
 	snapshotRevision int64,
 ) ([]ScriptSourcePreparationMember, error) {
 	if ctx == nil || repository == nil || repository.store == nil || sources.Revision <= 0 || snapshotRevision <= 0 {
@@ -52,7 +53,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 	members := []ScriptSourcePreparationMember{manualScriptExistingMember(body, scriptrecord.ScriptSetBodyGenerationKey(
 		execution.EnvironmentID, body.Source.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
 	))}
-	snapshotKey := scriptRunnerSnapshotKey(execution.SnapshotID)
+	snapshotKey := scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)
 	service := base
 	service.Source = sourceref.SourceIdentity{Kind: sourceref.SourceService, ServiceID: execution.ServiceID}
 	service.SourceModRevision, service.SourceDigest = snapshotRevision, execution.SnapshotSHA256

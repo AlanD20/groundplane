@@ -11,6 +11,7 @@ import (
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -28,7 +29,7 @@ import (
 
 func validateScriptSourceReference(reference ref.Reference) error {
 	if ids.Validate(ids.KindOperation, reference.OperationID) != nil ||
-		!validRawScriptExecutionID(reference.ScriptExecutionID) ||
+		!scriptexecutions.ValidRawScriptExecutionID(reference.ScriptExecutionID) ||
 		validateScriptSourceIdentity(reference.Source) != nil ||
 		reference.SourceOwnerID == "" {
 		return errs.New(errs.KindValidationFailed, "Script source reference is invalid")
@@ -53,7 +54,7 @@ func validateScriptSourceReference(reference ref.Reference) error {
 		reference.Source.Kind == ref.SourceEntryValue ||
 		reference.Source.Kind == ref.SourceSecretValue ||
 		reference.Source.Kind == ref.SourceMaterialization
-	if (requiresDigest && !validLowerSHA256(reference.SourceDigest)) ||
+	if (requiresDigest && !scriptexecutions.ValidLowerSHA256(reference.SourceDigest)) ||
 		(!requiresDigest && reference.SourceDigest != "") {
 		return errs.New(errs.KindValidationFailed, "Script source digest is invalid")
 	}
@@ -75,7 +76,7 @@ func validateScriptSourceIdentity(source ref.SourceIdentity) error {
 			ids.Validate(ids.KindScript, source.ScriptID) == nil && source.BodyGeneration > 0
 		copy.EnvironmentID, copy.ScriptSetGeneration, copy.ScriptID, copy.BodyGeneration = source.EnvironmentID, source.ScriptSetGeneration, source.ScriptID, source.BodyGeneration
 	case ref.SourceRunnerSnapshot:
-		valid, copy.SnapshotID = validRawScriptExecutionID(source.SnapshotID), source.SnapshotID
+		valid, copy.SnapshotID = scriptexecutions.ValidRawScriptExecutionID(source.SnapshotID), source.SnapshotID
 	case ref.SourceService:
 		valid, copy.ServiceID = ids.Validate(ids.KindService, source.ServiceID) == nil, source.ServiceID
 	case ref.SourceRelease:
@@ -131,7 +132,7 @@ func validateScriptSourceRecord(key string, value []byte, reference ref.Referenc
 			return errs.New(errs.KindValidationFailed, "Script runner snapshot source evidence is invalid")
 		}
 	case ref.SourceService:
-		if strings.HasPrefix(key, scriptRunnerSnapshotPrefix) {
+		if strings.HasPrefix(key, scriptexecutions.ScriptRunnerSnapshotPrefix) {
 			payload, _, err := decodeScriptRunnerSnapshotSource(key, value, reference)
 			if err != nil || payload.ServiceId != source.ServiceID {
 				return errs.New(errs.KindValidationFailed, "Script Service snapshot evidence is invalid")
@@ -211,7 +212,7 @@ func decodeScriptRunnerSnapshotSource(
 	snapshot, err := recordcodec.Decode[storedScriptRunnerSnapshot](value, "script-runner-snapshot")
 	digest := sha256.Sum256(snapshot.Payload)
 	var payload agentpb.ResolvedRunnerSnapshot
-	if err != nil || snapshot.SnapshotID == "" || key != scriptRunnerSnapshotKey(snapshot.SnapshotID) ||
+	if err != nil || snapshot.SnapshotID == "" || key != scriptexecutions.ScriptRunnerSnapshotKey(snapshot.SnapshotID) ||
 		snapshot.ExecutionID != reference.ScriptExecutionID || snapshot.SHA256 != reference.SourceDigest ||
 		hex.EncodeToString(digest[:]) != reference.SourceDigest || proto.Unmarshal(snapshot.Payload, &payload) != nil ||
 		payload.SnapshotId != snapshot.SnapshotID || payload.ScriptExecutionId != snapshot.ExecutionID ||
@@ -339,7 +340,7 @@ func decodeScriptSourcePreparation(value []byte) (ref.Preparation, error) {
 func decodeScriptOperationSourceRoot(value []byte) (ref.OperationSourceRoot, error) {
 	root, err := recordcodec.Decode[ref.OperationSourceRoot](value, "script-operation-source-root")
 	if err != nil || ids.Validate(ids.KindOperation, root.OperationID) != nil || root.MembershipCount == 0 ||
-		!validLowerSHA256(root.MembershipSHA256) || root.ReleaseCursor > root.MembershipCount {
+		!scriptexecutions.ValidLowerSHA256(root.MembershipSHA256) || root.ReleaseCursor > root.MembershipCount {
 		return ref.OperationSourceRoot{}, errs.New(
 			errs.KindInternal,
 			"Script operation source root is corrupt",

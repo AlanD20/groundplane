@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -92,7 +93,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	}
 	executionOffset := len(keys)
 	for _, step := range steps {
-		keys = append(keys, scriptExecutionKey(step.executionID))
+		keys = append(keys, scriptexecutions.ScriptExecutionKey(step.executionID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -120,18 +121,18 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 			return scriptTerminalSourceRelease{}, false, corruptTaskMaterializationWriter()
 		}
 	}
-	executions := make([]ScriptExecutionRecord, len(steps))
+	executions := make([]scriptexecutions.ScriptExecutionRecord, len(steps))
 	for index, step := range steps {
 		value := read.Values[index+executionOffset]
-		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
-		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || !taskOwnsScriptExecution(task, record) ||
+		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
+		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || !taskOwnsScriptExecution(task, record) ||
 			record.ID != step.executionID || record.StepID != step.stepID || record.CurrentTaskID != task.ID ||
 			record.OperationID != task.OperationID || record.PlanHash != task.PlanHash {
 			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 		executions[index] = record
 		if root.Phase == ScriptOperationSourceActive && terminalStatus == taskjournal.TaskStatusCompleted &&
-			(record.State != ScriptExecutionCleanupProven || record.AssignmentID != assignment.AssignmentID || record.ReconciliationRequired) {
+			(record.State != scriptexecutions.ScriptExecutionCleanupProven || record.AssignmentID != assignment.AssignmentID || record.ReconciliationRequired) {
 			return scriptTerminalSourceRelease{}, false, errs.New(
 				errs.KindStateConflict,
 				"Blueprint Script cleanup is not proven",
@@ -274,7 +275,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	ctx context.Context,
 	task TaskRecord,
-	executions []ScriptExecutionRecord,
+	executions []scriptexecutions.ScriptExecutionRecord,
 	values []*etcdstore.KeyValue,
 	terminalAt time.Time,
 ) (scriptTerminalSourceRelease, error) {
@@ -298,26 +299,26 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 		}
 		next := execution
 		switch execution.State {
-		case ScriptExecutionNotStarted:
+		case scriptexecutions.ScriptExecutionNotStarted:
 			if execution.AssignmentID != "" || execution.StartAuthorized || !execution.ActiveReference {
 				clearMutationValues(mutations)
 				return scriptTerminalSourceRelease{}, errs.New(
 					errs.KindStateConflict, "recovery parent Script execution may already have started",
 				)
 			}
-			outcome := ScriptOutcomeEvidence{Reason: ScriptOutcomeParentFailureBeforeStart, ObservedAt: terminalAt}
-			cleanup := ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
+			outcome := scriptexecutions.ScriptOutcomeEvidence{Reason: scriptexecutions.ScriptOutcomeParentFailureBeforeStart, ObservedAt: terminalAt}
+			cleanup := scriptexecutions.ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
 			digest, digestErr := scriptControllerCleanupSHA256(outcome, cleanup)
 			if digestErr != nil {
 				clearMutationValues(mutations)
 				return scriptTerminalSourceRelease{}, digestErr
 			}
-			next.State = ScriptExecutionCleanupProven
+			next.State = scriptexecutions.ScriptExecutionCleanupProven
 			next.Outcome = &outcome
 			next.Cleanup = &cleanup
-			next.ControllerCleanup = ScriptControllerCleanupReleaseRecoveryParentFailure
+			next.ControllerCleanup = scriptexecutions.ScriptControllerCleanupReleaseRecoveryParentFailure
 			next.LastCheckpointSHA256 = digest
-		case ScriptExecutionCleanupProven:
+		case scriptexecutions.ScriptExecutionCleanupProven:
 			if execution.AssignmentID == "" || execution.ControllerCleanup != "" || execution.ReconciliationRequired {
 				clearMutationValues(mutations)
 				return scriptTerminalSourceRelease{}, errs.New(
@@ -332,7 +333,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 		}
 		next.ActiveReference = false
 		next.UpdatedAt = terminalAt
-		if validateScriptExecutionRecord(next) != nil ||
+		if scriptexecutions.ValidateScriptExecutionRecord(next) != nil ||
 			!releaseRecoveryClosedScriptExecutionMatches(next, execution.AssignmentID) {
 			clearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, releases.CorruptReleaseRecord()
@@ -348,12 +349,12 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	return scriptTerminalSourceRelease{conditions: conditions, mutations: mutations}, nil
 }
 
-func releaseRecoveryParentFailureExecutionMatches(record ScriptExecutionRecord) bool {
-	if record.State != ScriptExecutionCleanupProven || record.AssignmentID != "" || record.StartAuthorized ||
+func releaseRecoveryParentFailureExecutionMatches(record scriptexecutions.ScriptExecutionRecord) bool {
+	if record.State != scriptexecutions.ScriptExecutionCleanupProven || record.AssignmentID != "" || record.StartAuthorized ||
 		record.BodyPrepared != nil || record.ContainerCreated != nil || record.ActiveReference ||
 		record.ReconciliationRequired || record.Outcome == nil || record.Cleanup == nil ||
-		record.ControllerCleanup != ScriptControllerCleanupReleaseRecoveryParentFailure ||
-		record.Outcome.Reason != ScriptOutcomeParentFailureBeforeStart || record.Outcome.ExitCode != nil ||
+		record.ControllerCleanup != scriptexecutions.ScriptControllerCleanupReleaseRecoveryParentFailure ||
+		record.Outcome.Reason != scriptexecutions.ScriptOutcomeParentFailureBeforeStart || record.Outcome.ExitCode != nil ||
 		record.Outcome.OutputTruncated || record.Outcome.ObservedAt.IsZero() ||
 		!record.Cleanup.ContainerAbsent || !record.Cleanup.BodyAbsent || !record.Cleanup.ExecutionDirectoryAbsent ||
 		record.Cleanup.ContainerID != "" || record.Cleanup.BodyDevice != 0 || record.Cleanup.BodyInode != 0 ||
@@ -364,11 +365,11 @@ func releaseRecoveryParentFailureExecutionMatches(record ScriptExecutionRecord) 
 	return err == nil && record.LastCheckpointSHA256 == digest
 }
 
-func releaseRecoveryClosedScriptExecutionMatches(record ScriptExecutionRecord, assignmentID string) bool {
+func releaseRecoveryClosedScriptExecutionMatches(record scriptexecutions.ScriptExecutionRecord, assignmentID string) bool {
 	if releaseRecoveryParentFailureExecutionMatches(record) {
 		return true
 	}
-	return record.State == ScriptExecutionCleanupProven && record.AssignmentID == assignmentID &&
+	return record.State == scriptexecutions.ScriptExecutionCleanupProven && record.AssignmentID == assignmentID &&
 		record.ControllerCleanup == "" && !record.ActiveReference && !record.ReconciliationRequired &&
-		validateScriptExecutionRecord(record) == nil
+		scriptexecutions.ValidateScriptExecutionRecord(record) == nil
 }

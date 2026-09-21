@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -148,12 +149,12 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			ScriptSourcePreparationMember{
 				Reference: snapshotReference,
 				Evidence: ScriptSourceEvidence{
-					Existing: &ScriptExistingSourceEvidence{SourceKey: scriptRunnerSnapshotKey(execution.SnapshotID)},
+					Existing: &ScriptExistingSourceEvidence{SourceKey: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)},
 				},
 			},
 		)
 
-		snapshotKey := scriptRunnerSnapshotKey(execution.SnapshotID)
+		snapshotKey := scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)
 		seenNetworks := make(map[string]struct{}, len(snapshot.Networks))
 		for _, network := range snapshot.Networks {
 			if network == nil {

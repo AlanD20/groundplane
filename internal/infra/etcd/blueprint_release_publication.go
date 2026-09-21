@@ -11,6 +11,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
@@ -442,7 +443,7 @@ func prepareBlueprintReleaseHookPublicationFragment(
 			execution.ScriptSetGeneration = hook.Sources.Script.Record.ScriptSetGeneration
 		}
 		if validateStoredScriptContext(hook.Sources, execution) != nil ||
-			validateScriptExecutionRecord(execution) != nil || execution.State != ScriptExecutionNotStarted ||
+			scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 			execution.PlanHash != task.PlanHash || task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
 			clearReleaseHookPublicationFragment(fragment)
@@ -463,18 +464,18 @@ func prepareBlueprintReleaseHookPublicationFragment(
 			return releaseHookPublicationFragment{}, err
 		}
 		fragment.conditions = append(fragment.conditions,
-			etcdstore.Condition{Key: scriptExecutionKey(execution.ID)},
-			etcdstore.Condition{Key: scriptRunnerSnapshotKey(execution.SnapshotID)},
+			etcdstore.Condition{Key: scriptexecutions.ScriptExecutionKey(execution.ID)},
+			etcdstore.Condition{Key: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)},
 		)
 		fragment.mutations = append(fragment.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptExecutionKey(execution.ID), Value: executionValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
 		)
 	}
 	return fragment, nil
 }
 
-func encodeBlueprintReleaseHookSnapshot(execution ScriptExecutionRecord) ([]byte, error) {
+func encodeBlueprintReleaseHookSnapshot(execution scriptexecutions.ScriptExecutionRecord) ([]byte, error) {
 	return recordcodec.Encode("script-runner-snapshot", storedScriptRunnerSnapshot{
 		ExecutionID: execution.ID, SnapshotID: execution.SnapshotID,
 		SHA256: execution.SnapshotSHA256, Payload: execution.Snapshot,

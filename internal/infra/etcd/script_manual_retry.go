@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -14,10 +15,10 @@ import (
 )
 
 func (repository *TaskRepository) prepareManualScriptRetryAvailability(
-	ctx context.Context, task TaskRecord, execution ScriptExecutionRecord,
+	ctx context.Context, task TaskRecord, execution scriptexecutions.ScriptExecutionRecord,
 	executionValue, rootValue *etcdstore.KeyValue, status taskjournal.TaskStatus, terminalAt *time.Time,
 ) (scriptTerminalSourceRelease, error) {
-	if execution.State != ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
+	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
 		!execution.ActiveReference || execution.ReconciliationRequired {
 		return scriptTerminalSourceRelease{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
 	}
@@ -56,7 +57,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 			*source.RetainUntil,
 		) || retry.Type != taskjournal.TaskScript || retry.OperationID != source.OperationID ||
 		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash || retry.Target != source.Target ||
-		retry.Params[ScriptExecutionIDParam] != source.Params[ScriptExecutionIDParam] ||
+		retry.Params[scriptexecutions.ScriptExecutionIDParam] != source.Params[scriptexecutions.ScriptExecutionIDParam] ||
 		len(source.Steps) != 1 || len(retry.Steps) != 1 || retry.Steps[0].ID != source.Steps[0].ID {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script retry authority is unavailable")
 	}
@@ -68,7 +69,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
-	if execution.State != ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
+	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
 		!execution.ActiveReference || !retry.CreatedAt.After(execution.UpdatedAt) {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script may already have started")
 	}
@@ -109,7 +110,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	}
 	defer fragment.Clear()
 	execution.CurrentTaskID, execution.UpdatedAt = retry.ID, retry.CreatedAt.UTC()
-	if err := validateScriptExecutionRecord(execution); err != nil {
+	if err := scriptexecutions.ValidateScriptExecutionRecord(execution); err != nil {
 		return scriptTaskChange{}, err
 	}
 	encoded, err := recordcodec.Encode("script-execution", execution)

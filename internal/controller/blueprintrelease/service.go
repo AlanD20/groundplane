@@ -20,6 +20,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -271,7 +272,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	if err != nil {
 		return Prepared{}, errs.Wrap(errs.KindInternal, err)
 	}
-	var executions []etcd.ScriptExecutionRecord
+	var executions []scriptexecutions.ScriptExecutionRecord
 	if len(plan.GetScriptRunnerSnapshots()) != 0 {
 		executions, err = etcd.NewScriptExecutionRecords(task, plan, input.CreatedAt)
 		if err != nil {
