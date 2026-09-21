@@ -6,6 +6,7 @@ import (
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -37,8 +38,8 @@ type PlatformResolverTaskPreparer func(
 	etcdstore.Versioned[componentrecord.Record],
 	resolutionrecord.HostResolutionProjectionRecord,
 	TaskRecord,
-	*ComponentObservationRecord,
-) (PlatformComponentTaskRenderInput, error)
+	*platformcomponents.ComponentObservationRecord,
+) (platformcomponents.PlatformComponentTaskRenderInput, error)
 
 // PlatformResolverComponentSelector selects the platform Component that
 // provides the registered dns-resolver capability. The repository supplies

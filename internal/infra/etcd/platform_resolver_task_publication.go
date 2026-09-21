@@ -6,6 +6,7 @@ import (
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -19,13 +20,13 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	current etcdstore.Versioned[componentrecord.Record],
 	projection resolutionrecord.HostResolutionProjectionRecord,
 	task TaskRecord,
-	renderInput PlatformComponentTaskRenderInput,
+	renderInput platformcomponents.PlatformComponentTaskRenderInput,
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
-	if err := validatePlatformComponentRecord(current.Record); err != nil {
+	if err := platformcomponents.ValidatePlatformComponentRecord(current.Record); err != nil {
 		return err
 	}
 	if task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorSystem || task.Executor != taskjournal.TaskExecutorAgent ||
@@ -54,7 +55,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if err := validateTaskRecord(task); err != nil {
 		return err
 	}
-	if err := validatePlatformComponentTaskRenderInput(renderInput); err != nil {
+	if err := platformcomponents.ValidatePlatformComponentTaskRenderInput(renderInput); err != nil {
 		return err
 	}
 	projectionValue, err := resolutionrecord.EncodeHostResolutionProjectionRecord(projection)
@@ -62,7 +63,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		return err
 	}
 	defer clear(projectionValue)
-	renderValue, err := encodePlatformComponentTaskRenderInput(renderInput)
+	renderValue, err := platformcomponents.EncodePlatformComponentTaskRenderInput(renderInput)
 	if err != nil {
 		return err
 	}
@@ -79,8 +80,8 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	defer clear(reference)
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			platformComponentOwnerKey(task.Target),
-			platformComponentKindKey(current.Record.Desired.Kind),
+			platformcomponents.PlatformComponentOwnerKey(task.Target),
+			platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind),
 			platformComponentBootstrapKey(task.Target),
 		},
 		Revision: current.ReadRevision,
@@ -97,18 +98,18 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	}
 	conditions := []etcdstore.Condition{
 		{Key: componentrecord.RecordKey(task.Target), ModRevision: current.Revision},
-		{Key: platformComponentOwnerKey(task.Target), ModRevision: indexes.Values[0].ModRevision},
-		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
+		{Key: platformcomponents.PlatformComponentOwnerKey(task.Target), ModRevision: indexes.Values[0].ModRevision},
+		{Key: platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
 		{Key: platformComponentBootstrapKey(task.Target), ModRevision: indexes.Values[2].ModRevision},
 		{Key: resolutionrecord.StorageKey},
 		{Key: platformComponentTaskActiveKey(task.Target)},
-		{Key: platformComponentTaskRenderInputKey(task.PlanID)},
+		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)},
 		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: resolutionrecord.StorageKey, Value: projectionValue},
-		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
+		{Type: etcdstore.MutationPut, Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
@@ -148,7 +149,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	task TaskRecord,
 	active *etcdstore.KeyValue,
 	sealedPredecessor *TaskRecord,
-	priorObservation *ComponentObservationRecord,
+	priorObservation *platformcomponents.ComponentObservationRecord,
 	baseConditions []etcdstore.Condition,
 ) (hostResolutionReconciliationChange, error) {
 	if repository.platformResolverTaskPreparer == nil {
@@ -179,7 +180,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	task.Params[TaskPlatformComponentDesiredSHA256Param] = desiredSHA256
 	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
-	task.Steps = platformResolverTaskSteps(PlatformComponentTaskRenderInput{EnsureService: ensureService})
+	task.Steps = platformResolverTaskSteps(platformcomponents.PlatformComponentTaskRenderInput{EnsureService: ensureService})
 	var finalLineage *platformResolverLiveLineage
 	if sealedPredecessor != nil {
 		if active == nil || string(active.Value) != sealedPredecessor.ID {
@@ -205,7 +206,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 			return hostResolutionReconciliationChange{}, decodeErr
 		}
 		predecessorInputRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{platformComponentTaskRenderInputKey(predecessor.PlanID)}, Revision: active.ModRevision,
+			Keys: []string{platformcomponents.PlatformComponentTaskRenderInputKey(predecessor.PlanID)}, Revision: active.ModRevision,
 		})
 		if readErr != nil {
 			return hostResolutionReconciliationChange{}, readErr
@@ -217,7 +218,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 				"platform resolver predecessor render input is missing",
 			)
 		}
-		predecessorInput, decodeErr := decodePlatformComponentTaskRenderInput(predecessorInputRead.Values[0].Value)
+		predecessorInput, decodeErr := platformcomponents.DecodePlatformComponentTaskRenderInput(predecessorInputRead.Values[0].Value)
 		if decodeErr != nil {
 			return hostResolutionReconciliationChange{}, decodeErr
 		}
@@ -272,7 +273,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 			"platform resolver render input is not pinned",
 		)
 	}
-	if err := validatePlatformComponentTaskRenderInput(renderInput); err != nil {
+	if err := platformcomponents.ValidatePlatformComponentTaskRenderInput(renderInput); err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
 	if renderInput.TaskID != task.ID || renderInput.PlanID != task.PlanID || renderInput.ComponentID != task.Target {
@@ -283,8 +284,8 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			platformComponentOwnerKey(current.Record.Desired.ID),
-			platformComponentKindKey(current.Record.Desired.Kind),
+			platformcomponents.PlatformComponentOwnerKey(current.Record.Desired.ID),
+			platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -301,7 +302,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 			"platform resolver Component indexes are missing",
 		)
 	}
-	renderValue, err := encodePlatformComponentTaskRenderInput(renderInput)
+	renderValue, err := platformcomponents.EncodePlatformComponentTaskRenderInput(renderInput)
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
@@ -319,9 +320,9 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	conditions := append([]etcdstore.Condition(nil), baseConditions...)
 	for _, condition := range []etcdstore.Condition{
 		{Key: componentrecord.RecordKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
-		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
-		{Key: platformComponentTaskRenderInputKey(task.PlanID)},
+		{Key: platformcomponents.PlatformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
+		{Key: platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
+		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)},
 		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: taskjournal.TaskWorkspacePlatformIndexKey(task.ID)},
@@ -334,7 +335,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	conditions = appendHostResolutionCondition(conditions, activeCondition)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
+		{Type: etcdstore.MutationPut, Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -27,7 +28,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			platformComponentTaskRenderInputKey(source.Record.PlanID),
+			platformcomponents.PlatformComponentTaskRenderInputKey(source.Record.PlanID),
 			platformComponentTaskActiveKey(source.Record.Target),
 		},
 		Revision: source.ReadRevision,
@@ -41,7 +42,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 			"platform resolver retry input is missing",
 		)
 	}
-	input, err := decodePlatformComponentTaskRenderInput(state.Values[0].Value)
+	input, err := platformcomponents.DecodePlatformComponentTaskRenderInput(state.Values[0].Value)
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
@@ -87,7 +88,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 		)
 	}
 	conditions := []etcdstore.Condition{
-		{Key: platformComponentTaskRenderInputKey(input.PlanID), ModRevision: state.Values[0].ModRevision},
+		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(input.PlanID), ModRevision: state.Values[0].ModRevision},
 		{Key: platformComponentTaskActiveKey(input.ComponentID)},
 	}
 	if origin.Record.ID != source.Record.ID {

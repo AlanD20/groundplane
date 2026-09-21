@@ -12,6 +12,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
 )
@@ -58,11 +59,11 @@ func newControllerResolverComposition(
 		current etcdstore.Versioned[componentrecord.Record],
 		projection resolutionrecord.HostResolutionProjectionRecord,
 		task etcd.TaskRecord,
-		priorObservation *etcd.ComponentObservationRecord,
-	) (etcd.PlatformComponentTaskRenderInput, error) {
+		priorObservation *platformcomponents.ComponentObservationRecord,
+	) (platformcomponents.PlatformComponentTaskRenderInput, error) {
 		desired, err := componentrecord.ProjectRecord(current.Record)
 		if err != nil {
-			return etcd.PlatformComponentTaskRenderInput{}, err
+			return platformcomponents.PlatformComponentTaskRenderInput{}, err
 		}
 		return platformRenderPlanner.PrepareConfigTaskAtProjection(
 			ctx, current, desired, task, projection, priorObservation,

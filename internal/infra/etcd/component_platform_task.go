@@ -8,6 +8,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -29,13 +30,13 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task TaskRecord,
-	renderInput PlatformComponentTaskRenderInput,
+	renderInput platformcomponents.PlatformComponentTaskRenderInput,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validatePlatformComponentRecord(current.Record); err != nil {
+	if err := platformcomponents.ValidatePlatformComponentRecord(current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateComponentVersion(current); err != nil {
@@ -45,7 +46,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validatePlatformComponentRecord(replacement); err != nil {
+	if err := platformcomponents.ValidatePlatformComponentRecord(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if task.Target != replacement.Desired.ID || task.Executor != taskjournal.TaskExecutorAgent ||
@@ -77,7 +78,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 			"platform Component Task render input does not match its Task",
 		)
 	}
-	renderInputValue, err := encodePlatformComponentTaskRenderInput(renderInput)
+	renderInputValue, err := platformcomponents.EncodePlatformComponentTaskRenderInput(renderInput)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -94,8 +95,8 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			platformComponentOwnerKey(current.Record.Desired.ID),
-			platformComponentKindKey(current.Record.Desired.Kind),
+			platformcomponents.PlatformComponentOwnerKey(current.Record.Desired.ID),
+			platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -128,9 +129,9 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	defer clear(reference)
 	conditions := []etcdstore.Condition{
 		{Key: componentrecord.RecordKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
-		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
-		{Key: platformComponentTaskRenderInputKey(task.PlanID)},
+		{Key: platformcomponents.PlatformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
+		{Key: platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
+		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)},
 		{Key: taskjournal.TaskStorageKey(task.ID)},
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
@@ -140,7 +141,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(replacement.Desired.ID), Value: componentValue},
 		componentrecord.WriteFenceMutation(replacement.Desired.ID),
-		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: etcdstore.MutationPut, Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
@@ -201,7 +202,7 @@ func requireAppliedPlatformComponentTask(result IdempotencyTransactionResult) er
 }
 
 func PlatformComponentDesiredDigest(record componentrecord.Record) (string, error) {
-	if err := validatePlatformComponentRecord(record); err != nil {
+	if err := platformcomponents.ValidatePlatformComponentRecord(record); err != nil {
 		return "", err
 	}
 	encoded, err := json.Marshal(record.Desired)

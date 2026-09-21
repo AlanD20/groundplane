@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
@@ -21,7 +22,7 @@ type platformComponentTaskChange struct {
 	mutations   []etcdstore.Mutation
 	values      [][]byte
 	promoted    *componentrecord.Record
-	observation *ComponentObservationRecord
+	observation *platformcomponents.ComponentObservationRecord
 }
 
 func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
@@ -37,9 +38,9 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	}
 	stateKeys := []string{
 		componentrecord.RecordKey(task.Target),
-		platformComponentTaskRenderInputKey(task.PlanID),
+		platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
 		platformComponentTaskActiveKey(task.Target),
-		componentObservationKey(task.Target),
+		platformcomponents.ComponentObservationKey(task.Target),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
@@ -57,7 +58,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
-	input, err := decodePlatformComponentTaskRenderInput(renderInputValue.Value)
+	input, err := platformcomponents.DecodePlatformComponentTaskRenderInput(renderInputValue.Value)
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
@@ -91,7 +92,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: componentrecord.RecordKey(task.Target), ModRevision: componentValue.ModRevision},
-			{Key: platformComponentTaskRenderInputKey(task.PlanID), ModRevision: renderInputValue.ModRevision},
+			{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID), ModRevision: renderInputValue.ModRevision},
 		},
 	}
 	change.conditions = append(change.conditions, etcdstore.Condition{
@@ -102,10 +103,10 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	}
 	priorObservation := state.Values[3]
 	priorModRevision := int64(0)
-	var decodedPrior *ComponentObservationRecord
+	var decodedPrior *platformcomponents.ComponentObservationRecord
 	if priorObservation != nil {
 		priorModRevision = priorObservation.ModRevision
-		decoded, err := decodeComponentObservation(priorObservation.Value)
+		decoded, err := platformcomponents.DecodeComponentObservation(priorObservation.Value)
 		if err != nil {
 			return platformComponentTaskChange{}, err
 		}
@@ -138,16 +139,16 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
-	observationValue, err := encodeComponentObservation(observation)
+	observationValue, err := platformcomponents.EncodeComponentObservation(observation)
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
 	change.conditions = append(change.conditions, etcdstore.Condition{
-		Key: componentObservationKey(task.Target), ModRevision: priorModRevision,
+		Key: platformcomponents.ComponentObservationKey(task.Target), ModRevision: priorModRevision,
 	})
 	change.values = append(change.values, observationValue)
 	change.mutations = append(change.mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: componentObservationKey(task.Target), Value: observationValue,
+		Type: etcdstore.MutationPut, Key: platformcomponents.ComponentObservationKey(task.Target), Value: observationValue,
 	})
 	change.observation = &observation
 	generatedServices := []string(nil)
@@ -180,12 +181,12 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 func newPlatformComponentObservation(
 	component componentrecord.Record,
 	desiredRevision int64,
-	input PlatformComponentTaskRenderInput,
+	input platformcomponents.PlatformComponentTaskRenderInput,
 	task TaskRecord,
 	result taskjournal.TaskResultRecord,
-) (ComponentObservationRecord, error) {
+) (platformcomponents.ComponentObservationRecord, error) {
 	if desiredRevision <= 0 || task.TerminalAssignment == nil || task.FinishedAt == nil || len(task.Steps) == 0 {
-		return ComponentObservationRecord{}, errs.New(
+		return platformcomponents.ComponentObservationRecord{}, errs.New(
 			errs.KindStateConflict,
 			"completed platform Component Task assignment evidence is missing",
 		)
@@ -194,7 +195,7 @@ func newPlatformComponentObservation(
 	if !input.DisableService {
 		observedAt = result.DNSResolverCandidateObservation.ObservedAt
 	}
-	record := ComponentObservationRecord{
+	record := platformcomponents.ComponentObservationRecord{
 		ComponentID: input.ComponentID, ServiceID: input.GeneratedServiceID,
 		PlanID: input.OwnershipPlanID, ComposeArtifactID: input.ComposeArtifactID,
 		Enabled: component.Desired.Enabled, Healthy: component.Desired.Enabled,
@@ -217,14 +218,14 @@ func newPlatformComponentObservation(
 	} else {
 		record.CorefileSHA256 = input.ExpectedPreviousArtifactSHA256
 	}
-	if err := validateComponentObservation(record); err != nil {
-		return ComponentObservationRecord{}, err
+	if err := platformcomponents.ValidateComponentObservation(record); err != nil {
+		return platformcomponents.ComponentObservationRecord{}, err
 	}
 	return record, nil
 }
 
 func validatePlatformComponentObservation(
-	input PlatformComponentTaskRenderInput,
+	input platformcomponents.PlatformComponentTaskRenderInput,
 	renderGeneration uint64,
 	result taskjournal.TaskResultRecord,
 ) error {
@@ -268,7 +269,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			platformComponentTaskRenderInputKey(task.PlanID),
+			platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
 			platformComponentTaskActiveKey(task.Target),
 		},
 		Revision: revision,
@@ -279,7 +280,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 	if state == nil || len(state.Values) != 2 || state.Values[0] == nil {
 		return errs.New(errs.KindStateConflict, "platform Component Task render input is missing")
 	}
-	input, err := decodePlatformComponentTaskRenderInput(state.Values[0].Value)
+	input, err := platformcomponents.DecodePlatformComponentTaskRenderInput(state.Values[0].Value)
 	if err != nil {
 		return err
 	}

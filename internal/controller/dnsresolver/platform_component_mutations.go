@@ -6,6 +6,7 @@ import (
 	"errors"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"net/netip"
@@ -131,7 +132,7 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	}
 	now := service.now().UTC()
 	task := newPlatformComponentLifecycleTask(componentID, idempotencyKey, now, ensureService, disableService)
-	var renderInput etcd.PlatformComponentTaskRenderInput
+	var renderInput platformcomponents.PlatformComponentTaskRenderInput
 	if disableService {
 		renderInput, err = service.planner.PrepareDisableTask(ctx, current, desired, task)
 	} else {

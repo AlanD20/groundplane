@@ -6,38 +6,39 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func sealPlatformComponentTaskPlanHash(
 	task etcd.TaskRecord,
-	input etcd.PlatformComponentTaskRenderInput,
+	input platformcomponents.PlatformComponentTaskRenderInput,
 	observationAction componentsdk.ActionID,
-) (etcd.PlatformComponentTaskRenderInput, error) {
+) (platformcomponents.PlatformComponentTaskRenderInput, error) {
 	definitionDigest, err := componentDigest(input.DefinitionSHA256)
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, err
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	catalogDigest, err := componentDigest(input.CatalogSHA256)
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, err
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	artifactDigest, err := componentDigest(input.ArtifactSHA256)
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, err
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	componentID, err := componentsdk.NewComponentID(input.ComponentID)
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
+		return platformcomponents.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
 	}
 	artifactID, err := componentsdk.NewArtifactID(input.ArtifactID)
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
+		return platformcomponents.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
 	}
 	artifact, err := componentsdk.NewArtifactReference(artifactID, artifactDigest)
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
+		return platformcomponents.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
 	}
 	envelope, err := componentsdk.NewActionEnvelope(componentsdk.ActionEnvelopeInput{
 		ComponentID: componentID, DefinitionDigest: definitionDigest, CatalogDigest: catalogDigest,
@@ -45,11 +46,11 @@ func sealPlatformComponentTaskPlanHash(
 		Generation: uint64(task.RenderGeneration),
 	})
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
+		return platformcomponents.PlatformComponentTaskRenderInput{}, errs.Wrap(errs.KindInternal, err)
 	}
 	previousArtifactDigest, err := hex.DecodeString(input.ExpectedPreviousArtifactSHA256)
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, errs.New(
+		return platformcomponents.PlatformComponentTaskRenderInput{}, errs.New(
 			errs.KindInternal,
 			"platform Component prior artifact digest is invalid",
 		)
@@ -78,7 +79,7 @@ func sealPlatformComponentTaskPlanHash(
 		})
 	}
 	if err != nil {
-		return etcd.PlatformComponentTaskRenderInput{}, err
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	input.ExecutionPlanSHA256 = hex.EncodeToString(execution.GetPlanHash())
 	return input, nil

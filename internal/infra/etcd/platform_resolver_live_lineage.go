@@ -1,6 +1,9 @@
 package etcd
 
-import taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+import (
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+)
 
 type platformResolverLiveLineage struct {
 	priorObservationModRevision    int64
@@ -12,10 +15,10 @@ type platformResolverLiveLineage struct {
 }
 
 func platformResolverObservationForLineage(
-	input PlatformComponentTaskRenderInput,
+	input platformcomponents.PlatformComponentTaskRenderInput,
 	lineage platformResolverLiveLineage,
-	observation *ComponentObservationRecord,
-) *ComponentObservationRecord {
+	observation *platformcomponents.ComponentObservationRecord,
+) *platformcomponents.ComponentObservationRecord {
 	if observation != nil && observation.Revision == lineage.priorObservationRevision &&
 		observation.TaskID == lineage.predecessorTaskID &&
 		observation.CorefileSHA256 == lineage.expectedPreviousArtifactSHA256 &&
@@ -25,14 +28,14 @@ func platformResolverObservationForLineage(
 		return observation
 	}
 	if lineage.expectedPreviousArtifactSHA256 == "" {
-		return &ComponentObservationRecord{}
+		return &platformcomponents.ComponentObservationRecord{}
 	}
 	composeArtifact := input.ComposeArtifact
 	if input.RollbackComposeArtifact != nil &&
 		lineage.expectedPreviousArtifactID == input.ExpectedPreviousArtifactID {
 		composeArtifact = input.RollbackComposeArtifact
 	}
-	return &ComponentObservationRecord{
+	return &platformcomponents.ComponentObservationRecord{
 		ComponentID: input.ComponentID, ServiceID: input.GeneratedServiceID,
 		PlanID: input.OwnershipPlanID, ComposeArtifactID: input.ComposeArtifactID,
 		Enabled: true, Healthy: true, RenderGeneration: lineage.expectedPreviousGeneration,
@@ -51,7 +54,7 @@ func platformResolverObservationForLineage(
 
 func platformResolverFinalLiveLineage(
 	predecessor TaskRecord,
-	input PlatformComponentTaskRenderInput,
+	input platformcomponents.PlatformComponentTaskRenderInput,
 ) (platformResolverLiveLineage, bool) {
 	if predecessor.Result == nil || predecessor.Result.Kind != taskjournal.TaskResultCompose ||
 		predecessor.Result.ReconciliationRequired {

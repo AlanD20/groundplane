@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
@@ -15,7 +16,7 @@ func resolverInputFromProjection(
 	record resolutionrecord.HostResolutionProjectionRecord,
 	baselineGeneration uint64,
 	resolvers []componentdns.ResolverEndpoint,
-) (componentdns.ResolverInput, []etcd.PlatformDNSHost, error) {
+) (componentdns.ResolverInput, []platformcomponents.PlatformDNSHost, error) {
 	baseline, err := componentdns.NewResolverBaseline(baselineGeneration, resolvers)
 	if err != nil {
 		return componentdns.ResolverInput{}, nil, errs.Wrap(errs.KindInternal, err)
@@ -45,9 +46,9 @@ func resolverInputFromProjection(
 	if err != nil {
 		return componentdns.ResolverInput{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	durable := make([]etcd.PlatformDNSHost, len(projection.Hosts))
+	durable := make([]platformcomponents.PlatformDNSHost, len(projection.Hosts))
 	for index, host := range projection.Hosts {
-		durable[index] = etcd.PlatformDNSHost{
+		durable[index] = platformcomponents.PlatformDNSHost{
 			Address:   host.Address.String(),
 			Hostnames: append([]string(nil), host.Hostnames...),
 		}

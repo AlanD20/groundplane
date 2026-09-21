@@ -7,6 +7,7 @@ import (
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
@@ -109,7 +110,7 @@ func EnsurePlatformResolverTask(
 
 func finalizePlatformComponentTask(
 	task etcd.TaskRecord,
-	input etcd.PlatformComponentTaskRenderInput,
+	input platformcomponents.PlatformComponentTaskRenderInput,
 ) (etcd.TaskRecord, error) {
 	if input.TaskID != task.ID || input.PlanID != task.PlanID || input.ComponentID != task.Target {
 		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "platform Component plan identity changed")

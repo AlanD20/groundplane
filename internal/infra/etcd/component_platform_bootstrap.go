@@ -4,6 +4,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -52,7 +53,7 @@ func (repository *ComponentRepository) EnsurePlatformComponents(
 ) ([]etcdstore.Versioned[componentrecord.Record], error) {
 	result := make([]etcdstore.Versioned[componentrecord.Record], 0, len(records))
 	for _, record := range records {
-		if err := validatePlatformComponentRecord(record); err != nil {
+		if err := platformcomponents.ValidatePlatformComponentRecord(record); err != nil {
 			return nil, err
 		}
 		current, err := repository.GetComponent(ctx, record.Desired.ID)
@@ -85,7 +86,7 @@ func (repository *ComponentRepository) HasPlatformComponentBootstrapProvenance(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return false, err
 	}
-	if err := validatePlatformComponentRecord(current.Record); err != nil {
+	if err := platformcomponents.ValidatePlatformComponentRecord(current.Record); err != nil {
 		return false, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision {

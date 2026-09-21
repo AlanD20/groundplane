@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,7 +22,7 @@ func (repository *TaskRepository) platformResolverAtRevision(
 	start := ""
 	for {
 		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: platformComponentOwnerPrefix, StartExclusive: start,
+			Prefix: platformcomponents.PlatformComponentOwnerPrefix, StartExclusive: start,
 			Limit: etcdstore.MaximumPageLimit, Revision: revision,
 		})
 		if err != nil {
@@ -34,14 +35,14 @@ func (repository *TaskRepository) platformResolverAtRevision(
 			)
 		}
 		for _, value := range page.Values {
-			if !strings.HasPrefix(value.Key, platformComponentOwnerPrefix) {
+			if !strings.HasPrefix(value.Key, platformcomponents.PlatformComponentOwnerPrefix) {
 				recordquery.ClearRangeKeyValues(page.Values)
 				return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 					errs.KindInternal,
 					"platform Component scan contains an invalid key",
 				)
 			}
-			componentID := strings.TrimPrefix(value.Key, platformComponentOwnerPrefix)
+			componentID := strings.TrimPrefix(value.Key, platformcomponents.PlatformComponentOwnerPrefix)
 			if ids.Validate(ids.KindComponent, componentID) != nil || string(value.Value) != componentID {
 				recordquery.ClearRangeKeyValues(page.Values)
 				return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
@@ -170,27 +171,27 @@ func (repository *TaskRepository) platformResolverTaskInputAtRevision(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (PlatformComponentTaskRenderInput, error) {
+) (platformcomponents.PlatformComponentTaskRenderInput, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{platformComponentTaskRenderInputKey(task.PlanID)}, Revision: revision,
+		Keys: []string{platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)}, Revision: revision,
 	})
 	if err != nil {
-		return PlatformComponentTaskRenderInput{}, err
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return PlatformComponentTaskRenderInput{}, errs.New(
+		return platformcomponents.PlatformComponentTaskRenderInput{}, errs.New(
 			errs.KindStateConflict,
 			"platform resolver render input is missing",
 		)
 	}
-	input, err := decodePlatformComponentTaskRenderInput(read.Values[0].Value)
+	input, err := platformcomponents.DecodePlatformComponentTaskRenderInput(read.Values[0].Value)
 	if err != nil {
-		return PlatformComponentTaskRenderInput{}, err
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	if input.PlanID != task.PlanID || input.ComponentID != task.Target || task.PlanHash != input.ExecutionPlanSHA256 ||
 		!platformResolverTaskInputBelongsToTask(task, input) ||
 		task.Params[TaskPlatformComponentDesiredSHA256Param] != input.DesiredSHA256 {
-		return PlatformComponentTaskRenderInput{}, errs.New(
+		return platformcomponents.PlatformComponentTaskRenderInput{}, errs.New(
 			errs.KindStateConflict,
 			"platform resolver render input is not pinned",
 		)
@@ -200,7 +201,7 @@ func (repository *TaskRepository) platformResolverTaskInputAtRevision(
 
 func platformResolverTaskInputBelongsToTask(
 	task TaskRecord,
-	input PlatformComponentTaskRenderInput,
+	input platformcomponents.PlatformComponentTaskRenderInput,
 ) bool {
 	return input.TaskID == task.ID || task.RetryOf != ""
 }

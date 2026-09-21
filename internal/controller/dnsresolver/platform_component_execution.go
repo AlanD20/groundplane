@@ -10,6 +10,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"io"
 	"net/netip"
@@ -36,7 +37,7 @@ type ComponentExecutionRepository interface {
 	GetPlatformComponentTaskRenderInput(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.PlatformComponentTaskRenderInput], error)
+	) (etcdstore.Versioned[platformcomponents.PlatformComponentTaskRenderInput], error)
 	GetComponent(context.Context, string) (etcdstore.Versioned[componentrecord.Record], error)
 }
 
@@ -48,7 +49,7 @@ type PlatformExecutionPlanner struct {
 }
 
 type resolvedPlatformComponent struct {
-	input          etcd.PlatformComponentTaskRenderInput
+	input          platformcomponents.PlatformComponentTaskRenderInput
 	plan           componentsdk.EnvironmentPlan
 	envelope       componentsdk.ActionEnvelope
 	implementation componentsdk.ImplementationKey

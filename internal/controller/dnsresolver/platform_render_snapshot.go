@@ -7,6 +7,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 )
 
 type fixedProjectionReader struct {
@@ -15,7 +16,7 @@ type fixedProjectionReader struct {
 
 type fixedObservationReader struct {
 	componentID string
-	record      etcd.ComponentObservationRecord
+	record      platformcomponents.ComponentObservationRecord
 }
 
 func (reader fixedProjectionReader) GetHostResolutionProjection(
@@ -27,11 +28,11 @@ func (reader fixedProjectionReader) GetHostResolutionProjection(
 func (reader fixedObservationReader) GetPlatformComponentObservation(
 	_ context.Context,
 	componentID string,
-) (etcdstore.Versioned[etcd.ComponentObservationRecord], bool, error) {
+) (etcdstore.Versioned[platformcomponents.ComponentObservationRecord], bool, error) {
 	if componentID != reader.componentID {
-		return etcdstore.Versioned[etcd.ComponentObservationRecord]{}, false, nil
+		return etcdstore.Versioned[platformcomponents.ComponentObservationRecord]{}, false, nil
 	}
-	return etcdstore.Versioned[etcd.ComponentObservationRecord]{Record: reader.record}, true, nil
+	return etcdstore.Versioned[platformcomponents.ComponentObservationRecord]{Record: reader.record}, true, nil
 }
 
 // PrepareConfigTaskAtProjection is the startup/recovery seam. It uses the
@@ -43,8 +44,8 @@ func (planner *PlatformRenderPlanner) PrepareConfigTaskAtProjection(
 	desired core.Component,
 	task etcd.TaskRecord,
 	projection resolutionrecord.HostResolutionProjectionRecord,
-	priorObservation *etcd.ComponentObservationRecord,
-) (etcd.PlatformComponentTaskRenderInput, error) {
+	priorObservation *platformcomponents.ComponentObservationRecord,
+) (platformcomponents.PlatformComponentTaskRenderInput, error) {
 	clone := *planner
 	clone.projections = fixedProjectionReader{record: projection}
 	if priorObservation != nil {
@@ -61,7 +62,7 @@ func (planner *PlatformRenderPlanner) PrepareBootstrapConfigTaskAtProjection(
 	desired core.Component,
 	task etcd.TaskRecord,
 	projection resolutionrecord.HostResolutionProjectionRecord,
-) (etcd.PlatformComponentTaskRenderInput, error) {
+) (platformcomponents.PlatformComponentTaskRenderInput, error) {
 	clone := *planner
 	clone.bootstrapProvenance = true
 	return clone.PrepareConfigTaskAtProjection(ctx, current, desired, task, projection, nil)

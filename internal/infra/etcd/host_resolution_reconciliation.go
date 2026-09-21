@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -43,7 +44,7 @@ func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRec
 	}
 }
 
-func platformResolverTaskSteps(input PlatformComponentTaskRenderInput) []taskjournal.TaskStepRecord {
+func platformResolverTaskSteps(input platformcomponents.PlatformComponentTaskRenderInput) []taskjournal.TaskStepRecord {
 	count := 2
 	if input.EnsureService {
 		count = 4
