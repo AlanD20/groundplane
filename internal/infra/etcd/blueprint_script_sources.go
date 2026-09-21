@@ -9,6 +9,7 @@ import (
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -51,7 +52,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				"Blueprint Script runner snapshot evidence is invalid",
 			)
 		}
-		if err := validateScriptContextSources(sources, &snapshot); err != nil {
+		if err := scriptsourcequeries.ValidateScriptContextSources(sources, &snapshot); err != nil {
 			return nil, err
 		}
 		base := sourceref.Reference{

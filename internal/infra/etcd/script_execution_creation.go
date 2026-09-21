@@ -163,7 +163,7 @@ func validateScriptExecutionSources(sources scriptsourcequeries.ScriptExecutionS
 			return errs.New(errs.KindValidationFailed, "Script execution network source revision is invalid")
 		}
 	}
-	return validateStoredScriptContext(sources, execution)
+	return scriptsourcequeries.ValidateStoredScriptContext(sources, execution)
 }
 
 func scriptExecutionProjectionConditions(sources scriptsourcequeries.ScriptExecutionSources) []etcdstore.Condition {

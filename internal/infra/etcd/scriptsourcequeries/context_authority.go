@@ -1,10 +1,9 @@
-package etcd
+package scriptsourcequeries
 
 import (
 	"bytes"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
-	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -14,17 +13,17 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func validateStoredScriptContext(sources scriptsourcequeries.ScriptExecutionSources, execution scriptexecutions.ScriptExecutionRecord) error {
+func ValidateStoredScriptContext(sources ScriptExecutionSources, execution scriptexecutions.ScriptExecutionRecord) error {
 	var snapshot agentpb.ResolvedRunnerSnapshot
 	if err := proto.Unmarshal(execution.Snapshot, &snapshot); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)
 	}
-	return validateScriptContextSources(sources, &snapshot)
+	return ValidateScriptContextSources(sources, &snapshot)
 }
 
 // validateScriptContextSources compares captured machine authority to the actual
 // fixed-read Script metadata. Hashes cannot authorize a different desired context.
-func validateScriptContextSources(sources scriptsourcequeries.ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) error {
+func ValidateScriptContextSources(sources ScriptExecutionSources, snapshot *agentpb.ResolvedRunnerSnapshot) error {
 	if snapshot == nil {
 		return errs.New(errs.KindValidationFailed, "Script runner context snapshot is missing")
 	}

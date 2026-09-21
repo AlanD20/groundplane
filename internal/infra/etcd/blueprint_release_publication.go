@@ -14,6 +14,7 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
+	scriptsourcequeries "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcequeries"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
@@ -444,7 +445,7 @@ func prepareBlueprintReleaseHookPublicationFragment(
 		if execution.ScriptSetGeneration == "" {
 			execution.ScriptSetGeneration = hook.Sources.Script.Record.ScriptSetGeneration
 		}
-		if validateStoredScriptContext(hook.Sources, execution) != nil ||
+		if scriptsourcequeries.ValidateStoredScriptContext(hook.Sources, execution) != nil ||
 			scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 			execution.PlanHash != task.PlanHash || task.Params[releaserender.ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {

@@ -59,7 +59,7 @@ func (ledger *ReleaseLedger) blueprintScriptPrimaryConditions(
 			(execution.ScriptSetGeneration != "" && script.ScriptSetGeneration != execution.ScriptSetGeneration) {
 			return nil, errs.New(errs.KindValidationFailed, "Blueprint Script primary differs from its execution")
 		}
-		if err := validateStoredScriptContext(hook.Sources, execution); err != nil {
+		if err := scriptsourcequeries.ValidateStoredScriptContext(hook.Sources, execution); err != nil {
 			return nil, err
 		}
 		condition, err := preparedScriptPrimary(ctx, ledger.store, hook.Sources)
