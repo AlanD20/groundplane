@@ -124,7 +124,7 @@ func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearMutationValues(plan.mutations)
+	defer etcdstore.ClearMutationValues(plan.mutations)
 	if backupPolicyReplacementOperationCount(plan, marker) > etcdstore.MaximumOperations {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,

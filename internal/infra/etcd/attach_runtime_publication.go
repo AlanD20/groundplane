@@ -22,7 +22,7 @@ func (repository *AttachRepository) publishAttachRuntimeTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer binding.clear()
-	defer clearMutationValues(binding.mutations)
+	defer etcdstore.ClearMutationValues(binding.mutations)
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		return binding.classify(revision, values, classifyConflict)
 	}

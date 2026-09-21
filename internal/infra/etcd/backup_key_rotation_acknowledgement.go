@@ -48,7 +48,7 @@ func (change *backupKeyRotationTaskChange) clear() {
 	if change == nil {
 		return
 	}
-	clearMutationValues(change.mutations)
+	etcdstore.ClearMutationValues(change.mutations)
 	change.conditions = nil
 	change.mutations = nil
 }
@@ -183,7 +183,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 	)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return backupKeyRotationTaskChange{}, err
 	}
 	mutations = append(mutations, epoch)

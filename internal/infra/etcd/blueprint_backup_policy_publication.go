@@ -159,7 +159,7 @@ func prepareBlueprintBackupPolicyPublication(
 		compare(
 			backupPolicyCompareConnectorOwnerIndex,
 			state.retainedConnectorID,
-			connectorEnvironmentKey(state.environmentID, state.retainedConnectorID),
+			connectorrecord.ConnectorEnvironmentKey(state.environmentID, state.retainedConnectorID),
 			ownerRevision,
 		)
 		compare(
@@ -260,7 +260,7 @@ func equalEnvironmentBlueprintBackupPolicy(left, right *projectionrecord.Environ
 }
 
 func clearPreparedBlueprintBackupPolicyPublication(publication preparedBlueprintBackupPolicyPublication) {
-	clearMutationValues(publication.mutations)
+	etcdstore.ClearMutationValues(publication.mutations)
 }
 
 func classifyEnvironmentBlueprintBackupPolicyPublication(

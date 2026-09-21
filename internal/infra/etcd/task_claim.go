@@ -139,7 +139,7 @@ func (repository *TaskRepository) claimNextTask(
 		}
 		hookInputConditions, err := repository.backingHookInputClaimConditions(ctx, task, candidate.readRevision)
 		if err != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return TaskAssignment{}, false, err
 		}
 		conditions = append(conditions, hookInputConditions...)
@@ -148,11 +148,11 @@ func (repository *TaskRepository) claimNextTask(
 				ctx, task, taskValue.ModRevision, candidate.readRevision,
 			)
 		if err != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return TaskAssignment{}, false, err
 		}
 		if !scriptSourceReady {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return TaskAssignment{}, false, nil
 		}
 		defer scriptSource.Clear()
@@ -161,11 +161,11 @@ func (repository *TaskRepository) claimNextTask(
 		requirementEvidence, requirementApplies, requirementReady, err :=
 			repository.observeBlueprintRequirementGateForClaim(ctx, task, candidate.readRevision)
 		if err != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return TaskAssignment{}, false, err
 		}
 		if requirementApplies && !requirementReady {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return TaskAssignment{}, false, nil
 		}
 		var writerValue []byte
@@ -197,13 +197,13 @@ func (repository *TaskRepository) claimNextTask(
 					candidate.readRevision,
 				)
 				if authorityErr != nil {
-					clearMutationValues(mutations)
+					etcdstore.ClearMutationValues(mutations)
 					return TaskAssignment{}, false, authorityErr
 				}
 				assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
 				updatedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
 				if encodeErr != nil {
-					clearMutationValues(mutations)
+					etcdstore.ClearMutationValues(mutations)
 					return TaskAssignment{}, false, encodeErr
 				}
 				clear(assignmentValue)
@@ -216,7 +216,7 @@ func (repository *TaskRepository) claimNextTask(
 						ctx, task, writer, candidate.readRevision, requirementEvidence.gateRevision,
 					)
 				if claimErr != nil {
-					clearMutationValues(mutations)
+					etcdstore.ClearMutationValues(mutations)
 					return TaskAssignment{}, false, claimErr
 				}
 				conditions = append(conditions, epochCondition)
@@ -230,13 +230,13 @@ func (repository *TaskRepository) claimNextTask(
 				candidate.readRevision,
 			)
 			if authorityErr != nil {
-				clearMutationValues(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return TaskAssignment{}, false, authorityErr
 			}
 			assignment.RestorationAuthority, assignment.RestorationAuthoritySHA256 = &authority, authorityDigest
 			updatedAssignmentValue, encodeErr := taskassignments.EncodeTaskAssignment(assignment)
 			if encodeErr != nil {
-				clearMutationValues(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return TaskAssignment{}, false, encodeErr
 			}
 			clear(assignmentValue)
@@ -247,7 +247,7 @@ func (repository *TaskRepository) claimNextTask(
 		}
 		attachChange, err := repository.prepareAttachTaskClaim(ctx, task, candidate.readRevision)
 		if err != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return TaskAssignment{}, false, err
 		}
 		if attachChange.applies {
@@ -258,7 +258,7 @@ func (repository *TaskRepository) claimNextTask(
 		}
 		blueprintAttachChange, err := repository.prepareBlueprintAttachTaskClaim(ctx, task, candidate.readRevision)
 		if err != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			clearAttachTaskChange(attachChange)
 			return TaskAssignment{}, false, err
 		}
@@ -270,7 +270,7 @@ func (repository *TaskRepository) claimNextTask(
 			conditions = append(conditions, requirementEvidence.conditions...)
 		}
 		transaction, err := repository.store.Transact(ctx, conditions, mutations)
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		clearAttachTaskChange(attachChange)
 		clearBlueprintAttachTaskChange(blueprintAttachChange)
 		if err != nil {

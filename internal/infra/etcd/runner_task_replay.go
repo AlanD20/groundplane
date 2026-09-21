@@ -37,8 +37,8 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 ) error {
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			runnerKey(task.Target),
-			runnerLifecycleKey(task.Target),
+			runnerrecord.RunnerKey(task.Target),
+			runnerrecord.RunnerLifecycleKey(task.Target),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 		},
 		Revision: revision,
@@ -77,16 +77,16 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			runnerKey(task.Target),
-			runnerLifecycleKey(task.Target),
+			runnerrecord.RunnerKey(task.Target),
+			runnerrecord.RunnerLifecycleKey(task.Target),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 			runnerrecord.RunnerRemovalIntentKey(task.Target),
-			runnerObservationKey(task.Target),
-			runnerOwnerKey(evidence.ownerKind, evidence.ownerID, task.Target),
+			runnerrecord.RunnerObservationKey(task.Target),
+			runnerrecord.RunnerOwnerKey(evidence.ownerKind, evidence.ownerID, task.Target),
 			runnerrecord.RunnerTenantQuotaKey(evidence.tenantID),
 			runnerrecord.RunnerHostSlotKey(evidence.hostSlot),
 			runnerrecord.SystemPoolRegistryKey,
-			runnerRuntimeOwnershipKey(task.Target),
+			runnerrecord.RunnerRuntimeOwnershipKey(task.Target),
 		},
 		Revision: revision,
 	})
@@ -130,7 +130,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 		return errs.New(errs.KindStateConflict, "failed runner removal retained corrupt target state")
 	}
 	slug, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
+		Keys:     []string{runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
 		Revision: revision,
 	})
 	if err != nil {

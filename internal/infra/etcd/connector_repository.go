@@ -5,11 +5,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const (
-	connectorEnvironmentIndexPrefix = "/v1/indexes/connectors/by-environment/"
-	connectorNameIndexPrefix        = "/v1/indexes/connectors/by-name/environment/"
-)
-
 type ConnectorRepository struct {
 	store hierarchyStore
 }

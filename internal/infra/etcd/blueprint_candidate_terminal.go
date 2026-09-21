@@ -282,7 +282,7 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 			}
 		}
 		for offset, value := range values {
-			condition := etcdstore.Condition{Key: keys[index*6+offset], ModRevision: keyValueRevision(value)}
+			condition := etcdstore.Condition{Key: keys[index*6+offset], ModRevision: etcdstore.RevisionOf(value)}
 			conditions = append(conditions, condition)
 		}
 	}

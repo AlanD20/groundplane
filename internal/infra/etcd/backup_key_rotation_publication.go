@@ -113,7 +113,7 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	}
 	mutationPlan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classify)
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
 	return (&IdempotencyRepository{store: repository.store}).Apply(ctx, marker, mutationPlan)

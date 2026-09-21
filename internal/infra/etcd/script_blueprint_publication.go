@@ -40,7 +40,7 @@ func (publication BlueprintScriptPublication) validate(
 }
 
 func (publication BlueprintScriptPublication) classify(values []*etcdstore.KeyValue) error {
-	if len(values) != 1 || conditionMatchesRead(publication.conditions[0], values[0]) {
+	if len(values) != 1 || etcdstore.ConditionMatchesRead(publication.conditions[0], values[0]) {
 		return errs.New(errs.KindInternal, "Blueprint Script compare evidence is invalid")
 	}
 	return errs.New(errs.KindStateConflict, "active Script-set generation changed")
@@ -54,7 +54,7 @@ func (publication *BlueprintScriptPublication) Clear() {
 	if publication == nil {
 		return
 	}
-	clearMutationValues(publication.mutations)
+	etcdstore.ClearMutationValues(publication.mutations)
 	publication.environmentID = ""
 	publication.conditions = nil
 	publication.mutations = nil
@@ -292,19 +292,19 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 		)
 		primary, encodeErr := scriptrecord.EncodeRecord(record)
 		if encodeErr != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return false, encodeErr
 		}
 		body, bodyErr := scriptrecord.NewScriptBodyGeneration(record)
 		if bodyErr != nil {
 			clear(primary)
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return false, bodyErr
 		}
 		bodyValue, encodeErr := scriptrecord.EncodeScriptBodyGeneration(body)
 		if encodeErr != nil {
 			clear(primary)
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return false, encodeErr
 		}
 		mutations = append(mutations,
@@ -318,7 +318,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 				scriptrecord.LocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: record.EnvironmentID},
 			)
 			if locatorErr != nil {
-				clearMutationValues(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return false, locatorErr
 			}
 			mutations = append(
@@ -331,7 +331,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			})
 		}
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	if len(records)*2 > 16 || len(conditions)+len(mutations) > etcdstore.MaximumOperations ||
 		scriptStageEncodedBytes(conditions, mutations) > etcdstore.MaximumBytes {
 		return false, nil

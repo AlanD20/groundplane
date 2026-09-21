@@ -90,7 +90,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		{
 			targetKind:    "connector",
 			actionKind:    hierarchydeletion.HierarchyDeletionConnectorFinalize,
-			ownerPrefix:   connectorEnvironmentPrefix,
+			ownerPrefix:   connectorrecord.ConnectorEnvironmentPrefix,
 			primaryKey:    connectorrecord.RecordKey,
 			stableIDKind:  ids.KindConnector,
 			validateOwner: validateHierarchyDeletionConnectorOwner,

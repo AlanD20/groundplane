@@ -21,7 +21,7 @@ func (repository *ScriptRepository) CreateScript(
 	if err != nil {
 		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return etcdstore.Versioned[scriptrecord.Record]{}, err
@@ -51,7 +51,7 @@ func (repository *ScriptRepository) CreateScriptIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	plan, err := NewIdempotencyMutationPlan(conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

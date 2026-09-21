@@ -63,7 +63,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	}
 	if !replay {
 		for index, condition := range extraConditions {
-			if !conditionMatchesRead(condition, anchor.Values[index+1]) {
+			if !etcdstore.ConditionMatchesRead(condition, anchor.Values[index+1]) {
 				return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 					errs.KindStateConflict,
 					"backup runtime companion state changed",
@@ -232,7 +232,7 @@ func exactBackupRuntimeReplayCompanions(
 		value := values[index]
 		mutation, changed := byKey[condition.Key]
 		if !changed {
-			if !conditionMatchesRead(condition, value) {
+			if !etcdstore.ConditionMatchesRead(condition, value) {
 				return false
 			}
 			continue

@@ -68,7 +68,7 @@ func bindHierarchyMutation(
 	}
 	binding := hierarchyMutationBinding{
 		conditions: append([]etcdstore.Condition(nil), conditions...),
-		mutations:  cloneMutations(mutations),
+		mutations:  etcdstore.CloneMutations(mutations),
 		values:     make([][]byte, 0, len(keys)),
 	}
 	for index, key := range keys {
@@ -107,7 +107,7 @@ func (binding *hierarchyMutationBinding) clear() {
 	if binding == nil {
 		return
 	}
-	clearMutationValues(binding.mutations)
+	etcdstore.ClearMutationValues(binding.mutations)
 	for _, value := range binding.values {
 		clear(value)
 	}

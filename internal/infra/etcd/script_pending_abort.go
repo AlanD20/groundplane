@@ -30,7 +30,7 @@ func (change *pendingScriptAbortChange) clear() {
 	if change == nil {
 		return
 	}
-	clearMutationValues(change.mutations)
+	etcdstore.ClearMutationValues(change.mutations)
 	*change = pendingScriptAbortChange{}
 }
 
@@ -227,7 +227,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	}
 	conditions := append([]etcdstore.Condition{{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision}}, release.conditions...)
 	mutations := append([]etcdstore.Mutation(nil), release.mutations...)
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	for index, execution := range executions {
 		next, encodeErr := abortScriptExecutionBeforeStart(
 			execution, task.Record, steps[index], terminalAt,

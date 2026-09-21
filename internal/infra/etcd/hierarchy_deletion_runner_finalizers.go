@@ -85,8 +85,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		runnerKey(action.TargetID), runnerLifecycleKey(action.TargetID),
-		runnerObservationKey(action.TargetID), runnerRuntimeOwnershipKey(action.TargetID),
+		runnerrecord.RunnerKey(action.TargetID), runnerrecord.RunnerLifecycleKey(action.TargetID),
+		runnerrecord.RunnerObservationKey(action.TargetID), runnerrecord.RunnerRuntimeOwnershipKey(action.TargetID),
 	}})
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
@@ -137,16 +137,16 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: runnerKey(action.TargetID), ModRevision: base.Values[0].ModRevision},
-		{Key: runnerLifecycleKey(action.TargetID), ModRevision: base.Values[1].ModRevision},
-		{Key: runnerObservationKey(action.TargetID), ModRevision: keyValueRevision(base.Values[2])},
-		{Key: runnerRuntimeOwnershipKey(action.TargetID)},
+		{Key: runnerrecord.RunnerKey(action.TargetID), ModRevision: base.Values[0].ModRevision},
+		{Key: runnerrecord.RunnerLifecycleKey(action.TargetID), ModRevision: base.Values[1].ModRevision},
+		{Key: runnerrecord.RunnerObservationKey(action.TargetID), ModRevision: etcdstore.RevisionOf(base.Values[2])},
+		{Key: runnerrecord.RunnerRuntimeOwnershipKey(action.TargetID)},
 		{
-			Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID),
+			Key:         runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID),
 			ModRevision: allocation.owner.ModRevision,
 		},
 		{
-			Key:         runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+			Key:         runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
 			ModRevision: allocation.slug.ModRevision,
 		},
 		{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
@@ -154,14 +154,14 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationDelete, Key: runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID)},
-		{Type: etcdstore.MutationDelete, Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
+		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID)},
+		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
 		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot)},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: systemValue},
-		{Type: etcdstore.MutationDelete, Key: runnerObservationKey(action.TargetID)},
-		{Type: etcdstore.MutationDelete, Key: runnerLifecycleKey(action.TargetID)},
-		{Type: etcdstore.MutationDelete, Key: runnerKey(action.TargetID)},
+		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerObservationKey(action.TargetID)},
+		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerLifecycleKey(action.TargetID)},
+		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerKey(action.TargetID)},
 	}
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(base.Values[0].Value), conditions: conditions,

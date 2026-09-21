@@ -290,7 +290,7 @@ func classifyZoneDeletionStartConflict(
 		if values[4] == nil || values[4].ModRevision != pool.Revision {
 			return recordcodec.StateConflict("Zone pool registry", environment.Record.ID)
 		}
-		if keyValueRevision(values[5]) != addresses.Revision {
+		if etcdstore.RevisionOf(values[5]) != addresses.Revision {
 			return errs.New(errs.KindResourceInUse, "Zone Component address reservations changed")
 		}
 		if values[6] != nil {

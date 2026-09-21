@@ -179,7 +179,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		conditions = append(conditions,
 			etcdstore.Condition{Key: detailKeys[offset*3], ModRevision: intentValue.ModRevision},
 			etcdstore.Condition{Key: detailKeys[offset*3+1], ModRevision: checkpointValue.ModRevision},
-			etcdstore.Condition{Key: detailKeys[offset*3+2], ModRevision: keyValueRevision(projectionValue)},
+			etcdstore.Condition{Key: detailKeys[offset*3+2], ModRevision: etcdstore.RevisionOf(projectionValue)},
 			etcdstore.Condition{Key: terminalValue.Key, ModRevision: terminalValue.ModRevision},
 		)
 		mutations = append(mutations,

@@ -187,7 +187,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	change.conditions = append(change.conditions, sources...)
 	change.conditions = append(
 		change.conditions,
-		etcdstore.Condition{Key: keys[3], ModRevision: keyValueRevision(read.Values[3])},
+		etcdstore.Condition{Key: keys[3], ModRevision: etcdstore.RevisionOf(read.Values[3])},
 	)
 	if intent.CurrentProjection == nil && read.Values[3] != nil {
 		applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[3].Value)

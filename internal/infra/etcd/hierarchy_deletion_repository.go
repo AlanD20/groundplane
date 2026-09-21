@@ -263,7 +263,7 @@ func (repository *HierarchyDeletionRepository) Begin(
 	if err != nil {
 		return HierarchyDeletionBeginResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	defer clearHierarchyDeletionOperation(operation)
 
 	task, err := hierarchyDeletionTask(begin, root.owner, operation.Intent)

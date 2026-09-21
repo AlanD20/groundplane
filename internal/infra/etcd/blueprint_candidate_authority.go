@@ -439,7 +439,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 	}
 	conditions := make([]etcdstore.Condition, len(keys))
 	for index, key := range keys {
-		conditions[index] = etcdstore.Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])}
+		conditions[index] = etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(read.Values[index])}
 	}
 	return blueprintCandidateAuthoritySnapshot{
 		conditions: conditions, manifest: manifest, epochValue: slices.Clone(read.Values[2].Value),

@@ -111,7 +111,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		if policy.Enabled {
 			keys = append(keys,
 				connectorrecord.RecordKey(policy.ConnectorID),
-				connectorEnvironmentKey(environmentID, policy.ConnectorID),
+				connectorrecord.ConnectorEnvironmentKey(environmentID, policy.ConnectorID),
 				backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID),
 				deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), policy.ConnectorID),
 			)
@@ -245,7 +245,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		connector, decodeErr := connectorrecord.DecodeRecord(connectorValue.Value)
 		if decodeErr != nil || connector.Connector.ID != policy.ConnectorID ||
 			connector.Connector.EnvironmentID != environmentID ||
-			ownerIndex.Key != connectorEnvironmentKey(environmentID, policy.ConnectorID) ||
+			ownerIndex.Key != connectorrecord.ConnectorEnvironmentKey(environmentID, policy.ConnectorID) ||
 			string(ownerIndex.Value) != policy.ConnectorID ||
 			reference.Key != backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID) ||
 			string(reference.Value) != environmentID {

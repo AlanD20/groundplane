@@ -62,8 +62,8 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretOwnerKey(current.Record.Secret),
-			secretScopedKey(current.Record.Secret),
+			secretrecord.SecretOwnerKey(current.Record.Secret),
+			secretrecord.SecretScopedKey(current.Record.Secret),
 			secretrecord.ValueKey(secretID),
 		},
 		Revision: current.ReadRevision,
@@ -122,11 +122,11 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: secretrecord.RecordKey(secretID), ModRevision: current.Revision},
 		{
-			Key:         secretOwnerKey(current.Record.Secret),
+			Key:         secretrecord.SecretOwnerKey(current.Record.Secret),
 			ModRevision: dependencies.Values[0].ModRevision,
 		},
 		{
-			Key:         secretScopedKey(current.Record.Secret),
+			Key:         secretrecord.SecretScopedKey(current.Record.Secret),
 			ModRevision: dependencies.Values[1].ModRevision,
 		},
 		{Key: secretrecord.ValueKey(secretID), ModRevision: dependencies.Values[2].ModRevision},

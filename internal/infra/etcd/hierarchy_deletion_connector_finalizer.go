@@ -21,8 +21,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnector
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	keys := []string{
-		connectorEnvironmentKey(record.Connector.EnvironmentID, action.TargetID),
-		connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
+		connectorrecord.ConnectorEnvironmentKey(record.Connector.EnvironmentID, action.TargetID),
+		connectorrecord.ConnectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
 		connectorrecord.CredentialValueKey(action.TargetID),
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)

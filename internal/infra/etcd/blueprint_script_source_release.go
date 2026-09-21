@@ -28,7 +28,7 @@ func (change *scriptTerminalSourceRelease) clear() {
 	if change == nil {
 		return
 	}
-	clearMutationValues(change.mutations)
+	etcdstore.ClearMutationValues(change.mutations)
 	*change = scriptTerminalSourceRelease{}
 }
 
@@ -293,7 +293,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	release.Clear()
 	for index, execution := range executions {
 		if !terminalAt.After(execution.UpdatedAt) {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, errs.New(
 				errs.KindStateConflict, "recovery parent Script execution timestamp changed",
 			)
@@ -302,7 +302,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 		switch execution.State {
 		case scriptexecutions.ScriptExecutionNotStarted:
 			if execution.AssignmentID != "" || execution.StartAuthorized || !execution.ActiveReference {
-				clearMutationValues(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return scriptTerminalSourceRelease{}, errs.New(
 					errs.KindStateConflict, "recovery parent Script execution may already have started",
 				)
@@ -311,7 +311,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 			cleanup := scriptexecutions.ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
 			digest, digestErr := scriptControllerCleanupSHA256(outcome, cleanup)
 			if digestErr != nil {
-				clearMutationValues(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return scriptTerminalSourceRelease{}, digestErr
 			}
 			next.State = scriptexecutions.ScriptExecutionCleanupProven
@@ -321,13 +321,13 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 			next.LastCheckpointSHA256 = digest
 		case scriptexecutions.ScriptExecutionCleanupProven:
 			if execution.AssignmentID == "" || execution.ControllerCleanup != "" || execution.ReconciliationRequired {
-				clearMutationValues(mutations)
+				etcdstore.ClearMutationValues(mutations)
 				return scriptTerminalSourceRelease{}, errs.New(
 					errs.KindStateConflict, "recovery parent Script cleanup authority changed",
 				)
 			}
 		default:
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, errs.New(
 				errs.KindStateConflict, "recovery parent Script execution may already have started",
 			)
@@ -336,12 +336,12 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 		next.UpdatedAt = terminalAt
 		if scriptexecutions.ValidateScriptExecutionRecord(next) != nil ||
 			!releaseRecoveryClosedScriptExecutionMatches(next, execution.AssignmentID) {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, releases.CorruptReleaseRecord()
 		}
 		encoded, encodeErr := recordcodec.Encode("script-execution", next)
 		if encodeErr != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, encodeErr
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: values[index].Key, ModRevision: values[index].ModRevision})

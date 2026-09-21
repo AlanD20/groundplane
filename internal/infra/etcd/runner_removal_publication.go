@@ -62,7 +62,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	runtimeEvidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{runnerRuntimeOwnershipKey(current.Record.Desired.ID)}, Revision: current.ReadRevision,
+		Keys: []string{runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID)}, Revision: current.ReadRevision,
 	})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -132,14 +132,14 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
-		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerrecord.RunnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
+		{Key: runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
 		{
-			Key:         runnerRuntimeOwnershipKey(current.Record.Desired.ID),
-			ModRevision: keyValueRevision(runtimeEvidence.Values[0]),
+			Key:         runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID),
+			ModRevision: etcdstore.RevisionOf(runtimeEvidence.Values[0]),
 		},
 		{
-			Key: runnerOwnerKey(
+			Key: runnerrecord.RunnerOwnerKey(
 				current.Record.Desired.OwnerKind,
 				current.Record.Desired.OwnerID,
 				current.Record.Desired.ID,
@@ -147,7 +147,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 			ModRevision: allocation.owner.ModRevision,
 		},
 		{
-			Key:         runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
+			Key:         runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
 			ModRevision: allocation.slug.ModRevision,
 		},
 		{Key: runnerrecord.RunnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
@@ -175,7 +175,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerRemovalIntentKey(current.Record.Desired.ID), Value: intentValue},
-		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: lifecycleValue},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID), Value: lifecycleValue},
 	}
 	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {

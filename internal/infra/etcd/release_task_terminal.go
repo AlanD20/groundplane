@@ -304,7 +304,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		conditions = append(conditions,
 			etcdstore.Condition{Key: keys[0], ModRevision: values[0].ModRevision},
 			etcdstore.Condition{Key: keys[1], ModRevision: values[1].ModRevision},
-			etcdstore.Condition{Key: keys[2], ModRevision: keyValueRevision(values[2])},
+			etcdstore.Condition{Key: keys[2], ModRevision: etcdstore.RevisionOf(values[2])},
 			etcdstore.Condition{Key: keys[3]}, etcdstore.Condition{Key: keys[4]},
 		)
 		mutations = append(mutations, memberMutations...)
@@ -320,7 +320,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
-			conditions = append(conditions, etcdstore.Condition{Key: keys[5], ModRevision: keyValueRevision(values[5])})
+			conditions = append(conditions, etcdstore.Condition{Key: keys[5], ModRevision: etcdstore.RevisionOf(values[5])})
 			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[5], Value: runtimeValue})
 		}
 		budget, err := repository.store.MeasureTransaction(

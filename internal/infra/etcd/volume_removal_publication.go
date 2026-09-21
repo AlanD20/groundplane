@@ -157,7 +157,7 @@ func (publication volumeRemovalInitialPublication) classifyConflict(
 			return err
 		}
 		for index, value := range values[baseCount:] {
-			if !conditionMatchesRead(publication.conditions[index], value) {
+			if !etcdstore.ConditionMatchesRead(publication.conditions[index], value) {
 				return errs.New(errs.KindStateConflict, "Volume removal publication authority changed")
 			}
 		}

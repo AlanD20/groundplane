@@ -204,7 +204,7 @@ func (publication entryDesiredRemovalPublication) bind(
 			return err
 		}
 		for index, condition := range publication.conditions {
-			if !conditionMatchesRead(condition, values[base+index]) {
+			if !etcdstore.ConditionMatchesRead(condition, values[base+index]) {
 				return errs.New(errs.KindStateConflict, "Entry removal publication authority changed")
 			}
 		}

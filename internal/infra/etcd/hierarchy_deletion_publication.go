@@ -332,7 +332,7 @@ func prepareHierarchyDeletionPublication(
 		next.MutationEpoch++
 		encoded, encodeErr := hierarchydeletion.EncodeHierarchyCoordination(next)
 		if encodeErr != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, encodeErr
 		}
 		key := root.coordinationKeys[index]
@@ -347,7 +347,7 @@ func prepareHierarchyDeletionPublication(
 	}
 	initiation, err := newTaskInitiation(root.owner, taskjournal.TaskActorOperator, initiationFences...)
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	return HierarchyDeletionOperation{

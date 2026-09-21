@@ -214,7 +214,7 @@ func bindRecoverySecretPinPublication(
 			return err
 		}
 		for index, condition := range change.conditions {
-			if keyValueRevision(values[base+index]) != condition.ModRevision {
+			if etcdstore.RevisionOf(values[base+index]) != condition.ModRevision {
 				return errs.New(errs.KindStateConflict, "recovery Secret preparation changed before publication")
 			}
 		}

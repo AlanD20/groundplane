@@ -62,7 +62,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 		keys = append(
 			keys,
 			connectorrecord.RecordKey(policy.ConnectorID),
-			connectorEnvironmentKey(environmentID, policy.ConnectorID),
+			connectorrecord.ConnectorEnvironmentKey(environmentID, policy.ConnectorID),
 		)
 	}
 	support := &etcdstore.GetManyResult{ReadRevision: base.ReadRevision}

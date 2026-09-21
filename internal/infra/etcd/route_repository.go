@@ -43,7 +43,7 @@ func (repository *RouteRepository) CreateRoute(
 	if err != nil {
 		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return etcdstore.Versioned[routerecord.Record]{}, err
@@ -140,7 +140,7 @@ func (repository *RouteRepository) ReplaceDesired(
 	if err != nil {
 		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
 		return etcdstore.Versioned[routerecord.Record]{}, err

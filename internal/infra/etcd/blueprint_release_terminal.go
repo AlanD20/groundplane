@@ -187,7 +187,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		conditions = append(conditions,
 			etcdstore.Condition{Key: values[0].Key, ModRevision: values[0].ModRevision},
 			etcdstore.Condition{Key: values[1].Key, ModRevision: values[1].ModRevision},
-			etcdstore.Condition{Key: keys[2], ModRevision: keyValueRevision(values[2])},
+			etcdstore.Condition{Key: keys[2], ModRevision: etcdstore.RevisionOf(values[2])},
 			etcdstore.Condition{Key: keys[3]}, etcdstore.Condition{Key: keys[4]},
 		)
 		mutations = append(mutations,

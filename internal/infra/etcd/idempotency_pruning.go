@@ -467,7 +467,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 				return nil, true, nil
 			}
 		}
-		fences = append(fences, etcdstore.Condition{Key: keys[index], ModRevision: keyValueRevision(value)})
+		fences = append(fences, etcdstore.Condition{Key: keys[index], ModRevision: etcdstore.RevisionOf(value)})
 	}
 	return fences, false, nil
 }
@@ -490,7 +490,7 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer etcdstore.ClearValues(read.Values)
-	fences := []etcdstore.Condition{{Key: taskjournal.TaskStorageKey(originID), ModRevision: keyValueRevision(read.Values[0])}}
+	fences := []etcdstore.Condition{{Key: taskjournal.TaskStorageKey(originID), ModRevision: etcdstore.RevisionOf(read.Values[0])}}
 	if read.Values[0] == nil {
 		return fences, false, nil // Marker-first GC already removed the original Task.
 	}
@@ -522,5 +522,5 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 			return nil, true, nil
 		}
 	}
-	return append(fences, etcdstore.Condition{Key: key, ModRevision: keyValueRevision(markerRead.Values[0])}), false, nil
+	return append(fences, etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(markerRead.Values[0])}), false, nil
 }

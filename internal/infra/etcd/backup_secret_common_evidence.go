@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	secrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -69,8 +70,8 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 	} {
 		credential := evidence.Connector.Connector.Credentials[name]
 		if credential.Kind == backupsecret.CredentialSourceSecretRef {
-			hierarchyrecord.ProjectKey := secretKeyIndexKey(backupsecret.SecretScopeProject, projectKeyID, credential.SecretRef)
-			platformKey := secretKeyIndexKey(backupsecret.SecretScopePlatform, "", credential.SecretRef)
+			hierarchyrecord.ProjectKey := secrets.SecretKeyIndexKey(backupsecret.SecretScopeProject, projectKeyID, credential.SecretRef)
+			platformKey := secrets.SecretKeyIndexKey(backupsecret.SecretScopePlatform, "", credential.SecretRef)
 			dynamic.secretIndexes = append(dynamic.secretIndexes, backupSecretIndexRead{
 				name: name, reference: credential.SecretRef,
 				projectIndex: dynamic.add(hierarchyrecord.ProjectKey), platformIndex: dynamic.add(platformKey),

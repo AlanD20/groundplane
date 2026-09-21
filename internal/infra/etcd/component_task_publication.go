@@ -207,7 +207,7 @@ func (publication preparedComponentTaskPublication) classify(values []*etcdstore
 	} else if appliedProjectionValue != nil {
 		return errs.New(errs.KindStateConflict, "Component candidate applied projection was published")
 	}
-	if keyValueRevision(values[3]) != publication.preparation.desiredProjectionRevision {
+	if etcdstore.RevisionOf(values[3]) != publication.preparation.desiredProjectionRevision {
 		return errs.New(errs.KindStateConflict, "Component candidate desired projection changed")
 	}
 	offset := 4

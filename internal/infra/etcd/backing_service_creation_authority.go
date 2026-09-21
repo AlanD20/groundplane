@@ -76,8 +76,8 @@ func backingServiceCreationConditions(
 	for _, secret := range creation.Secrets {
 		conditions = append(conditions,
 			etcdstore.Condition{Key: secretrecord.RecordKey(secret.Secret.ID)},
-			etcdstore.Condition{Key: secretOwnerKey(secret.Secret)},
-			etcdstore.Condition{Key: secretScopedKey(secret.Secret)},
+			etcdstore.Condition{Key: secretrecord.SecretOwnerKey(secret.Secret)},
+			etcdstore.Condition{Key: secretrecord.SecretScopedKey(secret.Secret)},
 			etcdstore.Condition{Key: secretrecord.ValueKey(secret.Secret.ID)},
 			etcdstore.Condition{Key: deletions.TombstoneKey("secret", secret.Secret.ID)},
 		)

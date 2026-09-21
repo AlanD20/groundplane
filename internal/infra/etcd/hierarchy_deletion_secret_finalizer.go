@@ -25,7 +25,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionSecretFin
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	keys := []string{secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretrecord.ValueKey(action.TargetID)}
+	keys := []string{secretrecord.SecretOwnerKey(record.Secret), secretrecord.SecretScopedKey(record.Secret), secretrecord.ValueKey(action.TargetID)}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err

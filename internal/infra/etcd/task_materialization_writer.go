@@ -122,7 +122,7 @@ func (repository *TaskRepository) readTaskMaterializationAppliedPredecessor(
 	if err != nil {
 		return taskMaterializationAppliedPredecessor{}, etcdstore.Condition{}, err
 	}
-	return predecessor, etcdstore.Condition{Key: key, ModRevision: keyValueRevision(read.Values[0])}, nil
+	return predecessor, etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(read.Values[0])}, nil
 }
 
 func taskMaterializationAppliedPredecessorFromValue(
@@ -402,7 +402,7 @@ func taskHasSpecializedProjectionAcknowledgement(record TaskRecord) bool {
 }
 
 func clearTaskMaterializationProjectionChange(change taskMaterializationProjectionChange) {
-	clearMutationValues(change.mutations)
+	etcdstore.ClearMutationValues(change.mutations)
 }
 
 func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {

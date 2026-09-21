@@ -152,7 +152,7 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	for index, key := range keys {
 		conditions, err = appendVolumeRemovalTerminalCondition(
 			conditions,
-			etcdstore.Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])},
+			etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(read.Values[index])},
 		)
 		if err != nil {
 			return etcdstore.TransactionResult{}, err
@@ -323,7 +323,7 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 		}
 		conditions, err = appendVolumeRemovalTerminalCondition(
 			conditions,
-			etcdstore.Condition{Key: keys[index], ModRevision: keyValueRevision(value)},
+			etcdstore.Condition{Key: keys[index], ModRevision: etcdstore.RevisionOf(value)},
 		)
 		if err != nil {
 			return etcdstore.TransactionResult{}, err

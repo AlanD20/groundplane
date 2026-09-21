@@ -57,9 +57,9 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		)
 	}
 	stateKeys := []string{
-		runnerKey(task.Target),
-		runnerLifecycleKey(task.Target),
-		runnerRuntimeOwnershipKey(task.Target),
+		runnerrecord.RunnerKey(task.Target),
+		runnerrecord.RunnerLifecycleKey(task.Target),
+		runnerrecord.RunnerRuntimeOwnershipKey(task.Target),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -130,7 +130,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		)
 	}
 	for index := 0; index < len(conditions)-1; index++ {
-		if keyValueRevision(transaction.FailureReads[index]) != conditions[index].ModRevision {
+		if etcdstore.RevisionOf(transaction.FailureReads[index]) != conditions[index].ModRevision {
 			return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, recordcodec.StateConflict("runner readiness", task.Target)
 		}
 	}

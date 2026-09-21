@@ -85,7 +85,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		defer clear(encoded)
 		mutations := append(cloneBlueprintCandidateMutations(fragment.mutations),
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: read.Values[1].Key, Value: encoded})
-		defer clearMutationValues(mutations)
+		defer etcdstore.ClearMutationValues(mutations)
 		transaction, err := repository.store.Transact(ctx, append(guards, fragment.conditions...), mutations)
 		if err != nil {
 			return false, err

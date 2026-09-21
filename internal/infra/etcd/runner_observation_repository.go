@@ -31,7 +31,7 @@ func (repository *RunnerRepository) PutRunnerObservation(
 		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	observation, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{runnerObservationKey(record.RunnerID)},
+		Keys: []string{runnerrecord.RunnerObservationKey(record.RunnerID)},
 	})
 	if err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
@@ -46,9 +46,9 @@ func (repository *RunnerRepository) PutRunnerObservation(
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{
-		{Key: runnerObservationKey(record.RunnerID), ModRevision: expectedRevision},
-		{Key: runnerKey(record.RunnerID), ModRevision: current.Revision},
-		{Key: runnerLifecycleKey(record.RunnerID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerrecord.RunnerObservationKey(record.RunnerID), ModRevision: expectedRevision},
+		{Key: runnerrecord.RunnerKey(record.RunnerID), ModRevision: current.Revision},
+		{Key: runnerrecord.RunnerLifecycleKey(record.RunnerID), ModRevision: current.Record.LifecycleRevision},
 		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), record.RunnerID)},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},
@@ -60,7 +60,7 @@ func (repository *RunnerRepository) PutRunnerObservation(
 		)
 	}
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
-		Type: etcdstore.MutationPut, Key: runnerObservationKey(record.RunnerID), Value: value,
+		Type: etcdstore.MutationPut, Key: runnerrecord.RunnerObservationKey(record.RunnerID), Value: value,
 	}})
 	if err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
@@ -83,7 +83,7 @@ func (repository *RunnerRepository) GetRunnerObservation(
 	if err := recordcodec.ValidateID(ids.KindRunner, runnerID); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
 	}
-	result, err := repository.store.Get(ctx, runnerObservationKey(runnerID))
+	result, err := repository.store.Get(ctx, runnerrecord.RunnerObservationKey(runnerID))
 	if err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
 	}

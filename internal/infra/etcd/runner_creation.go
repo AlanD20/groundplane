@@ -93,11 +93,11 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: values.reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: values.reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: values.reference},
-		{Type: etcdstore.MutationPut, Key: runnerKey(desired.ID), Value: values.runner},
-		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(desired.ID), Value: values.lifecycle},
-		{Type: etcdstore.MutationPut, Key: runnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerKey(desired.ID), Value: values.runner},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(desired.ID), Value: values.lifecycle},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
 		{
-			Type: etcdstore.MutationPut, Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
+			Type: etcdstore.MutationPut, Key: runnerrecord.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
 			Value: []byte(desired.ID),
 		},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), Value: values.quota},
@@ -218,10 +218,10 @@ func newRunnerCreateEvidence(
 	evidence.operation = add(etcdstore.Condition{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)})
 	evidence.active = add(etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)})
 	evidence.queue = add(etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)})
-	evidence.runner = add(etcdstore.Condition{Key: runnerKey(desired.ID)})
-	evidence.lifecycle = add(etcdstore.Condition{Key: runnerLifecycleKey(desired.ID)})
-	evidence.slug = add(etcdstore.Condition{Key: runnerTenantSlugKey(desired.TenantID, desired.Slug)})
-	evidence.owner = add(etcdstore.Condition{Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
+	evidence.runner = add(etcdstore.Condition{Key: runnerrecord.RunnerKey(desired.ID)})
+	evidence.lifecycle = add(etcdstore.Condition{Key: runnerrecord.RunnerLifecycleKey(desired.ID)})
+	evidence.slug = add(etcdstore.Condition{Key: runnerrecord.RunnerTenantSlugKey(desired.TenantID, desired.Slug)})
+	evidence.owner = add(etcdstore.Condition{Key: runnerrecord.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
 	evidence.quota = add(etcdstore.Condition{Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
 	evidence.system = add(etcdstore.Condition{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.Revision})
 	evidence.tenant = add(etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})

@@ -294,7 +294,7 @@ func (repository *TaskRepository) finishHierarchyDeletionPrune(
 	conditions := make([]etcdstore.Condition, len(keys))
 	mutations := make([]etcdstore.Mutation, 0, len(keys))
 	for index, key := range keys {
-		conditions[index] = etcdstore.Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])}
+		conditions[index] = etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(read.Values[index])}
 		if read.Values[index] != nil {
 			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 		}

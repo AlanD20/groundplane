@@ -16,7 +16,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 ) (*etcdstore.Versioned[connectorrecord.Record], *etcdstore.KeyValue, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		connectorrecord.RecordKey(connectorID),
-		connectorEnvironmentKey(environmentID, connectorID),
+		connectorrecord.ConnectorEnvironmentKey(environmentID, connectorID),
 	}, Revision: revision})
 	if err != nil {
 		return nil, nil, err

@@ -32,8 +32,8 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 	indexKeys := make([]string, 0, len(references)*2)
 	for _, reference := range references {
 		indexKeys = append(indexKeys,
-			secretKeyIndexKey(core.SecretScopeProject, projectID, reference),
-			secretKeyIndexKey(core.SecretScopePlatform, "", reference),
+			secretrecord.SecretKeyIndexKey(core.SecretScopeProject, projectID, reference),
+			secretrecord.SecretKeyIndexKey(core.SecretScopePlatform, "", reference),
 		)
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: indexKeys})
@@ -95,7 +95,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 	fence := connectorSecretReferenceFence{conditions: make([]etcdstore.Condition, 0, len(candidateKeys)+len(indexKeys))}
 	offset := 0
 	for _, candidate := range candidates {
-		projectIndexKey := secretKeyIndexKey(core.SecretScopeProject, projectID, candidate.reference)
+		projectIndexKey := secretrecord.SecretKeyIndexKey(core.SecretScopeProject, projectID, candidate.reference)
 		fence.conditions = append(
 			fence.conditions,
 			connectorSecretIndexCondition(projectIndexKey, candidate.projectIndex),
@@ -118,7 +118,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 			}
 			continue
 		}
-		platformIndexKey := secretKeyIndexKey(core.SecretScopePlatform, "", candidate.reference)
+		platformIndexKey := secretrecord.SecretKeyIndexKey(core.SecretScopePlatform, "", candidate.reference)
 		fence.conditions = append(
 			fence.conditions,
 			connectorSecretIndexCondition(platformIndexKey, candidate.platformIndex),

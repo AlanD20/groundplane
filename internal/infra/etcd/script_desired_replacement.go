@@ -29,7 +29,7 @@ func (repository *ScriptRepository) ReplaceDesiredIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	plan, err := NewIdempotencyMutationPlan(conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -142,12 +142,12 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 	if replacement.ActiveGeneration != current.Record.ActiveGeneration {
 		generation, generationErr := scriptrecord.NewScriptBodyGeneration(replacement)
 		if generationErr != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return scriptrecord.Record{}, nil, nil, nil, generationErr
 		}
 		generationValue, generationErr := scriptrecord.EncodeScriptBodyGeneration(generation)
 		if generationErr != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return scriptrecord.Record{}, nil, nil, nil, generationErr
 		}
 		extras.bodyGeneration = true

@@ -263,7 +263,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		if values[4].ModRevision != current.Revision {
 			return recordcodec.StateConflict("service", current.Record.Desired.ID)
 		}
-		if !conditionMatchesRead(servicerecord.ServiceRuntimeCondition(current), values[5]) {
+		if !etcdstore.ConditionMatchesRead(servicerecord.ServiceRuntimeCondition(current), values[5]) {
 			return recordcodec.StateConflict("service runtime", current.Record.Desired.ID)
 		}
 		if values[6] != nil || values[7] != nil || values[9] != nil || values[10] != nil {
@@ -276,7 +276,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer binding.clear()
-	defer clearMutationValues(binding.mutations)
+	defer etcdstore.ClearMutationValues(binding.mutations)
 	if err := validateBoundServiceConditions(binding, current, 4, 5); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -148,7 +148,7 @@ func validatebackupPolicyReplacementCandidate(
 		}
 		if !validBackupPolicyIndex(
 			candidate.ConnectorOwnerIndex,
-			connectorEnvironmentKey(
+			connectorrecord.ConnectorEnvironmentKey(
 				candidate.Replacement.EnvironmentID,
 				candidate.Replacement.ConnectorID,
 			),

@@ -230,7 +230,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer binding.clear()
-	defer clearMutationValues(binding.mutations)
+	defer etcdstore.ClearMutationValues(binding.mutations)
 	if err := validateBoundServiceConditions(binding, current, 4, 5); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -244,7 +244,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	if err := environmentfence.ValidateTransactionBudget(conditions, mutations); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -449,7 +449,7 @@ func classifyServiceLifecycleStartConflict(
 		if values[4].ModRevision != service.Revision {
 			return recordcodec.StateConflict("service", service.Record.Desired.ID)
 		}
-		if !conditionMatchesRead(servicerecord.ServiceRuntimeCondition(service), values[5]) {
+		if !etcdstore.ConditionMatchesRead(servicerecord.ServiceRuntimeCondition(service), values[5]) {
 			return recordcodec.StateConflict("service runtime", service.Record.Desired.ID)
 		}
 		if values[6] != nil {

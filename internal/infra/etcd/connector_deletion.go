@@ -64,8 +64,8 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		taskjournal.TaskActiveOperationKey(task.OperationID),
 		taskjournal.TaskQueueKey(task.Executor, task.ID),
 		connectorrecord.RecordKey(connector.ID),
-		connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
-		connectorNameKey(connector.EnvironmentID, connector.Name),
+		connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+		connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
 		connectorrecord.CredentialValueKey(connector.ID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 		connectorrecord.RemovalIntentKey(task.ID),
@@ -356,11 +356,11 @@ func newConnectorDeletionEvidence(
 			{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 			{Key: connectorrecord.RecordKey(connector.ID), ModRevision: current.Revision},
 			{
-				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+				Key:         connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 				ModRevision: dependencies.Values[5].ModRevision,
 			},
 			{
-				Key:         connectorNameKey(connector.EnvironmentID, connector.Name),
+				Key:         connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
 				ModRevision: dependencies.Values[6].ModRevision,
 			},
 			{

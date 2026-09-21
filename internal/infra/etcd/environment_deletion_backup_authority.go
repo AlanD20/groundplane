@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	connectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -91,7 +92,7 @@ func environmentDeletionBackupAuthorityPresent(
 	}
 	prefixes := []string{
 		backuppolicy.BackupSourceEnvironmentPrefix(environmentID),
-		connectorEnvironmentPrefix(environmentID),
+		connectors.ConnectorEnvironmentPrefix(environmentID),
 		backupruntime.BackupScheduleCursorPrefix + environmentID + "/",
 		backupruntime.BackupDueOutcomePrefix + environmentID + "/",
 		backupruntime.BackupRecoveryPointEnvironmentPrefix + environmentID + "/",

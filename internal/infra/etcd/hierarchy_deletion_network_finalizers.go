@@ -129,7 +129,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		fixedInputDigest: hierarchyDeletionBytesDigest(zoneValue),
 		conditions: []etcdstore.Condition{
 			{Key: poolKey, ModRevision: values.Values[0].ModRevision},
-			{Key: addressesKey, ModRevision: keyValueRevision(values.Values[1])},
+			{Key: addressesKey, ModRevision: etcdstore.RevisionOf(values.Values[1])},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID)},
 			{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(evidence.EnvironmentID)},
 		},

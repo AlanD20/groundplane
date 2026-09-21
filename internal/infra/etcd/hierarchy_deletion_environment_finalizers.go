@@ -93,9 +93,9 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		{Key: primary.Key, ModRevision: primary.ModRevision},
 		{Key: indexes.Values[0].Key, ModRevision: indexes.Values[0].ModRevision},
 		{Key: indexes.Values[1].Key, ModRevision: indexes.Values[1].ModRevision},
-		{Key: blueprints.EnvironmentBlueprintHeadKey(record.ID), ModRevision: keyValueRevision(indexes.Values[2])},
-		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID), ModRevision: keyValueRevision(indexes.Values[3])},
-		{Key: releaseGroupCollectionEpochKey(record.ID), ModRevision: keyValueRevision(indexes.Values[4])},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(record.ID), ModRevision: etcdstore.RevisionOf(indexes.Values[2])},
+		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID), ModRevision: etcdstore.RevisionOf(indexes.Values[3])},
+		{Key: releaseGroupCollectionEpochKey(record.ID), ModRevision: etcdstore.RevisionOf(indexes.Values[4])},
 	}
 	conditions = append(
 		conditions,

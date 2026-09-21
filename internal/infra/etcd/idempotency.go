@@ -140,7 +140,7 @@ func newIdempotencyMutationPlanForMarker(
 	return &idempotencyMutationPlan{
 		markerKind: markerKind,
 		conditions: append([]etcdstore.Condition(nil), conditions...),
-		mutations:  cloneMutations(mutations),
+		mutations:  etcdstore.CloneMutations(mutations),
 		classify:   classify,
 	}, nil
 }
@@ -186,30 +186,15 @@ func (plan *idempotencyMutationPlan) consume() ([]etcdstore.Condition, []etcdsto
 	}
 	plan.consumed = true
 	conditions := append([]etcdstore.Condition(nil), plan.conditions...)
-	mutations := cloneMutations(plan.mutations)
+	mutations := etcdstore.CloneMutations(plan.mutations)
 	classify := plan.classify
-	clearMutationValues(plan.mutations)
+	etcdstore.ClearMutationValues(plan.mutations)
 	plan.conditions = nil
 	plan.mutations = nil
 	plan.classify = nil
 	plan.validate = nil
 	plan.validateExisting = nil
 	return conditions, mutations, classify, nil
-}
-
-func cloneMutations(values []etcdstore.Mutation) []etcdstore.Mutation {
-	result := make([]etcdstore.Mutation, len(values))
-	for index, value := range values {
-		result[index] = etcdstore.Mutation{Type: value.Type, Key: value.Key, Value: append([]byte(nil), value.Value...)}
-	}
-	return result
-}
-
-func clearMutationValues(values []etcdstore.Mutation) {
-	for index := range values {
-		clear(values[index].Value)
-		values[index].Value = nil
-	}
 }
 
 type IdempotencyTransactionResult struct {
@@ -354,7 +339,7 @@ func (repository *IdempotencyRepository) apply(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	conditions = append([]etcdstore.Condition{{Key: markerKey, ModRevision: 0}}, conditions...)
 	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue})
 	if marker.ReplayTarget != nil {

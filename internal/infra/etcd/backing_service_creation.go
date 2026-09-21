@@ -280,8 +280,8 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	for index, secret := range creation.Secrets {
 		mutations = append(mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(secret.Secret.ID), Value: secretValues[index]},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretOwnerKey(secret.Secret), Value: []byte(secret.Secret.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretScopedKey(secret.Secret), Value: []byte(secret.Secret.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.SecretOwnerKey(secret.Secret), Value: []byte(secret.Secret.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.SecretScopedKey(secret.Secret), Value: []byte(secret.Secret.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.ValueKey(secret.Secret.ID), Value: secretEncryptedValues[index]},
 		)
 	}
@@ -290,7 +290,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	initiation, err := newTaskInitiation(creation.Task.Owner, taskjournal.TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

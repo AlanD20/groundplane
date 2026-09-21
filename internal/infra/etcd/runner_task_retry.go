@@ -35,11 +35,11 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			runnerKey(source.Target),
-			runnerLifecycleKey(source.Target),
+			runnerrecord.RunnerKey(source.Target),
+			runnerrecord.RunnerLifecycleKey(source.Target),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target),
 			runnerrecord.RunnerRemovalIntentKey(source.Target),
-			runnerRuntimeOwnershipKey(source.Target),
+			runnerrecord.RunnerRuntimeOwnershipKey(source.Target),
 		},
 		Revision: revision,
 	})
@@ -143,17 +143,17 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	change := runnerTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: runnerKey(source.Target), ModRevision: result.Values[0].ModRevision},
-			{Key: runnerLifecycleKey(source.Target), ModRevision: result.Values[1].ModRevision},
-			{Key: runnerRuntimeOwnershipKey(source.Target), ModRevision: keyValueRevision(result.Values[4])},
+			{Key: runnerrecord.RunnerKey(source.Target), ModRevision: result.Values[0].ModRevision},
+			{Key: runnerrecord.RunnerLifecycleKey(source.Target), ModRevision: result.Values[1].ModRevision},
+			{Key: runnerrecord.RunnerRuntimeOwnershipKey(source.Target), ModRevision: etcdstore.RevisionOf(result.Values[4])},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target)},
 			{Key: runnerrecord.RunnerRemovalIntentKey(source.Target)},
 			{
-				Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
+				Key:         runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
 				ModRevision: allocation.owner.ModRevision,
 			},
 			{
-				Key:         runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+				Key:         runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
 				ModRevision: allocation.slug.ModRevision,
 			},
 			{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
@@ -168,7 +168,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 				Value: tombstoneValue,
 			},
 			{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerRemovalIntentKey(source.Target), Value: intentValue},
-			{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(source.Target), Value: lifecycleValue},
+			{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(source.Target), Value: lifecycleValue},
 		},
 		values: [][]byte{tombstoneValue, intentValue, lifecycleValue},
 	}

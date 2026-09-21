@@ -47,8 +47,8 @@ func (repository *ConnectorRepository) CreateConnector(
 		project,
 		[]string{
 			connectorrecord.RecordKey(connector.ID),
-			connectorNameKey(connector.EnvironmentID, connector.Name),
-			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+			connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
+			connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorrecord.CredentialValueKey(connector.ID),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 		},
@@ -62,18 +62,18 @@ func (repository *ConnectorRepository) CreateConnector(
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
 	}
 	defer clear(epochMutation.Value)
-	conditions := append(connectorCreateConditions(record), fence.TransactionConditions()...)
+	conditions := append(connectorrecord.ConnectorCreateConditions(record), fence.TransactionConditions()...)
 	conditions = append(conditions, secretFence.conditions...)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: connectorrecord.RecordKey(record.Connector.ID), Value: primaryValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
+			Key:   connectorrecord.ConnectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
 			Value: []byte(record.Connector.ID),
 		},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
+			Key:   connectorrecord.ConnectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
 			Value: []byte(record.Connector.ID),
 		},
 		{
@@ -150,12 +150,12 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 		{Type: etcdstore.MutationPut, Key: connectorrecord.RecordKey(record.Connector.ID), Value: primaryValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
+			Key:   connectorrecord.ConnectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
 			Value: []byte(record.Connector.ID),
 		},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
+			Key:   connectorrecord.ConnectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
 			Value: []byte(record.Connector.ID),
 		},
 		{
@@ -171,25 +171,25 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 		project,
 		[]string{
 			connectorrecord.RecordKey(connector.ID),
-			connectorNameKey(connector.EnvironmentID, connector.Name),
-			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+			connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
+			connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorrecord.CredentialValueKey(connector.ID),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 		},
 	)
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
 	etcdstore.ClearValues(evidence.Values)
 	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
 	mutations = append(mutations, epochMutation)
-	defer clearMutationValues(mutations)
-	conditions := append(connectorCreateConditions(record), fence.TransactionConditions()...)
+	defer etcdstore.ClearMutationValues(mutations)
+	conditions := append(connectorrecord.ConnectorCreateConditions(record), fence.TransactionConditions()...)
 	conditions = append(conditions, secretFence.conditions...)
 	plan, err := NewIdempotencyMutationPlan(
 		conditions,

@@ -249,7 +249,7 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 		return "", nil, nil, nil, nil
 	}
 	nameRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{connectorNameKey(environmentID, name)}, Revision: revision,
+		Keys: []string{connectorrecord.ConnectorNameKey(environmentID, name)}, Revision: revision,
 	})
 	if err != nil {
 		return "", nil, nil, nil, err

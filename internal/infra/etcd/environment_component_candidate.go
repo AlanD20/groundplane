@@ -363,7 +363,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		managedRuntimeSources:     managedRuntimeSources,
 		appliedComponentRuntime:   append([]byte(nil), selected.Record.ComposeArtifact...),
 		appliedProjectionPresent:  found,
-		appliedProjectionRevision: keyValueRevision(appliedValue),
+		appliedProjectionRevision: etcdstore.RevisionOf(appliedValue),
 		desiredProjectionRevision: desired.Revision,
 		addresses:                 addresses,
 	}

@@ -86,7 +86,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	conditions := []etcdstore.Condition{
 		{Key: keys[0], ModRevision: state.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: state.Values[1].ModRevision},
-		{Key: keys[2], ModRevision: keyValueRevision(state.Values[2])},
+		{Key: keys[2], ModRevision: etcdstore.RevisionOf(state.Values[2])},
 		{Key: keys[3], ModRevision: state.Values[3].ModRevision},
 		{Key: keys[4], ModRevision: state.Values[4].ModRevision},
 		{Key: keys[5], ModRevision: state.Values[5].ModRevision},
@@ -161,7 +161,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	} else {
 		poolValue, encodeErr := recordcodec.Encode("zone_pool_registry", nextPool)
 		if encodeErr != nil {
-			clearMutationValues(mutations)
+			etcdstore.ClearMutationValues(mutations)
 			return nil, nil, encodeErr
 		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[1], Value: poolValue})

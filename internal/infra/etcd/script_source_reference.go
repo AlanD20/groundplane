@@ -51,7 +51,7 @@ func (fragment *ScriptSourceReleaseFragment) Clear() {
 	if fragment == nil {
 		return
 	}
-	clearMutationValues(fragment.mutations)
+	etcdstore.ClearMutationValues(fragment.mutations)
 	*fragment = ScriptSourceReleaseFragment{}
 }
 
@@ -102,7 +102,7 @@ func (fragment *ScriptSourcePublicationFragment) Clear() {
 	if fragment == nil {
 		return
 	}
-	clearMutationValues(fragment.mutations)
+	etcdstore.ClearMutationValues(fragment.mutations)
 	for index := range fragment.staged {
 		clear(fragment.staged[index].value)
 	}

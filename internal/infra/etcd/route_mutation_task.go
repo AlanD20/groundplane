@@ -195,7 +195,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 			return errs.New(errs.KindInternal, "Route mutation compare evidence is incomplete")
 		}
 		for index, condition := range baseConditions {
-			if !conditionMatchesRead(condition, values[index]) {
+			if !etcdstore.ConditionMatchesRead(condition, values[index]) {
 				return errs.New(errs.KindStateConflict, "Route mutation desired head changed")
 			}
 		}
@@ -291,7 +291,7 @@ func applyRouteMutationTaskMarkers(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearMutationValues(mutations)
+	defer etcdstore.ClearMutationValues(mutations)
 	baseConditionCount := len(conditions)
 	conditions = append(conditions,
 		etcdstore.Condition{Key: taskKeyValue},

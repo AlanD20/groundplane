@@ -156,7 +156,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	}
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
 	mutations = append(mutations, epoch)
@@ -168,12 +168,12 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	}
 	initiation, err := newInheritedTaskInitiation(source, actor)
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := newTaskIdempotencyMutationPlan(retry, initiation, conditions, mutations, classify)
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
 	result, err := (&IdempotencyRepository{store: repository.store}).Apply(ctx, marker, plan)

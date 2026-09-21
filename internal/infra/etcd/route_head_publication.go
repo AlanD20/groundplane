@@ -394,7 +394,7 @@ func classifyRouteHeadConflict(conditions []etcdstore.Condition) idempotencyPlan
 			return errs.New(errs.KindInternal, "Route desired head compare evidence is incomplete")
 		}
 		for index, condition := range conditions {
-			if !conditionMatchesRead(condition, values[index]) {
+			if !etcdstore.ConditionMatchesRead(condition, values[index]) {
 				return errs.New(errs.KindStateConflict, "Route desired head changed")
 			}
 		}

@@ -15,11 +15,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const (
-	secretOwnerIndexPrefix = "/v1/indexes/secrets/by-owner/"
-	secretKeyIndexPrefix   = "/v1/indexes/secrets/by-key/"
-)
-
 // SecretOwner is a closed project-or-platform ownership input. A nil Project
 // denotes platform scope.
 type SecretOwner struct {
@@ -73,8 +68,8 @@ func (repository *SecretRepository) CreateSecret(
 	conditions := secretCreateConditions(owner, record)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(record.Secret.ID), Value: primaryValue},
-		{Type: etcdstore.MutationPut, Key: secretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
-		{Type: etcdstore.MutationPut, Key: secretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
+		{Type: etcdstore.MutationPut, Key: secretrecord.SecretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
+		{Type: etcdstore.MutationPut, Key: secretrecord.SecretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
 		{Type: etcdstore.MutationPut, Key: secretrecord.ValueKey(record.Secret.ID), Value: encryptedValue},
 	})
 	if err != nil {
@@ -128,8 +123,8 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 		secretCreateConditions(owner, record),
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(record.Secret.ID), Value: primaryValue},
-			{Type: etcdstore.MutationPut, Key: secretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
-			{Type: etcdstore.MutationPut, Key: secretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
+			{Type: etcdstore.MutationPut, Key: secretrecord.SecretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
+			{Type: etcdstore.MutationPut, Key: secretrecord.SecretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
 			{Type: etcdstore.MutationPut, Key: secretrecord.ValueKey(record.Secret.ID), Value: encryptedValue},
 		},
 		func(_ int64, values []*etcdstore.KeyValue) error {
@@ -186,14 +181,14 @@ func (repository *SecretRepository) ListSecrets(
 	if err := validateSecretListScope(scope, projectID); err != nil {
 		return etcdstore.Page[secretrecord.Record]{}, err
 	}
-	ownerKind, ownerID := secretScopeKey(scope, projectID)
+	ownerKind, ownerID := secretrecord.SecretScopeKey(scope, projectID)
 	page, err := recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"secrets",
 		ownerKind,
 		ownerID,
-		secretOwnerCollectionPrefix(scope, projectID),
+		secretrecord.SecretOwnerCollectionPrefix(scope, projectID),
 		secretrecord.RecordKey,
 		ids.KindSecret,
 		request,
@@ -266,8 +261,8 @@ func (repository *SecretRepository) resolveSecretAtRevision(
 	}
 
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		secretKeyIndexKey(core.SecretScopeProject, projectID, reference),
-		secretKeyIndexKey(core.SecretScopePlatform, "", reference),
+		secretrecord.SecretKeyIndexKey(core.SecretScopeProject, projectID, reference),
+		secretrecord.SecretKeyIndexKey(core.SecretScopePlatform, "", reference),
 	}, Revision: revision})
 	if err != nil {
 		return etcdstore.Versioned[secretrecord.Record]{}, err
@@ -347,8 +342,8 @@ func (repository *SecretRepository) DeleteSecret(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretOwnerKey(current.Record.Secret),
-			secretScopedKey(current.Record.Secret),
+			secretrecord.SecretOwnerKey(current.Record.Secret),
+			secretrecord.SecretScopedKey(current.Record.Secret),
 			secretrecord.ValueKey(current.Record.Secret.ID),
 		},
 		Revision: current.ReadRevision,
@@ -370,8 +365,8 @@ func (repository *SecretRepository) DeleteSecret(
 	conditions = append(conditions, fences...)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: secretrecord.RecordKey(current.Record.Secret.ID)},
-		{Type: etcdstore.MutationDelete, Key: secretOwnerKey(current.Record.Secret)},
-		{Type: etcdstore.MutationDelete, Key: secretScopedKey(current.Record.Secret)},
+		{Type: etcdstore.MutationDelete, Key: secretrecord.SecretOwnerKey(current.Record.Secret)},
+		{Type: etcdstore.MutationDelete, Key: secretrecord.SecretScopedKey(current.Record.Secret)},
 		{Type: etcdstore.MutationDelete, Key: secretrecord.ValueKey(current.Record.Secret.ID)},
 	})
 	if err != nil {
@@ -444,8 +439,8 @@ func validateSecretListScope(scope core.SecretScope, projectID string) error {
 func secretCreateConditions(owner SecretOwner, record secretrecord.Record) []etcdstore.Condition {
 	conditions := []etcdstore.Condition{
 		{Key: secretrecord.RecordKey(record.Secret.ID)},
-		{Key: secretOwnerKey(record.Secret)},
-		{Key: secretScopedKey(record.Secret)},
+		{Key: secretrecord.SecretOwnerKey(record.Secret)},
+		{Key: secretrecord.SecretScopedKey(record.Secret)},
 		{Key: secretrecord.ValueKey(record.Secret.ID)},
 	}
 	if owner.Project != nil {
@@ -473,8 +468,8 @@ func secretDeleteConditions(
 ) []etcdstore.Condition {
 	conditions := []etcdstore.Condition{
 		{Key: secretrecord.RecordKey(current.Record.Secret.ID), ModRevision: current.Revision},
-		{Key: secretOwnerKey(current.Record.Secret), ModRevision: dependencies[0].ModRevision},
-		{Key: secretScopedKey(current.Record.Secret), ModRevision: dependencies[1].ModRevision},
+		{Key: secretrecord.SecretOwnerKey(current.Record.Secret), ModRevision: dependencies[0].ModRevision},
+		{Key: secretrecord.SecretScopedKey(current.Record.Secret), ModRevision: dependencies[1].ModRevision},
 		{Key: secretrecord.ValueKey(current.Record.Secret.ID), ModRevision: dependencies[2].ModRevision},
 	}
 	if owner.Project != nil {
@@ -539,29 +534,4 @@ func classifySecretCreateConflict(
 		}
 	}
 	return recordcodec.StateConflict("secret", record.Secret.ID)
-}
-
-func secretScopeKey(scope core.SecretScope, projectID string) (string, string) {
-	if scope == core.SecretScopeProject {
-		return "project", projectID
-	}
-	return "platform", "-"
-}
-
-func secretOwnerCollectionPrefix(scope core.SecretScope, projectID string) string {
-	kind, id := secretScopeKey(scope, projectID)
-	return secretOwnerIndexPrefix + kind + "/" + id + "/"
-}
-
-func secretOwnerKey(secret core.Secret) string {
-	return secretOwnerCollectionPrefix(secret.Scope, secret.ProjectID) + secret.ID
-}
-
-func secretKeyIndexKey(scope core.SecretScope, projectID string, key string) string {
-	kind, id := secretScopeKey(scope, projectID)
-	return secretKeyIndexPrefix + kind + "/" + id + "/" + recordcodec.EncodeKeySegment(key)
-}
-
-func secretScopedKey(secret core.Secret) string {
-	return secretKeyIndexKey(secret.Scope, secret.ProjectID, secret.Key)
 }

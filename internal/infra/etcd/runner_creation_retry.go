@@ -142,11 +142,11 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		{Key: taskjournal.TaskActiveOperationKey(retry.OperationID)},
 		{Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
 		{Key: taskjournal.TaskStorageKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
-		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
-		{Key: runnerRuntimeOwnershipKey(current.Record.Desired.ID)},
+		{Key: runnerrecord.RunnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
+		{Key: runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID)},
 		{
-			Key: runnerOwnerKey(
+			Key: runnerrecord.RunnerOwnerKey(
 				current.Record.Desired.OwnerKind,
 				current.Record.Desired.OwnerID,
 				current.Record.Desired.ID,
@@ -154,7 +154,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 			ModRevision: allocation.owner.ModRevision,
 		},
 		{
-			Key:         runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
+			Key:         runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
 			ModRevision: allocation.slug.ModRevision,
 		},
 		{Key: runnerrecord.RunnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
@@ -175,7 +175,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: recordValue},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID), Value: recordValue},
 	}
 	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {

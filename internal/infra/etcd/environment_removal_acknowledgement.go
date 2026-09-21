@@ -129,11 +129,11 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
 			ModRevision: tombstoneValue.ModRevision,
 		},
-		{Key: blueprints.EnvironmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
-		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[2])},
+		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[3])},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
-		{Key: releaseGroupCollectionEpochKey(environment.ID), ModRevision: keyValueRevision(stored.Values[7])},
+		{Key: releaseGroupCollectionEpochKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[7])},
 	}
 	conditions, err = environmentfence.AppendConditions(conditions, ownedFence)
 	if err != nil {
@@ -260,7 +260,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		})
 	}
 	if err := environmentfence.ValidateTransactionBudget(conditions, mutations); err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return nil, nil, err
 	}
 	return conditions, mutations, nil

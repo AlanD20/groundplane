@@ -184,7 +184,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		if len(values) == len(baseConditions) {
 			activeKey := environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)
 			for index, condition := range baseConditions {
-				if condition.Key == activeKey && !conditionMatchesRead(condition, values[index]) {
+				if condition.Key == activeKey && !etcdstore.ConditionMatchesRead(condition, values[index]) {
 					return errs.New(
 						errs.KindResourceInUse,
 						"Environment component reconciliation is in progress",

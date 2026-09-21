@@ -254,7 +254,7 @@ func (repository *TaskRepository) runtimeConfigurationClaimConditions(
 	}
 	defer etcdstore.ClearValues(read.Values)
 	value := read.Values[0]
-	if keyValueRevision(value) != condition.ModRevision ||
+	if etcdstore.RevisionOf(value) != condition.ModRevision ||
 		(value != nil && value.Key != condition.Key) {
 		return nil, errs.New(
 			errs.KindStateConflict,

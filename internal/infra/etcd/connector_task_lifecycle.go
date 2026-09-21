@@ -78,8 +78,8 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
-			connectorNameKey(connector.EnvironmentID, connector.Name),
+			connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+			connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorrecord.CredentialValueKey(connector.ID),
 			hierarchyrecord.EnvironmentKey(connector.EnvironmentID),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), connector.EnvironmentID),
@@ -153,11 +153,11 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
 			{Key: connectorrecord.RemovalIntentKey(retry.ID)},
 			{
-				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+				Key:         connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 				ModRevision: dependencies.Values[0].ModRevision,
 			},
 			{
-				Key:         connectorNameKey(connector.EnvironmentID, connector.Name),
+				Key:         connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: connectorrecord.CredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
@@ -275,8 +275,8 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
-			connectorNameKey(connector.EnvironmentID, connector.Name),
+			connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+			connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorrecord.CredentialValueKey(connector.ID),
 		},
 		Revision: revision,
@@ -321,11 +321,11 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 			},
 			{Key: connectorrecord.RemovalIntentKey(task.ID), ModRevision: stored.Values[2].ModRevision},
 			{
-				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+				Key:         connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 				ModRevision: dependencies.Values[0].ModRevision,
 			},
 			{
-				Key:         connectorNameKey(connector.EnvironmentID, connector.Name),
+				Key:         connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: connectorrecord.CredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
@@ -338,8 +338,8 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	change.conditions = append(change.conditions, referenceConditions...)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		change.mutations = append(change.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.CredentialValueKey(connector.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.RecordKey(connector.ID)},
 		)
@@ -361,8 +361,8 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 	name := task.Params[TaskConnectorNameParam]
 	keys := []string{
 		connectorrecord.RecordKey(task.Target),
-		connectorEnvironmentKey(environmentID, task.Target),
-		connectorNameKey(environmentID, name),
+		connectorrecord.ConnectorEnvironmentKey(environmentID, task.Target),
+		connectorrecord.ConnectorNameKey(environmentID, name),
 		connectorrecord.CredentialValueKey(task.Target),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
 		connectorrecord.RemovalIntentKey(task.ID),

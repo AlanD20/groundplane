@@ -61,7 +61,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
+			secretrecord.SecretOwnerKey(record.Secret), secretrecord.SecretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
 		},
 		Revision: revision,
 	})
@@ -78,8 +78,8 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: secretrecord.RecordKey(record.Secret.ID), ModRevision: stored.Values[0].ModRevision},
-			{Key: secretOwnerKey(record.Secret), ModRevision: dependencies.Values[0].ModRevision},
-			{Key: secretScopedKey(record.Secret), ModRevision: dependencies.Values[1].ModRevision},
+			{Key: secretrecord.SecretOwnerKey(record.Secret), ModRevision: dependencies.Values[0].ModRevision},
+			{Key: secretrecord.SecretScopedKey(record.Secret), ModRevision: dependencies.Values[1].ModRevision},
 			{Key: secretrecord.ValueKey(record.Secret.ID), ModRevision: dependencies.Values[2].ModRevision},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), record.Secret.ID)},
 		},
@@ -177,7 +177,7 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretOwnerKey(record.Secret), secretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
+			secretrecord.SecretOwnerKey(record.Secret), secretrecord.SecretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
 		},
 		Revision: revision,
 	})
@@ -204,8 +204,8 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 				Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), task.Target),
 				ModRevision: stored.Values[1].ModRevision,
 			},
-			{Key: secretOwnerKey(record.Secret), ModRevision: dependencies.Values[0].ModRevision},
-			{Key: secretScopedKey(record.Secret), ModRevision: dependencies.Values[1].ModRevision},
+			{Key: secretrecord.SecretOwnerKey(record.Secret), ModRevision: dependencies.Values[0].ModRevision},
+			{Key: secretrecord.SecretScopedKey(record.Secret), ModRevision: dependencies.Values[1].ModRevision},
 			{Key: secretrecord.ValueKey(task.Target), ModRevision: dependencies.Values[2].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{{
@@ -219,8 +219,8 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 		}
 		change.conditions = append(change.conditions, fences...)
 		change.mutations = append(change.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretOwnerKey(record.Secret)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretScopedKey(record.Secret)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretrecord.SecretOwnerKey(record.Secret)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretrecord.SecretScopedKey(record.Secret)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretrecord.ValueKey(task.Target)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: secretrecord.RecordKey(task.Target)},
 		)

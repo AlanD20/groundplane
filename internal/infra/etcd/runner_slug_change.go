@@ -50,12 +50,12 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	secondaryKeys := []string{
-		runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
+		runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID),
 	}
 	renaming := current.Record.Desired.Slug != slug
 	if renaming {
-		secondaryKeys = append(secondaryKeys, runnerTenantSlugKey(current.Record.Desired.TenantID, slug))
+		secondaryKeys = append(secondaryKeys, runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, slug))
 	}
 	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision})
 	if err != nil {
@@ -79,26 +79,26 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{
-		{Key: runnerKey(runnerID), ModRevision: current.Revision},
-		{Key: runnerLifecycleKey(runnerID), ModRevision: current.Record.LifecycleRevision},
+		{Key: runnerrecord.RunnerKey(runnerID), ModRevision: current.Revision},
+		{Key: runnerrecord.RunnerLifecycleKey(runnerID), ModRevision: current.Record.LifecycleRevision},
 		{
-			Key:         runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
+			Key:         runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
 			ModRevision: secondary.Values[0].ModRevision,
 		},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID)},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerKey(runnerID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerKey(runnerID), Value: value}}
 	if renaming {
-		conditions = append(conditions, etcdstore.Condition{Key: runnerTenantSlugKey(current.Record.Desired.TenantID, slug)})
+		conditions = append(conditions, etcdstore.Condition{Key: runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, slug)})
 		mutations = append(
 			mutations,
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
+				Key:  runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
 			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   runnerTenantSlugKey(current.Record.Desired.TenantID, slug),
+				Key:   runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, slug),
 				Value: []byte(runnerID),
 			},
 		)

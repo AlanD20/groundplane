@@ -185,7 +185,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 			{
 				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
-				ModRevision: keyValueRevision(state.Values[1]),
+				ModRevision: etcdstore.RevisionOf(state.Values[1]),
 			},
 			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
 			{

@@ -82,7 +82,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	}
 	if state == nil || len(state.Values) != len(keys) || state.Values[1] == nil ||
 		state.Values[2] == nil || state.Values[3] == nil || state.Values[4] == nil ||
-		!conditionMatchesRead(etcdstore.Condition{Key: keys[0], ModRevision: intent.RuntimeRevision}, state.Values[0]) ||
+		!etcdstore.ConditionMatchesRead(etcdstore.Condition{Key: keys[0], ModRevision: intent.RuntimeRevision}, state.Values[0]) ||
 		state.Values[2].ModRevision != intent.ExpectedHeadRevision ||
 		state.Values[3].ModRevision != intent.CurrentProjectionRevision ||
 		string(state.Values[4].Value) != task.ID {
@@ -239,7 +239,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		}
 		wantRevision = state.Values[2].ModRevision
 		wantProjection = intent.CandidateProjection
-	} else if !conditionMatchesRead(etcdstore.Condition{Key: servicerecord.ServiceRuntimeKey(intent.ServiceID), ModRevision: intent.RuntimeRevision}, state.Values[0]) {
+	} else if !etcdstore.ConditionMatchesRead(etcdstore.Condition{Key: servicerecord.ServiceRuntimeKey(intent.ServiceID), ModRevision: intent.RuntimeRevision}, state.Values[0]) {
 		return errs.New(errs.KindStateConflict, "failed Service removal lost its target")
 	}
 	projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)

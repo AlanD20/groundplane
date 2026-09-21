@@ -73,7 +73,7 @@ func (repository *ConnectorRepository) ListConnectors(
 		"connectors",
 		"environment",
 		environmentID,
-		connectorEnvironmentPrefix(environmentID),
+		connectorrecord.ConnectorEnvironmentPrefix(environmentID),
 		connectorrecord.RecordKey,
 		ids.KindConnector,
 		request,

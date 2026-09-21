@@ -272,7 +272,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				clear(environmentValue)
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}
-			defer clearMutationValues(zoneMutations)
+			defer etcdstore.ClearMutationValues(zoneMutations)
 			conditions = append(conditions, zoneConditions...)
 			mutations = append(mutations, zoneMutations...)
 		}

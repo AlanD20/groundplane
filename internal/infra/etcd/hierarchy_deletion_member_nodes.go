@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	runners "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -116,7 +117,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	case "connector":
 		key = connectorrecord.RecordKey(targetID)
 	case "runner":
-		key = runnerKey(targetID)
+		key = runners.RunnerKey(targetID)
 	case "secret":
 		key = secretrecord.RecordKey(targetID)
 	default:

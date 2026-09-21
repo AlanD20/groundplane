@@ -226,7 +226,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	for index, key := range keys {
 		change.conditions = append(
 			change.conditions,
-			etcdstore.Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])},
+			etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(read.Values[index])},
 		)
 	}
 	if hookInputIndex >= 0 {

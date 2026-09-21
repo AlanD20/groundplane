@@ -210,12 +210,12 @@ func (mutationContext *ordinaryEnvironmentMutationContext) prepareBinding(
 	}
 	prepared, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: mutationContext.readRevision})
 	if err != nil {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return nil, err
 	}
 	if prepared == nil || prepared.ReadRevision != mutationContext.readRevision ||
 		len(prepared.Values) != len(conditions) {
-		clearMutationValues(mutations)
+		etcdstore.ClearMutationValues(mutations)
 		return nil, errs.New(errs.KindInternal, "environment mutation domain read is invalid")
 	}
 	return &ordinaryEnvironmentMutationBinding{
@@ -234,16 +234,6 @@ func (binding *ordinaryEnvironmentMutationBinding) clear() {
 	binding.preparedReads = nil
 }
 
-func conditionMatchesRead(condition etcdstore.Condition, value *etcdstore.KeyValue) bool {
-	if condition.Prefix {
-		return false
-	}
-	if condition.ModRevision == 0 {
-		return value == nil
-	}
-	return value != nil && value.Key == condition.Key && value.ModRevision == condition.ModRevision
-}
-
 func (binding *ordinaryEnvironmentMutationBinding) classify(
 	revision int64,
 	reads []*etcdstore.KeyValue,
@@ -254,7 +244,7 @@ func (binding *ordinaryEnvironmentMutationBinding) classify(
 		return errs.New(errs.KindInternal, "environment mutation compare evidence is incomplete")
 	}
 	for index := range binding.originalConditionCount {
-		if !conditionMatchesRead(binding.conditions[index], reads[index]) {
+		if !etcdstore.ConditionMatchesRead(binding.conditions[index], reads[index]) {
 			return fallback(revision, reads[:binding.originalConditionCount])
 		}
 	}
@@ -272,7 +262,7 @@ func (binding *ordinaryEnvironmentMutationBinding) preparedConflict(
 		return errs.New(errs.KindInternal, "environment mutation prepared evidence is incomplete")
 	}
 	for index, condition := range binding.conditions {
-		if !conditionMatchesRead(condition, binding.preparedReads[index]) {
+		if !etcdstore.ConditionMatchesRead(condition, binding.preparedReads[index]) {
 			return binding.classify(binding.context.readRevision, binding.preparedReads, fallback)
 		}
 	}
@@ -284,7 +274,7 @@ func (binding *ordinaryEnvironmentMutationBinding) preparedConditionsMatch() (bo
 		return false, errs.New(errs.KindInternal, "environment mutation prepared evidence is incomplete")
 	}
 	for index, condition := range binding.conditions {
-		if !conditionMatchesRead(condition, binding.preparedReads[index]) {
+		if !etcdstore.ConditionMatchesRead(condition, binding.preparedReads[index]) {
 			return false, nil
 		}
 	}

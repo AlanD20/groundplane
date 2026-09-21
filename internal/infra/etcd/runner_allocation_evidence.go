@@ -23,8 +23,8 @@ func (repository *RunnerRepository) readRunnerAllocationEvidence(
 ) (runnerAllocationEvidence, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
-			runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+			runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
+			runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
 			runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID),
 			runnerrecord.RunnerHostSlotKey(record.Allocation.Slot),
 			runnerrecord.SystemPoolRegistryKey,

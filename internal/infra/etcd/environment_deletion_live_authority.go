@@ -7,6 +7,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	connectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
@@ -118,7 +119,7 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 		entryOwnerCollectionPrefix(environmentID),
 		attachrecord.AttachOwnerPrefix(environmentID),
 		componentrecord.EnvironmentOwnerPrefix(environmentID),
-		connectorEnvironmentPrefix(environmentID),
+		connectors.ConnectorEnvironmentPrefix(environmentID),
 		environmentReleaseGroupOwnerPrefix + environmentID + "/",
 		backuppolicy.BackupSourceEnvironmentPrefix(environmentID),
 		backupruntime.BackupScheduleCursorPrefix + environmentID + "/",

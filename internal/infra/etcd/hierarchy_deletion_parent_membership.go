@@ -43,8 +43,10 @@ func (repository *HierarchyDeletionRepository) freezeTenantMembership(
 	runners, err := repository.freezeIndexedResource(ctx, operation, operation.Tombstone.TargetID,
 		hierarchyDeletionIndexedResource{
 			targetKind: "runner", actionKind: hierarchydeletion.HierarchyDeletionRunnerLocalRemove,
-			ownerPrefix: func(owner string) string { return runnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, owner) },
-			primaryKey:  runnerKey, stableIDKind: ids.KindRunner, controller: true,
+			ownerPrefix: func(owner string) string {
+				return runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, owner)
+			},
+			primaryKey: runnerrecord.RunnerKey, stableIDKind: ids.KindRunner, controller: true,
 			validateOwner: validateHierarchyDeletionRunnerOwner,
 		})
 	if err != nil {
@@ -95,8 +97,10 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 		runners, freezeErr := repository.freezeIndexedResource(ctx, operation, projectID,
 			hierarchyDeletionIndexedResource{
 				targetKind: "runner", actionKind: hierarchydeletion.HierarchyDeletionRunnerLocalRemove,
-				ownerPrefix: func(owner string) string { return runnerOwnerPrefix(runnerrecord.RunnerOwnerProject, owner) },
-				primaryKey:  runnerKey, stableIDKind: ids.KindRunner, controller: true,
+				ownerPrefix: func(owner string) string {
+					return runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerProject, owner)
+				},
+				primaryKey: runnerrecord.RunnerKey, stableIDKind: ids.KindRunner, controller: true,
 				validateOwner: validateHierarchyDeletionRunnerOwner,
 			})
 		if freezeErr != nil {
@@ -108,7 +112,7 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 		hierarchyDeletionIndexedResource{
 			targetKind: "secret", actionKind: hierarchydeletion.HierarchyDeletionProjectSecretRemove,
 			ownerPrefix: func(owner string) string {
-				return secretOwnerCollectionPrefix(core.SecretScopeProject, owner)
+				return secretrecord.SecretOwnerCollectionPrefix(core.SecretScopeProject, owner)
 			},
 			primaryKey: secretrecord.RecordKey, stableIDKind: ids.KindSecret, controller: true,
 			validateOwner: validateHierarchyDeletionSecretOwner,

@@ -139,7 +139,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		defer clear(encoded)
 		mutations := append(cloneBlueprintCandidateMutations(release.mutations), reportMutation,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: executionValue.Key, Value: encoded})
-		defer clearMutationValues(mutations)
+		defer etcdstore.ClearMutationValues(mutations)
 		transaction, err := repository.store.Transact(ctx, append(guards, release.conditions...), mutations)
 		if err != nil {
 			return scriptTerminalSourceRelease{}, false, err

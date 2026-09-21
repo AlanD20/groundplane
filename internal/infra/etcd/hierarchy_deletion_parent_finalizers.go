@@ -7,6 +7,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	secrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFinalizer(
@@ -23,7 +24,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFin
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	prefixes := []string{
-		hierarchyrecord.ProjectTenantOwnerPrefix(record.ID), runnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, record.ID),
+		hierarchyrecord.ProjectTenantOwnerPrefix(record.ID), runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, record.ID),
 	}
 	if _, err := repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes); err != nil {
 		return hierarchyDeletionControllerEffects{}, err
@@ -70,8 +71,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	prefixes := []string{
-		hierarchyrecord.EnvironmentOwnerPrefix(record.ID), runnerOwnerPrefix(runnerrecord.RunnerOwnerProject, record.ID),
-		secretOwnerCollectionPrefix(core.SecretScopeProject, record.ID),
+		hierarchyrecord.EnvironmentOwnerPrefix(record.ID), runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerProject, record.ID),
+		secrets.SecretOwnerCollectionPrefix(core.SecretScopeProject, record.ID),
 	}
 	if _, err := repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes); err != nil {
 		return hierarchyDeletionControllerEffects{}, err

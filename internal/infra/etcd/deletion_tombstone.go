@@ -441,8 +441,8 @@ func classifyEnvironmentDeletionStartConflict(
 		if values[7] != nil {
 			return errs.New(errs.KindResourceInUse, "environment deletion is already in progress")
 		}
-		if keyValueRevision(values[8]) != expectedBlueprintRevision ||
-			keyValueRevision(values[9]) != expectedBlueprintRevision {
+		if etcdstore.RevisionOf(values[8]) != expectedBlueprintRevision ||
+			etcdstore.RevisionOf(values[9]) != expectedBlueprintRevision {
 			return errs.New(errs.KindStateConflict, "environment Blueprint state changed")
 		}
 		if values[10] == nil {
@@ -535,11 +535,4 @@ func decodeOwnedEnvironmentDeletionLock(
 		)
 	}
 	return record, nil
-}
-
-func keyValueRevision(value *etcdstore.KeyValue) int64 {
-	if value == nil {
-		return 0
-	}
-	return value.ModRevision
 }

@@ -110,7 +110,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		// Reserved idempotency keys are bound by the closed commit below, not
 		// exposed as writable keys in a generic Task mutation plan.
 		if index != 5 && index != 6 {
-			conditions = append(conditions, etcdstore.Condition{Key: keys[index], ModRevision: keyValueRevision(value)})
+			conditions = append(conditions, etcdstore.Condition{Key: keys[index], ModRevision: etcdstore.RevisionOf(value)})
 		}
 	}
 	progress, err := removalrecord.DecodeProgress(read.Values[0].Value)
