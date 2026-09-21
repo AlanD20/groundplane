@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -12,39 +13,39 @@ import (
 
 func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	preparedAt time.Time,
-) (HierarchyDeletionOperation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if recordcodec.ValidateTimestamp("hierarchy deletion root finalization", preparedAt) != nil {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion root finalization time is invalid",
 		)
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if current.Tombstone.Phase == hierarchydeletion.HierarchyDeletionFinalizing {
 		if current.Tombstone.PlanCount != nil && action.Ordinal == *current.Tombstone.PlanCount-1 &&
 			current.Fence.Dispatch == hierarchydeletion.HierarchyDeletionDispatchRetiring {
 			return current, nil
 		}
-		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	if err := validateHierarchyDeletionActiveAction(current, action); err != nil {
-		return HierarchyDeletionOperation{}, err
+	if err := hierarchydeletionexecution.ValidateHierarchyDeletionActiveAction(current, action); err != nil {
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if current.Tombstone.PlanCount == nil || action.Ordinal != *current.Tombstone.PlanCount-1 ||
 		current.Tombstone.Checkpoint.CompletedCount != action.Ordinal ||
 		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController || action.ControllerProcedure == nil ||
 		action.TargetKind != hierarchydeletion.HierarchyDeletionActionTargetKind(current.Tombstone.TargetKind) ||
 		action.TargetID != current.Tombstone.TargetID || !hierarchyDeletionRootFinalizerMatches(current.Tombstone.TargetKind, action.ActionKind) {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion root finalizer is not ready",
 		)
@@ -60,12 +61,12 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
 	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(tombstoneValue)
 	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(fenceValue)
 	transaction, err := repository.store.Transact(
@@ -80,11 +81,11 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 		},
 	)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion root finalization changed",
 		)

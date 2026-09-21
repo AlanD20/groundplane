@@ -35,7 +35,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReleaseGr
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironmentFinalizer(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	if err := scriptmutations.CleanupEnvironmentDeletionScriptLocators(

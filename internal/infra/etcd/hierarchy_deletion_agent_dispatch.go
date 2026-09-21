@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -20,7 +21,7 @@ import (
 
 func (repository *HierarchyDeletionRepository) PublishOrResumeAgentAction(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	now time.Time,
 ) (hierarchydeletion.HierarchyDeletionChildEntry, error) {
@@ -38,7 +39,7 @@ func (repository *HierarchyDeletionRepository) PublishOrResumeAgentAction(
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
-	if err := validateHierarchyDeletionActiveAction(current, action); err != nil {
+	if err := hierarchydeletionexecution.ValidateHierarchyDeletionActiveAction(current, action); err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
 	childKey, _ := hierarchydeletion.HierarchyDeletionChildKey(current.Tombstone.OperationID, action.AgentProcedure.ChildOperationID)
@@ -71,7 +72,7 @@ func (repository *HierarchyDeletionRepository) PublishOrResumeAgentAction(
 
 func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAttempt(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	previous *hierarchydeletion.HierarchyDeletionChildEntry,
 	previousRevision int64,
@@ -324,7 +325,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 
 func hierarchyDeletionChildMatches(
 	entry hierarchydeletion.HierarchyDeletionChildEntry,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) bool {
 	return entry.Schema == 1 && entry.ParentOperationID == operation.Tombstone.OperationID &&

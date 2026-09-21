@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
@@ -12,9 +13,9 @@ import (
 
 func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
-) (*HierarchyDeletionAgentTerminalProof, error) {
+) (*hierarchydeletionexecution.HierarchyDeletionAgentTerminalProof, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
@@ -82,7 +83,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 		progress.ReceiptDigest != hierarchydeletion.HierarchyDeletionBytesDigest(evidence.Values[0].Value) {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	return &HierarchyDeletionAgentTerminalProof{
+	return &hierarchydeletionexecution.HierarchyDeletionAgentTerminalProof{
 		ChildOperationID: receipt.ChildOperationID, AttemptID: receipt.AttemptID,
 		TaskID: receipt.TaskID, AssignmentID: receipt.AssignmentID,
 		AttemptGeneration: receipt.AttemptGeneration, ReceiptRevision: evidence.Values[0].ModRevision,
@@ -96,7 +97,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 
 func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalReceipt(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	entry hierarchydeletion.HierarchyDeletionChildEntry,
 	entryRevision int64,
@@ -270,7 +271,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 
 func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionProgress(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	entry hierarchydeletion.HierarchyDeletionChildEntry,
 	receipt hierarchydeletion.HierarchyDeletionTerminalAttemptReceipt,

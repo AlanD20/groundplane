@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -13,7 +14,7 @@ import (
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompletedRoot(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	terminalAt time.Time,
 	revision int64,
 	nextTombstone *hierarchydeletion.HierarchyDeletionTombstone,
@@ -105,7 +106,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 		change.clear()
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	nextTombstoneValue, nextFenceValue := advanceHierarchyDeletionCheckpoint(
+	nextTombstoneValue, nextFenceValue := hierarchydeletionexecution.AdvanceHierarchyDeletionCheckpoint(
 		operation, action, completion.ActionDigest, action.ControllerProcedure.MutationTemplateDigest, terminalAt,
 	)
 	*nextTombstone = nextTombstoneValue
@@ -140,7 +141,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 
 func (repository *HierarchyDeletionRepository) validateHierarchyDeletionRootProjection(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 ) error {
 	key := hierarchyDeletionPrimaryKey(operation.Tombstone.TargetKind, operation.Tombstone.TargetID)
 	read, err := repository.store.Get(ctx, key)

@@ -15,7 +15,7 @@ import (
 func (repository *HierarchyDeletionRepository) OperationByTask(
 	ctx context.Context,
 	taskID string,
-) (HierarchyDeletionOperation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, error) {
 	return repository.OperationByTaskAtRevision(ctx, taskID, 0)
 }
 
@@ -83,12 +83,12 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	ctx context.Context,
 	taskID string,
 	revision int64,
-) (HierarchyDeletionOperation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil || revision < 0 {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion Task lookup is invalid",
 		)
@@ -98,44 +98,44 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: revision},
 	)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if taskResult == nil || len(taskResult.Values) != 1 || taskResult.Values[0] == nil {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindTaskNotFound, "hierarchy deletion Task was not found")
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(errs.KindTaskNotFound, "hierarchy deletion Task was not found")
 	}
 	task, err := DecodeTaskRecord(taskResult.Values[0].Value)
 	if err != nil || task.ID != taskID || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
-		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if task.idempotencyMarker == nil || idempotencyrecord.ValidateIdempotencyLocator(*task.idempotencyMarker) != nil {
-		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	operationID := task.Params[taskjournal.TaskHierarchyDeletionOperationParam]
 	if !hierarchydeletion.ValidHierarchyDeletionPrivateID(operationID, "del") {
-		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	intentKey, err := hierarchydeletion.HierarchyDeletionIntentKey(operationID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	fenceKey, err := hierarchydeletion.HierarchyDeletionCleanupFenceKey(operationID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	replayKey, err := hierarchydeletion.HierarchyDeletionReplayTargetKey(operationID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	replayResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{intentKey, fenceKey, replayKey}, Revision: taskResult.ReadRevision,
 	})
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if replayResult == nil || replayResult.ReadRevision != taskResult.ReadRevision ||
 		len(replayResult.Values) != 3 || replayResult.Values[0] == nil ||
 		replayResult.Values[1] == nil || replayResult.Values[2] == nil {
-		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	var intent hierarchydeletion.HierarchyDeletionIntent
 	if err := hierarchydeletion.DecodeHierarchyDeletionRecord(
@@ -143,7 +143,7 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
 		&intent,
 	); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	var fence hierarchydeletion.HierarchyDeletionCleanupFence
 	if err := hierarchydeletion.DecodeHierarchyDeletionRecord(
@@ -151,7 +151,7 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
 		&fence,
 	); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	var replay hierarchydeletion.HierarchyDeletionReplayLocator
 	if err := hierarchydeletion.DecodeHierarchyDeletionRecord(
@@ -159,17 +159,17 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
 		&replay,
 	); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(intent.TargetKind), intent.TargetID)
 	tombstoneResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{tombstoneKey}, Revision: taskResult.ReadRevision,
 	})
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if tombstoneResult == nil || len(tombstoneResult.Values) != 1 || tombstoneResult.Values[0] == nil {
-		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	var tombstone hierarchydeletion.HierarchyDeletionTombstone
 	if err := hierarchydeletion.DecodeHierarchyDeletionRecord(
@@ -177,12 +177,12 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
 		&tombstone,
 	); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if err := validateHierarchyDeletionOperationSet(task, tombstone, intent, fence, replay); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	return HierarchyDeletionOperation{
+	return hierarchydeletion.HierarchyDeletionOperation{
 		Tombstone: tombstone, RootTaskID: replay.RootTaskID, MarkerLocator: *task.idempotencyMarker, Owner: task.Owner,
 		TombstoneRevision: tombstoneResult.Values[0].ModRevision,
 		Fence:             fence, FenceRevision: replayResult.Values[1].ModRevision,
@@ -229,45 +229,4 @@ func hierarchyDeletionPlanCursor(tombstone hierarchydeletion.HierarchyDeletionTo
 		return *tombstone.PlanCount
 	}
 	return 0
-}
-
-func cloneHierarchyDeletionOperation(operation HierarchyDeletionOperation) HierarchyDeletionOperation {
-	cloned := operation
-	cloned.Tombstone.PlanCount = cloneInt64Pointer(operation.Tombstone.PlanCount)
-	cloned.Tombstone.PlanDigest = cloneStringPointer(operation.Tombstone.PlanDigest)
-	cloned.Tombstone.Terminal = cloneHierarchyDeletionTerminal(operation.Tombstone.Terminal)
-	cloned.Fence.PlanDigest = cloneStringPointer(operation.Fence.PlanDigest)
-	cloned.Fence.ActiveActionOrdinal = cloneInt64Pointer(operation.Fence.ActiveActionOrdinal)
-	cloned.Intent = operation.Intent
-	return cloned
-}
-
-func clearHierarchyDeletionOperation(operation HierarchyDeletionOperation) {
-	operation.Tombstone.PlanDigest = nil
-	operation.Fence.PlanDigest = nil
-	operation.Intent.RootSlug = ""
-}
-
-func cloneInt64Pointer(value *int64) *int64 {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-func cloneStringPointer(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
-}
-
-func cloneHierarchyDeletionTerminal(value *hierarchydeletion.HierarchyDeletionTerminal) *hierarchydeletion.HierarchyDeletionTerminal {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
 }

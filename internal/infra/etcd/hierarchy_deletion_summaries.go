@@ -11,7 +11,7 @@ import (
 
 func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	rootCompletion []byte,
 	finalCheckpoint string,
 	completedAt time.Time,
@@ -21,8 +21,8 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 	completionDigest := hierarchydeletion.HierarchyDeletionFoldDigest("gp-deletion-completion-set-v1", operation.Tombstone.OperationID)
 	receiptDigest := hierarchydeletion.HierarchyDeletionFoldDigest("gp-deletion-receipt-set-v1", operation.Tombstone.OperationID)
 	childCount := int64(0)
-	for begin := int64(0); begin < count-1; begin += hierarchyDeletionPlanBatchSize {
-		end := min(begin+hierarchyDeletionPlanBatchSize, count-1)
+	for begin := int64(0); begin < count-1; begin += hierarchydeletion.PlanBatchSize {
+		end := min(begin+hierarchydeletion.PlanBatchSize, count-1)
 		keys := make([]string, end-begin)
 		for ordinal := begin; ordinal < end; ordinal++ {
 			keys[ordinal-begin] = mustHierarchyDeletionCompletionKey(operation.Tombstone.OperationID, ordinal)

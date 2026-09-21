@@ -10,7 +10,7 @@ import (
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAcknowledgement(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	task TaskRecord,
 	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,

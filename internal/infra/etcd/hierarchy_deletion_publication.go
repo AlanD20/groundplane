@@ -206,10 +206,10 @@ func prepareHierarchyDeletionPublication(
 	begin HierarchyDeletionBegin,
 	root hierarchyDeletionRoot,
 	snapshotRevision int64,
-) (HierarchyDeletionOperation, []etcdstore.Condition, []etcdstore.Mutation, TaskInitiation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, []etcdstore.Condition, []etcdstore.Mutation, TaskInitiation, error) {
 	if begin.OperationKind == hierarchydeletion.HierarchyDeletionOperationProject && root.workspace.Type == "platform" ||
 		begin.OperationKind == hierarchydeletion.HierarchyDeletionOperationBacking && root.workspace.Type != "platform" {
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion Project kind must use its exclusive permanent-delete authority",
 		)
@@ -224,22 +224,22 @@ func prepareHierarchyDeletionPublication(
 		}
 	}
 	if targetCoordinationIndex < 0 {
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, hierarchydeletion.CorruptHierarchyDeletion()
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	deletionEpoch := root.coordination[targetCoordinationIndex].Record.MutationEpoch + 1
 	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(begin.TargetKind), begin.TargetID)
 	lockKey := hierarchydeletion.HierarchyDeletionLockKey(string(begin.TargetKind), begin.TargetID)
 	replayKey, err := hierarchydeletion.HierarchyDeletionReplayTargetKey(begin.OperationID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	fenceKey, err := hierarchydeletion.HierarchyDeletionCleanupFenceKey(begin.OperationID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	intentKey, err := hierarchydeletion.HierarchyDeletionIntentKey(begin.OperationID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	initialDigest := sha256.Sum256([]byte("gp-deletion-completed-prefix-v1\x00"))
 	tombstone := hierarchydeletion.HierarchyDeletionTombstone{
@@ -277,25 +277,25 @@ func prepareHierarchyDeletionPublication(
 	}
 	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(tombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
 	if err != nil {
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	intentValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(intent, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
 	if err != nil {
 		clear(tombstoneValue)
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	lockValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(lock, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
 		clear(tombstoneValue)
 		clear(intentValue)
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(replay, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
 		clear(tombstoneValue)
 		clear(intentValue)
 		clear(lockValue)
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(fence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
@@ -303,7 +303,7 @@ func prepareHierarchyDeletionPublication(
 		clear(intentValue)
 		clear(lockValue)
 		clear(replayValue)
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	mutatedRootValue, err := hierarchyDeletionRootValue(begin.TargetKind, root.targetValue, begin.TaskID)
 	if err != nil {
@@ -312,7 +312,7 @@ func prepareHierarchyDeletionPublication(
 		clear(lockValue)
 		clear(replayValue)
 		clear(fenceValue)
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
 	conditions := append([]etcdstore.Condition(nil), root.primaryFences...)
 	conditions = append(conditions,
@@ -333,7 +333,7 @@ func prepareHierarchyDeletionPublication(
 		encoded, encodeErr := hierarchydeletion.EncodeHierarchyCoordination(next)
 		if encodeErr != nil {
 			etcdstore.ClearMutationValues(mutations)
-			return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, encodeErr
+			return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, encodeErr
 		}
 		key := root.coordinationKeys[index]
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: current.Revision})
@@ -348,9 +348,9 @@ func prepareHierarchyDeletionPublication(
 	initiation, err := newTaskInitiation(root.owner, taskjournal.TaskActorOperator, initiationFences...)
 	if err != nil {
 		etcdstore.ClearMutationValues(mutations)
-		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
-	return HierarchyDeletionOperation{
+	return hierarchydeletion.HierarchyDeletionOperation{
 		Tombstone: tombstone, Fence: fence, Intent: intent, UpdatedAt: begin.CreatedAt,
 	}, conditions, mutations, initiation, nil
 }

@@ -28,7 +28,7 @@ type HierarchyDeletionPlannedAction struct {
 
 func (repository *HierarchyDeletionRepository) BindActions(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	planned []HierarchyDeletionPlannedAction,
 ) ([]hierarchydeletion.HierarchyDeletionAction, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -53,7 +53,7 @@ func (repository *HierarchyDeletionRepository) BindActions(
 }
 
 func bindHierarchyDeletionAction(
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	planned HierarchyDeletionPlannedAction,
 ) (hierarchydeletion.HierarchyDeletionAction, error) {
 	if planned.ID == "" || planned.NodeID == "" || planned.ParentOperationID != operation.Tombstone.OperationID ||

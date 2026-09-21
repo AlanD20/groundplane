@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionexecution
 
 import (
 	"context"
@@ -8,20 +8,20 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) ReadyAction(
+func (repository *Executor) ReadyAction(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
-) (*hierarchydeletion.HierarchyDeletionAction, HierarchyDeletionOperation, error) {
+	operation hierarchydeletion.HierarchyDeletionOperation,
+) (*hierarchydeletion.HierarchyDeletionAction, hierarchydeletion.HierarchyDeletionOperation, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return nil, HierarchyDeletionOperation{}, err
+		return nil, hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
+	current, err := repository.operations.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
 	if err != nil {
-		return nil, HierarchyDeletionOperation{}, err
+		return nil, hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if current.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting || current.Tombstone.PlanCount == nil ||
 		current.Tombstone.PlanDigest == nil || current.Fence.Dispatch != hierarchydeletion.HierarchyDeletionDispatchOpen {
-		return nil, HierarchyDeletionOperation{}, errs.New(
+		return nil, hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion is not executable",
 		)
@@ -32,18 +32,18 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 	}
 	if current.Fence.ActiveActionOrdinal != nil {
 		if *current.Fence.ActiveActionOrdinal != ordinal {
-			return nil, HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
+			return nil, hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		action, readErr := repository.actionAtRevision(ctx, current, ordinal)
 		return &action, current, readErr
 	}
 	action, err := repository.actionAtRevision(ctx, current, ordinal)
 	if err != nil {
-		return nil, HierarchyDeletionOperation{}, err
+		return nil, hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	for _, prerequisite := range action.PrerequisiteOrdinals {
 		if prerequisite >= ordinal || prerequisite >= current.Tombstone.Checkpoint.CompletedCount {
-			return nil, HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
+			return nil, hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 	}
 	nextFence := current.Fence
@@ -56,7 +56,7 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
 	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
-		return nil, HierarchyDeletionOperation{}, err
+		return nil, hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(fenceValue)
 	conditions := []etcdstore.Condition{{Key: fenceKey, ModRevision: current.FenceRevision}}
@@ -68,7 +68,7 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 		tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID)
 		tombstoneValue, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
 		if encodeErr != nil {
-			return nil, HierarchyDeletionOperation{}, encodeErr
+			return nil, hierarchydeletion.HierarchyDeletionOperation{}, encodeErr
 		}
 		defer clear(tombstoneValue)
 		conditions = append(conditions, etcdstore.Condition{Key: tombstoneKey, ModRevision: current.TombstoneRevision})
@@ -76,11 +76,11 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return nil, HierarchyDeletionOperation{}, err
+		return nil, hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return nil, HierarchyDeletionOperation{}, errs.New(
+		return nil, hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion action selection changed",
 		)
@@ -94,9 +94,9 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 	return &action, current, nil
 }
 
-func (repository *HierarchyDeletionRepository) actionAtRevision(
+func (repository *Executor) actionAtRevision(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	ordinal int64,
 ) (hierarchydeletion.HierarchyDeletionAction, error) {
 	key, err := hierarchydeletion.HierarchyDeletionActionKey(operation.Tombstone.OperationID, ordinal)

@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionexecution
 
 import (
 	"context"
@@ -27,25 +27,25 @@ type HierarchyDeletionAgentTerminalProof struct {
 	CheckpointDigest   string
 }
 
-func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
+func (repository *Executor) ConsumeAgentTerminal(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	proof HierarchyDeletionAgentTerminalProof,
 	completedAt time.Time,
-) (HierarchyDeletionOperation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if err := validateHierarchyDeletionAgentTerminal(action, proof, completedAt); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
+	current, err := repository.operations.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	if err := validateHierarchyDeletionActiveAction(current, action); err != nil {
-		return HierarchyDeletionOperation{}, err
+	if err := ValidateHierarchyDeletionActiveAction(current, action); err != nil {
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	receiptKey, _ := hierarchydeletion.HierarchyDeletionReceiptKey(current.Tombstone.OperationID, proof.ChildOperationID, proof.AttemptID)
 	progressKey, _ := hierarchydeletion.HierarchyDeletionProgressKey(
@@ -54,7 +54,7 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		proof.AttemptID,
 	)
 	if proof.ProgressKey != progressKey {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion progress evidence changed",
 		)
@@ -63,13 +63,13 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		Keys: []string{receiptKey}, Revision: proof.ReceiptRevision,
 	})
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if receiptSnapshot == nil || receiptSnapshot.ReadRevision != proof.ReceiptRevision ||
 		len(receiptSnapshot.Values) != 1 || receiptSnapshot.Values[0] == nil ||
 		receiptSnapshot.Values[0].ModRevision != proof.ReceiptRevision ||
 		hierarchydeletion.HierarchyDeletionBytesDigest(receiptSnapshot.Values[0].Value) != proof.ReceiptDigest {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion terminal evidence changed",
 		)
@@ -78,10 +78,10 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 	defer clear(receiptRead.Value)
 	progressRead, err := repository.store.Get(ctx, progressKey)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if progressRead.Entry == nil || hierarchydeletion.HierarchyDeletionBytesDigest(progressRead.Entry.Value) != proof.ProgressDigest {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion terminal progress changed",
 		)
@@ -96,7 +96,7 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		receipt.AttemptGeneration != proof.AttemptGeneration || receipt.TerminalTaskDigest != proof.TerminalTaskDigest ||
 		receipt.Terminal != proof.Terminal || receipt.ResultDigest != proof.ResultDigest ||
 		receipt.ErrorDigest != proof.ErrorDigest || receipt.CheckpointDigest != proof.CheckpointDigest {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion terminal receipt does not match proof",
 		)
@@ -115,7 +115,7 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 		progress.ErrorDigest != proof.ErrorDigest || progress.CheckpointDigest != proof.CheckpointDigest ||
 		progress.ReceiptRevision != proof.ReceiptRevision || progress.ReceiptDigest != proof.ReceiptDigest ||
 		progress.ConsumedAction != wantConsumed {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion progress does not match proof",
 		)
@@ -136,9 +136,9 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 	)
 }
 
-func (repository *HierarchyDeletionRepository) completeAgentAction(
+func (repository *Executor) completeAgentAction(
 	ctx context.Context,
-	current HierarchyDeletionOperation,
+	current hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	proof HierarchyDeletionAgentTerminalProof,
 	receiptKey string,
@@ -146,10 +146,10 @@ func (repository *HierarchyDeletionRepository) completeAgentAction(
 	progressKey string,
 	progressRevision int64,
 	completedAt time.Time,
-) (HierarchyDeletionOperation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, error) {
 	actionValue, err := hierarchydeletion.EncodeHierarchyDeletionAction(action)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(actionValue)
 	completion := hierarchydeletion.HierarchyDeletionActionCompletion{
@@ -171,13 +171,13 @@ func (repository *HierarchyDeletionRepository) completeAgentAction(
 	}
 	completionValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completion, hierarchydeletion.HierarchyDeletionCompletionRecordBytes)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(completionValue)
-	nextTombstone, nextFence := advanceHierarchyDeletionCheckpoint(
+	nextTombstone, nextFence := AdvanceHierarchyDeletionCheckpoint(
 		current, action, completion.ActionDigest, proof.ReceiptDigest, completedAt,
 	)
-	return repository.commitHierarchyDeletionCompletion(
+	return repository.CommitActionCompletion(
 		ctx,
 		current,
 		nextTombstone,
@@ -192,14 +192,14 @@ func (repository *HierarchyDeletionRepository) completeAgentAction(
 	)
 }
 
-func (repository *HierarchyDeletionRepository) releaseFailedAgentAction(
+func (repository *Executor) releaseFailedAgentAction(
 	ctx context.Context,
-	current HierarchyDeletionOperation,
+	current hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	receiptKey string,
 	receiptRevision int64,
 	completedAt time.Time,
-) (HierarchyDeletionOperation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, error) {
 	nextFence := current.Fence
 	nextFence.Generation++
 	nextFence.ActiveActionOrdinal = nil
@@ -210,7 +210,7 @@ func (repository *HierarchyDeletionRepository) releaseFailedAgentAction(
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
 	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(fenceValue)
 	transaction, err := repository.store.Transact(ctx,
@@ -221,11 +221,11 @@ func (repository *HierarchyDeletionRepository) releaseFailedAgentAction(
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue}},
 	)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion action ownership changed",
 		)
@@ -237,27 +237,27 @@ func (repository *HierarchyDeletionRepository) releaseFailedAgentAction(
 	return current, nil
 }
 
-func (repository *HierarchyDeletionRepository) commitHierarchyDeletionCompletion(
+func (repository *Executor) CommitActionCompletion(
 	ctx context.Context,
-	current HierarchyDeletionOperation,
+	current hierarchydeletion.HierarchyDeletionOperation,
 	nextTombstone hierarchydeletion.HierarchyDeletionTombstone,
 	nextFence hierarchydeletion.HierarchyDeletionCleanupFence,
 	ordinal int64,
 	completionValue []byte,
 	extraConditions []etcdstore.Condition,
 	extraMutations []etcdstore.Mutation,
-) (HierarchyDeletionOperation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, error) {
 	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID)
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
 	completionKey, _ := hierarchydeletion.HierarchyDeletionCompletionKey(current.Tombstone.OperationID, ordinal)
 	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(tombstoneValue)
 	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(fenceValue)
 	conditions := []etcdstore.Condition{
@@ -273,15 +273,15 @@ func (repository *HierarchyDeletionRepository) commitHierarchyDeletionCompletion
 	}
 	mutations = append(mutations, extraMutations...)
 	if err := hierarchydeletion.EnforceHierarchyDeletionTransaction(conditions, mutations); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion completion changed")
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion completion changed")
 	}
 	current.Tombstone = nextTombstone
 	current.TombstoneRevision = transaction.Revision
@@ -293,8 +293,8 @@ func (repository *HierarchyDeletionRepository) commitHierarchyDeletionCompletion
 	return current, nil
 }
 
-func advanceHierarchyDeletionCheckpoint(
-	current HierarchyDeletionOperation,
+func AdvanceHierarchyDeletionCheckpoint(
+	current hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	actionDigest string,
 	proofDigest string,
@@ -319,8 +319,8 @@ func advanceHierarchyDeletionCheckpoint(
 	return nextTombstone, nextFence
 }
 
-func validateHierarchyDeletionActiveAction(
-	operation HierarchyDeletionOperation,
+func ValidateHierarchyDeletionActiveAction(
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) error {
 	if operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionExecuting || operation.Tombstone.PlanCount == nil ||

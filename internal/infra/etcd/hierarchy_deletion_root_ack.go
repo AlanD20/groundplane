@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -23,7 +24,7 @@ func (change *hierarchyDeletionRootAckChange) clear() {
 	if change == nil {
 		return
 	}
-	clearByteSlices(change.values)
+	hierarchydeletionexecution.ClearByteSlices(change.values)
 	change.values = nil
 }
 

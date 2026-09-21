@@ -4,6 +4,7 @@ import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -32,7 +33,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnector
 	prefixes := hierarchyDeletionConnectorReferencePrefixes(action.TargetID)
 	_, err = repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes)
 	if err != nil {
-		clearByteSlices(effects.values)
+		hierarchydeletionexecution.ClearByteSlices(effects.values)
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	for _, prefix := range prefixes {

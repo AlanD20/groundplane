@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -236,7 +237,7 @@ func (repository *EtcdRepository) ConsumeAgentTerminal(
 ) (Operation, error) {
 	updated, err := repository.journal.ConsumeAgentTerminal(
 		ctx, operationToEtcd(operation), actionToEtcd(action),
-		etcdinfra.HierarchyDeletionAgentTerminalProof{
+		hierarchydeletionexecution.HierarchyDeletionAgentTerminalProof{
 			ChildOperationID: proof.ChildOperationID, AttemptID: proof.AttemptID,
 			TaskID: proof.TaskID, AssignmentID: proof.AssignmentID,
 			AttemptGeneration: proof.AttemptGeneration, ReceiptRevision: proof.ReceiptRevision,
@@ -324,7 +325,7 @@ func (repository *EtcdRepository) Execute(
 	}
 }
 
-func operationFromEtcd(value etcdinfra.HierarchyDeletionOperation) Operation {
+func operationFromEtcd(value hierarchydeletion.HierarchyDeletionOperation) Operation {
 	operation := Operation{
 		ID: value.Tombstone.OperationID, TaskOperationID: value.Tombstone.TaskOperationID,
 		Kind: OperationKind(value.Tombstone.OperationKind), TargetKind: TargetKind(value.Tombstone.TargetKind),
@@ -345,8 +346,8 @@ func operationFromEtcd(value etcdinfra.HierarchyDeletionOperation) Operation {
 	return operation
 }
 
-func operationToEtcd(value Operation) etcdinfra.HierarchyDeletionOperation {
-	operation := etcdinfra.HierarchyDeletionOperation{
+func operationToEtcd(value Operation) hierarchydeletion.HierarchyDeletionOperation {
+	operation := hierarchydeletion.HierarchyDeletionOperation{
 		Tombstone: hierarchydeletion.HierarchyDeletionTombstone{
 			OperationID: value.ID, TaskOperationID: value.TaskOperationID,
 			OperationKind: hierarchydeletion.HierarchyDeletionOperationKind(value.Kind),
@@ -402,7 +403,7 @@ func actionToEtcd(value Action) hierarchydeletion.HierarchyDeletionAction {
 
 func actionFromEtcd(
 	value hierarchydeletion.HierarchyDeletionAction,
-	operation etcdinfra.HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 ) Action {
 	prerequisites := make([]int, len(value.PrerequisiteOrdinals))
 	for index, ordinal := range value.PrerequisiteOrdinals {

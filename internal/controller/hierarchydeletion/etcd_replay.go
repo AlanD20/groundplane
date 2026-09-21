@@ -10,7 +10,7 @@ import (
 	"net/http"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -307,7 +307,7 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 	return BeginResult{Operation: converted, Existing: true}, nil
 }
 
-func replayScopeMatches(locator idempotencyrecord.IdempotencyLocator, operation etcdinfra.HierarchyDeletionOperation) bool {
+func replayScopeMatches(locator idempotencyrecord.IdempotencyLocator, operation hierarchydeletion.HierarchyDeletionOperation) bool {
 	owner := operation.Owner
 	if owner.WorkspaceType == taskjournal.TaskWorkspacePlatform {
 		return locator.ScopeKind == idempotencyrecord.IdempotencyScopePlatform && locator.ScopeID == "-"

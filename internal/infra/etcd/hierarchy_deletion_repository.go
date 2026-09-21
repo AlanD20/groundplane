@@ -2,10 +2,9 @@ package etcd
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -18,10 +17,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const (
-	hierarchyDeletionPlanBatchSize = 47
-)
-
 type hierarchyDeletionStore interface {
 	Get(context.Context, string) (*etcdstore.GetResult, error)
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
@@ -31,6 +26,7 @@ type hierarchyDeletionStore interface {
 }
 
 type HierarchyDeletionRepository struct {
+	*hierarchydeletionexecution.Executor
 	store hierarchyDeletionStore
 }
 
@@ -42,7 +38,9 @@ func newHierarchyDeletionRepository(store hierarchyDeletionStore) (*HierarchyDel
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "hierarchy deletion store is required")
 	}
-	return &HierarchyDeletionRepository{store: store}, nil
+	repository := &HierarchyDeletionRepository{store: store}
+	repository.Executor = hierarchydeletionexecution.NewExecutor(store, repository)
+	return repository, nil
 }
 
 func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
@@ -189,24 +187,8 @@ type HierarchyDeletionBegin struct {
 	DeadlineAt      time.Time
 }
 
-type HierarchyDeletionOperation struct {
-	Tombstone         hierarchydeletion.HierarchyDeletionTombstone
-	RootTaskID        string
-	MarkerLocator     idempotencyrecord.IdempotencyLocator
-	Owner             taskjournal.TaskOwner
-	TombstoneRevision int64
-	Fence             hierarchydeletion.HierarchyDeletionCleanupFence
-	FenceRevision     int64
-	Intent            hierarchydeletion.HierarchyDeletionIntent
-	IntentRevision    int64
-	PlanCursor        int64
-	SucceededCount    int64
-	FailedCount       int64
-	UpdatedAt         time.Time
-}
-
 type HierarchyDeletionBeginResult struct {
-	Operation   HierarchyDeletionOperation
+	Operation   hierarchydeletion.HierarchyDeletionOperation
 	Idempotency IdempotencyTransactionResult
 	Existing    bool
 }
@@ -263,7 +245,7 @@ func (repository *HierarchyDeletionRepository) Begin(
 		return HierarchyDeletionBeginResult{}, err
 	}
 	defer etcdstore.ClearMutationValues(mutations)
-	defer clearHierarchyDeletionOperation(operation)
+	defer hierarchydeletion.ClearHierarchyDeletionOperation(operation)
 
 	task, err := hierarchyDeletionTask(begin, root.owner, operation.Intent)
 	if err != nil {
@@ -327,7 +309,7 @@ func (repository *HierarchyDeletionRepository) Begin(
 		existing, readErr := repository.OperationByTask(ctx, marker.TaskID)
 		return HierarchyDeletionBeginResult{Operation: existing, Idempotency: result, Existing: true}, readErr
 	}
-	created := cloneHierarchyDeletionOperation(operation)
+	created := hierarchydeletion.CloneHierarchyDeletionOperation(operation)
 	created.TombstoneRevision = result.revision
 	created.FenceRevision = result.revision
 	created.IntentRevision = result.revision
@@ -422,28 +404,4 @@ func (repository *HierarchyDeletionRepository) validateHierarchyDeletionBeginRep
 func hierarchyDeletionResponseDigest(taskID string) string {
 	value := []byte(`{"task_id":"` + taskID + `"}`)
 	return hierarchydeletion.HierarchyDeletionDigest(value)
-}
-
-func hierarchyDeletionPlanDigest(actions [][]byte) string {
-	hash := sha256.New()
-	_, _ = hash.Write([]byte("gp-deletion-plan-v1\x00"))
-	writeUint64(hash, uint64(len(actions)))
-	for _, action := range actions {
-		writeUint32(hash, uint32(len(action)))
-		_, _ = hash.Write(action)
-	}
-	return hex.EncodeToString(hash.Sum(nil))
-}
-
-type byteWriter interface{ Write([]byte) (int, error) }
-
-func writeUint64(writer byteWriter, value uint64) {
-	buffer := []byte{byte(value >> 56), byte(value >> 48), byte(value >> 40), byte(value >> 32),
-		byte(value >> 24), byte(value >> 16), byte(value >> 8), byte(value)}
-	_, _ = writer.Write(buffer)
-}
-
-func writeUint32(writer byteWriter, value uint32) {
-	buffer := []byte{byte(value >> 24), byte(value >> 16), byte(value >> 8), byte(value)}
-	_, _ = writer.Write(buffer)
 }

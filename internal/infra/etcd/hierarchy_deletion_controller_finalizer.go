@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	hierarchydeletionexecution "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionexecution"
 	hierarchydeletionplanning "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -19,39 +20,39 @@ type hierarchyDeletionControllerEffects struct {
 
 func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 	completedAt time.Time,
-) (HierarchyDeletionOperation, error) {
+) (hierarchydeletion.HierarchyDeletionOperation, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if recordcodec.ValidateTimestamp("hierarchy deletion Controller completion", completedAt) != nil ||
 		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController || action.ControllerProcedure == nil {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion Controller action is invalid",
 		)
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	if err := validateHierarchyDeletionActiveAction(current, action); err != nil {
-		return HierarchyDeletionOperation{}, err
+	if err := hierarchydeletionexecution.ValidateHierarchyDeletionActiveAction(current, action); err != nil {
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if action.TargetID == current.Tombstone.TargetID &&
 		hierarchyDeletionRootFinalizerMatches(current.Tombstone.TargetKind, action.ActionKind) {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"root hierarchy deletion finalizer requires Task acknowledgement",
 		)
 	}
 	effects, err := repository.prepareHierarchyDeletionControllerEffects(ctx, current, action)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
-	defer clearByteSlices(effects.values)
+	defer hierarchydeletionexecution.ClearByteSlices(effects.values)
 	expected, err := bindHierarchyDeletionControllerProcedure(
 		HierarchyDeletionPlannedAction{
 			NodeID: action.NodeID, Ordinal: action.Ordinal, ParentOperationID: action.ParentOperationID,
@@ -65,14 +66,14 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 		},
 	)
 	if err != nil || expected != *action.ControllerProcedure {
-		return HierarchyDeletionOperation{}, errs.New(
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion finalizer template changed",
 		)
 	}
 	actionValue, err := hierarchydeletion.EncodeHierarchyDeletionAction(action)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(actionValue)
 	completion := hierarchydeletion.HierarchyDeletionActionCompletion{
@@ -92,13 +93,13 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	}
 	completionValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completion, hierarchydeletion.HierarchyDeletionCompletionRecordBytes)
 	if err != nil {
-		return HierarchyDeletionOperation{}, err
+		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(completionValue)
-	nextTombstone, nextFence := advanceHierarchyDeletionCheckpoint(
+	nextTombstone, nextFence := hierarchydeletionexecution.AdvanceHierarchyDeletionCheckpoint(
 		current, action, completion.ActionDigest, action.ControllerProcedure.MutationTemplateDigest, completedAt,
 	)
-	return repository.commitHierarchyDeletionCompletion(
+	return repository.CommitActionCompletion(
 		ctx, current, nextTombstone, nextFence, action.Ordinal, completionValue,
 		effects.conditions, effects.mutations,
 	)
@@ -106,7 +107,7 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionControllerEffects(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	switch action.ActionKind {

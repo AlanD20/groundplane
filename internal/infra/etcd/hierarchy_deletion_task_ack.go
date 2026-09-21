@@ -229,7 +229,7 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 	if err != nil {
 		return err
 	}
-	operation := HierarchyDeletionOperation{Tombstone: hierarchydeletion.HierarchyDeletionTombstone{OperationID: parentOperationID}}
+	operation := hierarchydeletion.HierarchyDeletionOperation{Tombstone: hierarchydeletion.HierarchyDeletionTombstone{OperationID: parentOperationID}}
 	return hierarchy.ensureHierarchyDeletionTerminalReceipt(
 		ctx, operation, action, entry, read.Values[1].ModRevision, task, taskRevision,
 	)

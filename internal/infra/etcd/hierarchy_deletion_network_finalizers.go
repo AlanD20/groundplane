@@ -76,7 +76,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponent
 }
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinalizer(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	evidence, zoneValue, err := hierarchydeletionplanning.HierarchyDeletionZoneEvidenceAtRevision(

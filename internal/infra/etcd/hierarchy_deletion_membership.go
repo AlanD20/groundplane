@@ -10,7 +10,7 @@ import (
 
 func (repository *HierarchyDeletionRepository) FreezeMembership(
 	ctx context.Context,
-	operation HierarchyDeletionOperation,
+	operation hierarchydeletion.HierarchyDeletionOperation,
 ) (hierarchydeletionplanning.HierarchyDeletionFrozenMembership, error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return hierarchydeletionplanning.HierarchyDeletionFrozenMembership{}, err
