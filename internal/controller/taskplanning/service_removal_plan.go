@@ -118,7 +118,8 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 
 func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent environmentchanges.ServiceRemovalIntent) error {
 	if task.ID != intent.TaskID || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
-		task.Target != intent.ServiceID || len(task.Params) != 4 || len(task.Steps) != 1 ||
+		task.Target != intent.ServiceID || len(task.Params) != 4 ||
+		len(task.Steps) != 1 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||

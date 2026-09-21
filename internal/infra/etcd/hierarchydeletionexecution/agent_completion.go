@@ -97,7 +97,8 @@ func (repository *Executor) ConsumeAgentTerminal(
 		receipt.ParentOperationID != current.Tombstone.OperationID ||
 		receipt.ActionOrdinal != action.Ordinal ||
 		receipt.ChildOperationID != proof.ChildOperationID || receipt.AttemptID != proof.AttemptID ||
-		receipt.TaskID != proof.TaskID || receipt.AssignmentID != proof.AssignmentID ||
+		receipt.TaskID != proof.TaskID ||
+		receipt.AssignmentID != proof.AssignmentID ||
 		receipt.AttemptGeneration != proof.AttemptGeneration ||
 		receipt.TerminalTaskDigest != proof.TerminalTaskDigest ||
 		receipt.Terminal != proof.Terminal ||
@@ -118,7 +119,8 @@ func (repository *Executor) ConsumeAgentTerminal(
 		progress.ParentOperationID != current.Tombstone.OperationID ||
 		progress.ChildOperationID != proof.ChildOperationID || progress.ActionOrdinal != action.Ordinal ||
 		progress.TaskID != proof.TaskID || progress.AssignmentID != proof.AssignmentID ||
-		progress.AttemptGeneration != proof.AttemptGeneration || progress.Terminal != proof.Terminal ||
+		progress.AttemptGeneration != proof.AttemptGeneration ||
+		progress.Terminal != proof.Terminal ||
 		progress.TerminalTaskDigest != proof.TerminalTaskDigest ||
 		progress.ResultDigest != proof.ResultDigest ||
 		progress.ErrorDigest != proof.ErrorDigest ||

@@ -71,7 +71,8 @@ func TestSecretScriptAbsenceRequiresBothCountAndMembership(t *testing.T) {
 			}
 			switch state {
 			case "absent":
-				if err != nil || len(conditions) != 3 || conditions[0].Key != testscriptsourceevidence.ScriptSourceCountKey(source) ||
+				if err != nil || len(conditions) != 3 ||
+					conditions[0].Key != testscriptsourceevidence.ScriptSourceCountKey(source) ||
 					!conditions[1].Prefix ||
 					conditions[0].ModRevision != 0 ||
 					conditions[1].ModRevision != 0 ||

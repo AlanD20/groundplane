@@ -268,7 +268,8 @@ func volumeRemovalTaskMatchesRuntime(task TaskRecord, runtime removalrecord.Runt
 	if task.Actor != taskjournal.TaskActorOperator || task.Executor != taskjournal.TaskExecutorAgent || task.FinishedAt == nil ||
 		task.FinishedAt.Before(
 			runtime.UpdatedAt,
-		) || task.ID != runtime.CurrentTaskID ||
+		) ||
+		task.ID != runtime.CurrentTaskID ||
 		task.OperationID != runtime.OperationID ||
 		task.Target != runtime.VolumeID ||
 		task.Owner.EnvironmentID != runtime.EnvironmentID ||

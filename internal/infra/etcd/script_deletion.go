@@ -69,7 +69,8 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		Kind: idempotencyrecord.IdempotencyReplayTargetScript,
 		ID:   scriptID,
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID ||

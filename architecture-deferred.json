@@ -182,20 +182,44 @@
   {
     "path": "internal/infra/etcd/blueprint_executed_artifact_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composeidentity",
+    "message": "internal/infra/etcd must not import internal/controller/composeidentity"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_executed_artifact_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_executed_artifact_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/blueprint_mixed_observer_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/agent",
-    "message": "internal/infra/etcd must not import internal/agent"
+    "subject": "internal/agent/taskassignment",
+    "message": "internal/infra/etcd must not import internal/agent/taskassignment"
   },
   {
     "path": "internal/infra/etcd/blueprint_mixed_producer_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composeidentity",
+    "message": "internal/infra/etcd must not import internal/controller/composeidentity"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/blueprint_mixed_producer_external_test.go",
@@ -212,8 +236,20 @@
   {
     "path": "internal/infra/etcd/blueprint_mixed_runtime_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composeidentity",
+    "message": "internal/infra/etcd must not import internal/controller/composeidentity"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_runtime_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_runtime_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/blueprint_mixed_runtime_external_test.go",
@@ -236,14 +272,38 @@
   {
     "path": "internal/infra/etcd/blueprint_mixed_worker_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/agent/composeruntime",
+    "message": "internal/infra/etcd must not import internal/agent/composeruntime"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_worker_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent/taskassignment",
+    "message": "internal/infra/etcd must not import internal/agent/taskassignment"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_mixed_worker_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/blueprint_native_predecessor_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composeidentity",
+    "message": "internal/infra/etcd must not import internal/controller/composeidentity"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_native_predecessor_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_native_predecessor_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/blueprint_native_predecessor_external_test.go",
@@ -264,10 +324,34 @@
     "message": "internal/infra/etcd must not import internal/agent"
   },
   {
+    "path": "internal/infra/etcd/blueprint_publication_assignment_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent/taskassignment",
+    "message": "internal/infra/etcd must not import internal/agent/taskassignment"
+  },
+  {
     "path": "internal/infra/etcd/blueprint_publication_size_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composeidentity",
+    "message": "internal/infra/etcd must not import internal/controller/composeidentity"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_publication_size_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_publication_size_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskmaterialization",
+    "message": "internal/infra/etcd must not import internal/controller/taskmaterialization"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_publication_size_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/blueprint_publication_size_external_test.go",
@@ -284,8 +368,20 @@
   {
     "path": "internal/infra/etcd/blueprint_retained_producer_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composeidentity",
+    "message": "internal/infra/etcd must not import internal/controller/composeidentity"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_producer_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/blueprint_retained_producer_external_test.go",
@@ -302,8 +398,20 @@
   {
     "path": "internal/infra/etcd/blueprint_retained_rollback_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composeidentity",
+    "message": "internal/infra/etcd must not import internal/controller/composeidentity"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_rollback_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/blueprint_retained_rollback_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/blueprint_retained_rollback_external_test.go",
@@ -314,8 +422,8 @@
   {
     "path": "internal/infra/etcd/blueprint_terminal_budget_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/component_task_lifecycle.go",
@@ -341,14 +449,44 @@
   {
     "path": "internal/infra/etcd/entry_removal_agent_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/agent/materialization",
+    "message": "internal/infra/etcd must not import internal/agent/materialization"
+  },
+  {
+    "path": "internal/infra/etcd/entry_removal_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent/taskassignment",
+    "message": "internal/infra/etcd must not import internal/agent/taskassignment"
+  },
+  {
+    "path": "internal/infra/etcd/entry_removal_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskmaterialization",
+    "message": "internal/infra/etcd must not import internal/controller/taskmaterialization"
+  },
+  {
+    "path": "internal/infra/etcd/entry_removal_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/entry_removal_publication_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/entry_removal_publication_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskmaterialization",
+    "message": "internal/infra/etcd must not import internal/controller/taskmaterialization"
+  },
+  {
+    "path": "internal/infra/etcd/entry_removal_publication_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/entry_repository.go",
@@ -358,14 +496,20 @@
   {
     "path": "internal/infra/etcd/entry_runtime_publication_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/entry_serving_runtime_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/entry_serving_runtime_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/environment_blueprint_staging.go",
@@ -430,8 +574,8 @@
   {
     "path": "internal/infra/etcd/script_context_publication_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/script_execution.go",
@@ -441,20 +585,26 @@
   {
     "path": "internal/infra/etcd/script_explicit_producer_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/script_manual_admission_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/script_manual_entry_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/taskmaterialization",
+    "message": "internal/infra/etcd must not import internal/controller/taskmaterialization"
+  },
+  {
+    "path": "internal/infra/etcd/script_manual_entry_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/script_manual_entry_external_test.go",
@@ -465,8 +615,14 @@
   {
     "path": "internal/infra/etcd/script_manual_journey_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/taskmaterialization",
+    "message": "internal/infra/etcd must not import internal/controller/taskmaterialization"
+  },
+  {
+    "path": "internal/infra/etcd/script_manual_journey_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/script_manual_journey_external_test.go",
@@ -503,8 +659,32 @@
   {
     "path": "internal/infra/etcd/volume_agent_production_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/agent/composeruntime",
+    "message": "internal/infra/etcd must not import internal/agent/composeruntime"
+  },
+  {
+    "path": "internal/infra/etcd/volume_agent_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent/environmentdirectory",
+    "message": "internal/infra/etcd must not import internal/agent/environmentdirectory"
+  },
+  {
+    "path": "internal/infra/etcd/volume_agent_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent/taskassignment",
+    "message": "internal/infra/etcd must not import internal/agent/taskassignment"
+  },
+  {
+    "path": "internal/infra/etcd/volume_agent_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskcheckpoint",
+    "message": "internal/infra/etcd must not import internal/controller/taskcheckpoint"
+  },
+  {
+    "path": "internal/infra/etcd/volume_agent_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/volume_agent_production_external_test.go",
@@ -515,8 +695,8 @@
   {
     "path": "internal/infra/etcd/volume_checkpoint_production_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/taskcheckpoint",
+    "message": "internal/infra/etcd must not import internal/controller/taskcheckpoint"
   },
   {
     "path": "internal/infra/etcd/volume_checkpoint_production_external_test.go",
@@ -527,8 +707,20 @@
   {
     "path": "internal/infra/etcd/volume_removal_production_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/idempotency",
+    "message": "internal/infra/etcd must not import internal/controller/idempotency"
+  },
+  {
+    "path": "internal/infra/etcd/volume_removal_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
+  },
+  {
+    "path": "internal/infra/etcd/volume_removal_production_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/volume",
+    "message": "internal/infra/etcd must not import internal/controller/volume"
   },
   {
     "path": "internal/infra/etcd/volume_removal_production_external_test.go",
@@ -551,8 +743,26 @@
   {
     "path": "internal/infra/etcd/volume_resource_agent_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/agent/composeruntime",
+    "message": "internal/infra/etcd must not import internal/agent/composeruntime"
+  },
+  {
+    "path": "internal/infra/etcd/volume_resource_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent/environmentdirectory",
+    "message": "internal/infra/etcd must not import internal/agent/environmentdirectory"
+  },
+  {
+    "path": "internal/infra/etcd/volume_resource_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/agent/taskassignment",
+    "message": "internal/infra/etcd must not import internal/agent/taskassignment"
+  },
+  {
+    "path": "internal/infra/etcd/volume_resource_agent_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/volume_resource_agent_external_test.go",
@@ -563,8 +773,14 @@
   {
     "path": "internal/infra/etcd/volume_retained_publication_external_test.go",
     "rule": "layer-import",
-    "subject": "internal/controller",
-    "message": "internal/infra/etcd must not import internal/controller"
+    "subject": "internal/controller/composerender",
+    "message": "internal/infra/etcd must not import internal/controller/composerender"
+  },
+  {
+    "path": "internal/infra/etcd/volume_retained_publication_external_test.go",
+    "rule": "layer-import",
+    "subject": "internal/controller/taskplanning",
+    "message": "internal/infra/etcd must not import internal/controller/taskplanning"
   },
   {
     "path": "internal/infra/etcd/volume_retained_publication_external_test.go",

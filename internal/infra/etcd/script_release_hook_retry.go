@@ -161,7 +161,8 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 			record.StepID != steps[index].stepID ||
 			record.PlanHash != task.PlanHash ||
 			record.State == scriptexecutions.ScriptExecutionNotStarted && record.AssignmentID != "" ||
-			record.State != scriptexecutions.ScriptExecutionNotStarted && record.AssignmentID != assignment.AssignmentID {
+			record.State != scriptexecutions.ScriptExecutionNotStarted &&
+				record.AssignmentID != assignment.AssignmentID {
 			return false, nil, releases.CorruptReleaseRecord()
 		}
 		conditions[index] = etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision}

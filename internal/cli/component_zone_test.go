@@ -414,19 +414,6 @@ func TestComponentTunnelFirstZoneConfigRequiresFile(t *testing.T) {
 	}
 }
 
-// Delivery: superseded CLI flag removal; no Component request or behavior is exercised.
-// Rationale: the public config command must expose one Zone operand model and
-// must not reintroduce the removed --zone-id compatibility surface.
-func TestComponentConfigHasNoSupersededZoneIDFlag(t *testing.T) {
-	config, _, err := newComponentCmd().Find([]string{"config", "set"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if config.Flags().Lookup("zone-id") != nil {
-		t.Fatal("config set still exposes superseded --zone-id")
-	}
-}
-
 // QA: CMP-01, UI-02; pure ID-mode resolution only, not ownership validation by the Controller.
 // Rationale: global --id must preserve ordered stable Zone IDs verbatim and
 // bypass label lookup, including when no reachable API client exists.

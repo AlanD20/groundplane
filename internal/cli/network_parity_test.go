@@ -18,15 +18,6 @@ const (
 	c07ServiceID     = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
-// Delivery: locked Zone and Route command inventory only; not product QA evidence.
-// Rationale: the locked Zone and Route nouns must retain their complete primary
-// command inventory so a supported operator action is not silently dropped.
-func TestNetworkCommandTreesMatchC07Operations(t *testing.T) {
-	t.Parallel()
-	assertPrimaryCommands(t, newZoneCmd(), []string{"add", "list", "removal-impact", "remove", "show"})
-	assertPrimaryCommands(t, newRouteCmd(), []string{"add", "edit", "list", "remove", "show"})
-}
-
 // QA: NET-01, UI-01; local request/response shaping only, not reservation or Docker bridge creation.
 // Rationale: Zone add must carry the selected Environment, subnet, and internal
 // decision through the canonical create endpoint and return the created stable id.

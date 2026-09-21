@@ -14,7 +14,8 @@ func abortAssignedManualScriptBeforeStart(
 	execution scriptexecutions.ScriptExecutionRecord,
 	at time.Time,
 ) (scriptexecutions.ScriptExecutionRecord, error) {
-	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+		execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 		execution.StartAuthorized ||
 		execution.AssignmentID != "" ||
 		!execution.ActiveReference ||

@@ -38,7 +38,8 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != retry.ID ||
-		marker.Locator.Method != http.MethodPost || marker.Locator.Route != "/tasks/{id}/retry" ||
+		marker.Locator.Method != http.MethodPost ||
+		marker.Locator.Route != "/tasks/{id}/retry" ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != source.Record.Owner.EnvironmentID ||
 		marker.ReplayTarget != nil ||

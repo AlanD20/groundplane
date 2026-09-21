@@ -140,7 +140,8 @@ func expireManualScriptExecution(
 	execution scriptexecutions.ScriptExecutionRecord,
 	now time.Time,
 ) (scriptexecutions.ScriptExecutionRecord, error) {
-	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
+	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil ||
+		execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 		!execution.ActiveReference ||
 		execution.StartAuthorized ||
 		execution.AssignmentID != "" ||
@@ -174,7 +175,8 @@ func expireManualScriptExecution(
 
 func manualScriptExpiryExecutionMatches(execution scriptexecutions.ScriptExecutionRecord, deadline time.Time) bool {
 	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
-		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualRetryExpiry || execution.ActiveReference ||
+		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualRetryExpiry ||
+		execution.ActiveReference ||
 		execution.Outcome == nil ||
 		execution.Outcome.Reason != scriptexecutions.ScriptOutcomeExpiryBeforeStart ||
 		execution.Cleanup == nil ||

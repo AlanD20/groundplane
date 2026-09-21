@@ -31,7 +31,8 @@ func validateBackupPolicyReplacementMarker(
 	candidate ReplacementCandidate,
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != candidate.Replacement.EnvironmentID ||
 		marker.Locator.Method != http.MethodPut ||

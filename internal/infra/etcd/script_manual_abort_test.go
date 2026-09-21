@@ -34,7 +34,8 @@ func TestManualScriptAssignedAbortBeforeStartReleasesSources(t *testing.T) {
 		t.Fatal("assigned Abort retained its source root")
 	}
 	closed, err := scripts.GetScriptExecution(ctx, execution.ID)
-	if err != nil || closed.Record.State != testscriptexecutions.ScriptExecutionCleanupProven || closed.Record.ActiveReference ||
+	if err != nil || closed.Record.State != testscriptexecutions.ScriptExecutionCleanupProven ||
+		closed.Record.ActiveReference ||
 		closed.Record.StartAuthorized ||
 		closed.Record.Outcome == nil ||
 		closed.Record.Outcome.Reason != testscriptexecutions.ScriptOutcomeAbortBeforeStart {

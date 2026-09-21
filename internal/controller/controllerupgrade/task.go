@@ -67,7 +67,8 @@ func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Jour
 	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskUpdate || task.Target != Target ||
 		task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorOperator || ids.Validate(ids.KindTask, task.ID) != nil ||
 		ids.Validate(ids.KindOperation, task.OperationID) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
-		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds || task.RenderGeneration != 1 || task.RetryOf != "" || len(task.Steps) != 0 ||
+		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds || task.RenderGeneration != 1 || task.RetryOf != "" ||
+		len(task.Steps) != 0 ||
 		len(task.Materializations) != 0 ||
 		len(task.Params) != 2 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceController ||

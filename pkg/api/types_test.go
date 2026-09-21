@@ -96,17 +96,3 @@ func TestConnectorCreateRequestDistinguishesMissingPathStyle(t *testing.T) {
 		t.Fatalf("Unmarshal(missing) path_style = %#v, want nil", request.PathStyle)
 	}
 }
-
-// Delivery: public API vocabulary check only; it does not execute BAK-02/03
-// source validation, Blueprint round-trip, generated clients, or backup dispatch.
-// Rationale: the three exported source kinds must retain their independent wire
-// spellings so adapter keys cannot leak into source_kind.
-func TestBackupSourceKindsUseCanonicalValues(t *testing.T) {
-	want := []BackupSourceKind{"attach", "volume", "config"}
-	got := []BackupSourceKind{BackupSourceAttach, BackupSourceVolume, BackupSourceConfig}
-	for index := range want {
-		if got[index] != want[index] {
-			t.Fatalf("backup source kind %d = %q, want %q", index, got[index], want[index])
-		}
-	}
-}

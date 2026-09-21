@@ -69,7 +69,8 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		Kind: idempotencyrecord.IdempotencyReplayTargetRoute,
 		ID:   route.Record.Desired.ID,
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID ||

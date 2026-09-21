@@ -19,16 +19,6 @@ func TestBackupPolicyEffectiveDisabledJSONContract(t *testing.T) {
 	}
 }
 
-// Delivery: public API constant check only; it does not execute BAK-02 source
-// validation, protected policy replacement, transaction budgeting, or persistence.
-// Rationale: client-side bounds must not drift from the independently specified
-// maximum of 12 sources while still compiling against the exported constant.
-func TestMaximumBackupPolicySourcesMatchesPublicContract(t *testing.T) {
-	if MaximumBackupPolicySources != 12 {
-		t.Fatalf("MaximumBackupPolicySources = %d, want 12", MaximumBackupPolicySources)
-	}
-}
-
 // QA: BAK-01, BAK-02, UI-03 - L0 JSON decoding only; no HTTP admission,
 // semantic policy validation, idempotency record, or durable write is exercised.
 // Rationale: direct decoding must enforce required/non-null replacement

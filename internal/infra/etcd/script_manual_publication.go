@@ -46,7 +46,8 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, errs.New(errs.KindValidationFailed, "new Script execution record is invalid")
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		marker.TaskID != task.ID ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		task.ID != execution.CurrentTaskID ||
 		task.OperationID != execution.OperationID ||

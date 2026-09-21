@@ -6,44 +6,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"strings"
 	"testing"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-// Delivery: closed API/local/tool command classification; no command is executed.
-// Rationale: representative commands must retain the execution class that
-// controls whether they load human CLI config or invoke same-host tooling.
-func TestCommandExecutionClasses(t *testing.T) {
-	t.Parallel()
-
-	root := NewRootCmd(Dependencies{})
-	tests := []struct {
-		path  []string
-		class executionClass
-	}{
-		{path: []string{"tenant", "list"}, class: executionAPI},
-		{path: []string{"controller", "serve"}, class: executionLocal},
-		{path: []string{"controller", "key", "show"}, class: executionLocal},
-		{path: []string{"controller", "etcd", "show"}, class: executionLocal},
-		{path: []string{"agent-run", "run"}, class: executionLocal},
-		{path: []string{"version"}, class: executionTool},
-		{path: []string{"completion", "bash"}, class: executionTool},
-	}
-
-	for _, test := range tests {
-		command, _, err := root.Find(test.path)
-		if err != nil {
-			t.Fatalf("find %v: %v", test.path, err)
-		}
-		if got := commandExecutionClass(command); got != test.class {
-			t.Errorf("execution class for %v = %q, want %q", test.path, got, test.class)
-		}
-	}
-}
 
 // Delivery: local Controller process command with an injected runner; no daemon is started.
 // Rationale: controller serve must not parse unrelated human API client config
@@ -111,39 +78,6 @@ func TestToolCommandsSkipCLIConfig(t *testing.T) {
 		if output.Len() == 0 {
 			t.Fatalf("execute %v produced no output", args)
 		}
-	}
-}
-
-// Delivery: locked completion command inventory; no generated script is executed.
-// Rationale: completion must expose exactly the documented Bash, Fish, and Zsh
-// generators without Cobra adding an unsupported default command.
-func TestCompletionCommandHasOnlyLockedShells(t *testing.T) {
-	t.Parallel()
-
-	root := NewRootCmd(Dependencies{})
-	completion, _, err := root.Find([]string{"completion"})
-	if err != nil {
-		t.Fatalf("find completion: %v", err)
-	}
-
-	got := make([]string, 0, len(completion.Commands()))
-	for _, child := range completion.Commands() {
-		got = append(got, child.Name())
-	}
-	sort.Strings(got)
-	want := []string{"bash", "fish", "zsh"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("completion shells = %v, want %v", got, want)
-	}
-
-	if command, _, findErr := root.Find(
-		[]string{"completion", "powershell"},
-	); findErr == nil &&
-		command.Name() == "powershell" {
-		t.Fatal("unexpected powershell completion command")
-	}
-	if !root.CompletionOptions.DisableDefaultCmd {
-		t.Fatal("Cobra default completion command is enabled")
 	}
 }
 

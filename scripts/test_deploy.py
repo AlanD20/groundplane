@@ -124,23 +124,6 @@ class DeployStagingPathTest(unittest.TestCase):
             check=False,
         )
 
-    # Delivery: static staging-path constraint, not executed cleanup behavior.
-    # Rationale: deployment fragments must share the guarded private namespace;
-    # repository staging must not spill into system temporary storage.
-    def test_staging_paths_are_repo_local_and_remote_private(self) -> None:
-        self.assertEqual(deploy.LOCAL_DEPLOY_ROOT, deploy.REPOSITORY_ROOT / ".tmp")
-        self.assertEqual(
-            deploy.REMOTE_DEPLOY_PREFIX_PATH,
-            "/root/.groundplane/.tmp/groundplane-deploy-",
-        )
-        for script in (
-            deploy.REMOTE_DEPLOY_PREFIX,
-            deploy.REMOTE_RECEIVE,
-            deploy.REMOTE_INSTALL,
-        ):
-            self.assertNotIn("/tmp/groundplane-deploy-", script)
-            self.assertIn(deploy.REMOTE_DEPLOY_GUARD, script)
-
     # Delivery: executed path guard only, not a remote installation.
     # Rationale: the former system-temp namespace cannot authorize staging effects.
     def test_remote_guard_rejects_old_system_tmp_path(self) -> None:

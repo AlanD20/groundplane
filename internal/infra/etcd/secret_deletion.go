@@ -54,7 +54,8 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		Kind: idempotencyrecord.IdempotencyReplayTargetSecret,
 		ID:   secretID,
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID ||
 		marker.Locator.ScopeKind != expectedScope ||
 		marker.Locator.ScopeID != expectedScopeID ||

@@ -47,7 +47,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
 		&replay,
 	) != nil ||
-		hierarchydeletion.DecodeHierarchyDeletionRecord(auxiliary.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &lock) != nil ||
+		hierarchydeletion.DecodeHierarchyDeletionRecord(
+			auxiliary.Values[1].Value,
+			hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+			&lock,
+		) != nil ||
 		replay.ParentOperationID != operation.Tombstone.OperationID ||
 		replay.CurrentTaskID != task.ID ||
 		lock.ParentOperationID != operation.Tombstone.OperationID ||

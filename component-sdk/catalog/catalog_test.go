@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane-component-sdk/component"
-	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 )
 
 // QA: CMP-04; pure catalog lookup only, not action-envelope resolution or Agent execution.
@@ -240,11 +239,17 @@ func TestRegistrationImagesAreSoleRecipeAuthority(t *testing.T) {
 // QA: CMP-04, HTTP-08; pure catalog-digest proof only, not Tunnel startup or provider ingress.
 // Rationale: a planner-only Component image must still change catalog identity
 // even when the implementation declares no executable action recipe.
-func TestCatalogDigestBindsCloudflareTunnelImageWithoutRecipes(t *testing.T) {
-	definition, err := registeredtunnel.Definition()
+func TestCatalogDigestBindsPlannerOnlyImageWithoutRecipes(t *testing.T) {
+	definition, err := component.NewDefinition(component.DefinitionInput{
+		Implementation: "test-tunnel",
+		ConfigVariant:  "test-tunnel-v1",
+		Provides:       []component.Capability{component.CapabilityEdgeTunnel},
+		OwnerScopes:    []component.OwnerScope{component.OwnerScopeEnvironment},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	image := testOCIImage("example/tunnel", "a")
 	build := func(image component.OCIImage) [32]byte {
 		compiled, err := NewRegistered(Registration{Definition: definition, Images: []component.OCIImage{image}})
 		if err != nil {
@@ -252,16 +257,16 @@ func TestCatalogDigestBindsCloudflareTunnelImageWithoutRecipes(t *testing.T) {
 		}
 		return compiled.Digest()
 	}
-	base := build(registeredtunnel.Image)
-	childChanged := cloneOCIImage(registeredtunnel.Image)
+	base := build(image)
+	childChanged := cloneOCIImage(image)
 	childChanged.Platforms[0].ChildDigest = strings.Repeat("1", 64)
 	if base == build(childChanged) {
-		t.Fatal("Catalog.Digest() ignored Cloudflare child digest")
+		t.Fatal("Catalog.Digest() ignored planner-only image child digest")
 	}
-	configChanged := cloneOCIImage(registeredtunnel.Image)
+	configChanged := cloneOCIImage(image)
 	configChanged.Platforms[1].ConfigDigest = strings.Repeat("2", 64)
 	if base == build(configChanged) {
-		t.Fatal("Catalog.Digest() ignored Cloudflare config digest")
+		t.Fatal("Catalog.Digest() ignored planner-only image config digest")
 	}
 }
 

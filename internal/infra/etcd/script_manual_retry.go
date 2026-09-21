@@ -60,7 +60,8 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		!retry.CreatedAt.Before(
 			*source.RetainUntil,
 		) || retry.Type != taskjournal.TaskScript || retry.OperationID != source.OperationID ||
-		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash ||
+		retry.PlanID != source.PlanID ||
+		retry.PlanHash != source.PlanHash ||
 		retry.Target != source.Target ||
 		retry.Params[scriptexecutions.ScriptExecutionIDParam] != source.Params[scriptexecutions.ScriptExecutionIDParam] ||
 		len(source.Steps) != 1 ||

@@ -175,7 +175,8 @@ func buildEntryMutationPlan(
 	if task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent || task.RenderGeneration <= 0 ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 6 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry ||
-		task.Target != candidate.EnvironmentID || baseline.EnvironmentID != candidate.EnvironmentID ||
+		task.Target != candidate.EnvironmentID ||
+		baseline.EnvironmentID != candidate.EnvironmentID ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != candidate.EnvironmentID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != candidate.RevisionID ||
 		task.Params[EntryMutationBaselineRevisionParam] != baseline.RevisionID ||

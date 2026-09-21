@@ -145,7 +145,9 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		Kind: idempotencyrecord.IdempotencyReplayTargetService,
 		ID:   current.Record.Desired.ID,
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != task.ID ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID ||
 		marker.Locator != intent.Claim.Locator ||
 		marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplay ||

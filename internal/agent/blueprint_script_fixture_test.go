@@ -22,30 +22,30 @@ func capturedContainerFailureFixture() (testtaskassignment.Assignment, *agentpb.
 	executionID, snapshotID := ids.NewULID(), ids.NewULID()
 	scriptID, stepID := ids.New(ids.KindScript), ids.New(ids.KindStep)
 	return testtaskassignment.Assignment{
-		AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
-		OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
-		Plan: &agentpb.ExecutionPlan{
-			PlanHash:                append([]byte(nil), planDigest[:]...),
-			ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{{SnapshotId: snapshotID}},
-			ScriptRunnerSnapshots:   []*agentpb.ResolvedRunnerSnapshot{{SnapshotId: snapshotID}},
-		},
-		ScriptArtifacts: &agentpb.ScriptAssignmentArtifacts{Bodies: []*agentpb.ScriptBodyArtifact{{
-			Metadata: &agentpb.ScriptBodyArtifactMetadata{
-				ScriptExecutionId: executionID, ScriptId: scriptID, Generation: 1,
-				Size: uint32(len(body)), Sha256: append([]byte(nil), bodyDigest[:]...),
+			AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
+			OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
+			Plan: &agentpb.ExecutionPlan{
+				PlanHash:                append([]byte(nil), planDigest[:]...),
+				ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{{SnapshotId: snapshotID}},
+				ScriptRunnerSnapshots:   []*agentpb.ResolvedRunnerSnapshot{{SnapshotId: snapshotID}},
 			},
-			Body: append([]byte(nil), body...),
-		}}},
-		ScriptCheckpoints: []*agentpb.ScriptExecutionCheckpoint{{
-			ScriptExecutionId: executionID,
-			State:             agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED,
-		}},
-	}, &agentpb.ExecutionStep{StepId: stepID, Payload: &agentpb.ExecutionStep_RunScript{
-		RunScript: &agentpb.RunScript{
-			ScriptExecutionId: executionID, ScriptId: scriptID, ScriptGeneration: 1,
-			RunnerSnapshotId: snapshotID,
-		},
-	}}, bodyDigest
+			ScriptArtifacts: &agentpb.ScriptAssignmentArtifacts{Bodies: []*agentpb.ScriptBodyArtifact{{
+				Metadata: &agentpb.ScriptBodyArtifactMetadata{
+					ScriptExecutionId: executionID, ScriptId: scriptID, Generation: 1,
+					Size: uint32(len(body)), Sha256: append([]byte(nil), bodyDigest[:]...),
+				},
+				Body: append([]byte(nil), body...),
+			}}},
+			ScriptCheckpoints: []*agentpb.ScriptExecutionCheckpoint{{
+				ScriptExecutionId: executionID,
+				State:             agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED,
+			}},
+		}, &agentpb.ExecutionStep{StepId: stepID, Payload: &agentpb.ExecutionStep_RunScript{
+			RunScript: &agentpb.RunScript{
+				ScriptExecutionId: executionID, ScriptId: scriptID, ScriptGeneration: 1,
+				RunnerSnapshotId: snapshotID,
+			},
+		}}, bodyDigest
 }
 
 func setExplicitScriptFixture(t *testing.T, assignment *testtaskassignment.Assignment) {

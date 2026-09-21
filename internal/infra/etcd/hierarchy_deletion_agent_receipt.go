@@ -83,7 +83,11 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
 		&receipt,
 	) != nil ||
-		hierarchydeletion.DecodeHierarchyDeletionRecord(evidence.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &progress) != nil ||
+		hierarchydeletion.DecodeHierarchyDeletionRecord(
+			evidence.Values[1].Value,
+			hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+			&progress,
+		) != nil ||
 		receipt.ParentOperationID != operation.Tombstone.OperationID ||
 		receipt.ActionOrdinal != action.Ordinal ||
 		receipt.ChildOperationID != entry.ChildOperationID ||

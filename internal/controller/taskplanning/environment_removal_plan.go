@@ -18,7 +18,8 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
 	if resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
-		ids.Validate(ids.KindEnvironment, task.Target) != nil || task.TimeoutSeconds <= 0 ||
+		ids.Validate(ids.KindEnvironment, task.Target) != nil ||
+		task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 ||
 		len(task.Materializations) != 0 ||
 		(len(task.Params) != 1 && len(task.Params) != 4) {

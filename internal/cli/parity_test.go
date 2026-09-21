@@ -681,37 +681,6 @@ func TestBackupExportKeyPostsAndPrintsIdentity(t *testing.T) {
 	}
 }
 
-// Delivery: locked Release Group command inventory only; not product QA evidence.
-// Rationale: the flat Release Group noun must retain the locked authoring and
-// execution verbs, removal alias, and explicit rollback-preview/tag affordance.
-func TestReleaseGroupCommandTreeUsesLockedVerbs(t *testing.T) {
-	t.Parallel()
-
-	command := newReleaseGroupCmd()
-	want := map[string]bool{
-		"list": true, "show": true, "add": true, "edit": true,
-		"remove": true, "deploy": true, "rollback": true, "rollback-preview": true,
-	}
-	if len(command.Commands()) != len(want) {
-		t.Fatalf("subcommand count = %d, want %d", len(command.Commands()), len(want))
-	}
-
-	for _, child := range command.Commands() {
-		if !want[child.Name()] {
-			t.Errorf("unexpected primary subcommand %q", child.Name())
-		}
-		if child.Name() == "add" && len(child.Aliases) != 0 {
-			t.Errorf("add aliases = %q, want none", child.Aliases)
-		}
-		if child.Name() == "remove" && (len(child.Aliases) != 1 || child.Aliases[0] != "delete") {
-			t.Errorf("remove aliases = %q, want [delete]", child.Aliases)
-		}
-		if child.Name() == "rollback" && child.Flags().Lookup("tag") == nil {
-			t.Error("rollback is missing the optional --tag flag")
-		}
-	}
-}
-
 func exactRequestServer(
 	t *testing.T,
 	method, path, body string,

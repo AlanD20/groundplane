@@ -47,7 +47,8 @@ func prepareBackupRunTerminalReceipt(
 	terminal TaskRecord,
 	run backupruntime.BackupRunRecord,
 ) (backupTerminalReceiptPlan, error) {
-	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackup || terminal.Type != taskjournal.TaskBackup ||
+	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackup ||
+		terminal.Type != taskjournal.TaskBackup ||
 		current.Record.ID != terminal.ID ||
 		!taskjournal.IsTerminalTaskStatus(terminal.Status) ||
 		ValidateBackupRunTaskBinding(terminal, run) != nil ||

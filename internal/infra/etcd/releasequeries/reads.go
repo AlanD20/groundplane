@@ -458,7 +458,8 @@ func decodeReleaseCursor(value string) (releaseCursor, error) {
 	decoder := json.NewDecoder(bytes.NewReader(decoded))
 	decoder.DisallowUnknownFields()
 	var cursor releaseCursor
-	if decoder.Decode(&cursor) != nil || recordcodec.RequireEOF(decoder) != nil || cursor.Schema != 1 || cursor.Revision <= 0 ||
+	if decoder.Decode(&cursor) != nil || recordcodec.RequireEOF(decoder) != nil || cursor.Schema != 1 ||
+		cursor.Revision <= 0 ||
 		ids.Validate(
 			ids.KindEnvironment,
 			cursor.EnvironmentID,

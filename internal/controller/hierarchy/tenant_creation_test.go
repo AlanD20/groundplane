@@ -60,7 +60,8 @@ func TestTenantCreationServicePersistsEffectiveInputAndExactResponse(t *testing.
 	marker := repository.marker
 	if marker.Kind != testidempotency.IdempotencyMarkerDirect || marker.State != testidempotency.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != testidempotency.IdempotencyScopePlatform || marker.Locator.ScopeID != "-" ||
-		marker.Locator.Method != http.MethodPost || marker.Locator.Route != tenantCreationRoute ||
+		marker.Locator.Method != http.MethodPost ||
+		marker.Locator.Route != tenantCreationRoute ||
 		marker.Locator.Key != "tenant-create-key-0001" ||
 		marker.CreatedAt != now ||
 		marker.TerminalAt != now ||

@@ -127,7 +127,8 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	for index, step := range steps {
 		value := read.Values[index+executionOffset]
 		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
-		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || !taskOwnsScriptExecution(task, record) ||
+		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil ||
+			!taskOwnsScriptExecution(task, record) ||
 			record.ID != step.executionID ||
 			record.StepID != step.stepID ||
 			record.CurrentTaskID != task.ID ||
@@ -390,7 +391,8 @@ func releaseRecoveryParentFailureExecutionMatches(record scriptexecutions.Script
 		record.ControllerCleanup != scriptexecutions.ScriptControllerCleanupReleaseRecoveryParentFailure ||
 		record.Outcome.Reason != scriptexecutions.ScriptOutcomeParentFailureBeforeStart || record.Outcome.ExitCode != nil ||
 		record.Outcome.OutputTruncated || record.Outcome.ObservedAt.IsZero() ||
-		!record.Cleanup.ContainerAbsent || !record.Cleanup.BodyAbsent || !record.Cleanup.ExecutionDirectoryAbsent ||
+		!record.Cleanup.ContainerAbsent || !record.Cleanup.BodyAbsent ||
+		!record.Cleanup.ExecutionDirectoryAbsent ||
 		record.Cleanup.ContainerID != "" ||
 		record.Cleanup.BodyDevice != 0 ||
 		record.Cleanup.BodyInode != 0 ||

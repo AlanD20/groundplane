@@ -29,7 +29,8 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if err := platformcomponents.ValidatePlatformComponentRecord(current.Record); err != nil {
 		return err
 	}
-	if task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorSystem || task.Executor != taskjournal.TaskExecutorAgent ||
+	if task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorSystem ||
+		task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskUpdate ||
 		task.Status != taskjournal.TaskStatusPending ||
 		task.Target != current.Record.Desired.ID ||

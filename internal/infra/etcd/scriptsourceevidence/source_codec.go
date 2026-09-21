@@ -212,7 +212,8 @@ func decodeScriptRunnerSnapshotSource(
 	snapshot, err := recordcodec.Decode[StoredScriptRunnerSnapshot](value, "script-runner-snapshot")
 	digest := sha256.Sum256(snapshot.Payload)
 	var payload agentpb.ResolvedRunnerSnapshot
-	if err != nil || snapshot.SnapshotID == "" || key != scriptexecutions.ScriptRunnerSnapshotKey(snapshot.SnapshotID) ||
+	if err != nil || snapshot.SnapshotID == "" ||
+		key != scriptexecutions.ScriptRunnerSnapshotKey(snapshot.SnapshotID) ||
 		snapshot.ExecutionID != reference.ScriptExecutionID ||
 		snapshot.SHA256 != reference.SourceDigest ||
 		hex.EncodeToString(digest[:]) != reference.SourceDigest ||

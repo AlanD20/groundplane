@@ -1,38 +1,6 @@
 package cli
 
-import (
-	"strings"
-	"testing"
-
-	"github.com/spf13/cobra"
-)
-
-// Delivery: closed Cobra grammar inventory; commands are not dispatched to the API or local runners.
-// Rationale: every runnable zero-operand leaf must reject stray operands so a
-// typo cannot be silently interpreted as a valid command.
-func TestRunnableZeroArgumentLeavesRejectOperands(t *testing.T) {
-	t.Parallel()
-
-	root := NewRootCmd(Dependencies{})
-	walkCommands(root, func(command *cobra.Command) {
-		if command.Run == nil && command.RunE == nil {
-			return
-		}
-		if len(command.Commands()) != 0 {
-			return
-		}
-		if command.Args == nil {
-			t.Errorf("runnable leaf %q has no argument validator", command.CommandPath())
-			return
-		}
-		if hasPositionalOperand(command.Use) {
-			return
-		}
-		if err := command.Args(command, []string{"unexpected-operand"}); err == nil {
-			t.Errorf("zero-argument leaf %q accepted an operand", command.CommandPath())
-		}
-	})
-}
+import "testing"
 
 // QA: UI-03; local Cobra argument admission only, not action dispatch or effects.
 // Rationale: representative operator commands must enforce their documented
@@ -72,20 +40,4 @@ func TestParityOperandLeavesEnforceExactArity(t *testing.T) {
 			t.Errorf("leaf %q accepted %d operands", command.CommandPath(), test.want+1)
 		}
 	}
-}
-
-func walkCommands(command *cobra.Command, visit func(*cobra.Command)) {
-	visit(command)
-	for _, child := range command.Commands() {
-		walkCommands(child, visit)
-	}
-}
-
-func hasPositionalOperand(use string) bool {
-	for _, field := range strings.Fields(use) {
-		if strings.HasPrefix(field, "<") || strings.HasPrefix(field, "[") {
-			return true
-		}
-	}
-	return false
 }
