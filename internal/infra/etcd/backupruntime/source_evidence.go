@@ -1,18 +1,17 @@
-package etcd
+package backupruntime
 
 import (
-	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func backupPointMatchesRunSource(
-	point backupruntime.BackupRecoveryPointSnapshot,
-	run backupruntime.BackupRunRecord,
+func BackupPointMatchesRunSource(
+	point BackupRecoveryPointSnapshot,
+	run BackupRunRecord,
 	ordinal uint32,
 ) bool {
-	if int(ordinal) >= len(run.Sources) || backupruntime.ValidateBackupRecoveryPointSnapshot(point) != nil {
+	if int(ordinal) >= len(run.Sources) || ValidateBackupRecoveryPointSnapshot(point) != nil {
 		return false
 	}
 	source := run.Sources[ordinal]
@@ -26,33 +25,33 @@ func backupPointMatchesRunSource(
 		point.SizeBytes == source.SizeBytes && point.SHA256 == source.SHA256
 }
 
-func runContainsOrphanedPoint(run backupruntime.BackupRunRecord, orphan backupruntime.BackupOrphanRecord) bool {
+func RunContainsOrphanedPoint(run BackupRunRecord, orphan BackupOrphanRecord) bool {
 	for ordinal, source := range run.Sources {
-		if source.State == backupruntime.BackupSourceAttemptOrphaned &&
-			backupOrphanMatchesRunSource(orphan, run, uint32(ordinal)) {
+		if source.State == BackupSourceAttemptOrphaned &&
+			BackupOrphanMatchesRunSource(orphan, run, uint32(ordinal)) {
 			return true
 		}
 	}
 	return false
 }
 
-func backupOrphanMatchesRunSource(
-	orphan backupruntime.BackupOrphanRecord,
-	run backupruntime.BackupRunRecord,
+func BackupOrphanMatchesRunSource(
+	orphan BackupOrphanRecord,
+	run BackupRunRecord,
 	ordinal uint32,
 ) bool {
 	return orphan.TaskID == run.TaskID &&
-		orphan.Reconciliation == (backupruntime.BackupOrphanReconciliationAuthority{
+		orphan.Reconciliation == (BackupOrphanReconciliationAuthority{
 			OperationID:    run.OperationID,
 			PolicyRevision: run.PolicyRevision,
 			RetentionKeep:  run.RetentionKeep,
 		}) &&
-		backupPointMatchesRunSource(orphan.Point, run, ordinal)
+		BackupPointMatchesRunSource(orphan.Point, run, ordinal)
 }
 
-func validateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expected backupruntime.BackupOrphanRecord) error {
+func ValidateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expected BackupOrphanRecord) error {
 	expectedVersion := int64(1)
-	if expected.State == backupruntime.BackupOrphanDelete {
+	if expected.State == BackupOrphanDelete {
 		expectedVersion = 2
 	}
 	if len(values) != 3 || values[0] == nil || values[1] == nil || values[2] == nil ||
@@ -63,22 +62,22 @@ func validateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expecte
 		string(
 			values[1].Value,
 		) != expected.Point.ID || string(values[2].Value) != expected.Point.ID {
-		return backupruntime.CorruptBackupRuntimeRecord()
+		return CorruptBackupRuntimeRecord()
 	}
-	stored, err := backupruntime.DecodeBackupOrphanRecord(values[0].Value)
+	stored, err := DecodeBackupOrphanRecord(values[0].Value)
 	if err != nil || stored != expected {
-		return backupruntime.CorruptBackupRuntimeRecord()
+		return CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
 
-func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run backupruntime.BackupRunRecord) error {
+func ValidateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run BackupRunRecord) error {
 	if len(values) != 2 || values[0] == nil || values[0].ModRevision != run.ConnectorRevision {
 		return errs.New(errs.KindStateConflict, "backup connector snapshot changed")
 	}
 	connector, err := connectorrecord.DecodeRecord(values[0].Value)
 	if err != nil || connector.Connector.ID != run.ConnectorID {
-		return backupruntime.CorruptBackupRuntimeRecord()
+		return CorruptBackupRuntimeRecord()
 	}
 	if connector.Connector.EnvironmentID != run.EnvironmentID {
 		return errs.New(errs.KindStateConflict, "backup connector belongs to another environment")
@@ -102,7 +101,7 @@ func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run b
 	credentials, err := connectorrecord.DecodeEncryptedCredentials(values[1].Value)
 	defer clear(credentials.Ciphertext)
 	if err != nil || credentials.ConnectorID != run.ConnectorID {
-		return backupruntime.CorruptBackupRuntimeRecord()
+		return CorruptBackupRuntimeRecord()
 	}
 	return nil
 }

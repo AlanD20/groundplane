@@ -25,7 +25,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		return backupPruneTransactionPlan{}, err
 	}
 	if backupruntime.ValidateBackupRecoveryPointPruneDispatchRecord(dispatch) != nil ||
-		len(pending) == 0 || len(pending) > maximumBackupPruneBatch ||
+		len(pending) == 0 || len(pending) > backupruntime.MaximumBackupPruneBatch ||
 		len(pending) != len(dispatch.RecoveryPointIDs) ||
 		lock.EnvironmentID != dispatch.EnvironmentID || lock.OperationID != dispatch.OperationID ||
 		lock.TaskID != dispatch.TaskID || lock.Kind != backupruntime.BackupOperationPrune ||

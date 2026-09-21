@@ -46,7 +46,7 @@ func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 	if anchor.Values[0] != nil {
 		stored, decodeErr := backupruntime.DecodeBackupOrphanRecord(anchor.Values[0].Value)
 		if decodeErr == nil && stored == next &&
-			validateBackupOrphanCompanionEvidence(anchor.Values, next) == nil {
+			backupruntime.ValidateBackupOrphanCompanionEvidence(anchor.Values, next) == nil {
 			return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{
 				Record: stored, Revision: anchor.Values[0].ModRevision,
 				ReadRevision: anchor.ReadRevision,
@@ -59,7 +59,7 @@ func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 			"backup orphan reconciliation authority changed",
 		)
 	}
-	if err := validateBackupOrphanCompanionEvidence(anchor.Values, current.Record); err != nil {
+	if err := backupruntime.ValidateBackupOrphanCompanionEvidence(anchor.Values, current.Record); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
@@ -121,7 +121,7 @@ func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 	if anchor.Values[0] == nil || anchor.Values[0].ModRevision != current.Revision {
 		return errs.New(errs.KindStateConflict, "backup orphan reconciliation authority changed")
 	}
-	if err := validateBackupOrphanCompanionEvidence(anchor.Values, current.Record); err != nil {
+	if err := backupruntime.ValidateBackupOrphanCompanionEvidence(anchor.Values, current.Record); err != nil {
 		return err
 	}
 	result, err := repository.transact(ctx, []etcdstore.Condition{
@@ -230,7 +230,7 @@ func (repository *BackupRuntimeRepository) AdoptReconciledBackupOrphan(
 			"backup orphan reconciliation authority changed",
 		)
 	}
-	if err := validateBackupOrphanCompanionEvidence(anchor.Values[:3], current.Record); err != nil {
+	if err := backupruntime.ValidateBackupOrphanCompanionEvidence(anchor.Values[:3], current.Record); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	for _, value := range anchor.Values[3:] {

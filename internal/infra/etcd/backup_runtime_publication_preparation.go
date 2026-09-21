@@ -119,7 +119,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		)
 	}
 	defer etcdstore.ClearValues(connectorEvidence.Values)
-	if err := validateBackupConnectorSnapshotEvidence(
+	if err := backupruntime.ValidateBackupConnectorSnapshotEvidence(
 		connectorEvidence.Values,
 		record,
 	); err != nil {

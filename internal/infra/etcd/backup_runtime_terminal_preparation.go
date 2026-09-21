@@ -131,7 +131,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		}
 		if err != nil || retainedOrphan.TaskID != current.Record.TaskID ||
 			retainedOrphan.State != expectedState ||
-			!backupOrphanMatchesRunSource(retainedOrphan, current.Record, ordinal) {
+			!backupruntime.BackupOrphanMatchesRunSource(retainedOrphan, current.Record, ordinal) {
 			return backupRunPublicationPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		if absentOrphan != nil &&
@@ -142,7 +142,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 				"terminal backup orphan authority changed",
 			)
 		}
-		if err := validateBackupOrphanCompanionEvidence(values, retainedOrphan); err != nil {
+		if err := backupruntime.ValidateBackupOrphanCompanionEvidence(values, retainedOrphan); err != nil {
 			return backupRunPublicationPlan{}, err
 		}
 	}

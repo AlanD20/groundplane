@@ -71,30 +71,30 @@ func (repository *BackupRuntimeRepository) GetBackupRetentionSweep(
 func (repository *BackupRuntimeRepository) ListBackupRetentionSweepsBySource(
 	ctx context.Context,
 	sourceID string,
-	request BackupRuntimeListRequest,
-) (BackupRuntimePage[backupruntime.BackupRetentionSweepRecord], error) {
+	request backupruntime.BackupRuntimeListRequest,
+) (backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
 	}
 	prefix := backupruntime.BackupRetentionPrefix + sourceID + "/"
-	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
-		return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
+	if err := backupruntime.ValidateBackupRuntimeListRequest(prefix, request); err != nil {
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
 	}
 	result, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
 	if err != nil {
-		return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
 	}
 	if result == nil || result.ReadRevision <= 0 {
-		return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, errs.New(
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, errs.New(
 			errs.KindInternal,
 			"backup retention page is incomplete",
 		)
 	}
 	defer clearRangeValues(result.Values)
-	page := BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{
+	page := backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{
 		Items:    make([]etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord], len(result.Values)),
 		Revision: result.ReadRevision,
 	}
@@ -102,7 +102,7 @@ func (repository *BackupRuntimeRepository) ListBackupRetentionSweepsBySource(
 		record, decodeErr := backupruntime.DecodeBackupRetentionSweepRecord(item.Value)
 		if decodeErr != nil || record.SourceID != sourceID ||
 			item.Key != backupruntime.BackupRetentionKey(sourceID, record.TriggerRecoveryPointID) {
-			return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+			return backupruntime.BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		page.Items[index] = etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{
 			Record: record, Revision: item.ModRevision, ReadRevision: result.ReadRevision,
@@ -175,7 +175,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: prefix, StartExclusive: startExclusive, Limit: maximumBackupPruneBatch,
+		Prefix: prefix, StartExclusive: startExclusive, Limit: backupruntime.MaximumBackupPruneBatch,
 		Revision: selectionRevision,
 	})
 	if err != nil {

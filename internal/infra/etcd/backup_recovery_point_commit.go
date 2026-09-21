@@ -25,7 +25,7 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 			nextRun,
 			backupruntime.BackupRunTransitionPointCommit,
 		) != nil ||
-		!backupPointMatchesRunSource(point.BackupRecoveryPointSnapshot, nextRun, ordinal) ||
+		!backupruntime.BackupPointMatchesRunSource(point.BackupRecoveryPointSnapshot, nextRun, ordinal) ||
 		sweep.SourceID != point.SourceID || sweep.TriggerRecoveryPointID != point.ID ||
 		sweep.Revision != nextRun.PolicyRevision || sweep.Keep != nextRun.RetentionKeep ||
 		sweep.State != backupruntime.BackupRetentionPending {
@@ -36,7 +36,7 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	}
 	if currentRun.Record.Sources[ordinal].State == backupruntime.BackupSourceAttemptOrphaned {
 		if orphan == nil || orphan.Revision <= 0 ||
-			!backupOrphanMatchesRunSource(orphan.Record, currentRun.Record, ordinal) ||
+			!backupruntime.BackupOrphanMatchesRunSource(orphan.Record, currentRun.Record, ordinal) ||
 			orphan.Record.Point != point.BackupRecoveryPointSnapshot ||
 			orphan.Record.State != backupruntime.BackupOrphanInspect ||
 			orphan.Record.TaskID != currentRun.Record.TaskID {
@@ -117,7 +117,7 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 		)
 	}
 	validateCompanions := func(values []*etcdstore.KeyValue) error {
-		if err := validateBackupConnectorSnapshotEvidence(
+		if err := backupruntime.ValidateBackupConnectorSnapshotEvidence(
 			values[:2],
 			currentRun.Record,
 		); err != nil {
@@ -126,7 +126,7 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 		if orphan == nil {
 			return nil
 		}
-		return validateBackupOrphanCompanionEvidence(values[len(values)-3:], orphan.Record)
+		return backupruntime.ValidateBackupOrphanCompanionEvidence(values[len(values)-3:], orphan.Record)
 	}
 	updatedRun, err := repository.replaceBackupRun(
 		ctx,

@@ -2,43 +2,10 @@ package etcd
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"strings"
 )
-
-const maximumBackupRuntimeListLimit = 96
-const maximumBackupPruneBatch = 11
-
-type BackupRuntimeListRequest struct {
-	Limit          int
-	StartExclusive string
-	Revision       int64
-}
-
-type BackupRuntimePage[T any] struct {
-	Items    []etcdstore.Versioned[T]
-	Next     string
-	Revision int64
-}
-
-// BackupRecoveryPointPageRequest is the stable-id public paging seam. The
-// repository alone translates AfterID to its private inverted index key.
-type BackupRecoveryPointPageRequest struct {
-	Limit    int
-	AfterID  string
-	Revision int64
-}
-
-// BackupRecoveryPointPage never exposes an etcd key or inverted-id layout.
-type BackupRecoveryPointPage struct {
-	Items    []etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]
-	NextID   string
-	Revision int64
-}
 
 func allBackupRuntimeValuesAbsent(values []*etcdstore.KeyValue) bool {
 	for _, value := range values {
@@ -81,41 +48,6 @@ func getOptionalBackupRuntimeRecord[T any](
 	return etcdstore.Versioned[T]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
-}
-
-func validateBackupRuntimeListRequest(prefix string, request BackupRuntimeListRequest) error {
-	if request.Limit <= 0 || request.Limit > maximumBackupRuntimeListLimit ||
-		request.Revision < 0 ||
-		(request.StartExclusive != "" &&
-			(request.Revision <= 0 || !validBackupRuntimeListCursor(prefix, request.StartExclusive))) {
-		return errs.New(errs.KindValidationFailed, "backup runtime list request is invalid")
-	}
-	return nil
-}
-
-func validBackupRuntimeListCursor(prefix string, cursor string) bool {
-	if !strings.HasPrefix(cursor, prefix) {
-		return false
-	}
-	suffix := strings.TrimPrefix(cursor, prefix)
-	if suffix == "" || strings.Contains(suffix, "/") {
-		return false
-	}
-	switch {
-	case strings.HasPrefix(prefix, backupruntime.BackupRecoveryPointEnvironmentPrefix),
-		strings.HasPrefix(prefix, backupruntime.BackupRecoveryPointSourcePrefix):
-		_, ok := backupruntime.InvertBackupRecoveryPointULIDBody(suffix)
-		return ok
-	case strings.HasPrefix(prefix, backupruntime.BackupRecoveryPointConnectorPrefix),
-		strings.HasPrefix(prefix, backupruntime.BackupOrphanEnvironmentPrefix),
-		strings.HasPrefix(prefix, backupruntime.BackupRetentionPrefix):
-		return recordcodec.ValidateID(ids.KindRecoveryPoint, suffix) == nil
-	case strings.HasPrefix(prefix, backupruntime.BackupRunEnvironmentPrefix),
-		strings.HasPrefix(prefix, backupruntime.BackupRestoreEnvironmentPrefix):
-		return recordcodec.ValidateID(ids.KindTask, suffix) == nil
-	default:
-		return true
-	}
 }
 
 func clearRangeValues(values []etcdstore.KeyValue) {

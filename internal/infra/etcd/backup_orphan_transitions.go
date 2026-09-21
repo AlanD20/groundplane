@@ -22,7 +22,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		!next.UpdatedAt.After(current.Record.UpdatedAt) ||
 		next.CreatedAt != current.Record.CreatedAt ||
 		next.TaskID != run.Record.TaskID ||
-		!runContainsOrphanedPoint(run.Record, current.Record) {
+		!backupruntime.RunContainsOrphanedPoint(run.Record, current.Record) {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan transition is invalid",
@@ -83,7 +83,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	if anchor.Values[1] != nil {
 		storedOrphan, orphanErr := backupruntime.DecodeBackupOrphanRecord(anchor.Values[1].Value)
 		if orphanErr == nil && storedOrphan == next &&
-			validateBackupOrphanCompanionEvidence(anchor.Values[1:], next) == nil {
+			backupruntime.ValidateBackupOrphanCompanionEvidence(anchor.Values[1:], next) == nil {
 			return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{
 				Record: storedOrphan, Revision: anchor.Values[1].ModRevision,
 				ReadRevision: anchor.ReadRevision,
@@ -96,7 +96,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 			"backup orphan companion state changed",
 		)
 	}
-	if err := validateBackupOrphanCompanionEvidence(anchor.Values[1:], current.Record); err != nil {
+	if err := backupruntime.ValidateBackupOrphanCompanionEvidence(anchor.Values[1:], current.Record); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	evidence, err := repository.loadOwnedEvidence(ctx, run.Record, anchor.ReadRevision)

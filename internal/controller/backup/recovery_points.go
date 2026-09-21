@@ -11,7 +11,7 @@ import (
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -30,8 +30,8 @@ type recoveryPointRepository interface {
 	ListVerifiedRecoveryPointsByEnvironment(
 		context.Context,
 		string,
-		etcd.BackupRecoveryPointPageRequest,
-	) (etcd.BackupRecoveryPointPage, error)
+		backupruntime.BackupRecoveryPointPageRequest,
+	) (backupruntime.BackupRecoveryPointPage, error)
 }
 
 type recoveryPointCursorCipher interface {
@@ -92,7 +92,7 @@ func (service *RecoveryPointReadService) ListRecoveryPoints(
 		return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 
-	request := etcd.BackupRecoveryPointPageRequest{Limit: recoveryPointPageLimit}
+	request := backupruntime.BackupRecoveryPointPageRequest{Limit: recoveryPointPageLimit}
 	if encodedCursor != "" {
 		cursor, err := decodeRecoveryPointCursor(ctx, service.cursorCipher, encodedCursor)
 		if err != nil {

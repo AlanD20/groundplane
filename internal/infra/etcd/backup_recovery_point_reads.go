@@ -97,10 +97,10 @@ func (repository *BackupRuntimeRepository) GetBackupRecoveryPoint(
 func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByEnvironment(
 	ctx context.Context,
 	environmentID string,
-	request BackupRuntimeListRequest,
-) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
+	request backupruntime.BackupRuntimeListRequest,
+) (backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
 		ctx,
@@ -118,14 +118,14 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByEnvironment
 type backupRecoveryPointPageReader func(
 	context.Context,
 	string,
-	BackupRuntimeListRequest,
-) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error)
+	backupruntime.BackupRuntimeListRequest,
+) (backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error)
 
 func (repository *BackupRuntimeRepository) ListVerifiedRecoveryPointsByEnvironment(
 	ctx context.Context,
 	environmentID string,
-	request BackupRecoveryPointPageRequest,
-) (BackupRecoveryPointPage, error) {
+	request backupruntime.BackupRecoveryPointPageRequest,
+) (backupruntime.BackupRecoveryPointPage, error) {
 	return collectVerifiedRecoveryPointPage(
 		ctx,
 		environmentID,
@@ -137,27 +137,27 @@ func (repository *BackupRuntimeRepository) ListVerifiedRecoveryPointsByEnvironme
 func collectVerifiedRecoveryPointPage(
 	ctx context.Context,
 	environmentID string,
-	request BackupRecoveryPointPageRequest,
+	request backupruntime.BackupRecoveryPointPageRequest,
 	read backupRecoveryPointPageReader,
-) (BackupRecoveryPointPage, error) {
-	storageRequest := BackupRuntimeListRequest{Limit: request.Limit, Revision: request.Revision}
+) (backupruntime.BackupRecoveryPointPage, error) {
+	storageRequest := backupruntime.BackupRuntimeListRequest{Limit: request.Limit, Revision: request.Revision}
 	if request.AfterID != "" {
 		boundary, err := backupruntime.BackupRecoveryPointEnvironmentIndexKey(environmentID, request.AfterID)
 		if err != nil {
-			return BackupRecoveryPointPage{}, err
+			return backupruntime.BackupRecoveryPointPage{}, err
 		}
 		storageRequest.StartExclusive = boundary
 	}
 
-	result := BackupRecoveryPointPage{}
+	result := backupruntime.BackupRecoveryPointPage{}
 	for {
 		storageRequest.Limit = request.Limit - len(result.Items)
 		page, err := read(ctx, environmentID, storageRequest)
 		if err != nil {
-			return BackupRecoveryPointPage{}, err
+			return backupruntime.BackupRecoveryPointPage{}, err
 		}
 		if page.Revision <= 0 {
-			return BackupRecoveryPointPage{}, errs.New(
+			return backupruntime.BackupRecoveryPointPage{}, errs.New(
 				errs.KindInternal,
 				"recovery point list returned no fixed revision",
 			)
@@ -165,13 +165,13 @@ func collectVerifiedRecoveryPointPage(
 		if result.Revision == 0 {
 			result.Revision = page.Revision
 		} else if page.Revision != result.Revision {
-			return BackupRecoveryPointPage{}, errs.New(
+			return backupruntime.BackupRecoveryPointPage{}, errs.New(
 				errs.KindInternal,
 				"recovery point list changed fixed revision",
 			)
 		}
 		if len(page.Items) > storageRequest.Limit {
-			return BackupRecoveryPointPage{}, errs.New(
+			return backupruntime.BackupRecoveryPointPage{}, errs.New(
 				errs.KindInternal,
 				"recovery point list exceeded the visible page limit",
 			)
@@ -181,13 +181,13 @@ func collectVerifiedRecoveryPointPage(
 			if page.Next != "" {
 				result.NextID, err = backupruntime.BackupRecoveryPointIDFromEnvironmentIndexKey(environmentID, page.Next)
 				if err != nil {
-					return BackupRecoveryPointPage{}, err
+					return backupruntime.BackupRecoveryPointPage{}, err
 				}
 			}
 			return result, nil
 		}
 		if page.Next == storageRequest.StartExclusive {
-			return BackupRecoveryPointPage{}, errs.New(
+			return backupruntime.BackupRecoveryPointPage{}, errs.New(
 				errs.KindInternal,
 				"recovery point list boundary did not advance",
 			)
@@ -200,10 +200,10 @@ func collectVerifiedRecoveryPointPage(
 func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsBySource(
 	ctx context.Context,
 	sourceID string,
-	request BackupRuntimeListRequest,
-) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
+	request backupruntime.BackupRuntimeListRequest,
+) (backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
 		ctx,
@@ -219,10 +219,10 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsBySource(
 func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByConnector(
 	ctx context.Context,
 	connectorID string,
-	request BackupRuntimeListRequest,
-) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
+	request backupruntime.BackupRuntimeListRequest,
+) (backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindConnector, connectorID); err != nil {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
 		ctx,
@@ -238,22 +238,22 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByConnector(
 func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 	ctx context.Context,
 	prefix string,
-	request BackupRuntimeListRequest,
+	request backupruntime.BackupRuntimeListRequest,
 	belongs func(backupruntime.BackupRecoveryPointRecord) bool,
 	indexKey func(backupruntime.BackupRecoveryPointRecord) (string, error),
-) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
-	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
+) (backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
+	if err := backupruntime.ValidateBackupRuntimeListRequest(prefix, request); err != nil {
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
 	if err != nil {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if index == nil || index.ReadRevision <= 0 {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindInternal,
 			"recovery point index page is incomplete",
 		)
@@ -264,22 +264,22 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 	for position, item := range index.Values {
 		pointID := string(item.Value)
 		if recordcodec.ValidateID(ids.KindRecoveryPoint, pointID) != nil {
-			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+			return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		keys = append(keys, backupruntime.BackupRecoveryPointKey(pointID), backupruntime.BackupRecoveryPointPruneKey(pointID))
 		pointIDs[position] = pointID
 	}
-	page := BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{Revision: index.ReadRevision}
+	page := backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{Revision: index.ReadRevision}
 	if len(keys) == 0 {
 		return page, nil
 	}
 	points, err := repository.readBackupRecoveryPointPageChunks(ctx, keys, index.ReadRevision)
 	if err != nil {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if points == nil || points.ReadRevision != index.ReadRevision ||
 		len(points.Values) != len(keys) {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindInternal,
 			"recovery point fixed-revision page is incomplete",
 		)
@@ -291,29 +291,29 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 	for position, pointID := range pointIDs {
 		item := points.Values[position*2]
 		if item == nil {
-			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+			return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		point, decodeErr := backupruntime.DecodeBackupRecoveryPointRecord(item.Value)
 		if decodeErr != nil || point.ID != pointID || !belongs(point) || item.Version != 1 ||
 			index.Values[position].Version != 1 ||
 			index.Values[position].ModRevision != item.ModRevision {
-			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+			return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		expectedIndexKey, keyErr := indexKey(point)
 		if keyErr != nil || expectedIndexKey != index.Values[position].Key {
-			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+			return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		environmentIndex, keyErr := backupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 		if keyErr != nil {
-			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+			return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		sourceIndex, keyErr := backupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 		if keyErr != nil {
-			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+			return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		connectorIndex, keyErr := backupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 		if keyErr != nil {
-			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+			return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		records[position] = point
 		companionKeys = append(companionKeys, environmentIndex, sourceIndex, connectorIndex)
@@ -321,7 +321,7 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 			prune, pruneErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(pruneValue.Value)
 			if pruneErr != nil || prune.Point != point.BackupRecoveryPointSnapshot ||
 				prune.State == backupruntime.BackupPruneVerifiedAbsent {
-				return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+				return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 			}
 			continue
 		}
@@ -333,11 +333,11 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 		index.ReadRevision,
 	)
 	if err != nil {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if companions == nil || companions.ReadRevision != index.ReadRevision ||
 		len(companions.Values) != len(companionKeys) {
-		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
+		return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindInternal,
 			"recovery point companion page is incomplete",
 		)
@@ -351,7 +351,7 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 			expectedKey := companionKeys[position*3+offset]
 			if companion == nil || companion.Key != expectedKey || companion.Version != 1 ||
 				companion.ModRevision != primary.ModRevision || string(companion.Value) != point.ID {
-				return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
+				return backupruntime.BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 			}
 		}
 		if visible[position] {
