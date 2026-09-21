@@ -58,7 +58,7 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 			marker: idempotencyrecord.CloneIdempotencyMarker(existing.marker),
 		}, nil
 	}
-	parents, err := repository.resolveRunnerParents(ctx, desired)
+	parents, err := repository.ResolveRunnerParents(ctx, desired)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -194,14 +194,14 @@ type runnerCreateEvidence struct {
 	projectDeletion int
 	host            int
 	desired         runnerrecord.RunnerDesiredRecord
-	parents         runnerParents
+	parents         runnerrecord.RunnerParents
 	allocation      runnerAllocationState
 	operationID     string
 }
 
 func newRunnerCreateEvidence(
 	desired runnerrecord.RunnerDesiredRecord,
-	parents runnerParents,
+	parents runnerrecord.RunnerParents,
 	allocation runnerAllocationState,
 	task TaskRecord,
 ) runnerCreateEvidence {
@@ -224,11 +224,11 @@ func newRunnerCreateEvidence(
 	evidence.owner = add(etcdstore.Condition{Key: runnerrecord.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
 	evidence.quota = add(etcdstore.Condition{Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
 	evidence.system = add(etcdstore.Condition{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.Revision})
-	evidence.tenant = add(etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})
+	evidence.tenant = add(etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.Tenant().Revision})
 	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)})
 	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), desired.TenantID)})
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		evidence.project = add(etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.project.Revision})
+		evidence.project = add(etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.Project().Revision})
 		evidence.projectDeletion = add(
 			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), desired.OwnerID)},
 		)
@@ -265,16 +265,16 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 		if values[evidence.slug] != nil {
 			return errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
 		}
-		if revisionChanged(values[evidence.quota], evidence.allocation.quota.Revision) {
+		if etcdstore.RevisionChanged(values[evidence.quota], evidence.allocation.quota.Revision) {
 			return recordcodec.StateConflict("runner tenant quota", evidence.desired.TenantID)
 		}
-		if revisionChanged(values[evidence.system], evidence.allocation.system.Revision) {
+		if etcdstore.RevisionChanged(values[evidence.system], evidence.allocation.system.Revision) {
 			return recordcodec.StateConflict("system pool registry", "global")
 		}
 		if values[evidence.tenant] == nil {
 			return errs.New(errs.KindTenantNotFound, "tenant was not found")
 		}
-		if values[evidence.tenant].ModRevision != evidence.parents.tenant.Revision {
+		if values[evidence.tenant].ModRevision != evidence.parents.Tenant().Revision {
 			return recordcodec.StateConflict("tenant", evidence.desired.TenantID)
 		}
 		if values[evidence.runnerDeletion] != nil || values[evidence.tenantDeletion] != nil {
@@ -284,7 +284,7 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 			if values[evidence.project] == nil {
 				return errs.New(errs.KindProjectNotFound, "project was not found")
 			}
-			if values[evidence.project].ModRevision != evidence.parents.project.Revision {
+			if values[evidence.project].ModRevision != evidence.parents.Project().Revision {
 				return recordcodec.StateConflict("project", evidence.desired.OwnerID)
 			}
 			if values[evidence.projectDeletion] != nil {

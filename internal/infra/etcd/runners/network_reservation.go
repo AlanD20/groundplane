@@ -1,15 +1,14 @@
-package etcd
+package runners
 
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *RunnerRepository) EnsureRunnerNetworkPool(
+func (repository *Repository) EnsureRunnerNetworkPool(
 	ctx context.Context,
 	config runnerallocation.RunnerAllocationConfig,
 ) error {
@@ -19,7 +18,7 @@ func (repository *RunnerRepository) EnsureRunnerNetworkPool(
 	if _, err := config.Validate(); err != nil {
 		return err
 	}
-	result, err := repository.store.Get(ctx, runnerrecord.SystemPoolRegistryKey)
+	result, err := repository.store.Get(ctx, SystemPoolRegistryKey)
 	if err != nil {
 		return err
 	}
@@ -38,8 +37,8 @@ func (repository *RunnerRepository) EnsureRunnerNetworkPool(
 	}
 	defer clear(value)
 	transaction, err := repository.store.Transact(ctx,
-		[]etcdstore.Condition{{Key: runnerrecord.SystemPoolRegistryKey}},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: value}},
+		[]etcdstore.Condition{{Key: SystemPoolRegistryKey}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: SystemPoolRegistryKey, Value: value}},
 	)
 	if err != nil {
 		return err
@@ -54,12 +53,12 @@ func (repository *RunnerRepository) EnsureRunnerNetworkPool(
 }
 
 func validateReservedRunnerNetworkPool(config runnerallocation.RunnerAllocationConfig, value []byte) error {
-	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
-		return runnerrecord.CorruptSystemPoolRegistry()
+	if len(value) > MaximumRunnerPersistenceBytes {
+		return CorruptSystemPoolRegistry()
 	}
-	registry, err := runnerrecord.DecodeSystemPoolRegistry(value)
+	registry, err := DecodeSystemPoolRegistry(value)
 	if err != nil || registry.Validate(config.SystemPool) != nil {
-		return runnerrecord.CorruptSystemPoolRegistry()
+		return CorruptSystemPoolRegistry()
 	}
 	if registry.RunnerNetworkPool != config.RunnerPool.String() {
 		return errs.New(

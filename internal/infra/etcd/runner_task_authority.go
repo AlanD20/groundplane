@@ -12,16 +12,16 @@ import (
 
 func newRunnerTaskInitiation(
 	desired runnerrecord.RunnerDesiredRecord,
-	parents runnerParents,
+	parents runnerrecord.RunnerParents,
 	actor taskjournal.TaskActor,
 ) (TaskInitiation, error) {
 	owner, err := runnerTaskOwner(desired)
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	fences := []etcdstore.Condition{{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.tenant.Revision}}
+	fences := []etcdstore.Condition{{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.Tenant().Revision}}
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		fences = append(fences, etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.project.Revision})
+		fences = append(fences, etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.Project().Revision})
 	}
 	return newTaskInitiation(owner, actor, fences...)
 }

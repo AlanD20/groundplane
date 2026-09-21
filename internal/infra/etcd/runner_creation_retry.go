@@ -113,7 +113,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	parents, err := repository.resolveRunnerParents(ctx, current.Record.Desired)
+	parents, err := repository.ResolveRunnerParents(ctx, current.Record.Desired)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -160,13 +160,13 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		{Key: runnerrecord.RunnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
 		{Key: runnerrecord.RunnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
-		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
+		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.Tenant().Revision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
 	if current.Record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
+			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.Project().Revision},
 			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}

@@ -209,7 +209,7 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 	if err != nil {
 		return etcdstore.Versioned[platformcomponents.ComponentObservationRecord]{}, err
 	}
-	if current == nil || revisionChanged(current.Entry, expectedObservationRevision) {
+	if current == nil || etcdstore.RevisionChanged(current.Entry, expectedObservationRevision) {
 		return etcdstore.Versioned[platformcomponents.ComponentObservationRecord]{}, recordcodec.StateConflict(
 			"platform component observation",
 			record.ComponentID,

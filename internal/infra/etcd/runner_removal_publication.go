@@ -53,7 +53,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	if sourceErr != nil || !applies || !runnerTerminal(source.Status) || source.Target != current.Record.Desired.ID {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "runner create task is not terminal")
 	}
-	parents, err := repository.resolveRunnerParents(ctx, current.Record.Desired)
+	parents, err := repository.ResolveRunnerParents(ctx, current.Record.Desired)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -156,12 +156,12 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: taskjournal.TaskStorageKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
 		{Key: runnerrecord.RunnerRemovalIntentKey(current.Record.Desired.ID)},
-		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
+		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.Tenant().Revision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
 	if current.Record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
+			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.Project().Revision},
 			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}

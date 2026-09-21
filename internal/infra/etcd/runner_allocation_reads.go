@@ -107,8 +107,3 @@ func (repository *RunnerRepository) getRunnerAllocationState(
 	state.host.condition = etcdstore.Condition{Key: runnerrecord.RunnerHostSlotKey(uint32(selected))}
 	return state, nil
 }
-
-func revisionChanged(value *etcdstore.KeyValue, expected int64) bool {
-	return (expected == 0 && value != nil) ||
-		(expected > 0 && (value == nil || value.ModRevision != expected))
-}

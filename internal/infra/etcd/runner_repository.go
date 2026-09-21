@@ -7,7 +7,7 @@ import (
 )
 
 type RunnerRepository struct {
-	*runnerrecord.Reader
+	*runnerrecord.Repository
 	store hierarchyStore
 }
 
@@ -23,5 +23,5 @@ func newRunnerRepository(store hierarchyStore) (*RunnerRepository, error) {
 }
 
 func composeRunnerRepository(store hierarchyStore) *RunnerRepository {
-	return &RunnerRepository{Reader: runnerrecord.NewReader(store), store: store}
+	return &RunnerRepository{Repository: runnerrecord.NewRepository(store), store: store}
 }
