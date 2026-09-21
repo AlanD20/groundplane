@@ -27,6 +27,10 @@ func ValidSHA256(value string) bool {
 	return err == nil && len(decoded) == sha256.Size
 }
 
+func ValidNonZeroSHA256(value string) bool {
+	return ValidSHA256(value) && value != strings.Repeat("0", sha256.Size*2)
+}
+
 func ValidateTimestamp(field string, value time.Time) error {
 	if value.IsZero() || value.Location() != time.UTC {
 		return errs.Newf(errs.KindValidationFailed, "%s must be a non-zero UTC timestamp", field)

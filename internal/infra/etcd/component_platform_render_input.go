@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"net"
 	"net/netip"
 	"sort"
 	"strings"
@@ -149,7 +149,7 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		!recordcodec.ValidSHA256(input.DefinitionSHA256) || !recordcodec.ValidSHA256(input.CatalogSHA256) ||
 		!recordcodec.ValidSHA256(input.ArtifactSHA256) || input.ArtifactLength == 0 ||
 		!recordcodec.ValidSHA256(input.PlanSHA256) || !recordcodec.ValidSHA256(input.ExecutionPlanSHA256) ||
-		!recordcodec.ValidSHA256(input.ImageIndexDigest) || !validNonZeroSHA256(input.ImageConfigDigest) ||
+		!recordcodec.ValidSHA256(input.ImageIndexDigest) || !recordcodec.ValidNonZeroSHA256(input.ImageConfigDigest) ||
 		input.ImageConfigDigest == input.ImageIndexDigest || input.ImageConfigDigest == input.ImageChildDigest ||
 		input.ImageIndexDigest == input.ImageChildDigest ||
 		!recordcodec.ValidSHA256(input.ImageChildDigest) || !validSelectedPlatform(input) ||
@@ -194,7 +194,7 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		previousAddress = address
 		previousName := ""
 		for _, hostname := range host.Hostnames {
-			if !validPlatformDNSName(hostname) || hostname <= previousName {
+			if !resolutionrecord.ValidPlatformDNSName(hostname) || hostname <= previousName {
 				return errs.New(errs.KindValidationFailed, "platform Component DNS names are invalid or unsorted")
 			}
 			if existing, found := seenNames[hostname]; found && existing != address {
@@ -205,10 +205,6 @@ func validatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderI
 		}
 	}
 	return nil
-}
-
-func validNonZeroSHA256(value string) bool {
-	return recordcodec.ValidSHA256(value) && value != strings.Repeat("0", sha256.Size*2)
 }
 
 func validSelectedPlatform(input PlatformComponentTaskRenderInput) bool {
@@ -227,25 +223,6 @@ func validComponentActionToken(value string) bool {
 	for _, character := range value {
 		if !(character == '-' || character >= 'a' && character <= 'z' || character >= '0' && character <= '9') {
 			return false
-		}
-	}
-	return true
-}
-
-func validPlatformDNSName(value string) bool {
-	if value == "" || value == "." || len(value) > 253 || strings.HasPrefix(value, ".") ||
-		strings.HasSuffix(value, ".") || strings.HasPrefix(value, "*.") || net.ParseIP(value) != nil {
-		return false
-	}
-	for _, label := range strings.Split(value, ".") {
-		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, character := range label {
-			if !(character == '-' || character >= 'a' && character <= 'z' ||
-				character >= 'A' && character <= 'Z' || character >= '0' && character <= '9') {
-				return false
-			}
 		}
 	}
 	return true

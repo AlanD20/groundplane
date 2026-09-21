@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"encoding/hex"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
@@ -51,7 +52,7 @@ func validateTaskDNSResolverObservationEvidence(
 		evidence.StaticQueryIPv4 == "" &&
 		!evidence.StaticQuerySucceeded
 	if evidence.StaticQueryPresent {
-		staticValid = validPlatformDNSName(evidence.StaticQueryName) && addressErr == nil && address.Is4() &&
+		staticValid = resolutionrecord.ValidPlatformDNSName(evidence.StaticQueryName) && addressErr == nil && address.Is4() &&
 			!address.Is4In6() && evidence.StaticQuerySucceeded
 	}
 	if canonicalErr != nil || hex.EncodeToString(canonical.GetProofSha256()) != evidence.ProofSHA256 ||
@@ -63,7 +64,7 @@ func validateTaskDNSResolverObservationEvidence(
 		) != nil || ids.Validate(ids.KindConfig, evidence.ArtifactID) != nil ||
 		evidence.RenderGeneration == 0 || !recordcodec.ValidSHA256(evidence.ArtifactSHA256) ||
 		!imageref.IsDigestPinned(evidence.ImageReference) || !recordcodec.ValidSHA256(evidence.VerifiedImageDigest) ||
-		!validNonZeroSHA256(evidence.ImageConfigDigest) ||
+		!recordcodec.ValidNonZeroSHA256(evidence.ImageConfigDigest) ||
 		hex.EncodeToString(canonical.GetImageConfigDigest()) != evidence.ImageConfigDigest ||
 		evidence.ListenEndpoint != "127.0.0.1:53" || !validSHA512(evidence.ReloadSHA512) ||
 		recordcodec.ValidateTimestamp("DNS resolver observation observed_at", evidence.ObservedAt) != nil || !staticValid ||
