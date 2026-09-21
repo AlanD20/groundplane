@@ -1,0 +1,138 @@
+package etcd
+
+import (
+	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+// EnvironmentZoneRemovalAuthorities binds the desired revision being edited
+// to the independently mutable projection last acknowledged by the runtime.
+type EnvironmentZoneRemovalAuthorities struct {
+	Desired etcdstore.Versioned[EnvironmentComposeProjection]
+	Applied etcdstore.Versioned[EnvironmentComposeProjection]
+}
+
+// GetEnvironmentZoneRemovalAuthorities reads both authorities required to
+// fence a Zone removal. Each returned revision belongs to its own etcd key.
+func (repository *HierarchyRepository) GetEnvironmentZoneRemovalAuthorities(
+	ctx context.Context,
+	environmentID string,
+) (EnvironmentZoneRemovalAuthorities, bool, error) {
+	desired, found, err := repository.GetEnvironmentComposeProjection(ctx, environmentID)
+	if err != nil || !found {
+		return EnvironmentZoneRemovalAuthorities{}, found, err
+	}
+	applied, found, err := repository.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
+	if err != nil {
+		return EnvironmentZoneRemovalAuthorities{}, false, err
+	}
+	if !found {
+		return EnvironmentZoneRemovalAuthorities{}, false, errs.New(
+			errs.KindStateConflict,
+			"Environment applied projection is missing",
+		)
+	}
+	return EnvironmentZoneRemovalAuthorities{Desired: desired, Applied: applied}, true, nil
+}
+
+func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
+	ctx context.Context,
+	environmentID string,
+) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	head, err := repository.store.Get(ctx, environmentBlueprintHeadKey(environmentID))
+	if err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if head == nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, errs.New(
+			errs.KindInternal,
+			"Environment desired head read is empty",
+		)
+	}
+	if head.Entry == nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: head.ReadRevision}, false, nil
+	}
+	revisionID, err := idempotencyrecord.DecodeTaskReference(head.Entry.Value)
+	if err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
+	if err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if root == nil || root.Entry == nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	seal, err := decodeEnvironmentBlueprintSeal(root.Entry.Value)
+	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "projection")
+	if err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	defer clear(stream)
+	projection, err := decodeEnvironmentComposeProjection(stream)
+	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	return etcdstore.Versioned[EnvironmentComposeProjection]{
+		Record: projection, Revision: head.Entry.ModRevision, ReadRevision: readRevision,
+	}, true, nil
+}
+
+// GetEnvironmentComposeProjectionRevision resolves one immutable published
+// revision directly. Task execution uses this method and never substitutes the
+// Environment's newer current head as render input.
+func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
+	ctx context.Context,
+	environmentID string,
+	revisionID string,
+) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if err := recordcodec.ValidateID(ids.KindTask, revisionID); err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
+	if err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	if root == nil || root.Entry == nil {
+		readRevision := int64(0)
+		if root != nil {
+			readRevision = root.ReadRevision
+		}
+		return etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: readRevision}, false, nil
+	}
+	seal, err := decodeEnvironmentBlueprintSeal(root.Entry.Value)
+	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "projection")
+	if err != nil {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+	}
+	defer clear(stream)
+	projection, err := decodeEnvironmentComposeProjection(stream)
+	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID {
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+	}
+	return etcdstore.Versioned[EnvironmentComposeProjection]{
+		Record: projection, Revision: root.Entry.ModRevision, ReadRevision: readRevision,
+	}, true, nil
+}
