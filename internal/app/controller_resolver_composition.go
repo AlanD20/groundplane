@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
@@ -26,6 +27,7 @@ func newControllerResolverComposition(
 	volumeRoot string,
 	componentRecords *etcd.ComponentRepository,
 	resolverBaselines *resolverbaseline.Repository,
+	resolutionProjections *resolutionrecord.Repository,
 	tasks *etcd.TaskRepository,
 	intentCoordinator *requestidempotency.Coordinator,
 	planResolver *taskplanning.TaskPlanResolver,
@@ -39,7 +41,7 @@ func newControllerResolverComposition(
 		return nil, fmt.Errorf("controller: initialize registered Component action catalog: %w", err)
 	}
 	platformRenderPlanner, err := controllerdns.NewPlatformRenderPlanner(
-		componentRecords,
+		resolutionProjections,
 		resolverBaselines,
 		componentRecords,
 		controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
@@ -54,7 +56,7 @@ func newControllerResolverComposition(
 	if err := tasks.SetPlatformResolverTaskPreparer(func(
 		ctx context.Context,
 		current etcdstore.Versioned[componentrecord.Record],
-		projection etcd.HostResolutionProjectionRecord,
+		projection resolutionrecord.HostResolutionProjectionRecord,
 		task etcd.TaskRecord,
 		priorObservation *etcd.ComponentObservationRecord,
 	) (etcd.PlatformComponentTaskRenderInput, error) {

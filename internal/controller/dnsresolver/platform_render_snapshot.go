@@ -5,11 +5,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 type fixedProjectionReader struct {
-	record etcd.HostResolutionProjectionRecord
+	record resolutionrecord.HostResolutionProjectionRecord
 }
 
 type fixedObservationReader struct {
@@ -19,8 +20,8 @@ type fixedObservationReader struct {
 
 func (reader fixedProjectionReader) GetHostResolutionProjection(
 	context.Context,
-) (etcdstore.Versioned[etcd.HostResolutionProjectionRecord], bool, error) {
-	return etcdstore.Versioned[etcd.HostResolutionProjectionRecord]{Record: reader.record}, true, nil
+) (etcdstore.Versioned[resolutionrecord.HostResolutionProjectionRecord], bool, error) {
+	return etcdstore.Versioned[resolutionrecord.HostResolutionProjectionRecord]{Record: reader.record}, true, nil
 }
 
 func (reader fixedObservationReader) GetPlatformComponentObservation(
@@ -41,7 +42,7 @@ func (planner *PlatformRenderPlanner) PrepareConfigTaskAtProjection(
 	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task etcd.TaskRecord,
-	projection etcd.HostResolutionProjectionRecord,
+	projection resolutionrecord.HostResolutionProjectionRecord,
 	priorObservation *etcd.ComponentObservationRecord,
 ) (etcd.PlatformComponentTaskRenderInput, error) {
 	clone := *planner
@@ -59,7 +60,7 @@ func (planner *PlatformRenderPlanner) PrepareBootstrapConfigTaskAtProjection(
 	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task etcd.TaskRecord,
-	projection etcd.HostResolutionProjectionRecord,
+	projection resolutionrecord.HostResolutionProjectionRecord,
 ) (etcd.PlatformComponentTaskRenderInput, error) {
 	clone := *planner
 	clone.bootstrapProvenance = true

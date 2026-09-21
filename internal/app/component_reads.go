@@ -6,6 +6,7 @@ import (
 
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 )
@@ -13,10 +14,11 @@ import (
 func newComponentReadService(
 	components *etcd.ComponentRepository,
 	baselines *resolverbaseline.Repository,
+	projections *resolutionrecord.Repository,
 	network *networketcd.Repository,
 	catalog []componentrender.EnvironmentComponentRegistration,
 ) (*componentcapability.ReadService, error) {
-	platform, err := componentregistration.NewDNSManagedConfigProjector(components, baselines)
+	platform, err := componentregistration.NewDNSManagedConfigProjector(projections, baselines)
 	if err != nil {
 		return nil, err
 	}

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ import (
 func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	ctx context.Context,
 	current etcdstore.Versioned[componentrecord.Record],
-	projection HostResolutionProjectionRecord,
+	projection resolutionrecord.HostResolutionProjectionRecord,
 	task TaskRecord,
 	renderInput PlatformComponentTaskRenderInput,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -55,7 +56,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if err := validatePlatformComponentTaskRenderInput(renderInput); err != nil {
 		return err
 	}
-	projectionValue, err := encodeHostResolutionProjectionRecord(projection)
+	projectionValue, err := resolutionrecord.EncodeHostResolutionProjectionRecord(projection)
 	if err != nil {
 		return err
 	}
@@ -98,14 +99,14 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		{Key: platformComponentOwnerKey(task.Target), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
 		{Key: platformComponentBootstrapKey(task.Target), ModRevision: indexes.Values[2].ModRevision},
-		{Key: hostResolutionProjectionKey},
+		{Key: resolutionrecord.StorageKey},
 		{Key: platformComponentTaskActiveKey(task.Target)},
 		{Key: platformComponentTaskRenderInputKey(task.PlanID)},
 		{Key: taskKey(task.ID)}, {Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: hostResolutionProjectionKey, Value: projectionValue},
+		{Type: etcdstore.MutationPut, Key: resolutionrecord.StorageKey, Value: projectionValue},
 		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
 		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
@@ -142,7 +143,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	ctx context.Context,
 	current etcdstore.Versioned[componentrecord.Record],
-	projection HostResolutionProjectionRecord,
+	projection resolutionrecord.HostResolutionProjectionRecord,
 	task TaskRecord,
 	active *etcdstore.KeyValue,
 	sealedPredecessor *TaskRecord,

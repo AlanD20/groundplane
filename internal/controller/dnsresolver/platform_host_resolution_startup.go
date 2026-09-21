@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
@@ -29,7 +30,7 @@ func EnsurePlatformResolverTask(
 	if ctx == nil || components == nil || tasks == nil || planner == nil || coordinator == nil {
 		return errs.New(errs.KindInternal, "platform resolver startup dependencies are required")
 	}
-	_, found, err := components.GetHostResolutionProjection(ctx)
+	_, found, err := planner.projections.GetHostResolutionProjection(ctx)
 	if err != nil {
 		return err
 	}
@@ -51,7 +52,7 @@ func EnsurePlatformResolverTask(
 	if inputRevision <= 0 {
 		return errs.New(errs.KindInternal, "platform resolver startup revision is unavailable")
 	}
-	empty, err := etcd.NewHostResolutionProjectionRecord(inputRevision, nil)
+	empty, err := resolutionrecord.NewHostResolutionProjectionRecord(inputRevision, nil)
 	if err != nil {
 		return err
 	}

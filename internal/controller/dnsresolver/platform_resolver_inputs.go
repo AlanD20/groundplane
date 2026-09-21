@@ -5,13 +5,14 @@ import (
 	"encoding/hex"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
 	"time"
 )
 
 func resolverInputFromProjection(
-	record etcd.HostResolutionProjectionRecord,
+	record resolutionrecord.HostResolutionProjectionRecord,
 	baselineGeneration uint64,
 	resolvers []componentdns.ResolverEndpoint,
 ) (componentdns.ResolverInput, []etcd.PlatformDNSHost, error) {

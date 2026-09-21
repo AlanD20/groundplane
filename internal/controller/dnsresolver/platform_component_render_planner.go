@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	resolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,7 +21,7 @@ import (
 )
 
 type PlatformProjectionReader interface {
-	GetHostResolutionProjection(context.Context) (etcdstore.Versioned[etcd.HostResolutionProjectionRecord], bool, error)
+	GetHostResolutionProjection(context.Context) (etcdstore.Versioned[resolutionrecord.HostResolutionProjectionRecord], bool, error)
 }
 
 type BaselineRepository interface {

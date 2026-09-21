@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -32,7 +33,7 @@ type taskRepositoryStore interface {
 type PlatformResolverTaskPreparer func(
 	context.Context,
 	etcdstore.Versioned[componentrecord.Record],
-	HostResolutionProjectionRecord,
+	resolutionrecord.HostResolutionProjectionRecord,
 	TaskRecord,
 	*ComponentObservationRecord,
 ) (PlatformComponentTaskRenderInput, error)

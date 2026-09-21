@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"log/slog"
 	"os"
@@ -350,6 +351,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize host resolver baseline repository: %w", err)
 	}
+	resolutionProjections, err := resolutionrecord.New(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize host-resolution projection repository: %w", err)
+	}
 	platformComponents, err := etcd.DefaultPlatformComponents(detectTailnetDelegationDefault())
 	if err != nil {
 		_ = store.Close()
@@ -520,7 +526,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
 	resolverComposition, err := newControllerResolverComposition(
-		ctx, cfg.Storage.VolumeRoot, componentRecords, resolverBaselines, tasks, intentCoordinator, planResolver,
+		ctx, cfg.Storage.VolumeRoot, componentRecords, resolverBaselines, resolutionProjections, tasks, intentCoordinator, planResolver,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -688,7 +694,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Network desired revision persistence: %w", err)
 	}
-	componentReads, err := newComponentReadService(componentRecords, resolverBaselines, networkRecords, componentCatalog)
+	componentReads, err := newComponentReadService(componentRecords, resolverBaselines, resolutionProjections, networkRecords, componentCatalog)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component reads: %w", err)

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -128,7 +129,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	for id, record := range componentOverride {
 		components[id] = record
 	}
-	hostRoutes := make([]HostResolutionRouteRecord, 0, len(routes))
+	hostRoutes := make([]resolutionrecord.HostResolutionRouteRecord, 0, len(routes))
 	conditions := append([]etcdstore.Condition(nil), baseConditions...)
 	for _, condition := range componentConditions {
 		conditions = appendHostResolutionCondition(conditions, condition)
@@ -152,7 +153,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 			)
 		}
 		serviceID := provider.Runtime.GeneratedServices[0]
-		hostRoutes = append(hostRoutes, HostResolutionRouteRecord{
+		hostRoutes = append(hostRoutes, resolutionrecord.HostResolutionRouteRecord{
 			EnvironmentID: route.EnvironmentID, DesiredRevisionID: task.ID,
 			AppliedRevision: route.Observed.Provider.InputRevision, RouteID: route.Desired.ID,
 			ServiceID: serviceID, Hostname: route.Desired.Host,
@@ -160,7 +161,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		})
 	}
 	currentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{hostResolutionProjectionKey}, Revision: revision,
+		Keys: []string{resolutionrecord.StorageKey}, Revision: revision,
 	})
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
@@ -172,9 +173,9 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		)
 	}
 	current := currentRead.Values[0]
-	var stored *HostResolutionProjectionRecord
+	var stored *resolutionrecord.HostResolutionProjectionRecord
 	if current != nil {
-		decoded, decodeErr := decodeHostResolutionProjectionRecord(current.Value)
+		decoded, decodeErr := resolutionrecord.DecodeHostResolutionProjectionRecord(current.Value)
 		if decodeErr != nil {
 			return hostResolutionReconciliationChange{}, decodeErr
 		}
@@ -320,13 +321,13 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 }
 
 func preserveHostResolutionDesiredRevisionIDs(
-	current *HostResolutionProjectionRecord,
-	routes []HostResolutionRouteRecord,
+	current *resolutionrecord.HostResolutionProjectionRecord,
+	routes []resolutionrecord.HostResolutionRouteRecord,
 ) {
 	if current == nil {
 		return
 	}
-	previous := make(map[string]HostResolutionRouteRecord, len(current.Routes))
+	previous := make(map[string]resolutionrecord.HostResolutionRouteRecord, len(current.Routes))
 	for _, route := range current.Routes {
 		previous[route.EnvironmentID+"\x00"+route.RouteID] = route
 	}
