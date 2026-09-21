@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,7 +21,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 		(len(task.Params) != 1 && len(task.Params) != 4) {
 		return nil, errs.New(errs.KindInternal, "durable Environment removal Task shape is invalid")
 	}
-	volumeDirectory, exists := task.Params[EnvironmentRemoveVolumeDirectoryParam]
+	volumeDirectory, exists := task.Params[taskcontract.EnvironmentRemoveVolumeDirectoryParam]
 	if !exists {
 		return nil, errs.New(errs.KindInternal, "durable Environment removal directory is missing")
 	}
@@ -64,7 +65,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 		return nil, errs.New(errs.KindInternal, "Environment removal procedure is invalid")
 	}
 	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
-	artifactID := task.Params[EnvironmentBlueprintArtifactParam]
+	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[etcd.TaskMaterializationEnvironmentParam] != task.Target ||
 		ids.Validate(ids.KindTask, revisionID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil {
 		return nil, errs.New(errs.KindInternal, "Environment removal Blueprint parameters are invalid")

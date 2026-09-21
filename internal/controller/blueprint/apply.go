@@ -591,13 +591,13 @@ func (service *Service) applyBlueprintOnce(
 	params := map[string]string{
 		etcd.EnvironmentDesiredRevisionParam:           taskID,
 		etcd.TaskMaterializationEnvironmentParam:       environmentID,
-		taskplanning.EnvironmentBlueprintArtifactParam: artifactID,
+		taskcontract.EnvironmentBlueprintArtifactParam: artifactID,
 		taskcontract.EnvironmentBlueprintProcedureParam: string(
 			taskcontract.BlueprintComposeProcedureNone,
 		),
 	}
 	if len(managedVolumeIDs) != 0 {
-		params[taskplanning.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
+		params[taskcontract.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
 		params[taskplanning.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
 	}
 	task := etcd.TaskRecord{

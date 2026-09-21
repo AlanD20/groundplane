@@ -84,7 +84,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
 	}
 	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
-	artifactID := task.Params[EnvironmentBlueprintArtifactParam]
+	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[etcd.TaskMaterializationEnvironmentParam] != task.Target ||
 		ids.Validate(ids.KindTask, revisionID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task parameters are invalid")
@@ -331,7 +331,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 }
 
 func blueprintManagedVolumeProcedure(params map[string]string) ([]string, []byte, error) {
-	encodedIDs, hasIDs := params[EnvironmentBlueprintManagedVolumesParam]
+	encodedIDs, hasIDs := params[taskcontract.EnvironmentBlueprintManagedVolumesParam]
 	encodedDigest, hasDigest := params[VolumeTaskIntentSHA256Param]
 	if !hasIDs && !hasDigest {
 		return nil, nil, nil

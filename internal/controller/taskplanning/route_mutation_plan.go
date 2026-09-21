@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -210,7 +211,7 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	pin := *intent.Provider
 	candidate := *intent.CandidateProjection
 	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
-	artifactID := task.Params[EnvironmentBlueprintArtifactParam]
+	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceRoute ||
 		task.Params[etcd.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[etcd.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||

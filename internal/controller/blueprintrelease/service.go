@@ -177,7 +177,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint Release publication allocator is invalid")
 	}
 	task.Params[etcd.TaskReleasePublicationParam] = publicationID
-	artifactID := task.Params[taskplanning.EnvironmentBlueprintArtifactParam]
+	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	stage := etcd.ReleaseStage{PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: input.CreatedAt,
 		Members: make([]etcd.ReleaseStageMember, len(candidates))}
 	members := make([]etcd.ReleaseTaskRenderMember, len(candidates))

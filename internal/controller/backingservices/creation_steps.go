@@ -57,7 +57,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 		etcd.TaskMaterializationEnvironmentParam:       environment.ID,
 		etcd.TaskBackingServiceCreationParam:           serviceID,
 		etcd.TaskBackingServiceVolumeDirectoryParam:    environment.VolumeDir,
-		taskplanning.EnvironmentBlueprintArtifactParam: artifactID,
+		taskcontract.EnvironmentBlueprintArtifactParam: artifactID,
 		taskcontract.EnvironmentBlueprintProcedureParam: string(
 			taskcontract.BlueprintComposeProcedureFullReconcile,
 		),
@@ -83,7 +83,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 			},
 		})
 		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: volumeStepID})
-		taskParams[taskplanning.EnvironmentBlueprintManagedVolumesParam] = volumeID
+		taskParams[taskcontract.EnvironmentBlueprintManagedVolumesParam] = volumeID
 		taskParams[taskplanning.VolumeTaskIntentSHA256Param] = hex.EncodeToString(intentDigest)
 	}
 	materializations := []materializationrecord.Record(nil)

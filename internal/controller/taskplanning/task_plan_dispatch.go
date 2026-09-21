@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
+	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -129,7 +130,7 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		len(task.Steps) != 1 || task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Environment creation Task shape is invalid")
 	}
-	volumeDirectory, exists := task.Params[EnvironmentCreateVolumeDirectoryParam]
+	volumeDirectory, exists := task.Params[taskcontract.EnvironmentCreateVolumeDirectoryParam]
 	if !exists || ids.Validate(ids.KindStep, task.Steps[0].ID) != nil {
 		return nil, errs.New(errs.KindInternal, "durable Environment creation Task procedure is invalid")
 	}
