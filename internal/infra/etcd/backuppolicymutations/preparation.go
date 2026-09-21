@@ -1,13 +1,11 @@
-package etcd
+package backuppolicymutations
 
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
-	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupsources"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -24,7 +22,7 @@ type BackupPolicyInitialKeyMaterial struct {
 // exposing the exact typed projection the application serializes into the
 // protected 200 response.
 type PreparedBackupPolicyReplacement struct {
-	candidate          backuppolicymutations.ReplacementCandidate
+	candidate          ReplacementCandidate
 	projection         backupqueries.BackupPolicyProjection
 	requiresInitialKey bool
 }
@@ -50,10 +48,10 @@ func (prepared PreparedBackupPolicyReplacement) FinalizeSchedule(
 			errs.KindValidationFailed, "backup policy initial key is not prepared",
 		)
 	}
-	if err := backuppolicymutations.SealBackupPolicyCandidateSchedule(&prepared.candidate, now); err != nil {
+	if err := SealBackupPolicyCandidateSchedule(&prepared.candidate, now); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
-	if err := backuppolicymutations.ValidateReplacementCandidate(context.Background(), prepared.candidate); err != nil {
+	if err := ValidateReplacementCandidate(context.Background(), prepared.candidate); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	prepared.projection = backupPolicyProjectionFromCandidate(prepared.candidate)
@@ -78,17 +76,17 @@ func (prepared *PreparedBackupPolicyReplacement) Destroy() {
 // PrepareBackupPolicyReplacement resolves stable source catalog identities and
 // captures every hierarchy, owner-index, Connector, key, and reverse-reference
 // compare inside the etcd adapter. Callers never construct KeyValue evidence.
-func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
+func (repository *Repository) PrepareBackupPolicyReplacement(
 	ctx context.Context,
 	input backuppolicy.BackupPolicyReplacementInput,
 ) (PreparedBackupPolicyReplacement, error) {
 	if err := backuppolicy.ValidateReplacementInput(ctx, input); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
-	hierarchy, err := newHierarchyRepository(repository.store)
-	if err != nil {
-		return PreparedBackupPolicyReplacement{}, err
+	if repository.store == nil {
+		return PreparedBackupPolicyReplacement{}, errs.New(errs.KindInternal, "hierarchy store is required")
 	}
+	hierarchy := hierarchyrecord.NewReader(repository.store)
 	environment, err := hierarchy.GetEnvironment(ctx, input.EnvironmentID)
 	if err != nil {
 		return PreparedBackupPolicyReplacement{}, err
@@ -148,7 +146,7 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	}()
 	for index, source := range resolved {
 		candidate.Replacement.SourceIDs[index] = source.Record.ID
-		candidate.Sources[index], err = repository.loadbackupPolicySourceEvidence(
+		candidate.Sources[index], err = repository.loadSourceEvidence(
 			ctx,
 			source,
 			candidate.MutationEpoch.ReadRevision,
@@ -176,13 +174,13 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	if err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
-	if err := backuppolicymutations.SealBackupPolicyCandidateSchedule(&candidate, now); err != nil {
+	if err := SealBackupPolicyCandidateSchedule(&candidate, now); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	requiresInitialKey := input.Enabled && input.Encryption == "age" && !keyFound
 	projection := backupqueries.BackupPolicyProjection{}
 	if !requiresInitialKey {
-		if err := backuppolicymutations.ValidateReplacementCandidate(ctx, candidate); err != nil {
+		if err := ValidateReplacementCandidate(ctx, candidate); err != nil {
 			return PreparedBackupPolicyReplacement{}, err
 		}
 		projection = backupPolicyProjectionFromCandidate(candidate)
@@ -193,7 +191,7 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	}, nil
 }
 
-func (repository *BackupPolicyRepository) SupplyBackupPolicyInitialKey(
+func (repository *Repository) SupplyBackupPolicyInitialKey(
 	ctx context.Context,
 	prepared PreparedBackupPolicyReplacement,
 	material BackupPolicyInitialKeyMaterial,
@@ -206,7 +204,7 @@ func (repository *BackupPolicyRepository) SupplyBackupPolicyInitialKey(
 			errs.KindValidationFailed, "backup policy preparation does not require initial key material",
 		)
 	}
-	initial, err := newbackupPolicyInitialKey(
+	initial, err := NewInitialKey(
 		prepared.candidate.Replacement.EnvironmentID,
 		prepared.candidate.Replacement.UpdatedAt,
 		&material,
@@ -215,21 +213,11 @@ func (repository *BackupPolicyRepository) SupplyBackupPolicyInitialKey(
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	prepared.candidate.InitialKey = initial
-	if err := backuppolicymutations.ValidateReplacementCandidate(ctx, prepared.candidate); err != nil {
+	if err := ValidateReplacementCandidate(ctx, prepared.candidate); err != nil {
 		clear(initial.Encrypted.Ciphertext)
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	prepared.requiresInitialKey = false
 	prepared.projection = backupPolicyProjectionFromCandidate(prepared.candidate)
 	return prepared, nil
-}
-
-// ReplaceBackupPolicyProtected commits an opaque prepared replacement and the
-// exact completed-direct response marker in one transaction.
-func (repository *BackupPolicyRepository) ReplaceBackupPolicyProtected(
-	ctx context.Context,
-	prepared PreparedBackupPolicyReplacement,
-	marker idempotencyrecord.IdempotencyMarker,
-) (IdempotencyTransactionResult, error) {
-	return repository.replaceBackupPolicyProtected(ctx, prepared.candidate, marker)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -18,7 +19,7 @@ import (
 func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	ctx context.Context,
 	input BackupKeyRotationInput,
-	material BackupPolicyInitialKeyMaterial,
+	material backuppolicymutations.BackupPolicyInitialKeyMaterial,
 ) (PreparedBackupKeyRotation, error) {
 	if repository == nil || repository.store == nil {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindInternal, "backup policy repository is not configured")

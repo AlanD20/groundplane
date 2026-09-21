@@ -63,7 +63,7 @@ func (prepared BlueprintBackupPolicyPreparation) RequiresInitialKey() bool {
 	return prepared.state.requiresInitialKey
 }
 func (prepared *BlueprintBackupPolicyPreparation) SupplyInitialKey(
-	material BackupPolicyInitialKeyMaterial,
+	material backuppolicymutations.BackupPolicyInitialKeyMaterial,
 ) error {
 	if prepared == nil || prepared.state == nil {
 		return errs.New(errs.KindInternal, "Blueprint Backup preparation is required")
@@ -74,7 +74,7 @@ func (prepared *BlueprintBackupPolicyPreparation) SupplyInitialKey(
 	if state.consumed || !state.requiresInitialKey || state.candidate.InitialKey != nil {
 		return errs.New(errs.KindStateConflict, "Blueprint Backup initial key is not expected")
 	}
-	initial, err := newbackupPolicyInitialKey(state.environmentID, state.createdAt, &material)
+	initial, err := backuppolicymutations.NewInitialKey(state.environmentID, state.createdAt, &material)
 	if err != nil {
 		return err
 	}
@@ -284,5 +284,5 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 	if tombstone.Values[0] != nil {
 		return "", nil, nil, nil, errs.New(errs.KindResourceInUse, "connector deletion is in progress")
 	}
-	return connectorID, connector, owner, cloneBackupPolicyEvidenceKeyValue(nameRead.Values[0]), nil
+	return connectorID, connector, owner, backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(nameRead.Values[0]), nil
 }

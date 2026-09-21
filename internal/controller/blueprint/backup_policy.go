@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
@@ -31,7 +32,7 @@ type environmentBlueprintBackupRepository interface {
 }
 
 type environmentBlueprintBackupKeyFactory interface {
-	Create(context.Context) (etcd.BackupPolicyInitialKeyMaterial, error)
+	Create(context.Context) (backuppolicymutations.BackupPolicyInitialKeyMaterial, error)
 }
 
 type environmentBlueprintBackupPolicySnapshot struct {

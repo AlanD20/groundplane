@@ -1,8 +1,7 @@
-package etcd
+package backuppolicymutations
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
@@ -13,7 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
+func (repository *Repository) validateBackupPolicySelectionTarget(
 	ctx context.Context,
 	environmentID string,
 	selection backuppolicy.BackupPolicySourceSelection,

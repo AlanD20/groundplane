@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
@@ -26,19 +27,19 @@ type backupPolicyRepository interface {
 	PrepareBackupPolicyReplacement(
 		context.Context,
 		backuppolicy.BackupPolicyReplacementInput,
-	) (etcd.PreparedBackupPolicyReplacement, bool, error)
+	) (backuppolicymutations.PreparedBackupPolicyReplacement, bool, error)
 	SupplyBackupPolicyInitialKey(
 		context.Context,
-		etcd.PreparedBackupPolicyReplacement,
-		etcd.BackupPolicyInitialKeyMaterial,
-	) (etcd.PreparedBackupPolicyReplacement, error)
+		backuppolicymutations.PreparedBackupPolicyReplacement,
+		backuppolicymutations.BackupPolicyInitialKeyMaterial,
+	) (backuppolicymutations.PreparedBackupPolicyReplacement, error)
 	FinalizeBackupPolicySchedule(
-		etcd.PreparedBackupPolicyReplacement,
+		backuppolicymutations.PreparedBackupPolicyReplacement,
 		time.Time,
-	) (etcd.PreparedBackupPolicyReplacement, backupqueries.BackupPolicyProjection, error)
+	) (backuppolicymutations.PreparedBackupPolicyReplacement, backupqueries.BackupPolicyProjection, error)
 	ReplaceBackupPolicyProtected(
 		context.Context,
-		etcd.PreparedBackupPolicyReplacement,
+		backuppolicymutations.PreparedBackupPolicyReplacement,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -135,7 +136,7 @@ func (service *durableBackupPolicyIdempotency) ResolveUnknown(
 }
 
 type backupPolicyKeyFactory interface {
-	Create(context.Context) (etcd.BackupPolicyInitialKeyMaterial, error)
+	Create(context.Context) (backuppolicymutations.BackupPolicyInitialKeyMaterial, error)
 }
 
 type ageBackupPolicyKeyFactory struct {
@@ -151,18 +152,18 @@ func NewAgeBackupPolicyKeyFactory(protector *secretvalue.Protector) (*ageBackupP
 
 func (factory *ageBackupPolicyKeyFactory) Create(
 	ctx context.Context,
-) (etcd.BackupPolicyInitialKeyMaterial, error) {
+) (backuppolicymutations.BackupPolicyInitialKeyMaterial, error) {
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
-		return etcd.BackupPolicyInitialKeyMaterial{}, errs.Wrap(errs.KindInternal, err)
+		return backuppolicymutations.BackupPolicyInitialKeyMaterial{}, errs.Wrap(errs.KindInternal, err)
 	}
 	plaintext := []byte(identity.String())
 	defer clear(plaintext)
 	envelope, err := factory.protector.Seal(ctx, plaintext)
 	if err != nil {
-		return etcd.BackupPolicyInitialKeyMaterial{}, err
+		return backuppolicymutations.BackupPolicyInitialKeyMaterial{}, err
 	}
-	return etcd.BackupPolicyInitialKeyMaterial{
+	return backuppolicymutations.BackupPolicyInitialKeyMaterial{
 		Recipient: identity.Recipient().String(), Ciphertext: envelope.Ciphertext(),
 	}, nil
 }

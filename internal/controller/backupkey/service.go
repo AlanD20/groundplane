@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
@@ -32,7 +33,7 @@ type Repository interface {
 	PrepareBackupKeyRotation(
 		context.Context,
 		etcd.BackupKeyRotationInput,
-		etcd.BackupPolicyInitialKeyMaterial,
+		backuppolicymutations.BackupPolicyInitialKeyMaterial,
 	) (etcd.PreparedBackupKeyRotation, error)
 	PublishBackupKeyRotation(
 		context.Context,
@@ -148,7 +149,7 @@ func (service *durableBackupKeyRotationIdempotency) ResolveUnknown(
 }
 
 type KeyFactory interface {
-	Create(context.Context) (etcd.BackupPolicyInitialKeyMaterial, error)
+	Create(context.Context) (backuppolicymutations.BackupPolicyInitialKeyMaterial, error)
 }
 
 type Service struct {

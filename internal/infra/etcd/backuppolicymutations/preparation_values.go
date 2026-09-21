@@ -1,23 +1,22 @@
-package etcd
+package backuppolicymutations
 
 import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
-	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
 
-func newbackupPolicyInitialKey(
+func NewInitialKey(
 	environmentID string,
 	now time.Time,
 	material *BackupPolicyInitialKeyMaterial,
-) (*backuppolicymutations.InitialKey, error) {
+) (*InitialKey, error) {
 	if material == nil {
 		return nil, errs.New(errs.KindValidationFailed, "initial age key material is required")
 	}
-	initial := &backuppolicymutations.InitialKey{
+	initial := &InitialKey{
 		Record: backuppolicy.BackupKeyRecord{
 			EnvironmentID: environmentID,
 			Recipient:     material.Recipient,
@@ -42,7 +41,7 @@ func newbackupPolicyInitialKey(
 	return initial, nil
 }
 
-func backupPolicyProjectionFromCandidate(candidate backuppolicymutations.ReplacementCandidate) backupqueries.BackupPolicyProjection {
+func backupPolicyProjectionFromCandidate(candidate ReplacementCandidate) backupqueries.BackupPolicyProjection {
 	projection := backupqueries.BackupPolicyProjection{
 		EnvironmentID: candidate.Replacement.EnvironmentID,
 		Enabled:       candidate.Replacement.Enabled,
@@ -51,7 +50,7 @@ func backupPolicyProjectionFromCandidate(candidate backuppolicymutations.Replace
 		Encryption:    candidate.Replacement.Encryption,
 		ConnectorID:   candidate.Replacement.ConnectorID,
 		Sources:       make([]backupqueries.BackupPolicySourceProjection, len(candidate.Sources)),
-		NextRunAt:     backuppolicymutations.BackupPolicyNextRunAt(candidate.NextRunAt),
+		NextRunAt:     BackupPolicyNextRunAt(candidate.NextRunAt),
 	}
 	for index, source := range candidate.Sources {
 		projection.Sources[index] = backupqueries.BackupPolicySourceProjection{
@@ -73,7 +72,7 @@ func backupPolicyProjectionFromCandidate(candidate backuppolicymutations.Replace
 	return projection
 }
 
-func cloneBackupPolicyEvidenceKeyValue(value *etcdstore.KeyValue) *etcdstore.KeyValue {
+func CloneBackupPolicyEvidenceKeyValue(value *etcdstore.KeyValue) *etcdstore.KeyValue {
 	if value == nil {
 		return nil
 	}

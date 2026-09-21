@@ -8,18 +8,15 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// replaceBackupPolicyProtected atomically replaces the Environment singleton,
+// ReplaceBackupPolicyProtected atomically replaces the Environment singleton,
 // swaps Connector reverse references, creates an optional sealed era-1 key,
 // and commits exact completed-direct replay evidence.
-func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
+func (repository *BackupPolicyRepository) ReplaceBackupPolicyProtected(
 	ctx context.Context,
-	candidate backuppolicymutations.ReplacementCandidate,
+	prepared backuppolicymutations.PreparedBackupPolicyReplacement,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := backuppolicymutations.ValidateBackupPolicyReplacement(ctx, candidate, marker); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	plan, err := backuppolicymutations.PrepareBackupPolicyReplacement(candidate)
+	plan, err := prepared.PreparePublication(ctx, marker)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

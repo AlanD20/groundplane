@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
@@ -176,9 +177,9 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 			return nil, recordcodec.CorruptRecord()
 		}
 		result[index] = blueprintBackupPolicySourceEvidence{
-			record: source, primary: cloneBackupPolicyEvidenceKeyValue(values.Values[0]),
-			environmentIndex: cloneBackupPolicyEvidenceKeyValue(values.Values[1]),
-			identityIndex:    cloneBackupPolicyEvidenceKeyValue(identity.Values[0]),
+			record: source, primary: backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(values.Values[0]),
+			environmentIndex: backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(values.Values[1]),
+			identityIndex:    backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(identity.Values[0]),
 		}
 		etcdstore.ClearValues(values.Values)
 		etcdstore.ClearValues(identity.Values)
@@ -205,7 +206,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 		return nil, nil, nil, nil, errs.New(errs.KindInternal, "retained Blueprint Backup Connector read is incomplete")
 	}
 	defer etcdstore.ClearValues(result.Values)
-	tombstone := cloneBackupPolicyEvidenceKeyValue(result.Values[2])
+	tombstone := backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(result.Values[2])
 	if result.Values[0] == nil {
 		if enabled || result.Values[1] != nil {
 			return nil, nil, nil, nil, connectorrecord.CorruptRecord()
@@ -230,7 +231,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 	defer etcdstore.ClearValues(name.Values)
 	return &etcdstore.Versioned[connectorrecord.Record]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: revision,
-	}, cloneBackupPolicyEvidenceKeyValue(result.Values[1]), cloneBackupPolicyEvidenceKeyValue(name.Values[0]), tombstone, nil
+	}, backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(result.Values[1]), backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(name.Values[0]), tombstone, nil
 }
 
 func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
@@ -264,7 +265,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 		}
 		item := blueprintBackupPolicySourceEvidence{
 			record:        record,
-			identityIndex: cloneBackupPolicyEvidenceKeyValue(identity.Values[0]),
+			identityIndex: backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(identity.Values[0]),
 		}
 		if identity.Values[0] != nil {
 			triples, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
@@ -284,8 +285,8 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 				return nil, recordcodec.CorruptRecord()
 			}
 			item.record = stored
-			item.primary = cloneBackupPolicyEvidenceKeyValue(triples.Values[0])
-			item.environmentIndex = cloneBackupPolicyEvidenceKeyValue(triples.Values[1])
+			item.primary = backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(triples.Values[0])
+			item.environmentIndex = backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(triples.Values[1])
 		}
 		if selection.Kind == core.BackupSourceAttach {
 			candidate := blueprintBackupAttachCandidate(input.AttachPreparation, selection.TargetID)
@@ -310,7 +311,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 				}
 				versioned := etcdstore.Versioned[attachrecord.Record]{Record: attach, Revision: attachRead.Values[0].ModRevision, ReadRevision: revision}
 				item.attach = &versioned
-				item.attachOwner = cloneBackupPolicyEvidenceKeyValue(attachRead.Values[1])
+				item.attachOwner = backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(attachRead.Values[1])
 			}
 		}
 		result[index] = item

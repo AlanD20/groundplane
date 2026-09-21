@@ -1,4 +1,4 @@
-package etcd
+package backuppolicymutations
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
 
-func (repository *BackupPolicyRepository) GetBackupPolicyProjection(ctx context.Context, environmentID string) (backupqueries.BackupPolicyProjection, error) {
+func (repository *Repository) GetBackupPolicyProjection(ctx context.Context, environmentID string) (backupqueries.BackupPolicyProjection, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return backupqueries.BackupPolicyProjection{}, err
 	}

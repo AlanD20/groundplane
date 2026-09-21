@@ -1,15 +1,14 @@
-package etcd
+package backuppolicymutations
 
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
-	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
+func (repository *Repository) loadBackupPolicyConnectorEvidence(
 	ctx context.Context,
 	environmentID string,
 	connectorID string,
@@ -40,14 +39,14 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 	}
 	return &etcdstore.Versioned[connectorrecord.Record]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
-	}, cloneBackupPolicyEvidenceKeyValue(result.Values[1]), nil
+	}, CloneBackupPolicyEvidenceKeyValue(result.Values[1]), nil
 }
 
-func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
+func (repository *Repository) loadBackupPolicyConnectorReferences(
 	ctx context.Context,
-	candidate backuppolicymutations.ReplacementCandidate,
+	candidate ReplacementCandidate,
 	revision int64,
-) ([]backuppolicymutations.ConnectorReferenceEvidence, error) {
+) ([]ConnectorReferenceEvidence, error) {
 	oldConnectorID := ""
 	if candidate.Current != nil && candidate.Current.Record.Enabled {
 		oldConnectorID = candidate.Current.Record.ConnectorID
@@ -63,7 +62,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 	if newConnectorID != "" && newConnectorID != oldConnectorID {
 		connectorIDs = append(connectorIDs, newConnectorID)
 	}
-	evidence := make([]backuppolicymutations.ConnectorReferenceEvidence, len(connectorIDs))
+	evidence := make([]ConnectorReferenceEvidence, len(connectorIDs))
 	for index, connectorID := range connectorIDs {
 		result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
@@ -77,9 +76,9 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 		if result == nil || result.ReadRevision != revision || len(result.Values) != 1 {
 			return nil, errs.New(errs.KindInternal, "backup policy connector reference read is empty")
 		}
-		evidence[index] = backuppolicymutations.ConnectorReferenceEvidence{
+		evidence[index] = ConnectorReferenceEvidence{
 			ConnectorID: connectorID,
-			Entry:       cloneBackupPolicyEvidenceKeyValue(result.Values[0]),
+			Entry:       CloneBackupPolicyEvidenceKeyValue(result.Values[0]),
 		}
 	}
 	return evidence, nil
