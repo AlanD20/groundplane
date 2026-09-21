@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -115,7 +116,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 			Record: record, Revision: value.ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
-	if err := repository.requireHierarchyDeletionDescendantsAvailable(
+	if err := hierarchydeletionplanning.NewPlanner(repository.store).RequireDescendantsAvailable(
 		ctx,
 		result.ReadRevision,
 		targetKind,
@@ -124,7 +125,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		clear(root.targetValue)
 		return hierarchyDeletionRoot{}, 0, err
 	}
-	if err := repository.requireHierarchyVolumeRemovalAbsent(ctx, result.ReadRevision, targetKind, targetID); err != nil {
+	if err := hierarchydeletionplanning.NewPlanner(repository.store).RequireVolumeRemovalAbsent(ctx, result.ReadRevision, targetKind, targetID); err != nil {
 		clear(root.targetValue)
 		return hierarchyDeletionRoot{}, 0, err
 	}

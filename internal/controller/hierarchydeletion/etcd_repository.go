@@ -184,7 +184,7 @@ func (repository *EtcdRepository) BindPlan(
 	operation Operation,
 	planned []PlannedAction,
 ) ([]Action, error) {
-	encoded := make([]etcdinfra.HierarchyDeletionPlannedAction, len(planned))
+	encoded := make([]hierarchydeletionplanning.HierarchyDeletionPlannedAction, len(planned))
 	for index, action := range planned {
 		encoded[index] = plannedActionToEtcd(action)
 	}
@@ -491,12 +491,12 @@ func procedureInputToEtcd(value ProcedureInput) hierarchydeletionplanning.Hierar
 	return input
 }
 
-func plannedActionToEtcd(value PlannedAction) etcdinfra.HierarchyDeletionPlannedAction {
+func plannedActionToEtcd(value PlannedAction) hierarchydeletionplanning.HierarchyDeletionPlannedAction {
 	prerequisites := make([]int64, len(value.PrerequisiteOrdinals))
 	for index, ordinal := range value.PrerequisiteOrdinals {
 		prerequisites[index] = int64(ordinal)
 	}
-	return etcdinfra.HierarchyDeletionPlannedAction{
+	return hierarchydeletionplanning.HierarchyDeletionPlannedAction{
 		ID: value.ID, NodeID: value.NodeID, Ordinal: int64(value.Ordinal), ParentOperationID: value.OperationID,
 		ActionKind: hierarchydeletion.HierarchyDeletionActionKind(value.Kind),
 		TargetKind: hierarchydeletion.HierarchyDeletionActionTargetKind(value.TargetKind), TargetID: value.TargetID,

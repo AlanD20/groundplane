@@ -47,8 +47,8 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer hierarchydeletionexecution.ClearByteSlices(effects.Values())
-	expected, err := bindHierarchyDeletionControllerProcedure(
-		HierarchyDeletionPlannedAction{
+	expected, err := hierarchydeletionplanning.BindHierarchyDeletionControllerProcedure(
+		hierarchydeletionplanning.HierarchyDeletionPlannedAction{
 			NodeID: action.NodeID, Ordinal: action.Ordinal, ParentOperationID: action.ParentOperationID,
 			ActionKind: action.ActionKind, TargetKind: action.TargetKind, TargetID: action.TargetID,
 			TargetRevision: action.TargetRevision,

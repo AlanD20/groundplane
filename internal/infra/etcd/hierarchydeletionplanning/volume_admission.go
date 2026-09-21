@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionplanning
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // The root's coordination CAS fences this fixed-revision scan: initial Volume
 // removal publication advances both ancestor epochs atomically with its lock.
 // Retained locks are authoritative even when no active Task index remains.
-func (repository *HierarchyDeletionRepository) requireHierarchyVolumeRemovalAbsent(
+func (repository *Planner) RequireVolumeRemovalAbsent(
 	ctx context.Context, revision int64, kind hierarchydeletion.HierarchyDeletionTargetKind, targetID string,
 ) error {
 	switch kind {
@@ -46,7 +46,7 @@ func (repository *HierarchyDeletionRepository) requireHierarchyVolumeRemovalAbse
 	}
 }
 
-func (repository *HierarchyDeletionRepository) requireProjectVolumeRemovalAbsent(
+func (repository *Planner) requireProjectVolumeRemovalAbsent(
 	ctx context.Context, revision int64, projectID string,
 ) error {
 	environments, err := repository.hierarchyDeletionIndexedTargets(ctx, revision,
@@ -69,7 +69,7 @@ func (repository *HierarchyDeletionRepository) requireProjectVolumeRemovalAbsent
 	return nil
 }
 
-func (repository *HierarchyDeletionRepository) requireEnvironmentVolumeRemovalAbsent(
+func (repository *Planner) requireEnvironmentVolumeRemovalAbsent(
 	ctx context.Context, revision int64, environmentID string,
 ) error {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{

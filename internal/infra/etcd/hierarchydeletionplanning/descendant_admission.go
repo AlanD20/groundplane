@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletionplanning
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *HierarchyDeletionRepository) requireHierarchyDeletionDescendantsAvailable(
+func (repository *Planner) RequireDescendantsAvailable(
 	ctx context.Context,
 	revision int64,
 	targetKind hierarchydeletion.HierarchyDeletionTargetKind,
@@ -54,7 +54,7 @@ func (repository *HierarchyDeletionRepository) requireHierarchyDeletionDescendan
 	}
 }
 
-func (repository *HierarchyDeletionRepository) requireProjectDeletionDescendantsAvailable(
+func (repository *Planner) requireProjectDeletionDescendantsAvailable(
 	ctx context.Context,
 	revision int64,
 	projectID string,
