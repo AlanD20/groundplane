@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -32,7 +33,7 @@ func newHierarchyDeletionZoneEvidence(
 	if projection.ReadRevision <= 0 || projection.Revision <= 0 ||
 		projection.Record.EnvironmentID != desired.EnvironmentID ||
 		validateHierarchyDeletionZoneEvidence(evidence) != nil {
-		return hierarchyDeletionZoneEvidence{}, corruptHierarchyDeletion()
+		return hierarchyDeletionZoneEvidence{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return evidence, nil
 }
@@ -40,7 +41,7 @@ func newHierarchyDeletionZoneEvidence(
 func validateHierarchyDeletionZoneEvidence(evidence hierarchyDeletionZoneEvidence) error {
 	if evidence.ProjectionRevision <= 0 || evidence.ZoneID != evidence.Desired.ID ||
 		zonerecord.ValidateRecord(zonerecord.Record{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired}) != nil {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -55,7 +56,7 @@ func encodeHierarchyDeletionZoneEvidence(evidence hierarchyDeletionZoneEvidence)
 func decodeHierarchyDeletionZoneEvidence(value []byte) (hierarchyDeletionZoneEvidence, error) {
 	evidence, err := recordcodec.Decode[hierarchyDeletionZoneEvidence](value, hierarchyDeletionZoneEvidenceKind)
 	if err != nil || validateHierarchyDeletionZoneEvidence(evidence) != nil {
-		return hierarchyDeletionZoneEvidence{}, corruptHierarchyDeletion()
+		return hierarchyDeletionZoneEvidence{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return evidence, nil
 }
@@ -78,7 +79,7 @@ func hierarchyDeletionZoneEvidenceAtRevision(
 			return hierarchyDeletionZoneEvidence{}, nil, err
 		}
 		if page == nil || page.ReadRevision != snapshotRevision {
-			return hierarchyDeletionZoneEvidence{}, nil, corruptHierarchyDeletion()
+			return hierarchyDeletionZoneEvidence{}, nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		for index := range page.Values {
 			value := &page.Values[index]
@@ -90,7 +91,7 @@ func hierarchyDeletionZoneEvidenceAtRevision(
 				strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix), "/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
-				return hierarchyDeletionZoneEvidence{}, nil, corruptHierarchyDeletion()
+				return hierarchyDeletionZoneEvidence{}, nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
 				ctx, store, environmentID, snapshotRevision,
@@ -106,7 +107,7 @@ func hierarchyDeletionZoneEvidenceAtRevision(
 					continue
 				}
 				if matched != nil || projection.Revision != projectionRevision {
-					return hierarchyDeletionZoneEvidence{}, nil, corruptHierarchyDeletion()
+					return hierarchyDeletionZoneEvidence{}, nil, hierarchydeletion.CorruptHierarchyDeletion()
 				}
 				evidence, evidenceErr := newHierarchyDeletionZoneEvidence(projection, desired)
 				if evidenceErr != nil {
@@ -119,11 +120,11 @@ func hierarchyDeletionZoneEvidenceAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return hierarchyDeletionZoneEvidence{}, nil, corruptHierarchyDeletion()
+			return hierarchyDeletionZoneEvidence{}, nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 	}
 	if matched == nil {
-		return hierarchyDeletionZoneEvidence{}, nil, corruptHierarchyDeletion()
+		return hierarchyDeletionZoneEvidence{}, nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	value, err := encodeHierarchyDeletionZoneEvidence(*matched)
 	if err != nil {

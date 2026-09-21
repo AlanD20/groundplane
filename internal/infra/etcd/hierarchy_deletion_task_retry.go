@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -138,17 +139,17 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	if operation.Tombstone.CurrentTaskID != source.Record.ID || operation.Tombstone.Terminal == nil ||
 		operation.Tombstone.Terminal.TaskID != source.Record.ID ||
 		operation.Tombstone.Terminal.Status != string(source.Record.Status) ||
-		operation.Tombstone.Phase == HierarchyDeletionRetained || operation.Fence.Dispatch != HierarchyDeletionDispatchClosed {
+		operation.Tombstone.Phase == hierarchydeletion.HierarchyDeletionRetained || operation.Fence.Dispatch != hierarchydeletion.HierarchyDeletionDispatchClosed {
 		return hierarchyDeletionRootAckChange{}, errs.New(
 			errs.KindTaskNotRetryable,
 			"hierarchy deletion operation is not retryable",
 		)
 	}
 	targetKey := hierarchyDeletionPrimaryKey(operation.Tombstone.TargetKind, operation.Tombstone.TargetID)
-	tombstoneKey := HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
-	fenceKey, _ := HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
-	replayKey, _ := HierarchyDeletionReplayTargetKey(operation.Tombstone.OperationID)
-	lockKey := HierarchyDeletionLockKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
+	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
+	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
+	replayKey, _ := hierarchydeletion.HierarchyDeletionReplayTargetKey(operation.Tombstone.OperationID)
+	lockKey := hierarchydeletion.HierarchyDeletionLockKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{targetKey, replayKey, lockKey}, Revision: source.ReadRevision,
 	})
@@ -156,7 +157,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 		return hierarchyDeletionRootAckChange{}, err
 	}
 	if read == nil || len(read.Values) != 3 || read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
-		return hierarchyDeletionRootAckChange{}, corruptHierarchyDeletion()
+		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	targetValue, err := hierarchyDeletionRetryTargetValue(
 		operation.Tombstone.TargetKind, read.Values[0].Value, source.Record.ID, retry.ID,
@@ -164,14 +165,14 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	var replay HierarchyDeletionReplayLocator
-	var lock HierarchyDeletionLock
-	if decodeHierarchyDeletionRecord(read.Values[1].Value, hierarchyDeletionSmallRecordBytes, &replay) != nil ||
-		decodeHierarchyDeletionRecord(read.Values[2].Value, hierarchyDeletionSmallRecordBytes, &lock) != nil ||
+	var replay hierarchydeletion.HierarchyDeletionReplayLocator
+	var lock hierarchydeletion.HierarchyDeletionLock
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &replay) != nil ||
+		hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[2].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &lock) != nil ||
 		replay.ParentOperationID != operation.Tombstone.OperationID || replay.CurrentTaskID != source.Record.ID ||
 		lock.ParentOperationID != operation.Tombstone.OperationID {
 		clear(targetValue)
-		return hierarchyDeletionRootAckChange{}, corruptHierarchyDeletion()
+		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	nextTombstone := operation.Tombstone
 	nextTombstone.CurrentTaskID = retry.ID
@@ -181,25 +182,25 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	nextFence.CurrentTaskID = retry.ID
 	nextFence.Generation++
 	nextFence.UpdatedAt = retry.CreatedAt
-	if nextFence.Phase == HierarchyDeletionFinalizing {
-		nextFence.Dispatch = HierarchyDeletionDispatchRetiring
+	if nextFence.Phase == hierarchydeletion.HierarchyDeletionFinalizing {
+		nextFence.Dispatch = hierarchydeletion.HierarchyDeletionDispatchRetiring
 	} else {
-		nextFence.Dispatch = HierarchyDeletionDispatchOpen
+		nextFence.Dispatch = hierarchydeletion.HierarchyDeletionDispatchOpen
 	}
 	replay.CurrentTaskID = retry.ID
 	replay.RetainUntil = nil
-	tombstoneValue, err := encodeHierarchyDeletionRecord(nextTombstone, hierarchyDeletionLargeRecordBytes)
+	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
 	if err != nil {
 		clear(targetValue)
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	fenceValue, err := encodeHierarchyDeletionRecord(nextFence, hierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
 		clear(targetValue)
 		clear(tombstoneValue)
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	replayValue, err := encodeHierarchyDeletionRecord(replay, hierarchyDeletionSmallRecordBytes)
+	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(replay, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
 		clear(targetValue)
 		clear(tombstoneValue)
@@ -225,7 +226,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 }
 
 func hierarchyDeletionRetryTargetValue(
-	kind HierarchyDeletionTargetKind,
+	kind hierarchydeletion.HierarchyDeletionTargetKind,
 	value []byte,
 	sourceTaskID string,
 	retryTaskID string,
@@ -234,21 +235,21 @@ func hierarchyDeletionRetryTargetValue(
 	case HierarchyDeletionTargetTenant:
 		record, err := hierarchyrecord.DecodeTenant(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = retryTaskID
 		return hierarchyrecord.EncodeTenant(record)
-	case HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
 		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = retryTaskID
 		return hierarchyrecord.EncodeProject(record)
 	case HierarchyDeletionTargetEnvironment:
 		record, err := hierarchyrecord.DecodeEnvironment(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = retryTaskID
 		return hierarchyrecord.EncodeEnvironment(record)

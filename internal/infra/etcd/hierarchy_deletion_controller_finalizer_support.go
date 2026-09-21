@@ -5,6 +5,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,7 +14,7 @@ import (
 func (repository *HierarchyDeletionRepository) readHierarchyDeletionPrimary(
 	ctx context.Context,
 	key string,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (*etcdstore.KeyValue, error) {
 	result, err := repository.store.Get(ctx, key)
 	if err != nil {
@@ -37,26 +38,26 @@ func (repository *HierarchyDeletionRepository) readHierarchyDeletionPrimary(
 	return result.Entry, nil
 }
 
-func hierarchyDeletionOriginalRootValue(action HierarchyDeletionAction, value []byte) ([]byte, error) {
+func hierarchyDeletionOriginalRootValue(action hierarchydeletion.HierarchyDeletionAction, value []byte) ([]byte, error) {
 	switch action.ActionKind {
 	case HierarchyDeletionTenantFinalize:
 		record, err := hierarchyrecord.DecodeTenant(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = ""
 		return hierarchyrecord.EncodeTenant(record)
-	case HierarchyDeletionProjectFinalize, HierarchyDeletionBackingServiceFinalize:
+	case hierarchydeletion.HierarchyDeletionProjectFinalize, HierarchyDeletionBackingServiceFinalize:
 		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = ""
 		return hierarchyrecord.EncodeProject(record)
 	case HierarchyDeletionEnvironmentFinalize:
 		record, err := hierarchyrecord.DecodeEnvironment(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = ""
 		return hierarchyrecord.EncodeEnvironment(record)
@@ -67,7 +68,7 @@ func hierarchyDeletionOriginalRootValue(action HierarchyDeletionAction, value []
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDelete(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 	primary *etcdstore.KeyValue,
 	indexKeys []string,
 ) (hierarchyDeletionControllerEffects, error) {
@@ -89,13 +90,13 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDe
 		if indexes != nil {
 			clearKeyValues(indexes.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer clearKeyValues(indexes.Values)
 	for index, key := range indexKeys {
 		value := indexes.Values[index]
 		if value == nil || value.Key != key || (index < 2 && string(value.Value) != action.TargetID) {
-			return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+			return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})

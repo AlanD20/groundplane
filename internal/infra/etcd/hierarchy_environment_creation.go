@@ -4,6 +4,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -39,7 +40,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetEnvironment, record.ID)
+	coordinationValue, err := encodeInitialHierarchyCoordination(hierarchydeletion.HierarchyDeletionTargetEnvironment, record.ID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
@@ -54,7 +55,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	label := hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)
 	ownerIndex := hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)
 	epochKey := hierarchyrecord.EnvironmentMutationEpochKey(record.ID)
-	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), record.ID)
 	scriptSetKey := scriptrecord.ScriptSetActiveKey(record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]etcdstore.Condition{

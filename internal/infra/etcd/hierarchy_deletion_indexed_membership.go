@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
@@ -70,17 +71,17 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 			return nil, err
 		}
 		if page == nil || page.ReadRevision != revision {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		for _, value := range page.Values {
 			if validateListKey(prefix, value.Key, kind) != nil {
 				clearRangeValues(page.Values)
-				return nil, corruptHierarchyDeletion()
+				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			id := strings.TrimPrefix(value.Key, prefix)
 			if string(value.Value) != id {
 				clearRangeValues(page.Values)
-				return nil, corruptHierarchyDeletion()
+				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			idsAtRevision = append(idsAtRevision, id)
 			start = value.Key
@@ -91,7 +92,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 			break
 		}
 		if start == "" {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 	}
 	targets := make([]hierarchyDeletionIndexedTarget, 0, len(idsAtRevision))
@@ -106,13 +107,13 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 			return nil, err
 		}
 		if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		for index, value := range read.Values {
 			id := idsAtRevision[begin+index]
 			if value == nil || value.Key != keys[index] || value.ModRevision <= 0 {
 				clearKeyValues(read.Values)
-				return nil, corruptHierarchyDeletion()
+				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			if validateErr := validateOwner(value.Value, id, ownerID); validateErr != nil {
 				clearKeyValues(read.Values)

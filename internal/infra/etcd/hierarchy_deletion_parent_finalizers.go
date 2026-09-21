@@ -4,13 +4,14 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 )
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, hierarchyrecord.TenantKey(action.TargetID), action)
 	if err != nil {
@@ -19,7 +20,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFin
 	defer clear(primary.Value)
 	record, err := hierarchyrecord.DecodeTenant(primary.Value)
 	if err != nil || record.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	prefixes := []string{
 		hierarchyrecord.ProjectTenantOwnerPrefix(record.ID), runnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, record.ID),
@@ -36,7 +37,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFin
 		if slug.Entry != nil {
 			clear(slug.Entry.Value)
 		}
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer clear(slug.Entry.Value)
 	conditions := []etcdstore.Condition{
@@ -57,7 +58,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFin
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, hierarchyrecord.ProjectKey(action.TargetID), action)
 	if err != nil {
@@ -66,7 +67,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 	defer clear(primary.Value)
 	record, err := hierarchyrecord.DecodeProject(primary.Value)
 	if err != nil || record.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	prefixes := []string{
 		hierarchyrecord.EnvironmentOwnerPrefix(record.ID), runnerOwnerPrefix(runnerrecord.RunnerOwnerProject, record.ID),
@@ -87,7 +88,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 		if indexes != nil {
 			clearKeyValues(indexes.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer clearKeyValues(indexes.Values)
 	conditions := []etcdstore.Condition{

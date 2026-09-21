@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,7 +12,7 @@ import (
 func (repository *HierarchyDeletionRepository) requireHierarchyDeletionDescendantsAvailable(
 	ctx context.Context,
 	revision int64,
-	targetKind HierarchyDeletionTargetKind,
+	targetKind hierarchydeletion.HierarchyDeletionTargetKind,
 	targetID string,
 ) error {
 	switch targetKind {
@@ -26,7 +27,7 @@ func (repository *HierarchyDeletionRepository) requireHierarchyDeletionDescendan
 				record, decodeErr := hierarchyrecord.DecodeProject(value)
 				if decodeErr != nil || record.ID != id || record.TenantID != owner ||
 					record.Kind != hierarchyrecord.ProjectKindTenant {
-					return corruptHierarchyDeletion()
+					return hierarchydeletion.CorruptHierarchyDeletion()
 				}
 				if record.DeletionTaskID != "" {
 					return hierarchyDeletionDescendantUnavailable()
@@ -44,7 +45,7 @@ func (repository *HierarchyDeletionRepository) requireHierarchyDeletionDescendan
 			}
 		}
 		return nil
-	case HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
 		return repository.requireProjectDeletionDescendantsAvailable(ctx, revision, targetID)
 	case HierarchyDeletionTargetEnvironment:
 		return nil
@@ -67,7 +68,7 @@ func (repository *HierarchyDeletionRepository) requireProjectDeletionDescendants
 		func(value []byte, id, owner string) error {
 			record, decodeErr := hierarchyrecord.DecodeEnvironment(value)
 			if decodeErr != nil || record.ID != id || record.ProjectID != owner {
-				return corruptHierarchyDeletion()
+				return hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			if record.DeletionTaskID != "" {
 				return hierarchyDeletionDescendantUnavailable()

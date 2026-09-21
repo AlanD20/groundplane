@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -39,7 +40,7 @@ func (repository *EtcdRepository) ResolveDeletionTarget(
 	targetID string,
 ) (DeletionTargetResolution, error) {
 	resolved, err := repository.journal.ResolveDeletionTarget(
-		ctx, etcdinfra.HierarchyDeletionTargetKind(requested), targetID,
+		ctx, hierarchydeletion.HierarchyDeletionTargetKind(requested), targetID,
 	)
 	if err != nil {
 		return DeletionTargetResolution{}, err
@@ -94,8 +95,8 @@ func (repository *EtcdRepository) BeginDeletion(
 	}
 	created, err := repository.journal.Begin(ctx, etcdinfra.HierarchyDeletionBegin{
 		OperationID: begin.OperationID, TaskOperationID: begin.TaskOperationIDCandidate,
-		OperationKind: etcdinfra.HierarchyDeletionOperationKind(begin.OperationKind),
-		TargetKind:    etcdinfra.HierarchyDeletionTargetKind(begin.TargetKind), TargetID: begin.TargetID,
+		OperationKind: hierarchydeletion.HierarchyDeletionOperationKind(begin.OperationKind),
+		TargetKind:    hierarchydeletion.HierarchyDeletionTargetKind(begin.TargetKind), TargetID: begin.TargetID,
 		TaskID: begin.TaskIDCandidate, IdempotencyHash: idempotencyKeyHash(begin.IdempotencyKey),
 		Marker: marker, CreatedAt: begin.CreatedAt, DeadlineAt: begin.DeadlineAt,
 	})
@@ -203,7 +204,7 @@ func (repository *EtcdRepository) AppendPlan(
 	start int,
 	sealed bool,
 ) (Operation, error) {
-	encoded := make([]etcdinfra.HierarchyDeletionAction, len(actions))
+	encoded := make([]hierarchydeletion.HierarchyDeletionAction, len(actions))
 	for index, action := range actions {
 		encoded[index] = actionToEtcd(action)
 	}
@@ -240,7 +241,7 @@ func (repository *EtcdRepository) ConsumeAgentTerminal(
 			AttemptGeneration: proof.AttemptGeneration, ReceiptRevision: proof.ReceiptRevision,
 			ReceiptDigest: proof.ReceiptDigest, ProgressKey: proof.ProgressKey,
 			ProgressDigest: proof.ProgressDigest, TerminalTaskDigest: proof.TerminalTaskDigest,
-			Terminal:     etcdinfra.HierarchyDeletionAgentTerminal(proof.Terminal),
+			Terminal:     hierarchydeletion.HierarchyDeletionAgentTerminal(proof.Terminal),
 			ResultDigest: proof.ResultDigest, ErrorDigest: proof.ErrorDigest,
 			CheckpointDigest: proof.CheckpointDigest,
 		}, repository.clock.Now().UTC(),
@@ -277,7 +278,7 @@ func (repository *EtcdRepository) GetDeletionTaskIDAtRevision(
 	revision int64,
 ) (*string, error) {
 	return repository.journal.GetDeletionTaskIDAtRevision(
-		ctx, etcdinfra.HierarchyDeletionTargetKind(target), id, revision,
+		ctx, hierarchydeletion.HierarchyDeletionTargetKind(target), id, revision,
 	)
 }
 
@@ -345,14 +346,14 @@ func operationFromEtcd(value etcdinfra.HierarchyDeletionOperation) Operation {
 
 func operationToEtcd(value Operation) etcdinfra.HierarchyDeletionOperation {
 	operation := etcdinfra.HierarchyDeletionOperation{
-		Tombstone: etcdinfra.HierarchyDeletionTombstone{
+		Tombstone: hierarchydeletion.HierarchyDeletionTombstone{
 			OperationID: value.ID, TaskOperationID: value.TaskOperationID,
-			OperationKind: etcdinfra.HierarchyDeletionOperationKind(value.Kind),
-			TargetKind:    etcdinfra.HierarchyDeletionTargetKind(value.TargetKind), TargetID: value.TargetID,
+			OperationKind: hierarchydeletion.HierarchyDeletionOperationKind(value.Kind),
+			TargetKind:    hierarchydeletion.HierarchyDeletionTargetKind(value.TargetKind), TargetID: value.TargetID,
 			CurrentTaskID: value.TaskID, SnapshotRevision: value.SnapshotRevision,
-			DeletionEpoch: value.CoordinationEpoch, Phase: etcdinfra.HierarchyDeletionPhase(value.Phase),
+			DeletionEpoch: value.CoordinationEpoch, Phase: hierarchydeletion.HierarchyDeletionPhase(value.Phase),
 			AttemptDeadline: value.DeadlineAt, CreatedAt: value.CreatedAt,
-			Checkpoint: etcdinfra.HierarchyDeletionCheckpoint{
+			Checkpoint: hierarchydeletion.HierarchyDeletionCheckpoint{
 				NextOrdinal: int64(value.PlanCursor), CompletedCount: int64(value.SucceededCount),
 			},
 		},
@@ -366,19 +367,19 @@ func operationToEtcd(value Operation) etcdinfra.HierarchyDeletionOperation {
 	return operation
 }
 
-func actionToEtcd(value Action) etcdinfra.HierarchyDeletionAction {
-	converted := etcdinfra.HierarchyDeletionAction{
+func actionToEtcd(value Action) hierarchydeletion.HierarchyDeletionAction {
+	converted := hierarchydeletion.HierarchyDeletionAction{
 		Schema: 1, ParentOperationID: value.OperationID, NodeID: value.NodeID,
-		Ordinal: int64(value.Ordinal), ActionKind: etcdinfra.HierarchyDeletionActionKind(value.Kind),
-		TargetKind: etcdinfra.HierarchyDeletionActionTargetKind(value.TargetKind), TargetID: value.TargetID,
+		Ordinal: int64(value.Ordinal), ActionKind: hierarchydeletion.HierarchyDeletionActionKind(value.Kind),
+		TargetKind: hierarchydeletion.HierarchyDeletionActionTargetKind(value.TargetKind), TargetID: value.TargetID,
 		TargetRevision: value.TargetRevision, PrerequisiteOrdinals: make([]int64, len(value.PrerequisiteOrdinals)),
-		ProcedureKind: etcdinfra.HierarchyDeletionProcedureKind(value.Procedure.Kind),
+		ProcedureKind: hierarchydeletion.HierarchyDeletionProcedureKind(value.Procedure.Kind),
 	}
 	for index, ordinal := range value.PrerequisiteOrdinals {
 		converted.PrerequisiteOrdinals[index] = int64(ordinal)
 	}
 	if value.Procedure.AgentChild != nil {
-		converted.AgentProcedure = &etcdinfra.HierarchyDeletionAgentProcedure{
+		converted.AgentProcedure = &hierarchydeletion.HierarchyDeletionAgentProcedure{
 			ChildOperationID: value.Procedure.AgentChild.ChildOperationID,
 			TaskType:         taskjournal.TaskType(value.Procedure.AgentChild.TaskType),
 			TypedProcedure:   value.Procedure.AgentChild.TypedProcedure,
@@ -388,7 +389,7 @@ func actionToEtcd(value Action) etcdinfra.HierarchyDeletionAction {
 	}
 	if value.Procedure.ControllerFinalizer != nil {
 		procedure := value.Procedure.ControllerFinalizer
-		converted.ControllerProcedure = &etcdinfra.HierarchyDeletionControllerProcedure{
+		converted.ControllerProcedure = &hierarchydeletion.HierarchyDeletionControllerProcedure{
 			Finalizer: procedure.Finalizer, FixedInputRevision: procedure.FixedInputRevision,
 			CompareTemplateDigest:       procedure.CompareTemplateDigest,
 			MutationTemplateDigest:      procedure.MutationTemplateDigest,
@@ -399,7 +400,7 @@ func actionToEtcd(value Action) etcdinfra.HierarchyDeletionAction {
 }
 
 func actionFromEtcd(
-	value etcdinfra.HierarchyDeletionAction,
+	value hierarchydeletion.HierarchyDeletionAction,
 	operation etcdinfra.HierarchyDeletionOperation,
 ) Action {
 	prerequisites := make([]int, len(value.PrerequisiteOrdinals))
@@ -424,9 +425,9 @@ func actionFromEtcd(
 }
 
 func procedureFromEtcd(
-	kind etcdinfra.HierarchyDeletionProcedureKind,
-	agent *etcdinfra.HierarchyDeletionAgentProcedure,
-	controller *etcdinfra.HierarchyDeletionControllerProcedure,
+	kind hierarchydeletion.HierarchyDeletionProcedureKind,
+	agent *hierarchydeletion.HierarchyDeletionAgentProcedure,
+	controller *hierarchydeletion.HierarchyDeletionControllerProcedure,
 ) Procedure {
 	procedure := Procedure{Kind: ProcedureKind(kind)}
 	if agent != nil {
@@ -469,7 +470,7 @@ func procedureInputFromEtcd(value etcdinfra.HierarchyDeletionProcedureInput) Pro
 }
 
 func procedureInputToEtcd(value ProcedureInput) etcdinfra.HierarchyDeletionProcedureInput {
-	input := etcdinfra.HierarchyDeletionProcedureInput{Kind: etcdinfra.HierarchyDeletionProcedureKind(value.Kind)}
+	input := etcdinfra.HierarchyDeletionProcedureInput{Kind: hierarchydeletion.HierarchyDeletionProcedureKind(value.Kind)}
 	if value.AgentChild != nil {
 		input.AgentChild = &etcdinfra.HierarchyDeletionAgentInput{
 			TaskType: taskjournal.TaskType(value.AgentChild.TaskType), TypedProcedure: value.AgentChild.TypedProcedure,
@@ -479,7 +480,7 @@ func procedureInputToEtcd(value ProcedureInput) etcdinfra.HierarchyDeletionProce
 	if value.ControllerFinalizer != nil {
 		controller := value.ControllerFinalizer
 		input.ControllerFinalizer = &etcdinfra.HierarchyDeletionControllerFinalizerInput{
-			Finalizer: controller.Finalizer, TargetKind: etcdinfra.HierarchyDeletionActionTargetKind(controller.TargetKind),
+			Finalizer: controller.Finalizer, TargetKind: hierarchydeletion.HierarchyDeletionActionTargetKind(controller.TargetKind),
 			TargetID: controller.TargetID, FixedInputRevision: controller.FixedInputRevision,
 			FixedInputDigest: controller.FixedInputDigest,
 			BatchOrdinal:     int64(controller.BatchOrdinal), BatchCount: int64(controller.BatchCount),
@@ -495,8 +496,8 @@ func plannedActionToEtcd(value PlannedAction) etcdinfra.HierarchyDeletionPlanned
 	}
 	return etcdinfra.HierarchyDeletionPlannedAction{
 		ID: value.ID, NodeID: value.NodeID, Ordinal: int64(value.Ordinal), ParentOperationID: value.OperationID,
-		ActionKind: etcdinfra.HierarchyDeletionActionKind(value.Kind),
-		TargetKind: etcdinfra.HierarchyDeletionActionTargetKind(value.TargetKind), TargetID: value.TargetID,
+		ActionKind: hierarchydeletion.HierarchyDeletionActionKind(value.Kind),
+		TargetKind: hierarchydeletion.HierarchyDeletionActionTargetKind(value.TargetKind), TargetID: value.TargetID,
 		TargetRevision: value.TargetRevision, PrerequisiteOrdinals: prerequisites,
 		ProcedureInput: procedureInputToEtcd(value.ProcedureInput),
 	}

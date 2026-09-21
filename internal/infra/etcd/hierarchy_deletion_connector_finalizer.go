@@ -3,12 +3,13 @@ package etcd
 import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnectorFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, connectorrecord.RecordKey(action.TargetID), action)
 	if err != nil {
@@ -17,7 +18,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnector
 	defer clear(primary.Value)
 	record, err := connectorrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Connector.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	keys := []string{
 		connectorEnvironmentKey(record.Connector.EnvironmentID, action.TargetID),

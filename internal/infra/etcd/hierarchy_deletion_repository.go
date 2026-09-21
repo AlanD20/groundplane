@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -47,7 +48,7 @@ func newHierarchyDeletionRepository(store hierarchyDeletionStore) (*HierarchyDel
 func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 	ctx context.Context,
 	projectID string,
-) (HierarchyDeletionTargetKind, error) {
+) (hierarchydeletion.HierarchyDeletionTargetKind, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return "", err
 	}
@@ -68,7 +69,7 @@ func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 	}
 	switch project.Record.Kind {
 	case hierarchyrecord.ProjectKindTenant:
-		return HierarchyDeletionTargetProject, nil
+		return hierarchydeletion.HierarchyDeletionTargetProject, nil
 	case hierarchyrecord.ProjectKindBacking:
 		return "", errs.New(errs.KindValidationFailed, "project deletion requires an ordinary Project")
 	default:
@@ -77,14 +78,14 @@ func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 }
 
 type HierarchyDeletionTargetResolution struct {
-	TargetKind HierarchyDeletionTargetKind
+	TargetKind hierarchydeletion.HierarchyDeletionTargetKind
 	ScopeKind  idempotencyrecord.IdempotencyScopeKind
 	ScopeID    string
 }
 
 func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 	ctx context.Context,
-	requested HierarchyDeletionTargetKind,
+	requested hierarchydeletion.HierarchyDeletionTargetKind,
 	targetID string,
 ) (HierarchyDeletionTargetResolution, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -160,7 +161,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			return HierarchyDeletionTargetResolution{}, err
 		}
 		if err := recordcodec.ValidateID(ids.KindProject, environment.Record.ProjectID); err != nil {
-			return HierarchyDeletionTargetResolution{}, corruptHierarchyDeletion()
+			return HierarchyDeletionTargetResolution{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		return HierarchyDeletionTargetResolution{
 			TargetKind: requested,
@@ -178,8 +179,8 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 type HierarchyDeletionBegin struct {
 	OperationID     string
 	TaskOperationID string
-	OperationKind   HierarchyDeletionOperationKind
-	TargetKind      HierarchyDeletionTargetKind
+	OperationKind   hierarchydeletion.HierarchyDeletionOperationKind
+	TargetKind      hierarchydeletion.HierarchyDeletionTargetKind
 	TargetID        string
 	TaskID          string
 	IdempotencyHash string
@@ -189,14 +190,14 @@ type HierarchyDeletionBegin struct {
 }
 
 type HierarchyDeletionOperation struct {
-	Tombstone         HierarchyDeletionTombstone
+	Tombstone         hierarchydeletion.HierarchyDeletionTombstone
 	RootTaskID        string
 	MarkerLocator     idempotencyrecord.IdempotencyLocator
 	Owner             TaskOwner
 	TombstoneRevision int64
-	Fence             HierarchyDeletionCleanupFence
+	Fence             hierarchydeletion.HierarchyDeletionCleanupFence
 	FenceRevision     int64
-	Intent            HierarchyDeletionIntent
+	Intent            hierarchydeletion.HierarchyDeletionIntent
 	IntentRevision    int64
 	PlanCursor        int64
 	SucceededCount    int64
@@ -215,10 +216,10 @@ type hierarchyDeletionRoot struct {
 	targetRevision   int64
 	targetValue      []byte
 	rootSlug         string
-	workspace        HierarchyDeletionWorkspace
+	workspace        hierarchydeletion.HierarchyDeletionWorkspace
 	owner            TaskOwner
 	primaryFences    []etcdstore.Condition
-	coordination     []etcdstore.Versioned[HierarchyCoordinationRecord]
+	coordination     []etcdstore.Versioned[hierarchydeletion.HierarchyCoordinationRecord]
 	coordinationKeys []string
 }
 
@@ -242,7 +243,7 @@ func (repository *HierarchyDeletionRepository) Begin(
 			return HierarchyDeletionBeginResult{}, conflict
 		}
 		if outcome != IdempotencyKnownExisting || marker.TaskID == "" {
-			return HierarchyDeletionBeginResult{}, corruptHierarchyDeletion()
+			return HierarchyDeletionBeginResult{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		existing, readErr := repository.OperationByTask(ctx, marker.TaskID)
 		return HierarchyDeletionBeginResult{Operation: existing, Idempotency: known, Existing: true}, readErr
@@ -302,7 +303,7 @@ func (repository *HierarchyDeletionRepository) Begin(
 		return HierarchyDeletionBeginResult{}, err
 	}
 	if err := plan.enforceTransactionBounds(func(finalConditions []etcdstore.Condition, finalMutations []etcdstore.Mutation) error {
-		return validateHierarchyDeletionTransaction(finalConditions, finalMutations, 64)
+		return hierarchydeletion.ValidateHierarchyDeletionTransaction(finalConditions, finalMutations, 64)
 	}); err != nil {
 		return HierarchyDeletionBeginResult{}, err
 	}
@@ -334,12 +335,12 @@ func (repository *HierarchyDeletionRepository) Begin(
 }
 
 func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
-	if !validHierarchyDeletionPrivateID(begin.OperationID, "del") ||
+	if !hierarchydeletion.ValidHierarchyDeletionPrivateID(begin.OperationID, "del") ||
 		ids.Validate(ids.KindOperation, begin.TaskOperationID) != nil ||
-		!validHierarchyDeletionOperation(begin.OperationKind, begin.TargetKind) ||
-		!validHierarchyDeletionTarget(begin.TargetKind, begin.TargetID) ||
-		ids.Validate(ids.KindTask, begin.TaskID) != nil || !validHierarchyDeletionDigest(begin.IdempotencyHash) ||
-		!validHierarchyDeletionTimestamp(begin.CreatedAt) || !validHierarchyDeletionTimestamp(begin.DeadlineAt) ||
+		!hierarchydeletion.ValidHierarchyDeletionOperation(begin.OperationKind, begin.TargetKind) ||
+		!hierarchydeletion.ValidHierarchyDeletionTarget(begin.TargetKind, begin.TargetID) ||
+		ids.Validate(ids.KindTask, begin.TaskID) != nil || !hierarchydeletion.ValidHierarchyDeletionDigest(begin.IdempotencyHash) ||
+		!hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.CreatedAt) || !hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.DeadlineAt) ||
 		!begin.DeadlineAt.Equal(begin.CreatedAt.Add(hierarchyDeletionAttemptTimeout)) {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion publication is invalid")
 	}
@@ -354,14 +355,14 @@ func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
 func hierarchyDeletionTask(
 	begin HierarchyDeletionBegin,
 	owner TaskOwner,
-	intent HierarchyDeletionIntent,
+	intent hierarchydeletion.HierarchyDeletionIntent,
 ) (TaskRecord, error) {
 	separator := strings.IndexByte(begin.TaskID, '_')
 	if separator <= 0 || separator == len(begin.TaskID)-1 {
 		return TaskRecord{}, errs.New(errs.KindInternal, "hierarchy deletion Task identity is invalid")
 	}
 	suffix := begin.TaskID[separator+1:]
-	intentValue, err := encodeHierarchyDeletionRecord(intent, hierarchyDeletionLargeRecordBytes)
+	intentValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(intent, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
 	if err != nil {
 		return TaskRecord{}, err
 	}
@@ -369,7 +370,7 @@ func hierarchyDeletionTask(
 	task := TaskRecord{
 		ID: begin.TaskID, OperationID: begin.TaskOperationID, IdempotencyKey: begin.Marker.Locator.Key,
 		Owner: owner, Actor: TaskActorOperator, Executor: taskjournal.TaskExecutorController,
-		PlanID: "plan_" + suffix, PlanHash: hierarchyDeletionDigest(intentValue), RenderGeneration: 1,
+		PlanID: "plan_" + suffix, PlanHash: hierarchydeletion.HierarchyDeletionDigest(intentValue), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: begin.TargetID,
 		Params: map[string]string{
 			TaskResourceKindParam:                TaskResourceHierarchyDeletion,
@@ -420,7 +421,7 @@ func (repository *HierarchyDeletionRepository) validateHierarchyDeletionBeginRep
 
 func hierarchyDeletionResponseDigest(taskID string) string {
 	value := []byte(`{"task_id":"` + taskID + `"}`)
-	return hierarchyDeletionDigest(value)
+	return hierarchydeletion.HierarchyDeletionDigest(value)
 }
 
 func hierarchyDeletionPlanDigest(actions [][]byte) string {

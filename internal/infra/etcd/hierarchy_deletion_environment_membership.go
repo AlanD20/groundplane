@@ -10,6 +10,7 @@ import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -39,12 +40,12 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	}
 	if found && (projection.ReadRevision != operation.Tombstone.SnapshotRevision ||
 		projection.Record.EnvironmentID != environmentID) {
-		return nil, corruptHierarchyDeletion()
+		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	descriptors := []hierarchyDeletionIndexedResource{
 		{
 			targetKind:    "attach",
-			actionKind:    HierarchyDeletionAttachGrantRevoke,
+			actionKind:    hierarchydeletion.HierarchyDeletionAttachGrantRevoke,
 			ownerPrefix:   attachrecord.AttachOwnerPrefix,
 			primaryKey:    attachrecord.AttachKey,
 			stableIDKind:  ids.KindAttach,
@@ -52,7 +53,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		},
 		{
 			targetKind:    "release-group",
-			actionKind:    HierarchyDeletionReleaseGroupRemove,
+			actionKind:    hierarchydeletion.HierarchyDeletionReleaseGroupRemove,
 			ownerPrefix:   func(owner string) string { return releaseGroupOwnerPrefix + owner + "/" },
 			primaryKey:    releaseGroupRecordKey,
 			stableIDKind:  ids.KindReleaseGroup,
@@ -61,7 +62,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		},
 		{
 			targetKind:    "entry",
-			actionKind:    HierarchyDeletionEntryRemove,
+			actionKind:    hierarchydeletion.HierarchyDeletionEntryRemove,
 			ownerPrefix:   entryOwnerCollectionPrefix,
 			primaryKey:    entryrecord.RecordKey,
 			stableIDKind:  ids.KindEnvEntry,
@@ -70,14 +71,14 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		},
 		{
 			targetKind:    "component",
-			actionKind:    HierarchyDeletionComponentRemove,
+			actionKind:    hierarchydeletion.HierarchyDeletionComponentRemove,
 			ownerPrefix:   componentrecord.EnvironmentOwnerPrefix,
 			primaryKey:    componentrecord.RecordKey,
 			stableIDKind:  ids.KindComponent,
 			validateOwner: validateHierarchyDeletionComponentOwner,
 			controller:    true,
 		},
-		{targetKind: "script", actionKind: HierarchyDeletionScriptRemove,
+		{targetKind: "script", actionKind: hierarchydeletion.HierarchyDeletionScriptRemove,
 			ownerPrefix: func(owner string) string {
 				return scriptrecord.ScriptSetOwnerPrefix(owner, activeScripts.Record.GenerationID)
 			},
@@ -87,7 +88,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 			stableIDKind: ids.KindScript, validateOwner: validateHierarchyDeletionScriptOwner, controller: true},
 		{
 			targetKind:    "connector",
-			actionKind:    HierarchyDeletionConnectorFinalize,
+			actionKind:    hierarchydeletion.HierarchyDeletionConnectorFinalize,
 			ownerPrefix:   connectorEnvironmentPrefix,
 			primaryKey:    connectorrecord.RecordKey,
 			stableIDKind:  ids.KindConnector,
@@ -97,7 +98,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	}
 	cleanup := hierarchyDeletionAgentNode(
 		"environment:"+environmentID+":cleanup", "environment", environmentID,
-		HierarchyDeletionEnvironmentAgentCleanup, environmentRevision, nil, operation.Tombstone.OperationID,
+		hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup, environmentRevision, nil, operation.Tombstone.OperationID,
 	)
 	cleanup.fixedInputDigest = environmentDigest
 	nodes := []HierarchyDeletionMembershipNode{cleanup}
@@ -114,14 +115,14 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		for index := range part {
 			part[index].PrerequisiteNodeIDs = append([]string(nil), prerequisites...)
 		}
-		if descriptor.actionKind == HierarchyDeletionAttachGrantRevoke {
+		if descriptor.actionKind == hierarchydeletion.HierarchyDeletionAttachGrantRevoke {
 			for _, grant := range part {
 				nodes = append(nodes, grant)
 				detach := hierarchyDeletionAgentNode(
 					"attach:"+grant.TargetID+":detach",
 					"attach",
 					grant.TargetID,
-					HierarchyDeletionAttachDetach,
+					hierarchydeletion.HierarchyDeletionAttachDetach,
 					grant.TargetRevision,
 					[]string{grant.NodeID},
 					operation.Tombstone.OperationID,
@@ -132,7 +133,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 			continue
 		}
 		nodes = append(nodes, part...)
-		if descriptor.actionKind == HierarchyDeletionReleaseGroupRemove {
+		if descriptor.actionKind == hierarchydeletion.HierarchyDeletionReleaseGroupRemove {
 			prerequisites := terminalHierarchyDeletionNodes(nodes)
 			for index := range services {
 				services[index].PrerequisiteNodeIDs = append([]string(nil), prerequisites...)
@@ -152,7 +153,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		}
 		nodes = append(nodes, hierarchyDeletionControllerNode(
 			"zone:"+evidence.ZoneID+":remove", "zone", evidence.ZoneID,
-			HierarchyDeletionZoneRemove, projection.Revision, prerequisites,
+			hierarchydeletion.HierarchyDeletionZoneRemove, projection.Revision, prerequisites,
 			"zone.remove", hierarchyDeletionBytesDigest(value),
 		))
 		clear(value)
@@ -167,7 +168,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		for _, route := range projection.Record.DesiredRoutes {
 			routes = append(routes, hierarchyDeletionControllerNode(
 				"route:"+route.Desired.ID+":remove", "route", route.Desired.ID,
-				HierarchyDeletionRouteRemove, projection.Revision, nil, "route.remove", inputDigest,
+				hierarchydeletion.HierarchyDeletionRouteRemove, projection.Revision, nil, "route.remove", inputDigest,
 			))
 		}
 	}
@@ -178,7 +179,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	nodes = append(nodes, routes...)
 	reservation := hierarchyDeletionControllerNode(
 		"reservation:"+environmentID+":release", "reservation", environmentID,
-		HierarchyDeletionReservationRelease, environmentRevision,
+		hierarchydeletion.HierarchyDeletionReservationRelease, environmentRevision,
 		terminalHierarchyDeletionNodes(nodes), "reservation.release", environmentDigest,
 	)
 	nodes = append(nodes, reservation)
@@ -211,7 +212,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 			if read != nil {
 				clearKeyValues(read.Values)
 			}
-			return nil, corruptHierarchyDeletion()
+			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		for index, value := range read.Values {
 			if value == nil {
@@ -222,13 +223,13 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 			if decodeErr != nil || value.Key != keys[index] || runtime.EnvironmentID != environmentID ||
 				runtime.ServiceID != desired.Desired.ID || runtime.BackingNetworkID != desired.BackingNetworkID {
 				clearKeyValues(read.Values)
-				return nil, corruptHierarchyDeletion()
+				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			nodes = append(nodes, hierarchyDeletionControllerNode(
-				fmt.Sprintf("service:%s:%s", runtime.ServiceID, HierarchyDeletionServiceRemove),
+				fmt.Sprintf("service:%s:%s", runtime.ServiceID, hierarchydeletion.HierarchyDeletionServiceRemove),
 				"service",
 				runtime.ServiceID,
-				HierarchyDeletionServiceRemove,
+				hierarchydeletion.HierarchyDeletionServiceRemove,
 				value.ModRevision,
 				nil,
 				"service.remove",

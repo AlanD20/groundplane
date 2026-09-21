@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -23,13 +24,13 @@ func (repository *HierarchyRepository) CreateTenant(
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
-	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetTenant, record.ID)
+	coordinationValue, err := encodeInitialHierarchyCoordination(hierarchydeletion.HierarchyDeletionTargetTenant, record.ID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	primary := hierarchyrecord.TenantKey(record.ID)
 	slug := hierarchyrecord.TenantSlugKey(record.Slug)
-	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]etcdstore.Condition{{Key: primary}, {Key: slug}, {Key: coordinationKey}},
 		[]etcdstore.Mutation{
@@ -74,12 +75,12 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetTenant, record.ID)
+	coordinationValue, err := encodeInitialHierarchyCoordination(hierarchydeletion.HierarchyDeletionTargetTenant, record.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(coordinationValue)
-	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), record.ID)
 	plan, err := newIdempotencyMutationPlan(
 		[]etcdstore.Condition{{Key: hierarchyrecord.TenantKey(record.ID)}, {Key: hierarchyrecord.TenantSlugKey(record.Slug)}, {Key: coordinationKey}},
 		[]etcdstore.Mutation{

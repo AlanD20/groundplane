@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -12,7 +13,7 @@ import (
 func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 	preparedAt time.Time,
 ) (HierarchyDeletionOperation, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -28,20 +29,20 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
-	if current.Tombstone.Phase == HierarchyDeletionFinalizing {
+	if current.Tombstone.Phase == hierarchydeletion.HierarchyDeletionFinalizing {
 		if current.Tombstone.PlanCount != nil && action.Ordinal == *current.Tombstone.PlanCount-1 &&
-			current.Fence.Dispatch == HierarchyDeletionDispatchRetiring {
+			current.Fence.Dispatch == hierarchydeletion.HierarchyDeletionDispatchRetiring {
 			return current, nil
 		}
-		return HierarchyDeletionOperation{}, corruptHierarchyDeletion()
+		return HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if err := validateHierarchyDeletionActiveAction(current, action); err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
 	if current.Tombstone.PlanCount == nil || action.Ordinal != *current.Tombstone.PlanCount-1 ||
 		current.Tombstone.Checkpoint.CompletedCount != action.Ordinal ||
-		action.ProcedureKind != HierarchyDeletionProcedureController || action.ControllerProcedure == nil ||
-		action.TargetKind != HierarchyDeletionActionTargetKind(current.Tombstone.TargetKind) ||
+		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController || action.ControllerProcedure == nil ||
+		action.TargetKind != hierarchydeletion.HierarchyDeletionActionTargetKind(current.Tombstone.TargetKind) ||
 		action.TargetID != current.Tombstone.TargetID || !hierarchyDeletionRootFinalizerMatches(current.Tombstone.TargetKind, action.ActionKind) {
 		return HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
@@ -49,20 +50,20 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 		)
 	}
 	nextTombstone := current.Tombstone
-	nextTombstone.Phase = HierarchyDeletionFinalizing
+	nextTombstone.Phase = hierarchydeletion.HierarchyDeletionFinalizing
 	nextFence := current.Fence
-	nextFence.Phase = HierarchyDeletionFinalizing
-	nextFence.Dispatch = HierarchyDeletionDispatchRetiring
+	nextFence.Phase = hierarchydeletion.HierarchyDeletionFinalizing
+	nextFence.Dispatch = hierarchydeletion.HierarchyDeletionDispatchRetiring
 	nextFence.Generation++
 	nextFence.UpdatedAt = preparedAt
-	tombstoneKey := HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID)
-	fenceKey, _ := HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
-	tombstoneValue, err := encodeHierarchyDeletionRecord(nextTombstone, hierarchyDeletionLargeRecordBytes)
+	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID)
+	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
+	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
 	defer clear(tombstoneValue)
-	fenceValue, err := encodeHierarchyDeletionRecord(nextFence, hierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
@@ -97,18 +98,18 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 }
 
 func hierarchyDeletionRootFinalizerMatches(
-	target HierarchyDeletionTargetKind,
-	action HierarchyDeletionActionKind,
+	target hierarchydeletion.HierarchyDeletionTargetKind,
+	action hierarchydeletion.HierarchyDeletionActionKind,
 ) bool {
 	switch target {
 	case HierarchyDeletionTargetTenant:
-		return action == HierarchyDeletionTenantFinalize
+		return action == hierarchydeletion.HierarchyDeletionTenantFinalize
 	case HierarchyDeletionTargetProject:
-		return action == HierarchyDeletionProjectFinalize
+		return action == hierarchydeletion.HierarchyDeletionProjectFinalize
 	case HierarchyDeletionTargetEnvironment:
-		return action == HierarchyDeletionEnvironmentFinalize
+		return action == hierarchydeletion.HierarchyDeletionEnvironmentFinalize
 	case HierarchyDeletionTargetBacking:
-		return action == HierarchyDeletionBackingServiceFinalize
+		return action == hierarchydeletion.HierarchyDeletionBackingServiceFinalize
 	default:
 		return false
 	}

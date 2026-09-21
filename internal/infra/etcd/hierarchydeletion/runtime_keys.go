@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletion
 
 func hierarchyDeletionOperationCollectionPrefix(collection, operationID string) (string, error) {
 	operation, err := hierarchyDeletionDynamicSegment(operationID)
@@ -36,7 +36,7 @@ func hierarchyDeletionChildAttemptKey(
 		return "", err
 	}
 	if !validHierarchyDeletionRawStableID(attemptID) {
-		return "", corruptHierarchyDeletion()
+		return "", CorruptHierarchyDeletion()
 	}
 	key := hierarchyDeletionRuntimeRoot + collection + "/" + parent + "/" + child + "/"
 	if includeAttempts {

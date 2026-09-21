@@ -5,6 +5,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -34,14 +35,14 @@ func backingServiceCreationConditions(
 		{Key: hierarchyrecord.ProjectKey(creation.Project.ID)},
 		{Key: hierarchyrecord.ProjectSlugKey(creation.Project)},
 		{Key: hierarchyrecord.ProjectOwnerKey(creation.Project)},
-		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID)},
+		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), creation.Project.ID)},
 		{Key: deletionTombstoneKey("project", creation.Project.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentNameKey(creation.Project.ID, creation.Environment.Name)},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(creation.Project.ID, creation.Environment.ID)},
 		{Key: deletionTombstoneKey("environment", creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID)},
-		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
+		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
 		{Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID)},
 		{Key: environmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
 		{Key: deletionTombstoneKey("zone", creation.Zone.Desired.ID)},

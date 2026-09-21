@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,10 +24,10 @@ type hierarchyMutationBinding struct {
 }
 
 func encodeInitialHierarchyCoordination(
-	targetKind HierarchyDeletionTargetKind,
+	targetKind hierarchydeletion.HierarchyDeletionTargetKind,
 	targetID string,
 ) ([]byte, error) {
-	return encodeHierarchyCoordination(HierarchyCoordinationRecord{
+	return hierarchydeletion.EncodeHierarchyCoordination(hierarchydeletion.HierarchyCoordinationRecord{
 		Schema:        1,
 		TargetKind:    targetKind,
 		TargetID:      targetID,
@@ -53,17 +54,17 @@ func bindHierarchyMutation(
 	}
 	keys := make([]string, 0, 2)
 	if scope.TenantID != "" {
-		keys = append(keys, HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), scope.TenantID))
+		keys = append(keys, hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), scope.TenantID))
 	}
 	if scope.ProjectID != "" {
-		keys = append(keys, HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), scope.ProjectID))
+		keys = append(keys, hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), scope.ProjectID))
 	}
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return hierarchyMutationBinding{}, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) {
-		return hierarchyMutationBinding{}, corruptHierarchyDeletion()
+		return hierarchyMutationBinding{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	binding := hierarchyMutationBinding{
 		conditions: append([]etcdstore.Condition(nil), conditions...),
@@ -74,19 +75,19 @@ func bindHierarchyMutation(
 		value := result.Values[index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 {
 			binding.clear()
-			return hierarchyMutationBinding{}, corruptHierarchyDeletion()
+			return hierarchyMutationBinding{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
-		record, decodeErr := decodeHierarchyCoordination(value.Value)
+		record, decodeErr := hierarchydeletion.DecodeHierarchyCoordination(value.Value)
 		if decodeErr != nil {
 			binding.clear()
 			return hierarchyMutationBinding{}, decodeErr
 		}
-		if HierarchyCoordinationKey(string(record.TargetKind), record.TargetID) != key {
+		if hierarchydeletion.HierarchyCoordinationKey(string(record.TargetKind), record.TargetID) != key {
 			binding.clear()
-			return hierarchyMutationBinding{}, corruptHierarchyDeletion()
+			return hierarchyMutationBinding{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.MutationEpoch++
-		encoded, encodeErr := encodeHierarchyCoordination(record)
+		encoded, encodeErr := hierarchydeletion.EncodeHierarchyCoordination(record)
 		if encodeErr != nil {
 			binding.clear()
 			return hierarchyMutationBinding{}, encodeErr
@@ -95,7 +96,7 @@ func bindHierarchyMutation(
 		binding.conditions = append(binding.conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
 		binding.mutations = append(binding.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded})
 	}
-	if err := validateHierarchyDeletionTransaction(binding.conditions, binding.mutations, etcdstore.MaximumOperations); err != nil {
+	if err := hierarchydeletion.ValidateHierarchyDeletionTransaction(binding.conditions, binding.mutations, etcdstore.MaximumOperations); err != nil {
 		binding.clear()
 		return hierarchyMutationBinding{}, err
 	}

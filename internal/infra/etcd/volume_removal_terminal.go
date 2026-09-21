@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -168,14 +169,14 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	conditions = append(
 		conditions,
 		etcdstore.Condition{
-			Key: HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
+			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
 		},
-		etcdstore.Condition{Key: HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetProject), task.Owner.ProjectID)},
+		etcdstore.Condition{Key: hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetProject), task.Owner.ProjectID)},
 	)
 	if task.Owner.TenantID != "" {
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetTenant), task.Owner.TenantID)},
+			etcdstore.Condition{Key: hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), task.Owner.TenantID)},
 		)
 	}
 	marker.State, marker.UpdatedAt, marker.TerminalAt = idempotencyrecord.IdempotencyMarkerCompleted, *task.FinishedAt, *task.FinishedAt
@@ -299,10 +300,10 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 		return etcdstore.TransactionResult{}, err
 	}
 	keys = append(keys, environmentBlueprintHeadKey(runtime.EnvironmentID), replayKey,
-		HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
-		HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetProject), task.Owner.ProjectID))
+		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
+		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetProject), task.Owner.ProjectID))
 	if task.Owner.TenantID != "" {
-		keys = append(keys, HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetTenant), task.Owner.TenantID))
+		keys = append(keys, hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), task.Owner.TenantID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 	if err != nil {

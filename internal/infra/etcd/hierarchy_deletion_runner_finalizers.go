@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,7 +11,7 @@ import (
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservationFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentKey(action.TargetID), environmentPoolRegistryKey,
@@ -30,7 +31,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	defer clearKeyValues(result.Values)
 	environment, err := hierarchyrecord.DecodeEnvironment(result.Values[0].Value)
 	if err != nil || environment.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	fixedInputDigest := hierarchyDeletionBytesDigest(result.Values[0].Value)
 	if result.Values[0].ModRevision != action.TargetRevision {
@@ -51,7 +52,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	}
 	registry, err := recordcodec.Decode[EnvironmentPoolRegistry](result.Values[1].Value, "environment_pool_registry")
 	if err != nil || validateEnvironmentPoolRegistry(registry) != nil {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	next, err := registry.Release(environment.ID, environment.NetworkPool)
 	if err != nil {
@@ -79,7 +80,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		runnerKey(action.TargetID), runnerLifecycleKey(action.TargetID),
@@ -101,7 +102,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 	defer clearKeyValues(base.Values)
 	record, err := decodeRunnerAggregate(base.Values[0], base.Values[1])
 	if err != nil || record.Desired.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	allocation, err := (&RunnerRepository{store: repository.store}).readRunnerAllocationEvidence(ctx, record, 0)
 	if err != nil {

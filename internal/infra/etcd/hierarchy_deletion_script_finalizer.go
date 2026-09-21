@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -9,10 +10,10 @@ import (
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	if action.ControllerProcedure == nil {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	storage, err := readActiveScriptStorage(
 		ctx,
@@ -25,7 +26,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 	}
 	record := storage.Script.Record
 	if storage.Script.Revision != action.TargetRevision || record.Desired.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if record.ActiveReferences != 0 {
 		return hierarchyDeletionControllerEffects{}, errs.New(

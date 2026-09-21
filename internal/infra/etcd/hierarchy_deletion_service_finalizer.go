@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
@@ -11,7 +12,7 @@ import (
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionServiceFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, servicerecord.ServiceRuntimeKey(action.TargetID), action)
 	if err != nil {
@@ -20,7 +21,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionServiceFi
 	defer clear(primary.Value)
 	record, err := servicerecord.DecodeServiceRuntimeRecord(primary.Value)
 	if err != nil || record.ServiceID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	activeKey := serviceLifecycleActiveKey(record.ServiceID)
 	active, err := repository.store.Get(ctx, activeKey)
@@ -28,7 +29,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionServiceFi
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	if active == nil {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if active.Entry != nil {
 		clear(active.Entry.Value)

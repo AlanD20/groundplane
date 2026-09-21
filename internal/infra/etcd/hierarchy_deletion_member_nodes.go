@@ -5,6 +5,7 @@ import (
 	"fmt"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -14,22 +15,22 @@ import (
 
 func hierarchyDeletionAgentNode(
 	nodeID string,
-	targetKind HierarchyDeletionActionTargetKind,
+	targetKind hierarchydeletion.HierarchyDeletionActionTargetKind,
 	targetID string,
-	action HierarchyDeletionActionKind,
+	action hierarchydeletion.HierarchyDeletionActionKind,
 	targetRevision int64,
 	prerequisites []string,
 	parentOperationID string,
 ) HierarchyDeletionMembershipNode {
 	taskType := taskjournal.TaskRemove
-	if action == HierarchyDeletionAttachDetach {
+	if action == hierarchydeletion.HierarchyDeletionAttachDetach {
 		taskType = taskjournal.TaskDetach
 	}
 	return HierarchyDeletionMembershipNode{
 		NodeID: nodeID, TargetKind: targetKind, TargetID: targetID, ActionKind: action,
 		TargetRevision: targetRevision, PrerequisiteNodeIDs: append([]string(nil), prerequisites...),
 		ProcedureInput: HierarchyDeletionProcedureInput{
-			Kind: HierarchyDeletionProcedureAgent,
+			Kind: hierarchydeletion.HierarchyDeletionProcedureAgent,
 			AgentChild: &HierarchyDeletionAgentInput{
 				TaskType:       taskType,
 				TypedProcedure: hierarchyDeletionAgentProcedure(action),
@@ -45,9 +46,9 @@ func hierarchyDeletionAgentNode(
 
 func hierarchyDeletionControllerNode(
 	nodeID string,
-	targetKind HierarchyDeletionActionTargetKind,
+	targetKind hierarchydeletion.HierarchyDeletionActionTargetKind,
 	targetID string,
-	action HierarchyDeletionActionKind,
+	action hierarchydeletion.HierarchyDeletionActionKind,
 	targetRevision int64,
 	prerequisites []string,
 	finalizer string,
@@ -57,7 +58,7 @@ func hierarchyDeletionControllerNode(
 		NodeID: nodeID, TargetKind: targetKind, TargetID: targetID, ActionKind: action,
 		TargetRevision: targetRevision, PrerequisiteNodeIDs: append([]string(nil), prerequisites...),
 		ProcedureInput: HierarchyDeletionProcedureInput{
-			Kind: HierarchyDeletionProcedureController,
+			Kind: hierarchydeletion.HierarchyDeletionProcedureController,
 			ControllerFinalizer: ptrHierarchyDeletionControllerInput(
 				hierarchyDeletionControllerInput(finalizer, targetKind, targetID, targetRevision, fixedInputDigest),
 			),
@@ -67,7 +68,7 @@ func hierarchyDeletionControllerNode(
 
 func hierarchyDeletionControllerInput(
 	finalizer string,
-	targetKind HierarchyDeletionActionTargetKind,
+	targetKind hierarchydeletion.HierarchyDeletionActionTargetKind,
 	targetID string,
 	targetRevision int64,
 	fixedInputDigest string,
@@ -88,7 +89,7 @@ func ptrHierarchyDeletionControllerInput(
 func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	ctx context.Context,
 	revision int64,
-	targetKind HierarchyDeletionActionTargetKind,
+	targetKind hierarchydeletion.HierarchyDeletionActionTargetKind,
 	targetID string,
 	targetRevision int64,
 ) (string, error) {
@@ -103,7 +104,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	case "script":
 		storage, scriptErr := readActiveScriptStorage(ctx, repository.store, targetID, revision)
 		if scriptErr != nil || storage.Script.Revision != targetRevision {
-			return "", corruptHierarchyDeletion()
+			return "", hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		encoded, encodeErr := scriptrecord.EncodeRecord(storage.Script.Record)
 		if encodeErr != nil {
@@ -131,7 +132,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	}
 	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != 1 ||
 		stored.Values[0] == nil || stored.Values[0].Key != key || stored.Values[0].ModRevision != targetRevision {
-		return "", corruptHierarchyDeletion()
+		return "", hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	digest := hierarchyDeletionBytesDigest(stored.Values[0].Value)
 	clearKeyValues(stored.Values)

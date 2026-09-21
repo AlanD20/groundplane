@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -58,12 +59,12 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetProject, record.ID)
+	coordinationValue, err := encodeInitialHierarchyCoordination(hierarchydeletion.HierarchyDeletionTargetProject, record.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(coordinationValue)
-	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), record.ID)
 	plan, err := newIdempotencyMutationPlan(
 		[]etcdstore.Condition{
 			{Key: hierarchyrecord.ProjectKey(record.ID)},
@@ -147,12 +148,12 @@ func (repository *HierarchyRepository) CreateProject(
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
-	coordinationTarget := HierarchyDeletionTargetProject
+	coordinationTarget := hierarchydeletion.HierarchyDeletionTargetProject
 	coordinationValue, err := encodeInitialHierarchyCoordination(coordinationTarget, record.ID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
-	coordinationKey := HierarchyCoordinationKey(string(coordinationTarget), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(coordinationTarget), record.ID)
 	conditions = append(conditions, etcdstore.Condition{Key: coordinationKey})
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(record.ID), Value: value},

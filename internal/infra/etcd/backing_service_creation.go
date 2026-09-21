@@ -7,6 +7,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -96,7 +97,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	}
 	defer clear(environmentValue)
 	projectCoordinationValue, err := encodeInitialHierarchyCoordination(
-		HierarchyDeletionTargetProject,
+		hierarchydeletion.HierarchyDeletionTargetProject,
 		creation.Project.ID,
 	)
 	if err != nil {
@@ -104,7 +105,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	}
 	defer clear(projectCoordinationValue)
 	environmentCoordinationValue, err := encodeInitialHierarchyCoordination(
-		HierarchyDeletionTargetEnvironment,
+		hierarchydeletion.HierarchyDeletionTargetEnvironment,
 		creation.Environment.ID,
 	)
 	if err != nil {
@@ -216,7 +217,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID),
+			Key:   hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), creation.Project.ID),
 			Value: projectCoordinationValue,
 		},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(creation.Environment.ID), Value: environmentValue},
@@ -233,7 +234,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID),
+			Key:   hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), creation.Environment.ID),
 			Value: environmentCoordinationValue,
 		},
 		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},

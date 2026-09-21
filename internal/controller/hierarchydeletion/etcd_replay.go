@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 
@@ -294,10 +295,10 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 		operation.Tombstone.TargetID != request.TargetID ||
 		operation.RootTaskID != markerTaskID ||
 		!replayScopeMatches(locator, operation) ||
-		(request.TargetKind == TargetTenant && operation.Tombstone.TargetKind != etcdinfra.HierarchyDeletionTargetTenant) ||
-		(request.TargetKind == TargetEnvironment && operation.Tombstone.TargetKind != etcdinfra.HierarchyDeletionTargetEnvironment) ||
-		(request.TargetKind == TargetBackingService && operation.Tombstone.TargetKind != etcdinfra.HierarchyDeletionTargetBacking) ||
-		(request.TargetKind == TargetProject && operation.Tombstone.TargetKind != etcdinfra.HierarchyDeletionTargetProject) {
+		(request.TargetKind == TargetTenant && operation.Tombstone.TargetKind != hierarchydeletion.HierarchyDeletionTargetTenant) ||
+		(request.TargetKind == TargetEnvironment && operation.Tombstone.TargetKind != hierarchydeletion.HierarchyDeletionTargetEnvironment) ||
+		(request.TargetKind == TargetBackingService && operation.Tombstone.TargetKind != hierarchydeletion.HierarchyDeletionTargetBacking) ||
+		(request.TargetKind == TargetProject && operation.Tombstone.TargetKind != hierarchydeletion.HierarchyDeletionTargetProject) {
 		return BeginResult{}, errs.New(errs.KindInternal, "hierarchy deletion replay proof is inconsistent")
 	}
 	converted := operationFromEtcd(operation)

@@ -6,6 +6,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -58,8 +59,8 @@ func terminalHierarchyDeletionNodes(nodes []HierarchyDeletionMembershipNode) []s
 	return terminal
 }
 
-func hierarchyDeletionAgentProcedure(action HierarchyDeletionActionKind) string {
-	return map[HierarchyDeletionActionKind]string{
+func hierarchyDeletionAgentProcedure(action hierarchydeletion.HierarchyDeletionActionKind) string {
+	return map[hierarchydeletion.HierarchyDeletionActionKind]string{
 		HierarchyDeletionAttachGrantRevoke: "attach.grant-revoke", HierarchyDeletionAttachDetach: "attach.detach",
 		HierarchyDeletionEnvironmentAgentCleanup: "environment.cleanup",
 		HierarchyDeletionMaterializationRemove:   "materialization.remove",
@@ -69,8 +70,8 @@ func hierarchyDeletionAgentProcedure(action HierarchyDeletionActionKind) string 
 	}[action]
 }
 
-func hierarchyDeletionControllerFinalizer(action HierarchyDeletionActionKind) string {
-	return map[HierarchyDeletionActionKind]string{
+func hierarchyDeletionControllerFinalizer(action hierarchydeletion.HierarchyDeletionActionKind) string {
+	return map[hierarchydeletion.HierarchyDeletionActionKind]string{
 		HierarchyDeletionServiceRemove:   "service.remove",
 		HierarchyDeletionEntryRemove:     "entry.remove",
 		HierarchyDeletionRouteRemove:     "route.remove",
@@ -89,7 +90,7 @@ func hierarchyDeletionControllerFinalizer(action HierarchyDeletionActionKind) st
 func validateHierarchyDeletionAttachOwner(value []byte, id, owner string) error {
 	record, err := attachrecord.DecodeAttachRecord(value)
 	if err != nil || record.ID != id || record.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -97,7 +98,7 @@ func validateHierarchyDeletionAttachOwner(value []byte, id, owner string) error 
 func validateHierarchyDeletionServiceOwner(value []byte, id, owner string) error {
 	record, err := servicerecord.DecodeServiceRuntimeRecord(value)
 	if err != nil || record.ServiceID != id || record.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -105,7 +106,7 @@ func validateHierarchyDeletionServiceOwner(value []byte, id, owner string) error
 func validateHierarchyDeletionReleaseGroupOwner(value []byte, id, owner string) error {
 	record, err := decodeReleaseGroupStored(value)
 	if err != nil || record.ID != id || record.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -113,7 +114,7 @@ func validateHierarchyDeletionReleaseGroupOwner(value []byte, id, owner string) 
 func validateHierarchyDeletionEntryOwner(value []byte, id, owner string) error {
 	record, err := entryrecord.DecodeRecord(value)
 	if err != nil || record.Entry.ID != id || record.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -121,7 +122,7 @@ func validateHierarchyDeletionEntryOwner(value []byte, id, owner string) error {
 func validateHierarchyDeletionRouteOwner(value []byte, id, owner string) error {
 	record, err := routerecord.DecodeObservation(value)
 	if err != nil || record.RouteID != id || record.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -129,7 +130,7 @@ func validateHierarchyDeletionRouteOwner(value []byte, id, owner string) error {
 func validateHierarchyDeletionComponentOwner(value []byte, id, owner string) error {
 	record, err := componentrecord.DecodeRecord(value)
 	if err != nil || record.Desired.ID != id || record.Desired.OwnerID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -137,7 +138,7 @@ func validateHierarchyDeletionComponentOwner(value []byte, id, owner string) err
 func validateHierarchyDeletionScriptOwner(value []byte, id, owner string) error {
 	record, err := scriptrecord.DecodeRecord(value)
 	if err != nil || record.Desired.ID != id || record.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if record.ActiveReferences != 0 {
 		return errs.New(errs.KindResourceInUse, "active Script executions fence hierarchy deletion")
@@ -148,7 +149,7 @@ func validateHierarchyDeletionScriptOwner(value []byte, id, owner string) error 
 func validateHierarchyDeletionZoneOwner(value []byte, id, owner string) error {
 	evidence, err := decodeHierarchyDeletionZoneEvidence(value)
 	if err != nil || evidence.ZoneID != id || evidence.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -156,7 +157,7 @@ func validateHierarchyDeletionZoneOwner(value []byte, id, owner string) error {
 func validateHierarchyDeletionConnectorOwner(value []byte, id, owner string) error {
 	record, err := connectorrecord.DecodeRecord(value)
 	if err != nil || record.Connector.ID != id || record.Connector.EnvironmentID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -164,7 +165,7 @@ func validateHierarchyDeletionConnectorOwner(value []byte, id, owner string) err
 func validateHierarchyDeletionRunnerOwner(value []byte, id, owner string) error {
 	record, err := runnerrecord.DecodeRunnerDesiredAggregate(value)
 	if err != nil || record.Desired.ID != id || record.Desired.OwnerID != owner {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }
@@ -173,7 +174,7 @@ func validateHierarchyDeletionSecretOwner(value []byte, id, owner string) error 
 	record, err := secretrecord.DecodeRecord(value)
 	if err != nil || record.Secret.ID != id || record.Secret.ProjectID != owner ||
 		record.Secret.Scope != core.SecretScopeProject {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil
 }

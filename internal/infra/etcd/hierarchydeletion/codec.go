@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletion
 
 import (
 	"bytes"
@@ -18,17 +18,17 @@ import (
 )
 
 const (
-	hierarchyDeletionSmallRecordBytes      = 4 << 10
+	HierarchyDeletionSmallRecordBytes      = 4 << 10
 	hierarchyDeletionActionRecordBytes     = 16 << 10
-	hierarchyDeletionCompletionRecordBytes = 8 << 10
-	hierarchyDeletionLargeRecordBytes      = 64 << 10
+	HierarchyDeletionCompletionRecordBytes = 8 << 10
+	HierarchyDeletionLargeRecordBytes      = 64 << 10
 	hierarchyDeletionTransactionBytes      = 900 << 10
 )
 
 var hierarchyDeletionPrivateIDPattern = regexp.MustCompile(`^(del|act)_[0-9a-f]{32}$`)
 var hierarchyDeletionRawStableIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*_[0-9A-HJKMNP-TV-Z]{26}$`)
 
-func encodeHierarchyDeletionRecord(value any, maximum int) ([]byte, error) {
+func EncodeHierarchyDeletionRecord(value any, maximum int) ([]byte, error) {
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
@@ -40,29 +40,29 @@ func encodeHierarchyDeletionRecord(value any, maximum int) ([]byte, error) {
 	return encoded, nil
 }
 
-func decodeHierarchyDeletionRecord(value []byte, maximum int, target any) error {
+func DecodeHierarchyDeletionRecord(value []byte, maximum int, target any) error {
 	if len(value) == 0 || len(value) > maximum || recordcodec.RejectDuplicateFields(value) != nil {
-		return corruptHierarchyDeletion()
+		return CorruptHierarchyDeletion()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil || recordcodec.RequireEOF(decoder) != nil {
-		return corruptHierarchyDeletion()
+		return CorruptHierarchyDeletion()
 	}
 	return nil
 }
 
-func hierarchyDeletionDigest(value []byte) string {
+func HierarchyDeletionDigest(value []byte) string {
 	digest := sha256.Sum256(value)
 	return hex.EncodeToString(digest[:])
 }
 
-func validHierarchyDeletionDigest(value string) bool {
+func ValidHierarchyDeletionDigest(value string) bool {
 	decoded, err := hex.DecodeString(value)
 	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == value
 }
 
-func validHierarchyDeletionPrivateID(value string, prefix string) bool {
+func ValidHierarchyDeletionPrivateID(value string, prefix string) bool {
 	return hierarchyDeletionPrivateIDPattern.MatchString(value) && strings.HasPrefix(value, prefix+"_")
 }
 
@@ -70,7 +70,7 @@ func validHierarchyDeletionRawStableID(value string) bool {
 	return hierarchyDeletionRawStableIDPattern.MatchString(value)
 }
 
-func enforceHierarchyDeletionTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
+func EnforceHierarchyDeletionTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
 	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion transaction exceeds its operation limit")
 	}
@@ -87,7 +87,7 @@ func enforceHierarchyDeletionTransaction(conditions []etcdstore.Condition, mutat
 	return nil
 }
 
-func validHierarchyDeletionTarget(kind HierarchyDeletionTargetKind, id string) bool {
+func ValidHierarchyDeletionTarget(kind HierarchyDeletionTargetKind, id string) bool {
 	var expected ids.Kind
 	switch kind {
 	case HierarchyDeletionTargetTenant:
@@ -104,7 +104,7 @@ func validHierarchyDeletionTarget(kind HierarchyDeletionTargetKind, id string) b
 	return ids.Validate(expected, id) == nil
 }
 
-func validHierarchyDeletionOperation(kind HierarchyDeletionOperationKind, target HierarchyDeletionTargetKind) bool {
+func ValidHierarchyDeletionOperation(kind HierarchyDeletionOperationKind, target HierarchyDeletionTargetKind) bool {
 	switch kind {
 	case HierarchyDeletionOperationTenant:
 		return target == HierarchyDeletionTargetTenant
@@ -119,7 +119,7 @@ func validHierarchyDeletionOperation(kind HierarchyDeletionOperationKind, target
 	}
 }
 
-func validHierarchyDeletionPhase(value HierarchyDeletionPhase) bool {
+func ValidHierarchyDeletionPhase(value HierarchyDeletionPhase) bool {
 	switch value {
 	case HierarchyDeletionPlanning, HierarchyDeletionExecuting, HierarchyDeletionSummarizing,
 		HierarchyDeletionFinalizing, HierarchyDeletionRetained:
@@ -129,36 +129,36 @@ func validHierarchyDeletionPhase(value HierarchyDeletionPhase) bool {
 	}
 }
 
-func validHierarchyDeletionTimestamp(value time.Time) bool {
+func ValidHierarchyDeletionTimestamp(value time.Time) bool {
 	return !value.IsZero() && value.Location() == time.UTC && value.Equal(value.UTC())
 }
 
 func validateHierarchyCoordination(record HierarchyCoordinationRecord) error {
-	if record.Schema != 1 || !validHierarchyDeletionTarget(record.TargetKind, record.TargetID) ||
+	if record.Schema != 1 || !ValidHierarchyDeletionTarget(record.TargetKind, record.TargetID) ||
 		record.MutationEpoch <= 0 {
 		return errs.New(errs.KindValidationFailed, "hierarchy coordination record is invalid")
 	}
 	return nil
 }
 
-func encodeHierarchyCoordination(record HierarchyCoordinationRecord) ([]byte, error) {
+func EncodeHierarchyCoordination(record HierarchyCoordinationRecord) ([]byte, error) {
 	if err := validateHierarchyCoordination(record); err != nil {
 		return nil, err
 	}
-	return encodeHierarchyDeletionRecord(record, hierarchyDeletionSmallRecordBytes)
+	return EncodeHierarchyDeletionRecord(record, HierarchyDeletionSmallRecordBytes)
 }
 
-func decodeHierarchyCoordination(value []byte) (HierarchyCoordinationRecord, error) {
+func DecodeHierarchyCoordination(value []byte) (HierarchyCoordinationRecord, error) {
 	var record HierarchyCoordinationRecord
-	if err := decodeHierarchyDeletionRecord(value, hierarchyDeletionSmallRecordBytes, &record); err != nil ||
+	if err := DecodeHierarchyDeletionRecord(value, HierarchyDeletionSmallRecordBytes, &record); err != nil ||
 		validateHierarchyCoordination(record) != nil {
-		return HierarchyCoordinationRecord{}, corruptHierarchyDeletion()
+		return HierarchyCoordinationRecord{}, CorruptHierarchyDeletion()
 	}
 	return record, nil
 }
 
-func validateHierarchyDeletionAction(action HierarchyDeletionAction) error {
-	if action.Schema != 1 || !validHierarchyDeletionPrivateID(action.ParentOperationID, "del") ||
+func ValidateHierarchyDeletionAction(action HierarchyDeletionAction) error {
+	if action.Schema != 1 || !ValidHierarchyDeletionPrivateID(action.ParentOperationID, "del") ||
 		action.NodeID == "" || action.Ordinal < 0 || action.TargetID == "" || action.TargetRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion action identity is invalid")
 	}
@@ -178,16 +178,16 @@ func validateHierarchyDeletionAction(action HierarchyDeletionAction) error {
 			ids.Validate(ids.KindOperation, action.AgentProcedure.ChildOperationID) != nil ||
 			(action.AgentProcedure.TaskType != taskjournal.TaskRemove && action.AgentProcedure.TaskType != taskjournal.TaskDetach) ||
 			action.AgentProcedure.TypedProcedure == "" ||
-			!validHierarchyDeletionDigest(action.AgentProcedure.InputDigest) ||
+			!ValidHierarchyDeletionDigest(action.AgentProcedure.InputDigest) ||
 			action.AgentProcedure.TimeoutSeconds <= 0 {
 			return errs.New(errs.KindValidationFailed, "hierarchy deletion Agent procedure is invalid")
 		}
 	case HierarchyDeletionProcedureController:
 		procedure := action.ControllerProcedure
 		if procedure == nil || action.AgentProcedure != nil || procedure.Finalizer == "" ||
-			procedure.FixedInputRevision <= 0 || !validHierarchyDeletionDigest(procedure.CompareTemplateDigest) ||
-			!validHierarchyDeletionDigest(procedure.MutationTemplateDigest) ||
-			!validHierarchyDeletionDigest(procedure.PostconditionTemplateDigest) {
+			procedure.FixedInputRevision <= 0 || !ValidHierarchyDeletionDigest(procedure.CompareTemplateDigest) ||
+			!ValidHierarchyDeletionDigest(procedure.MutationTemplateDigest) ||
+			!ValidHierarchyDeletionDigest(procedure.PostconditionTemplateDigest) {
 			return errs.New(errs.KindValidationFailed, "hierarchy deletion Controller procedure is invalid")
 		}
 	default:
@@ -234,18 +234,18 @@ func hierarchyDeletionProcedureMatchesAction(action HierarchyDeletionAction) boo
 		action.ControllerProcedure.Finalizer == expected
 }
 
-func encodeHierarchyDeletionAction(action HierarchyDeletionAction) ([]byte, error) {
-	if err := validateHierarchyDeletionAction(action); err != nil {
+func EncodeHierarchyDeletionAction(action HierarchyDeletionAction) ([]byte, error) {
+	if err := ValidateHierarchyDeletionAction(action); err != nil {
 		return nil, err
 	}
-	return encodeHierarchyDeletionRecord(action, hierarchyDeletionActionRecordBytes)
+	return EncodeHierarchyDeletionRecord(action, hierarchyDeletionActionRecordBytes)
 }
 
-func decodeHierarchyDeletionAction(value []byte) (HierarchyDeletionAction, error) {
+func DecodeHierarchyDeletionAction(value []byte) (HierarchyDeletionAction, error) {
 	var action HierarchyDeletionAction
-	if err := decodeHierarchyDeletionRecord(value, hierarchyDeletionActionRecordBytes, &action); err != nil ||
-		validateHierarchyDeletionAction(action) != nil {
-		return HierarchyDeletionAction{}, corruptHierarchyDeletion()
+	if err := DecodeHierarchyDeletionRecord(value, hierarchyDeletionActionRecordBytes, &action); err != nil ||
+		ValidateHierarchyDeletionAction(action) != nil {
+		return HierarchyDeletionAction{}, CorruptHierarchyDeletion()
 	}
 	return action, nil
 }
@@ -261,7 +261,7 @@ func hierarchyDeletionTransactionSize(conditions []etcdstore.Condition, mutation
 	return total
 }
 
-func validateHierarchyDeletionTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation, operationLimit int) error {
+func ValidateHierarchyDeletionTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation, operationLimit int) error {
 	if operationLimit <= 0 || len(conditions)+len(mutations) > operationLimit ||
 		len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion transaction exceeds its operation limit")
@@ -272,6 +272,6 @@ func validateHierarchyDeletionTransaction(conditions []etcdstore.Condition, muta
 	return nil
 }
 
-func corruptHierarchyDeletion() error {
+func CorruptHierarchyDeletion() error {
 	return errs.New(errs.KindInternal, "hierarchy deletion evidence is corrupt")
 }

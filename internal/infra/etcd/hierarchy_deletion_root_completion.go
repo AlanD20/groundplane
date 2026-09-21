@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,13 +15,13 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	operation HierarchyDeletionOperation,
 	terminalAt time.Time,
 	revision int64,
-	nextTombstone *HierarchyDeletionTombstone,
-	nextFence *HierarchyDeletionCleanupFence,
-	replay *HierarchyDeletionReplayLocator,
+	nextTombstone *hierarchydeletion.HierarchyDeletionTombstone,
+	nextFence *hierarchydeletion.HierarchyDeletionCleanupFence,
+	replay *hierarchydeletion.HierarchyDeletionReplayLocator,
 ) (hierarchyDeletionRootAckChange, error) {
-	if operation.Tombstone.Phase != HierarchyDeletionFinalizing ||
-		operation.Fence.Phase != HierarchyDeletionFinalizing ||
-		operation.Fence.Dispatch != HierarchyDeletionDispatchRetiring ||
+	if operation.Tombstone.Phase != hierarchydeletion.HierarchyDeletionFinalizing ||
+		operation.Fence.Phase != hierarchydeletion.HierarchyDeletionFinalizing ||
+		operation.Fence.Dispatch != hierarchydeletion.HierarchyDeletionDispatchRetiring ||
 		operation.Tombstone.PlanCount == nil ||
 		operation.Tombstone.PlanDigest == nil ||
 		*operation.Tombstone.PlanCount <= 0 ||
@@ -33,19 +34,19 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 		)
 	}
 	rootOrdinal := *operation.Tombstone.PlanCount - 1
-	actionKey, _ := HierarchyDeletionActionKey(operation.Tombstone.OperationID, rootOrdinal)
+	actionKey, _ := hierarchydeletion.HierarchyDeletionActionKey(operation.Tombstone.OperationID, rootOrdinal)
 	actionRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{actionKey}, Revision: revision})
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
 	if actionRead == nil || len(actionRead.Values) != 1 || actionRead.Values[0] == nil {
-		return hierarchyDeletionRootAckChange{}, corruptHierarchyDeletion()
+		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	action, err := decodeHierarchyDeletionAction(actionRead.Values[0].Value)
+	action, err := hierarchydeletion.DecodeHierarchyDeletionAction(actionRead.Values[0].Value)
 	if err != nil || action.Ordinal != rootOrdinal || action.ParentOperationID != operation.Tombstone.OperationID ||
-		action.TargetID != operation.Tombstone.TargetID || action.ProcedureKind != HierarchyDeletionProcedureController ||
+		action.TargetID != operation.Tombstone.TargetID || action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController ||
 		action.ControllerProcedure == nil || !hierarchyDeletionRootFinalizerMatches(operation.Tombstone.TargetKind, action.ActionKind) {
-		return hierarchyDeletionRootAckChange{}, corruptHierarchyDeletion()
+		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if err := repository.validateHierarchyDeletionRootProjection(ctx, operation); err != nil {
 		return hierarchyDeletionRootAckChange{}, err
@@ -78,19 +79,19 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 			"hierarchy deletion root template changed",
 		)
 	}
-	actionValue, err := encodeHierarchyDeletionAction(action)
+	actionValue, err := hierarchydeletion.EncodeHierarchyDeletionAction(action)
 	if err != nil {
 		change.clear()
 		return hierarchyDeletionRootAckChange{}, err
 	}
 	defer clear(actionValue)
-	completion := HierarchyDeletionActionCompletion{
+	completion := hierarchydeletion.HierarchyDeletionActionCompletion{
 		Schema: 1, ParentOperationID: operation.Tombstone.OperationID,
 		DeletionEpoch: operation.Tombstone.DeletionEpoch, Ordinal: action.Ordinal,
 		ActionDigest: hierarchyDeletionBytesDigest(actionValue), TargetKind: action.TargetKind,
 		TargetID: action.TargetID, TargetRevision: action.TargetRevision,
-		Executor: HierarchyDeletionProcedureController,
-		ControllerProof: &HierarchyDeletionControllerCompletionProof{
+		Executor: hierarchydeletion.HierarchyDeletionProcedureController,
+		ControllerProof: &hierarchydeletion.HierarchyDeletionControllerCompletionProof{
 			Finalizer: action.ControllerProcedure.Finalizer, FixedInputRevision: action.ControllerProcedure.FixedInputRevision,
 			CompareTemplateDigest:       action.ControllerProcedure.CompareTemplateDigest,
 			MutationTemplateDigest:      action.ControllerProcedure.MutationTemplateDigest,
@@ -98,7 +99,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 		},
 		CompletedAt: terminalAt,
 	}
-	completionValue, err := encodeHierarchyDeletionRecord(completion, hierarchyDeletionCompletionRecordBytes)
+	completionValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completion, hierarchydeletion.HierarchyDeletionCompletionRecordBytes)
 	if err != nil {
 		change.clear()
 		return hierarchyDeletionRootAckChange{}, err
@@ -108,11 +109,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	)
 	*nextTombstone = nextTombstoneValue
 	*nextFence = nextFenceValue
-	nextTombstone.Phase = HierarchyDeletionRetained
-	nextFence.Phase = HierarchyDeletionRetained
-	nextFence.Dispatch = HierarchyDeletionDispatchClosed
+	nextTombstone.Phase = hierarchydeletion.HierarchyDeletionRetained
+	nextFence.Phase = hierarchydeletion.HierarchyDeletionRetained
+	nextFence.Dispatch = hierarchydeletion.HierarchyDeletionDispatchClosed
 	nextFence.ActiveActionOrdinal = nil
-	nextTombstone.Terminal = &HierarchyDeletionTerminal{
+	nextTombstone.Terminal = &hierarchydeletion.HierarchyDeletionTerminal{
 		Status: string(taskjournal.TaskStatusCompleted), TaskID: operation.Tombstone.CurrentTaskID,
 		CompletedAt: terminalAt, RetainUntil: terminalAt.Add(TaskRetention),
 		CompletionSummaryDigest: nextTombstone.Checkpoint.CompletedPrefixDigest,
@@ -154,23 +155,23 @@ func (repository *HierarchyDeletionRepository) validateHierarchyDeletionRootProj
 	case HierarchyDeletionTargetTenant:
 		record, decodeErr := hierarchyrecord.DecodeTenant(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
-			return corruptHierarchyDeletion()
+			return hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		deletionTaskID = record.DeletionTaskID
-	case HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
 		record, decodeErr := hierarchyrecord.DecodeProject(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
-			return corruptHierarchyDeletion()
+			return hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		deletionTaskID = record.DeletionTaskID
 	case HierarchyDeletionTargetEnvironment:
 		record, decodeErr := hierarchyrecord.DecodeEnvironment(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
-			return corruptHierarchyDeletion()
+			return hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		deletionTaskID = record.DeletionTaskID
 	default:
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if deletionTaskID != operation.Tombstone.CurrentTaskID {
 		return errs.New(errs.KindStateConflict, "hierarchy deletion root Task projection changed")
@@ -179,6 +180,6 @@ func (repository *HierarchyDeletionRepository) validateHierarchyDeletionRootProj
 }
 
 func mustHierarchyDeletionCompletionKey(operationID string, ordinal int64) string {
-	key, _ := HierarchyDeletionCompletionKey(operationID, ordinal)
+	key, _ := hierarchydeletion.HierarchyDeletionCompletionKey(operationID, ordinal)
 	return key
 }

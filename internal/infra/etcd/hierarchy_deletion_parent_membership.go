@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
@@ -18,7 +19,7 @@ func (repository *HierarchyDeletionRepository) freezeTenantMembership(
 		hierarchyrecord.ProjectKey, ids.KindProject, func(value []byte, id, owner string) error {
 			record, decodeErr := hierarchyrecord.DecodeProject(value)
 			if decodeErr != nil || record.ID != id || record.TenantID != owner || record.Kind != hierarchyrecord.ProjectKindTenant {
-				return corruptHierarchyDeletion()
+				return hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			return nil
 		}, operation.Tombstone.TargetID,
@@ -35,13 +36,13 @@ func (repository *HierarchyDeletionRepository) freezeTenantMembership(
 		nodes = append(nodes, children...)
 		nodes = append(nodes, hierarchyDeletionControllerNode(
 			"project:"+project.id+":finalize", "project", project.id,
-			HierarchyDeletionProjectFinalize, project.revision,
+			hierarchydeletion.HierarchyDeletionProjectFinalize, project.revision,
 			terminalHierarchyDeletionNodes(children), "project.finalize", project.digest,
 		))
 	}
 	runners, err := repository.freezeIndexedResource(ctx, operation, operation.Tombstone.TargetID,
 		hierarchyDeletionIndexedResource{
-			targetKind: "runner", actionKind: HierarchyDeletionRunnerLocalRemove,
+			targetKind: "runner", actionKind: hierarchydeletion.HierarchyDeletionRunnerLocalRemove,
 			ownerPrefix: func(owner string) string { return runnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, owner) },
 			primaryKey:  runnerKey, stableIDKind: ids.KindRunner, controller: true,
 			validateOwner: validateHierarchyDeletionRunnerOwner,
@@ -63,7 +64,7 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 		ids.KindEnvironment, func(value []byte, id, owner string) error {
 			record, decodeErr := hierarchyrecord.DecodeEnvironment(value)
 			if decodeErr != nil || record.ID != id || record.ProjectID != owner {
-				return corruptHierarchyDeletion()
+				return hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			return nil
 		}, projectID,
@@ -86,14 +87,14 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 		nodes = append(nodes, children...)
 		nodes = append(nodes, hierarchyDeletionControllerNode(
 			"environment:"+environment.id+":finalize", "environment", environment.id,
-			HierarchyDeletionEnvironmentFinalize, environment.revision,
+			hierarchydeletion.HierarchyDeletionEnvironmentFinalize, environment.revision,
 			terminalHierarchyDeletionNodes(children), "environment.finalize", environment.digest,
 		))
 	}
-	if operation.Tombstone.OperationKind != HierarchyDeletionOperationBacking || !root {
+	if operation.Tombstone.OperationKind != hierarchydeletion.HierarchyDeletionOperationBacking || !root {
 		runners, freezeErr := repository.freezeIndexedResource(ctx, operation, projectID,
 			hierarchyDeletionIndexedResource{
-				targetKind: "runner", actionKind: HierarchyDeletionRunnerLocalRemove,
+				targetKind: "runner", actionKind: hierarchydeletion.HierarchyDeletionRunnerLocalRemove,
 				ownerPrefix: func(owner string) string { return runnerOwnerPrefix(runnerrecord.RunnerOwnerProject, owner) },
 				primaryKey:  runnerKey, stableIDKind: ids.KindRunner, controller: true,
 				validateOwner: validateHierarchyDeletionRunnerOwner,
@@ -105,7 +106,7 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 	}
 	secrets, err := repository.freezeIndexedResource(ctx, operation, projectID,
 		hierarchyDeletionIndexedResource{
-			targetKind: "secret", actionKind: HierarchyDeletionProjectSecretRemove,
+			targetKind: "secret", actionKind: hierarchydeletion.HierarchyDeletionProjectSecretRemove,
 			ownerPrefix: func(owner string) string {
 				return secretOwnerCollectionPrefix(core.SecretScopeProject, owner)
 			},

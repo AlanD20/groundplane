@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -225,7 +226,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		{Type: etcdstore.MutationDelete, Key: timeoutKey},
 	}
 	mutations = append(mutations, change.mutations...)
-	if err := enforceHierarchyDeletionTransaction(conditions, mutations); err != nil {
+	if err := hierarchydeletion.EnforceHierarchyDeletionTransaction(conditions, mutations); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)

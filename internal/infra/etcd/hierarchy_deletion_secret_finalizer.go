@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
 
@@ -9,7 +10,7 @@ import (
 // exact Script count and forward-membership absence proof as direct removal.
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionSecretFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, secretrecord.RecordKey(action.TargetID), action)
 	if err != nil {
@@ -18,7 +19,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionSecretFin
 	defer clear(primary.Value)
 	record, err := secretrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Secret.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	fences, err := prepareSecretScriptAbsence(ctx, repository.store, action.TargetID)
 	if err != nil {

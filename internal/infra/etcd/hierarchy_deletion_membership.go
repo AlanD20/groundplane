@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,9 +11,9 @@ import (
 
 type HierarchyDeletionMembershipNode struct {
 	NodeID              string
-	TargetKind          HierarchyDeletionActionTargetKind
+	TargetKind          hierarchydeletion.HierarchyDeletionActionTargetKind
 	TargetID            string
-	ActionKind          HierarchyDeletionActionKind
+	ActionKind          hierarchydeletion.HierarchyDeletionActionKind
 	TargetRevision      int64
 	PrerequisiteNodeIDs []string
 	ProcedureInput      HierarchyDeletionProcedureInput
@@ -28,7 +29,7 @@ type HierarchyDeletionAgentInput struct {
 
 type HierarchyDeletionControllerFinalizerInput struct {
 	Finalizer          string
-	TargetKind         HierarchyDeletionActionTargetKind
+	TargetKind         hierarchydeletion.HierarchyDeletionActionTargetKind
 	TargetID           string
 	FixedInputRevision int64
 	FixedInputDigest   string
@@ -37,15 +38,15 @@ type HierarchyDeletionControllerFinalizerInput struct {
 }
 
 type HierarchyDeletionProcedureInput struct {
-	Kind                HierarchyDeletionProcedureKind
+	Kind                hierarchydeletion.HierarchyDeletionProcedureKind
 	AgentChild          *HierarchyDeletionAgentInput
 	ControllerFinalizer *HierarchyDeletionControllerFinalizerInput
 }
 
 type HierarchyDeletionReverseReference struct {
-	SourceKind HierarchyDeletionActionTargetKind
+	SourceKind hierarchydeletion.HierarchyDeletionActionTargetKind
 	SourceID   string
-	TargetKind HierarchyDeletionActionTargetKind
+	TargetKind hierarchydeletion.HierarchyDeletionActionTargetKind
 	TargetID   string
 }
 
@@ -53,7 +54,7 @@ type HierarchyDeletionFrozenMembership struct {
 	Revision                int64
 	CoordinationEpoch       int64
 	RootRevision            int64
-	RootTargetKind          HierarchyDeletionActionTargetKind
+	RootTargetKind          hierarchydeletion.HierarchyDeletionActionTargetKind
 	RootProcedureInput      HierarchyDeletionControllerFinalizerInput
 	RootPrerequisiteNodeIDs []string
 	Nodes                   []HierarchyDeletionMembershipNode
@@ -61,8 +62,8 @@ type HierarchyDeletionFrozenMembership struct {
 }
 
 type hierarchyDeletionIndexedResource struct {
-	targetKind    HierarchyDeletionActionTargetKind
-	actionKind    HierarchyDeletionActionKind
+	targetKind    hierarchydeletion.HierarchyDeletionActionTargetKind
+	actionKind    hierarchydeletion.HierarchyDeletionActionKind
 	ownerPrefix   func(string) string
 	primaryKey    func(string) string
 	stableIDKind  ids.Kind
@@ -81,7 +82,7 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 	if err != nil {
 		return HierarchyDeletionFrozenMembership{}, err
 	}
-	if current.Tombstone.Phase != HierarchyDeletionPlanning || current.Tombstone.SnapshotRevision <= 0 ||
+	if current.Tombstone.Phase != hierarchydeletion.HierarchyDeletionPlanning || current.Tombstone.SnapshotRevision <= 0 ||
 		current.Tombstone.TargetRevision <= 0 || current.Tombstone.PlanCount != nil || current.Tombstone.PlanDigest != nil {
 		return HierarchyDeletionFrozenMembership{}, errs.New(
 			errs.KindStateConflict,
@@ -91,7 +92,7 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 	frozen := HierarchyDeletionFrozenMembership{
 		Revision: current.Tombstone.SnapshotRevision, CoordinationEpoch: current.Tombstone.DeletionEpoch,
 		RootRevision:   current.Tombstone.TargetRevision,
-		RootTargetKind: HierarchyDeletionActionTargetKind(current.Tombstone.TargetKind),
+		RootTargetKind: hierarchydeletion.HierarchyDeletionActionTargetKind(current.Tombstone.TargetKind),
 	}
 	rootFinalizer := ""
 	switch current.Tombstone.OperationKind {
@@ -103,9 +104,9 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 		rootFinalizer = "environment.finalize"
 	case HierarchyDeletionOperationBacking:
 		rootFinalizer = "backing.finalize"
-		frozen.RootTargetKind = HierarchyDeletionActionTargetKind("backing-service")
+		frozen.RootTargetKind = hierarchydeletion.HierarchyDeletionActionTargetKind("backing-service")
 	default:
-		return HierarchyDeletionFrozenMembership{}, corruptHierarchyDeletion()
+		return HierarchyDeletionFrozenMembership{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	rootDigest, err := repository.hierarchyDeletionTargetDigest(
 		ctx, current.Tombstone.SnapshotRevision, frozen.RootTargetKind,
@@ -134,7 +135,7 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 	case HierarchyDeletionTargetTenant:
 		frozen.Nodes, err = repository.freezeTenantMembership(ctx, current)
 	default:
-		err = corruptHierarchyDeletion()
+		err = hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if err != nil {
 		return HierarchyDeletionFrozenMembership{}, err

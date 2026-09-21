@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -20,13 +21,13 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 ) (bool, bool, error) {
 	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
-		return false, false, corruptHierarchyDeletion()
+		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	operationID := task.Params[TaskHierarchyDeletionOperationParam]
-	if !validHierarchyDeletionPrivateID(operationID, "del") {
-		return false, false, corruptHierarchyDeletion()
+	if !hierarchydeletion.ValidHierarchyDeletionPrivateID(operationID, "del") {
+		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	intentKey, _ := HierarchyDeletionIntentKey(operationID)
+	intentKey, _ := hierarchydeletion.HierarchyDeletionIntentKey(operationID)
 	intentRead, err := repository.store.GetMany(
 		ctx,
 		etcdstore.GetManyRequest{Keys: []string{intentKey, markerKey}, Revision: revision},
@@ -35,7 +36,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		return false, false, err
 	}
 	if intentRead == nil || len(intentRead.Values) != 2 {
-		return false, false, corruptHierarchyDeletion()
+		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if intentRead.Values[1] != nil {
 		return false, false, nil
@@ -43,12 +44,12 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	if intentRead.Values[0] == nil {
 		return false, true, nil
 	}
-	var intent HierarchyDeletionIntent
-	if decodeHierarchyDeletionRecord(intentRead.Values[0].Value, hierarchyDeletionLargeRecordBytes, &intent) != nil ||
+	var intent hierarchydeletion.HierarchyDeletionIntent
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(intentRead.Values[0].Value, hierarchydeletion.HierarchyDeletionLargeRecordBytes, &intent) != nil ||
 		intent.OperationID != operationID {
-		return false, false, corruptHierarchyDeletion()
+		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	tombstoneKey := HierarchyDeletionTombstoneKey(string(intent.TargetKind), intent.TargetID)
+	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(intent.TargetKind), intent.TargetID)
 	tombstoneRead, err := repository.store.GetMany(
 		ctx,
 		etcdstore.GetManyRequest{Keys: []string{tombstoneKey}, Revision: revision},
@@ -57,17 +58,17 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		return false, false, err
 	}
 	if tombstoneRead == nil || len(tombstoneRead.Values) != 1 || tombstoneRead.Values[0] == nil {
-		return false, false, corruptHierarchyDeletion()
+		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	var tombstone HierarchyDeletionTombstone
-	if decodeHierarchyDeletionRecord(
+	var tombstone hierarchydeletion.HierarchyDeletionTombstone
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
 		tombstoneRead.Values[0].Value,
-		hierarchyDeletionLargeRecordBytes,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
 		&tombstone,
 	) != nil ||
 		tombstone.OperationID != operationID ||
 		tombstone.Terminal == nil {
-		return false, false, corruptHierarchyDeletion()
+		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if tombstone.CurrentTaskID != task.ID {
 		return false, true, nil
@@ -75,7 +76,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	if tombstone.Terminal.RetainUntil.After(now) {
 		return false, false, nil
 	}
-	if tombstone.Terminal.Status != string(taskjournal.TaskStatusCompleted) || tombstone.Phase != HierarchyDeletionRetained {
+	if tombstone.Terminal.Status != string(taskjournal.TaskStatusCompleted) || tombstone.Phase != hierarchydeletion.HierarchyDeletionRetained {
 		transaction, transactErr := repository.store.Transact(ctx,
 			[]etcdstore.Condition{
 				{Key: taskKey(task.ID), ModRevision: taskRevision},
@@ -94,17 +95,17 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		}
 		return true, false, nil
 	}
-	pruneKey, _ := HierarchyDeletionPruneIntentKey(operationID)
+	pruneKey, _ := hierarchydeletion.HierarchyDeletionPruneIntentKey(operationID)
 	pruneRead, err := repository.store.Get(ctx, pruneKey)
 	if err != nil {
 		return false, false, err
 	}
 	if pruneRead.Entry == nil {
-		prune := HierarchyDeletionPruneIntent{
-			Schema: 1, ParentOperationID: operationID, Phase: HierarchyDeletionPruneReceipts,
+		prune := hierarchydeletion.HierarchyDeletionPruneIntent{
+			Schema: 1, ParentOperationID: operationID, Phase: hierarchydeletion.HierarchyDeletionPruneReceipts,
 			RetainUntil: tombstone.Terminal.RetainUntil, UpdatedAt: now,
 		}
-		value, encodeErr := encodeHierarchyDeletionRecord(prune, hierarchyDeletionSmallRecordBytes)
+		value, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(prune, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 		if encodeErr != nil {
 			return false, false, encodeErr
 		}
@@ -125,11 +126,11 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		}
 		return true, false, nil
 	}
-	var prune HierarchyDeletionPruneIntent
-	if decodeHierarchyDeletionRecord(pruneRead.Entry.Value, hierarchyDeletionSmallRecordBytes, &prune) != nil ||
+	var prune hierarchydeletion.HierarchyDeletionPruneIntent
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(pruneRead.Entry.Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &prune) != nil ||
 		prune.ParentOperationID != operationID || !prune.RetainUntil.Equal(tombstone.Terminal.RetainUntil) {
 		clear(pruneRead.Entry.Value)
-		return false, false, corruptHierarchyDeletion()
+		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	clear(pruneRead.Entry.Value)
 	changed, err := repository.advanceHierarchyDeletionPrune(
@@ -147,9 +148,9 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 	ctx context.Context,
 	task TaskRecord,
-	tombstone HierarchyDeletionTombstone,
+	tombstone hierarchydeletion.HierarchyDeletionTombstone,
 	tombstoneRevision int64,
-	prune HierarchyDeletionPruneIntent,
+	prune hierarchydeletion.HierarchyDeletionPruneIntent,
 	pruneRevision int64,
 	now time.Time,
 ) (bool, error) {
@@ -166,7 +167,7 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 			return false, rangeErr
 		}
 		if page == nil {
-			return false, corruptHierarchyDeletion()
+			return false, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		if len(page.Values) == 0 {
 			continue
@@ -191,11 +192,11 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 		}
 		return true, nil
 	}
-	if prune.Phase != HierarchyDeletionPruneFinal {
+	if prune.Phase != hierarchydeletion.HierarchyDeletionPruneFinal {
 		prune.Phase = nextHierarchyDeletionPrunePhase(prune.Phase)
 		prune.NextOrdinal = 0
 		prune.UpdatedAt = now
-		value, encodeErr := encodeHierarchyDeletionRecord(prune, hierarchyDeletionSmallRecordBytes)
+		value, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(prune, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 		if encodeErr != nil {
 			return false, encodeErr
 		}
@@ -216,46 +217,46 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 	return repository.finishHierarchyDeletionPrune(ctx, task, tombstone, tombstoneRevision, pruneRevision)
 }
 
-func hierarchyDeletionPrunePrefixes(operationID string, phase HierarchyDeletionPrunePhase) ([]string, error) {
+func hierarchyDeletionPrunePrefixes(operationID string, phase hierarchydeletion.HierarchyDeletionPrunePhase) ([]string, error) {
 	switch phase {
 	case HierarchyDeletionPruneReceipts:
-		receipts, err := HierarchyDeletionReceiptPrefix(operationID)
+		receipts, err := hierarchydeletion.HierarchyDeletionReceiptPrefix(operationID)
 		if err != nil {
 			return nil, err
 		}
-		successors, err := HierarchyDeletionSuccessorPrefix(operationID)
+		successors, err := hierarchydeletion.HierarchyDeletionSuccessorPrefix(operationID)
 		return []string{receipts, successors}, err
 	case HierarchyDeletionPruneProgress:
-		prefix, err := HierarchyDeletionProgressPrefix(operationID)
+		prefix, err := hierarchydeletion.HierarchyDeletionProgressPrefix(operationID)
 		return []string{prefix}, err
 	case HierarchyDeletionPruneChildren:
-		prefix, err := HierarchyDeletionChildPrefix(operationID)
+		prefix, err := hierarchydeletion.HierarchyDeletionChildPrefix(operationID)
 		return []string{prefix}, err
 	case HierarchyDeletionPruneActions:
-		prefix, err := HierarchyDeletionActionPrefix(operationID)
+		prefix, err := hierarchydeletion.HierarchyDeletionActionPrefix(operationID)
 		return []string{prefix}, err
 	case HierarchyDeletionPruneCompletions:
-		prefix, err := HierarchyDeletionCompletionPrefix(operationID)
+		prefix, err := hierarchydeletion.HierarchyDeletionCompletionPrefix(operationID)
 		return []string{prefix}, err
 	case HierarchyDeletionPruneFinal:
 		return nil, nil
 	default:
-		return nil, corruptHierarchyDeletion()
+		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 }
 
-func nextHierarchyDeletionPrunePhase(phase HierarchyDeletionPrunePhase) HierarchyDeletionPrunePhase {
+func nextHierarchyDeletionPrunePhase(phase hierarchydeletion.HierarchyDeletionPrunePhase) hierarchydeletion.HierarchyDeletionPrunePhase {
 	switch phase {
 	case HierarchyDeletionPruneReceipts:
-		return HierarchyDeletionPruneProgress
+		return hierarchydeletion.HierarchyDeletionPruneProgress
 	case HierarchyDeletionPruneProgress:
-		return HierarchyDeletionPruneChildren
+		return hierarchydeletion.HierarchyDeletionPruneChildren
 	case HierarchyDeletionPruneChildren:
-		return HierarchyDeletionPruneActions
+		return hierarchydeletion.HierarchyDeletionPruneActions
 	case HierarchyDeletionPruneActions:
-		return HierarchyDeletionPruneCompletions
+		return hierarchydeletion.HierarchyDeletionPruneCompletions
 	case HierarchyDeletionPruneCompletions:
-		return HierarchyDeletionPruneFinal
+		return hierarchydeletion.HierarchyDeletionPruneFinal
 	default:
 		return ""
 	}
@@ -264,21 +265,21 @@ func nextHierarchyDeletionPrunePhase(phase HierarchyDeletionPrunePhase) Hierarch
 func (repository *TaskRepository) finishHierarchyDeletionPrune(
 	ctx context.Context,
 	task TaskRecord,
-	tombstone HierarchyDeletionTombstone,
+	tombstone hierarchydeletion.HierarchyDeletionTombstone,
 	tombstoneRevision int64,
 	pruneRevision int64,
 ) (bool, error) {
 	operationID := tombstone.OperationID
 	keys := []string{
-		HierarchyDeletionTombstoneKey(string(tombstone.TargetKind), tombstone.TargetID),
-		mustHierarchyDeletionOperationKey(HierarchyDeletionCleanupFenceKey(operationID)),
-		mustHierarchyDeletionOperationKey(HierarchyDeletionReplayTargetKey(operationID)),
-		mustHierarchyDeletionOperationKey(HierarchyDeletionIntentKey(operationID)),
-		HierarchyDeletionLockKey(string(tombstone.TargetKind), tombstone.TargetID),
-		mustHierarchyDeletionOperationKey(HierarchyDeletionReceiptSummaryKey(operationID)),
-		mustHierarchyDeletionOperationKey(HierarchyDeletionCompletionSummaryKey(operationID)),
-		mustHierarchyDeletionOperationKey(HierarchyDeletionReceiptScanCursorKey(operationID, task.ID)),
-		mustHierarchyDeletionOperationKey(HierarchyDeletionCompletionScanCursorKey(operationID, task.ID)),
+		hierarchydeletion.HierarchyDeletionTombstoneKey(string(tombstone.TargetKind), tombstone.TargetID),
+		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionCleanupFenceKey(operationID)),
+		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionReplayTargetKey(operationID)),
+		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionIntentKey(operationID)),
+		hierarchydeletion.HierarchyDeletionLockKey(string(tombstone.TargetKind), tombstone.TargetID),
+		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionReceiptSummaryKey(operationID)),
+		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionCompletionSummaryKey(operationID)),
+		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionReceiptScanCursorKey(operationID, task.ID)),
+		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionCompletionScanCursorKey(operationID, task.ID)),
 		mustHierarchyDeletionPruneIntentKey(operationID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
@@ -288,7 +289,7 @@ func (repository *TaskRepository) finishHierarchyDeletionPrune(
 	if read == nil || len(read.Values) != len(keys) || read.Values[0] == nil ||
 		read.Values[0].ModRevision != tombstoneRevision || read.Values[4] != nil ||
 		read.Values[9] == nil || read.Values[9].ModRevision != pruneRevision {
-		return false, corruptHierarchyDeletion()
+		return false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	conditions := make([]etcdstore.Condition, len(keys))
 	mutations := make([]etcdstore.Mutation, 0, len(keys))
@@ -310,7 +311,7 @@ func (repository *TaskRepository) finishHierarchyDeletionPrune(
 }
 
 func mustHierarchyDeletionPruneIntentKey(operationID string) string {
-	key, _ := HierarchyDeletionPruneIntentKey(operationID)
+	key, _ := hierarchydeletion.HierarchyDeletionPruneIntentKey(operationID)
 	return key
 }
 

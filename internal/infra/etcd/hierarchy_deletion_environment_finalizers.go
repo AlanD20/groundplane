@@ -4,6 +4,7 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
@@ -12,7 +13,7 @@ import (
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReleaseGroupFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, releaseGroupRecordKey(action.TargetID), action)
 	if err != nil {
@@ -21,7 +22,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReleaseGr
 	defer clear(primary.Value)
 	record, err := decodeReleaseGroupStored(primary.Value)
 	if err != nil || record.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, []string{
 		releaseGroupOwnerKey(record.EnvironmentID, record.ID),
@@ -32,11 +33,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReleaseGr
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironmentFinalizer(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	if err := cleanupEnvironmentDeletionScriptLocators(
 		ctx, repository.store, action.TargetID, etcdstore.Condition{
-			Key:         HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), action.TargetID),
+			Key:         hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), action.TargetID),
 			ModRevision: operation.TombstoneRevision,
 		},
 	); err != nil {
@@ -49,7 +50,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	defer clear(primary.Value)
 	record, err := hierarchyrecord.DecodeEnvironment(primary.Value)
 	if err != nil || record.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID),
@@ -64,7 +65,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		if indexes != nil {
 			clearKeyValues(indexes.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer clearKeyValues(indexes.Values)
 	if err := requireEnvironmentDeletionLiveAuthorityEmpty(

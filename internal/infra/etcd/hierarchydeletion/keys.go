@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletion
 
 import (
 	"encoding/base64"

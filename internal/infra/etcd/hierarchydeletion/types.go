@@ -1,4 +1,4 @@
-package etcd
+package hierarchydeletion
 
 import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"

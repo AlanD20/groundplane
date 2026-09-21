@@ -4,12 +4,13 @@ import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEntryFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, entryrecord.RecordKey(action.TargetID), action)
 	if err != nil {
@@ -18,7 +19,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEntryFina
 	defer clear(primary.Value)
 	record, err := entryrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Entry.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	fences, err := prepareEntryScriptAbsence(ctx, repository.store, action.TargetID, 0)
 	if err != nil {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,14 +19,14 @@ type hierarchyDeletionControllerEffects struct {
 func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 	completedAt time.Time,
 ) (HierarchyDeletionOperation, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
 	if recordcodec.ValidateTimestamp("hierarchy deletion Controller completion", completedAt) != nil ||
-		action.ProcedureKind != HierarchyDeletionProcedureController || action.ControllerProcedure == nil {
+		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController || action.ControllerProcedure == nil {
 		return HierarchyDeletionOperation{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion Controller action is invalid",
@@ -68,18 +69,18 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 			"hierarchy deletion finalizer template changed",
 		)
 	}
-	actionValue, err := encodeHierarchyDeletionAction(action)
+	actionValue, err := hierarchydeletion.EncodeHierarchyDeletionAction(action)
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
 	defer clear(actionValue)
-	completion := HierarchyDeletionActionCompletion{
+	completion := hierarchydeletion.HierarchyDeletionActionCompletion{
 		Schema: 1, ParentOperationID: current.Tombstone.OperationID,
 		DeletionEpoch: current.Tombstone.DeletionEpoch, Ordinal: action.Ordinal,
 		ActionDigest: hierarchyDeletionBytesDigest(actionValue), TargetKind: action.TargetKind,
 		TargetID: action.TargetID, TargetRevision: action.TargetRevision,
-		Executor: HierarchyDeletionProcedureController,
-		ControllerProof: &HierarchyDeletionControllerCompletionProof{
+		Executor: hierarchydeletion.HierarchyDeletionProcedureController,
+		ControllerProof: &hierarchydeletion.HierarchyDeletionControllerCompletionProof{
 			Finalizer:                   action.ControllerProcedure.Finalizer,
 			FixedInputRevision:          action.ControllerProcedure.FixedInputRevision,
 			CompareTemplateDigest:       action.ControllerProcedure.CompareTemplateDigest,
@@ -88,7 +89,7 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 		},
 		CompletedAt: completedAt,
 	}
-	completionValue, err := encodeHierarchyDeletionRecord(completion, hierarchyDeletionCompletionRecordBytes)
+	completionValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completion, hierarchydeletion.HierarchyDeletionCompletionRecordBytes)
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
@@ -105,7 +106,7 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionControllerEffects(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	switch action.ActionKind {
 	case HierarchyDeletionReleaseGroupRemove:

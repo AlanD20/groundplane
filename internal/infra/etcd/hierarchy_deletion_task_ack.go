@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -188,13 +189,13 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 	childOperationID := task.Params[TaskHierarchyDeletionChildParam]
 	ordinal, err := strconv.ParseInt(task.Params[TaskHierarchyDeletionOrdinalParam], 10, 64)
 	if err != nil || ordinal < 0 {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	actionKey, err := HierarchyDeletionActionKey(parentOperationID, ordinal)
+	actionKey, err := hierarchydeletion.HierarchyDeletionActionKey(parentOperationID, ordinal)
 	if err != nil {
 		return err
 	}
-	childKey, err := HierarchyDeletionChildKey(parentOperationID, childOperationID)
+	childKey, err := hierarchydeletion.HierarchyDeletionChildKey(parentOperationID, childOperationID)
 	if err != nil {
 		return err
 	}
@@ -203,9 +204,9 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 		return err
 	}
 	if read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	action, err := decodeHierarchyDeletionAction(read.Values[0].Value)
+	action, err := hierarchydeletion.DecodeHierarchyDeletionAction(read.Values[0].Value)
 	if err != nil {
 		return err
 	}
@@ -214,20 +215,20 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 		return err
 	}
 	if action.ParentOperationID != parentOperationID || action.Ordinal != ordinal ||
-		action.ProcedureKind != HierarchyDeletionProcedureAgent || action.AgentProcedure == nil ||
+		action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureAgent || action.AgentProcedure == nil ||
 		action.AgentProcedure.ChildOperationID != childOperationID ||
 		string(action.ActionKind) != task.Params[TaskHierarchyDeletionActionKindParam] ||
 		action.AgentProcedure.TypedProcedure != task.Params[TaskHierarchyDeletionProcedureParam] ||
 		action.AgentProcedure.InputDigest != task.Params[TaskHierarchyDeletionInputParam] ||
 		entry.ParentOperationID != parentOperationID || entry.ChildOperationID != childOperationID ||
 		entry.CurrentTaskID != task.ID || entry.CurrentAttemptID != task.Params[TaskHierarchyDeletionAttemptParam] {
-		return corruptHierarchyDeletion()
+		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	hierarchy, err := newHierarchyDeletionRepository(repository.store)
 	if err != nil {
 		return err
 	}
-	operation := HierarchyDeletionOperation{Tombstone: HierarchyDeletionTombstone{OperationID: parentOperationID}}
+	operation := HierarchyDeletionOperation{Tombstone: hierarchydeletion.HierarchyDeletionTombstone{OperationID: parentOperationID}}
 	return hierarchy.ensureHierarchyDeletionTerminalReceipt(
 		ctx, operation, action, entry, read.Values[1].ModRevision, task, taskRevision,
 	)

@@ -4,6 +4,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -13,14 +14,14 @@ import (
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	result, err := repository.store.Get(ctx, routerecord.ObservationKey(action.TargetID))
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	if result == nil || result.ReadRevision <= 0 {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	conditions := []etcdstore.Condition{{Key: routerecord.ObservationKey(action.TargetID)}}
 	mutations := []etcdstore.Mutation{}
@@ -28,11 +29,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 	if result.Entry != nil {
 		if result.Entry.Key != routerecord.ObservationKey(action.TargetID) {
 			clear(result.Entry.Value)
-			return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+			return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		if _, decodeErr := routerecord.DecodeObservation(result.Entry.Value); decodeErr != nil {
 			clear(result.Entry.Value)
-			return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+			return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		conditions[0].ModRevision = result.Entry.ModRevision
 		digest = hierarchyDeletionBytesDigest(result.Entry.Value)
@@ -48,7 +49,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponentFinalizer(
 	ctx context.Context,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	primary, err := repository.readHierarchyDeletionPrimary(ctx, componentrecord.RecordKey(action.TargetID), action)
 	if err != nil {
@@ -57,7 +58,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponent
 	defer clear(primary.Value)
 	record, err := componentrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Desired.ID != action.TargetID {
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	keys := []string{
 		componentrecord.EnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID),
@@ -73,7 +74,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponent
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinalizer(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
-	action HierarchyDeletionAction,
+	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	evidence, zoneValue, err := hierarchyDeletionZoneEvidenceAtRevision(
 		ctx, repository.store, action.TargetID, operation.Tombstone.SnapshotRevision, action.TargetRevision,
@@ -97,7 +98,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		if values != nil {
 			clearKeyValues(values.Values)
 		}
-		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
+		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer clearKeyValues(values.Values)
 	pool, err := recordcodec.Decode[zonePoolRegistry](values.Values[0].Value, "zone_pool_registry")

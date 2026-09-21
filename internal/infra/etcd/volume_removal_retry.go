@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -79,12 +80,12 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		removalrecord.EnvironmentLockKey(
 			runtime.EnvironmentID,
 		), rootKey, replayKey, environmentBlueprintHeadKey(runtime.EnvironmentID),
-		HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
-		HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetProject), source.Record.Owner.ProjectID)}
+		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
+		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetProject), source.Record.Owner.ProjectID)}
 	if source.Record.Owner.TenantID != "" {
 		keys = append(
 			keys,
-			HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetTenant), source.Record.Owner.TenantID),
+			hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), source.Record.Owner.TenantID),
 		)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: source.ReadRevision})
