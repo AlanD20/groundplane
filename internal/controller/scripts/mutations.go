@@ -60,7 +60,7 @@ type scriptMutationRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-type durableScriptMutationRepository struct {
+type MutationRepository struct {
 	hierarchy *etcd.HierarchyRepository
 	services  *etcd.ServiceRepository
 	scripts   *etcd.ScriptRepository
@@ -72,23 +72,23 @@ func NewMutationRepository(
 	services *etcd.ServiceRepository,
 	scripts *etcd.ScriptRepository,
 	releases *etcd.ReleaseLedger,
-) (*durableScriptMutationRepository, error) {
+) (*MutationRepository, error) {
 	if hierarchy == nil || services == nil || scripts == nil || releases == nil {
 		return nil, errs.New(errs.KindInternal, "Script mutation repositories are not configured")
 	}
-	return &durableScriptMutationRepository{
+	return &MutationRepository{
 		hierarchy: hierarchy, services: services, scripts: scripts, releases: releases,
 	}, nil
 }
 
-func (repository *durableScriptMutationRepository) LoadExecutionSources(
+func (repository *MutationRepository) LoadExecutionSources(
 	ctx context.Context,
 	scriptID string,
 ) (etcd.ScriptExecutionSources, error) {
 	return repository.scripts.LoadExecutionSources(ctx, repository.releases, scriptID)
 }
 
-func (repository *durableScriptMutationRepository) PublishExecutionWithTask(
+func (repository *MutationRepository) PublishExecutionWithTask(
 	ctx context.Context,
 	sources etcd.ScriptExecutionSources,
 	execution etcd.ScriptExecutionRecord,
@@ -98,31 +98,31 @@ func (repository *durableScriptMutationRepository) PublishExecutionWithTask(
 	return repository.scripts.PublishExecutionWithTask(ctx, sources, execution, task, marker)
 }
 
-func (repository *durableScriptMutationRepository) GetEnvironment(
+func (repository *MutationRepository) GetEnvironment(
 	ctx context.Context, id string,
 ) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
-func (repository *durableScriptMutationRepository) GetProject(
+func (repository *MutationRepository) GetProject(
 	ctx context.Context, id string,
 ) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
-func (repository *durableScriptMutationRepository) GetService(
+func (repository *MutationRepository) GetService(
 	ctx context.Context, id string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 
-func (repository *durableScriptMutationRepository) GetScript(
+func (repository *MutationRepository) GetScript(
 	ctx context.Context, id string,
 ) (etcdstore.Versioned[scriptrecord.Record], error) {
 	return repository.scripts.GetScript(ctx, id)
 }
 
-func (repository *durableScriptMutationRepository) CreateScriptIdempotent(
+func (repository *MutationRepository) CreateScriptIdempotent(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -133,7 +133,7 @@ func (repository *durableScriptMutationRepository) CreateScriptIdempotent(
 	return repository.scripts.CreateScriptIdempotent(ctx, environment, project, target, record, marker)
 }
 
-func (repository *durableScriptMutationRepository) ReplaceDesiredIdempotent(
+func (repository *MutationRepository) ReplaceDesiredIdempotent(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],

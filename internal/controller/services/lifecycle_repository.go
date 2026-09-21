@@ -36,28 +36,28 @@ type serviceLifecycleRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-func (repository *durableServiceMutationRepository) GetTenant(
+func (repository *MutationRepository) GetTenant(
 	ctx context.Context,
 	tenantID string,
 ) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	return repository.hierarchy.GetTenant(ctx, tenantID)
 }
 
-func (repository *durableServiceMutationRepository) GetEnvironmentAppliedComposeProjection(
+func (repository *MutationRepository) GetEnvironmentAppliedComposeProjection(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
 }
 
-func (repository *durableServiceMutationRepository) GetEnvironmentComposeProjection(
+func (repository *MutationRepository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 }
 
-func (repository *durableServiceMutationRepository) ResolveServing(
+func (repository *MutationRepository) ResolveServing(
 	ctx context.Context,
 	environmentID string,
 	serviceID string,
@@ -66,7 +66,7 @@ func (repository *durableServiceMutationRepository) ResolveServing(
 	return repository.releases.ResolveServing(ctx, environmentID, serviceID, revision)
 }
 
-func (repository *durableServiceMutationRepository) GetReleaseRenderInputAt(
+func (repository *MutationRepository) GetReleaseRenderInputAt(
 	ctx context.Context,
 	releaseID string,
 	revision int64,
@@ -74,7 +74,7 @@ func (repository *durableServiceMutationRepository) GetReleaseRenderInputAt(
 	return repository.releases.GetReleaseRenderInputAt(ctx, releaseID, revision)
 }
 
-func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTaskHookInputs(
+func (repository *MutationRepository) BeginServiceLifecycleWithTaskHookInputs(
 	ctx context.Context,
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],

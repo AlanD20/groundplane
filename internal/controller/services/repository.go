@@ -57,7 +57,7 @@ type serviceMutationRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-type durableServiceMutationRepository struct {
+type MutationRepository struct {
 	hierarchy *etcd.HierarchyRepository
 	services  *etcd.ServiceRepository
 	zones     *etcd.ZoneRepository
@@ -71,11 +71,11 @@ func NewMutationRepository(
 	zones *etcd.ZoneRepository,
 	desired *desiredrevisionstore.Repository,
 	releases *etcd.ReleaseLedger,
-) (*durableServiceMutationRepository, error) {
+) (*MutationRepository, error) {
 	if hierarchy == nil || services == nil || zones == nil || desired == nil || releases == nil {
 		return nil, errs.New(errs.KindInternal, "Service mutation repositories are not configured")
 	}
-	return &durableServiceMutationRepository{
+	return &MutationRepository{
 		hierarchy: hierarchy,
 		services:  services,
 		zones:     zones,
@@ -84,35 +84,35 @@ func NewMutationRepository(
 	}, nil
 }
 
-func (repository *durableServiceMutationRepository) GetEnvironment(
+func (repository *MutationRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
-func (repository *durableServiceMutationRepository) GetProject(
+func (repository *MutationRepository) GetProject(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
-func (repository *durableServiceMutationRepository) GetEnvironmentBlueprintHead(
+func (repository *MutationRepository) GetEnvironmentBlueprintHead(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
 	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
 }
 
-func (repository *durableServiceMutationRepository) GetService(
+func (repository *MutationRepository) GetService(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 
-func (repository *durableServiceMutationRepository) ListServices(
+func (repository *MutationRepository) ListServices(
 	ctx context.Context,
 	environmentID string,
 	request etcdstore.PageRequest,
@@ -120,7 +120,7 @@ func (repository *durableServiceMutationRepository) ListServices(
 	return repository.services.ListServices(ctx, environmentID, request)
 }
 
-func (repository *durableServiceMutationRepository) ListZones(
+func (repository *MutationRepository) ListZones(
 	ctx context.Context,
 	environmentID string,
 	request etcdstore.PageRequest,
@@ -128,28 +128,28 @@ func (repository *durableServiceMutationRepository) ListZones(
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
-func (repository *durableServiceMutationRepository) ClaimEnvironmentBlueprintStage(
+func (repository *MutationRepository) ClaimEnvironmentBlueprintStage(
 	ctx context.Context,
 	request etcd.EnvironmentBlueprintStageClaimRequest,
 ) (etcd.EnvironmentBlueprintStageClaim, error) {
 	return repository.desired.ClaimEnvironmentBlueprintStage(ctx, request)
 }
 
-func (repository *durableServiceMutationRepository) StageEnvironmentBlueprintRevision(
+func (repository *MutationRepository) StageEnvironmentBlueprintRevision(
 	ctx context.Context,
 	request etcd.EnvironmentBlueprintStageRequest,
 ) (etcd.EnvironmentBlueprintSeal, error) {
 	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
 }
 
-func (repository *durableServiceMutationRepository) PublishEnvironmentServiceDesiredRevisionDirect(
+func (repository *MutationRepository) PublishEnvironmentServiceDesiredRevisionDirect(
 	ctx context.Context,
 	input etcd.EnvironmentServiceDesiredPublication,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.hierarchy.PublishEnvironmentServiceDesiredRevisionDirect(ctx, input)
 }
 
-func (repository *durableServiceMutationRepository) ValidateServiceRemovalReferences(
+func (repository *MutationRepository) ValidateServiceRemovalReferences(
 	ctx context.Context,
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
@@ -157,7 +157,7 @@ func (repository *durableServiceMutationRepository) ValidateServiceRemovalRefere
 	return repository.services.ValidateServiceRemovalReferences(ctx, current, projection)
 }
 
-func (repository *durableServiceMutationRepository) BeginServiceRemovalWithTask(
+func (repository *MutationRepository) BeginServiceRemovalWithTask(
 	ctx context.Context,
 	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],

@@ -45,7 +45,7 @@ type scriptDeletionRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
-func (repository *durableScriptMutationRepository) BeginScriptDeletionWithTask(
+func (repository *MutationRepository) BeginScriptDeletionWithTask(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],

@@ -697,61 +697,19 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Network capability: %w", err)
 	}
-	serviceMutationIdempotency, err := serviceoperations.NewMutationIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Service mutation idempotency: %w", err)
-	}
-	serviceLifecycleIdempotency, err := serviceoperations.NewLifecycleIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Service lifecycle idempotency: %w", err)
-	}
-	serviceLifecycle, err := serviceoperations.NewLifecycleService(
-		serviceMutationRepository,
-		planResolver,
-		serviceLifecycleIdempotency,
-		attachFactValues,
+	serviceMutations, err := newControllerServiceMutations(
+		serviceMutationRepository, planResolver, attachFactValues, intentCoordinator, idempotency,
 	)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Service lifecycle service: %w", err)
+		return nil, err
 	}
-	serviceMutations, err := serviceoperations.NewMutationService(serviceMutationRepository, serviceMutationIdempotency, serviceLifecycle)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Service mutation service: %w", err)
-	}
-	scriptMutationIdempotency, err := scriptoperations.NewMutationIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Script mutation idempotency: %w", err)
-	}
-	scriptPreparation, err := taskplanning.NewScriptRunnerPreparationService(
-		scriptArtifacts,
-		agents,
-		agentRuntime.Registry,
+	scriptMutations, err := newControllerScriptMutations(
+		scriptMutationRepository, scriptArtifacts, agents, agentRuntime.Registry, intentCoordinator, idempotency,
 	)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Script runner preparation: %w", err)
-	}
-	scriptDeletionIdempotency, err := scriptoperations.NewDeletionIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Script deletion idempotency: %w", err)
-	}
-	scriptDeletions, err := scriptoperations.NewDeletionService(scriptMutationRepository, scriptDeletionIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Script deletion service: %w", err)
-	}
-	scriptMutations, err := scriptoperations.NewMutationService(
-		scriptMutationRepository, scriptMutationIdempotency, scriptPreparation, scriptDeletions,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Script mutation service: %w", err)
+		return nil, err
 	}
 	entryGeneration, err := entrygeneration.NewEntryGenerationService(secretRecords, attachFactValues, intentProtector)
 	if err != nil {
