@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,7 +28,7 @@ const (
 )
 
 type localAgentReader interface {
-	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 }
 
 type Service struct {

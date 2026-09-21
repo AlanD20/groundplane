@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
@@ -12,36 +13,36 @@ import (
 )
 
 type localAgentRecords interface {
-	CreateSingleton(context.Context, etcd.LocalAgentRecord) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
-	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	CreateSingleton(context.Context, localagentrecord.LocalAgentRecord) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	UpdateConfigIdempotent(
 		context.Context,
-		etcdstore.Versioned[etcd.LocalAgentRecord],
-		etcd.LocalAgentConfig,
+		etcdstore.Versioned[localagentrecord.LocalAgentRecord],
+		localagentrecord.LocalAgentConfig,
 		idempotencyrecord.IdempotencyMarker,
-	) (etcdstore.Versioned[etcd.LocalAgentRecord], etcd.IdempotencyTransactionResult, error)
-	MarkReady(context.Context, string, uint64, int64, time.Time) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], etcd.IdempotencyTransactionResult, error)
+	MarkReady(context.Context, string, uint64, int64, time.Time) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	ReplaceGeneration(
 		context.Context,
-		etcdstore.Versioned[etcd.LocalAgentRecord],
+		etcdstore.Versioned[localagentrecord.LocalAgentRecord],
 		string,
 		[]byte,
 		string,
 		time.Time,
-	) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	FenceReplacementAttempt(
 		context.Context,
 		string,
 		uint64,
 		int64,
-	) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	MarkReplacementReady(
 		context.Context,
 		string,
 		uint64,
 		int64,
-	) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
-	BeginDelete(context.Context, string, uint64, int64) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
+	BeginDelete(context.Context, string, uint64, int64) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	Delete(context.Context, string, uint64, int64) error
 }
 
@@ -116,7 +117,7 @@ func (adapter *localAgentRepositoryAdapter) BeginReplacement(
 	}
 	stored, err := adapter.repository.ReplaceGeneration(
 		ctx,
-		etcdstore.Versioned[etcd.LocalAgentRecord]{
+		etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
 			Record: durable, Revision: current.Revision, ReadRevision: current.Revision,
 		},
 		image,
@@ -175,15 +176,15 @@ func (adapter *localAgentRepositoryAdapter) Delete(
 	return adapter.repository.Delete(ctx, id, generation, revision)
 }
 
-func localAgentRecordToDurable(record localagent.Record) (etcd.LocalAgentRecord, error) {
+func localAgentRecordToDurable(record localagent.Record) (localagentrecord.LocalAgentRecord, error) {
 	phase, err := localAgentPhaseToDurable(record.Phase)
 	if err != nil {
-		return etcd.LocalAgentRecord{}, err
+		return localagentrecord.LocalAgentRecord{}, err
 	}
-	return etcd.LocalAgentRecord{
+	return localagentrecord.LocalAgentRecord{
 		ID: record.ID, EnrollmentTaskID: record.EnrollmentTaskID,
 		Image: record.Image, Generation: record.Generation, Phase: phase,
-		Config: etcd.LocalAgentConfig{
+		Config: localagentrecord.LocalAgentConfig{
 			PullIntervalSeconds: record.Config.PullIntervalSeconds,
 			MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
 			Labels:              cloneLocalAgentLabels(record.Config.Labels),
@@ -197,7 +198,7 @@ func localAgentRecordToDurable(record localagent.Record) (etcd.LocalAgentRecord,
 }
 
 func localAgentRecordFromDurable(
-	stored etcdstore.Versioned[etcd.LocalAgentRecord],
+	stored etcdstore.Versioned[localagentrecord.LocalAgentRecord],
 ) (localagent.StoredRecord, error) {
 	phase, err := localAgentPhaseFromDurable(stored.Record.Phase)
 	if err != nil {
@@ -224,30 +225,30 @@ func localAgentRecordFromDurable(
 	}, nil
 }
 
-func localAgentPhaseToDurable(phase localagent.Phase) (etcd.LocalAgentPhase, error) {
+func localAgentPhaseToDurable(phase localagent.Phase) (localagentrecord.LocalAgentPhase, error) {
 	switch phase {
 	case localagent.PhaseProvisioning:
-		return etcd.LocalAgentPhaseProvisioning, nil
+		return localagentrecord.LocalAgentPhaseProvisioning, nil
 	case localagent.PhaseReady:
-		return etcd.LocalAgentPhaseReady, nil
+		return localagentrecord.LocalAgentPhaseReady, nil
 	case localagent.PhaseUpdating:
-		return etcd.LocalAgentPhaseUpdating, nil
+		return localagentrecord.LocalAgentPhaseUpdating, nil
 	case localagent.PhaseDeleting:
-		return etcd.LocalAgentPhaseDeleting, nil
+		return localagentrecord.LocalAgentPhaseDeleting, nil
 	default:
 		return "", errs.New(errs.KindInternal, "local agent lifecycle phase is invalid")
 	}
 }
 
-func localAgentPhaseFromDurable(phase etcd.LocalAgentPhase) (localagent.Phase, error) {
+func localAgentPhaseFromDurable(phase localagentrecord.LocalAgentPhase) (localagent.Phase, error) {
 	switch phase {
-	case etcd.LocalAgentPhaseProvisioning:
+	case localagentrecord.LocalAgentPhaseProvisioning:
 		return localagent.PhaseProvisioning, nil
-	case etcd.LocalAgentPhaseReady:
+	case localagentrecord.LocalAgentPhaseReady:
 		return localagent.PhaseReady, nil
-	case etcd.LocalAgentPhaseUpdating:
+	case localagentrecord.LocalAgentPhaseUpdating:
 		return localagent.PhaseUpdating, nil
-	case etcd.LocalAgentPhaseDeleting:
+	case localagentrecord.LocalAgentPhaseDeleting:
 		return localagent.PhaseDeleting, nil
 	default:
 		return "", errs.New(errs.KindInternal, "durable local agent phase is invalid")

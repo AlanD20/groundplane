@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type staleAgentReader interface {
-	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 }
 
 type staleAgentTaskTimeout interface {
@@ -60,7 +61,7 @@ func (maintenance *staleAgentTaskMaintenance) ExpireStaleAgentTasks(
 		return 0, err
 	}
 	record := stored.Record
-	if record.Phase != etcd.LocalAgentPhaseReady {
+	if record.Phase != localagentrecord.LocalAgentPhaseReady {
 		return 0, nil
 	}
 	if record.Config.PullIntervalSeconds <= 0 || record.Config.MaxConcurrentTasks <= 0 {

@@ -3,11 +3,12 @@ package serviceobservation
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"time"
 
 	wire "github.com/AlanD20/groundplane/internal/common/serviceobservation"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -15,7 +16,7 @@ import (
 // Agents supplies the one enrolled host identity, never an arbitrary online
 // connection. The channel separately fences its authenticated session.
 type Agents interface {
-	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 }
 
 type Reader struct {
@@ -42,14 +43,14 @@ func (reader *Reader) ObserveServices(
 	ctx, cancel := context.WithTimeout(ctx, wire.Timeout)
 	defer cancel()
 	agent, err := reader.agents.GetSingleton(ctx)
-	if err != nil || agent.Record.Phase != etcd.LocalAgentPhaseReady || agent.Record.Generation == 0 {
+	if err != nil || agent.Record.Phase != localagentrecord.LocalAgentPhaseReady || agent.Record.Generation == 0 {
 		return result
 	}
 	observations := reader.observer.Observe(ctx, agent.Record.ID, services)
 	current, err := reader.agents.GetSingleton(ctx)
 	if err != nil || ctx.Err() != nil || current.Revision != agent.Revision ||
 		current.Record.ID != agent.Record.ID || current.Record.Generation != agent.Record.Generation ||
-		current.Record.Phase != etcd.LocalAgentPhaseReady {
+		current.Record.Phase != localagentrecord.LocalAgentPhaseReady {
 		return result
 	}
 	now := reader.observer.now()

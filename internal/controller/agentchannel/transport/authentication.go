@@ -3,10 +3,11 @@ package transport
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -16,8 +17,8 @@ type agentChannelCredentialResolver interface {
 		context.Context,
 		string,
 		[agentprotocol.RawTokenBytes]byte,
-	) (etcd.LocalAgentChannelAuthorization, error)
-	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	) (localagentrecord.LocalAgentChannelAuthorization, error)
+	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 }
 
 type agentChannelAuthenticator struct {
@@ -64,13 +65,13 @@ func (authenticator *agentChannelAuthenticator) Configuration(
 		return nil, err
 	}
 	if stored.Record.ID != agentID || stored.Record.Generation != generation ||
-		stored.Record.Phase == etcd.LocalAgentPhaseDeleting {
+		stored.Record.Phase == localagentrecord.LocalAgentPhaseDeleting {
 		return nil, errs.New(errs.KindStateConflict, "Agent channel generation is no longer current")
 	}
 	return agentChannelConfig(stored.Record.Config), nil
 }
 
-func agentChannelConfig(config etcd.LocalAgentConfig) *agentpb.AgentConfig {
+func agentChannelConfig(config localagentrecord.LocalAgentConfig) *agentpb.AgentConfig {
 	labels := make(map[string]string, len(config.Labels))
 	for key, value := range config.Labels {
 		labels[key] = value

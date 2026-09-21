@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -18,7 +19,7 @@ import (
 )
 
 type scriptPreparationAgentReader interface {
-	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 }
 
 // ScriptRunnerPreparation is private source-bound authority, never caller-supplied

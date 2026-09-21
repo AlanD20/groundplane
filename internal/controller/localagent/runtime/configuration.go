@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	"net/http"
 	"sort"
 
@@ -194,7 +195,7 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 	if current.Record.ID != agentID {
 		return localagent.ConfigUpdateResult{}, errs.New(errs.KindAgentNotFound, "Agent was not found")
 	}
-	if current.Record.Phase == etcd.LocalAgentPhaseDeleting {
+	if current.Record.Phase == localagentrecord.LocalAgentPhaseDeleting {
 		return localagent.ConfigUpdateResult{}, errs.New(
 			errs.KindStateConflict,
 			"deleting local Agent config cannot be changed",
@@ -221,7 +222,7 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 	updated, transaction, mutationErr := adapter.repository.UpdateConfigIdempotent(
 		ctx,
 		current,
-		etcd.LocalAgentConfig{
+		localagentrecord.LocalAgentConfig{
 			PullIntervalSeconds: config.PullIntervalSeconds,
 			MaxConcurrentTasks:  config.MaxConcurrentTasks,
 			Labels:              cloneLocalAgentLabels(config.Labels),
