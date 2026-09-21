@@ -40,7 +40,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	coordinationValue, err := encodeInitialHierarchyCoordination(hierarchydeletion.HierarchyDeletionTargetEnvironment, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetEnvironment, record.ID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}

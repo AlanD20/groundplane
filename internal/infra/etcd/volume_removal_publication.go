@@ -8,6 +8,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -126,15 +127,15 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 				publication.mutations = append(publication.mutations, etcdstore.Mutation{
 					Type: etcdstore.MutationPut, Key: lockKey, Value: lockValue,
 				})
-				ancestry, err := bindHierarchyMutation(ctx, repository.store, readRevision,
-					HierarchyMutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
+				ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, readRevision,
+					hierarchydeletion.MutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
 				if err != nil {
 					clearBackupRuntimeMutations(publication.mutations)
 					return volumeRemovalInitialPublication{}, err
 				}
 				// The combined desired publisher owns and clears these epoch values.
-				publication.conditions = append(publication.conditions, ancestry.conditions...)
-				publication.mutations = append(publication.mutations, ancestry.mutations...)
+				publication.conditions = append(publication.conditions, ancestry.Conditions()...)
+				publication.mutations = append(publication.mutations, ancestry.Mutations()...)
 				return publication, nil
 			}
 		}

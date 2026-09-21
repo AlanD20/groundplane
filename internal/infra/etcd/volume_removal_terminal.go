@@ -160,13 +160,13 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	}
 	conditions = append(conditions, etcdstore.Condition{Key: runtimeRead.Entry.Key, ModRevision: runtimeRead.Entry.ModRevision},
 		etcdstore.Condition{Key: completionKey, ModRevision: completionRead.Values[0].ModRevision})
-	ancestry, err := bindHierarchyMutation(ctx, repository.store, read.ReadRevision,
-		HierarchyMutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
+	ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, read.ReadRevision,
+		hierarchydeletion.MutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
-	defer ancestry.clear()
-	conditions = append(conditions, ancestry.conditions...)
+	defer ancestry.Clear()
+	conditions = append(conditions, ancestry.Conditions()...)
 	conditions = append(
 		conditions,
 		etcdstore.Condition{
@@ -201,7 +201,7 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 		return etcdstore.TransactionResult{}, err
 	}
 	mutations = append([]etcdstore.Mutation(nil), mutations...)
-	mutations = append(mutations, ancestry.mutations...)
+	mutations = append(mutations, ancestry.Mutations()...)
 	mutations = replaceVolumeRemovalTerminalPut(mutations, markerKey, markerValue)
 	mutations = replaceVolumeRemovalTerminalPut(mutations, retentionKey, retentionValue)
 	mutations = append(
@@ -386,22 +386,22 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 			filtered = append(filtered, mutation)
 		}
 	}
-	ancestry, err := bindHierarchyMutation(ctx, repository.store, read.ReadRevision,
-		HierarchyMutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, conditions, filtered)
+	ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, read.ReadRevision,
+		hierarchydeletion.MutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, conditions, filtered)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
-	defer ancestry.clear()
-	if len(ancestry.conditions) > 24 || len(ancestry.mutations) > 24 {
+	defer ancestry.Clear()
+	if len(ancestry.Conditions()) > 24 || len(ancestry.Mutations()) > 24 {
 		return etcdstore.TransactionResult{}, errs.New(
 			errs.KindInternal,
 			"Volume removal attempt terminal transaction exceeds its operation budget",
 		)
 	}
-	if err := ValidateBlueprintTransaction(repository.store, ancestry.conditions, ancestry.mutations, 48, 900*1024); err != nil {
+	if err := ValidateBlueprintTransaction(repository.store, ancestry.Conditions(), ancestry.Mutations(), 48, 900*1024); err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
-	return repository.store.Transact(ctx, ancestry.conditions, ancestry.mutations)
+	return repository.store.Transact(ctx, ancestry.Conditions(), ancestry.Mutations())
 }
 
 func appendVolumeRemovalTerminalCondition(conditions []etcdstore.Condition, candidate etcdstore.Condition) ([]etcdstore.Condition, error) {

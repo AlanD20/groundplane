@@ -100,7 +100,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(environmentValue)
-	projectCoordinationValue, err := encodeInitialHierarchyCoordination(
+	projectCoordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
 		hierarchydeletion.HierarchyDeletionTargetProject,
 		creation.Project.ID,
 	)
@@ -108,7 +108,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(projectCoordinationValue)
-	environmentCoordinationValue, err := encodeInitialHierarchyCoordination(
+	environmentCoordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
 		hierarchydeletion.HierarchyDeletionTargetEnvironment,
 		creation.Environment.ID,
 	)

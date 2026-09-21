@@ -60,7 +60,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	coordinationValue, err := encodeInitialHierarchyCoordination(hierarchydeletion.HierarchyDeletionTargetProject, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetProject, record.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -150,7 +150,7 @@ func (repository *HierarchyRepository) CreateProject(
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	coordinationTarget := hierarchydeletion.HierarchyDeletionTargetProject
-	coordinationValue, err := encodeInitialHierarchyCoordination(coordinationTarget, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(coordinationTarget, record.ID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}

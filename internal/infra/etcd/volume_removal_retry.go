@@ -215,11 +215,11 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: runtimeKey, Value: runtimeValue},
 		{Type: etcdstore.MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal), Value: attemptValue}}
-	ancestry, err := bindHierarchyMutation(
+	ancestry, err := hierarchydeletion.BindMutationEpochs(
 		ctx,
 		repository.store,
 		source.ReadRevision,
-		HierarchyMutationScope{
+		hierarchydeletion.MutationScope{
 			TenantID:  source.Record.Owner.TenantID,
 			ProjectID: source.Record.Owner.ProjectID,
 		},
@@ -229,12 +229,12 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer ancestry.clear()
+	defer ancestry.Clear()
 	initiation, err := newInheritedTaskInitiation(source, actor)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(retry, initiation, ancestry.conditions, ancestry.mutations,
+	plan, err := newTaskIdempotencyMutationPlan(retry, initiation, ancestry.Conditions(), ancestry.Mutations(),
 		func(_ int64, _ []*etcdstore.KeyValue) error { return volumeRemovalTerminalConflict() })
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

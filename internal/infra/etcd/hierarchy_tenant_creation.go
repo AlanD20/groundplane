@@ -24,7 +24,7 @@ func (repository *HierarchyRepository) CreateTenant(
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
-	coordinationValue, err := encodeInitialHierarchyCoordination(hierarchydeletion.HierarchyDeletionTargetTenant, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetTenant, record.ID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
@@ -75,7 +75,7 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	coordinationValue, err := encodeInitialHierarchyCoordination(hierarchydeletion.HierarchyDeletionTargetTenant, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetTenant, record.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
