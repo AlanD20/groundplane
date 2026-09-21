@@ -38,7 +38,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 			runnerKey(source.Target),
 			runnerLifecycleKey(source.Target),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target),
-			runnerRemovalIntentKey(source.Target),
+			runnerrecord.RunnerRemovalIntentKey(source.Target),
 			runnerRuntimeOwnershipKey(source.Target),
 		},
 		Revision: revision,
@@ -123,7 +123,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		TargetRevision: result.Values[0].ModRevision, TaskID: retry.ID,
 		Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: retry.CreatedAt, UpdatedAt: retry.CreatedAt,
 	}
-	intent := RunnerRemovalIntent{
+	intent := runnerrecord.RunnerRemovalIntent{
 		RunnerID: record.Desired.ID, TaskID: retry.ID,
 		OwnerKind: record.Desired.OwnerKind, OwnerID: record.Desired.OwnerID,
 		TenantID: record.Desired.TenantID, Allocation: record.Allocation, CreatedAt: retry.CreatedAt,
@@ -131,11 +131,11 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	if !retryEvidence.matchesIntent(intent) {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner removal retry intent changed")
 	}
-	tombstoneValue, err := encodeRunnerDeletionTombstone(tombstone)
+	tombstoneValue, err := runnerrecord.EncodeRunnerDeletionTombstone(tombstone)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	intentValue, err := encodeRunnerRemovalIntent(intent)
+	intentValue, err := runnerrecord.EncodeRunnerRemovalIntent(intent)
 	if err != nil {
 		clear(tombstoneValue)
 		return runnerTaskChange{}, err
@@ -147,7 +147,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 			{Key: runnerLifecycleKey(source.Target), ModRevision: result.Values[1].ModRevision},
 			{Key: runnerRuntimeOwnershipKey(source.Target), ModRevision: keyValueRevision(result.Values[4])},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target)},
-			{Key: runnerRemovalIntentKey(source.Target)},
+			{Key: runnerrecord.RunnerRemovalIntentKey(source.Target)},
 			{
 				Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
 				ModRevision: allocation.owner.ModRevision,
@@ -167,7 +167,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 				Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target),
 				Value: tombstoneValue,
 			},
-			{Type: etcdstore.MutationPut, Key: runnerRemovalIntentKey(source.Target), Value: intentValue},
+			{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerRemovalIntentKey(source.Target), Value: intentValue},
 			{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(source.Target), Value: lifecycleValue},
 		},
 		values: [][]byte{tombstoneValue, intentValue, lifecycleValue},

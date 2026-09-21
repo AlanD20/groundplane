@@ -94,7 +94,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(lifecycleValue)
-	intent := RunnerRemovalIntent{
+	intent := runnerrecord.RunnerRemovalIntent{
 		RunnerID: current.Record.Desired.ID, TaskID: task.ID,
 		OwnerKind: current.Record.Desired.OwnerKind, OwnerID: current.Record.Desired.OwnerID,
 		TenantID: current.Record.Desired.TenantID, Allocation: current.Record.Allocation,
@@ -117,12 +117,12 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	tombstoneValue, err := encodeRunnerDeletionTombstone(tombstone)
+	tombstoneValue, err := runnerrecord.EncodeRunnerDeletionTombstone(tombstone)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstoneValue)
-	intentValue, err := encodeRunnerRemovalIntent(intent)
+	intentValue, err := runnerrecord.EncodeRunnerRemovalIntent(intent)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -155,7 +155,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 		{Key: taskjournal.TaskStorageKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
-		{Key: runnerRemovalIntentKey(current.Record.Desired.ID)},
+		{Key: runnerrecord.RunnerRemovalIntentKey(current.Record.Desired.ID)},
 		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
@@ -174,7 +174,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
-		{Type: etcdstore.MutationPut, Key: runnerRemovalIntentKey(current.Record.Desired.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerRemovalIntentKey(current.Record.Desired.ID), Value: intentValue},
 		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: lifecycleValue},
 	}
 	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
@@ -219,7 +219,7 @@ func validateRunnerDeletionTask(
 	task TaskRecord,
 ) error {
 	evidence, evidenceErr := decodeRunnerRemovalTaskEvidence(task)
-	if validateRunnerDeletionTombstone(tombstone) != nil ||
+	if runnerrecord.ValidateRunnerDeletionTombstone(tombstone) != nil ||
 		tombstone.TargetID != current.Record.Desired.ID || tombstone.TargetRevision != current.Revision ||
 		tombstone.TaskID != task.ID || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||

@@ -43,7 +43,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		Keys: []string{
 			runnerKey(task.Target), runnerLifecycleKey(task.Target),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
-			runnerRuntimeOwnershipKey(task.Target), runnerReadinessProofKey(task.ID),
+			runnerRuntimeOwnershipKey(task.Target), runnerrecord.RunnerReadinessProofKey(task.ID),
 		},
 		Revision: revision,
 	})
@@ -64,7 +64,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 			return runnerTaskChange{}, errs.New(errs.KindStateConflict, "exact runner readiness proof is required")
 		}
 		ownership, ownershipErr := runnerrecord.DecodeRunnerRuntimeOwnership(result.Values[3].Value)
-		proof, proofErr := decodeRunnerReadinessProof(proofValue.Value)
+		proof, proofErr := runnerrecord.DecodeRunnerReadinessProof(proofValue.Value)
 		if ownershipErr != nil || proofErr != nil {
 			return runnerTaskChange{}, errs.New(errs.KindInternal, "runner readiness evidence is corrupt")
 		}
@@ -95,7 +95,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		{Key: runnerKey(task.Target), ModRevision: result.Values[0].ModRevision},
 		{Key: runnerLifecycleKey(task.Target), ModRevision: result.Values[1].ModRevision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
-		{Key: runnerReadinessProofKey(task.ID), ModRevision: keyValueRevision(proofValue)},
+		{Key: runnerrecord.RunnerReadinessProofKey(task.ID), ModRevision: keyValueRevision(proofValue)},
 		{
 			Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
 			ModRevision: allocation.owner.ModRevision,
@@ -113,7 +113,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		conditions = append(conditions, etcdstore.Condition{
 			Key: runnerRuntimeOwnershipKey(task.Target), ModRevision: result.Values[3].ModRevision,
 		})
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerReadinessProofKey(task.ID)})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerReadinessProofKey(task.ID)})
 	}
 	return runnerTaskChange{
 		applies:    true,
@@ -134,7 +134,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
-			runnerRemovalIntentKey(task.Target),
+			runnerrecord.RunnerRemovalIntentKey(task.Target),
 			runnerObservationKey(task.Target),
 			runnerRuntimeOwnershipKey(task.Target),
 		},
@@ -151,14 +151,14 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	tombstone, err := decodeRunnerDeletionTombstone(base.Values[2].Value)
+	tombstone, err := runnerrecord.DecodeRunnerDeletionTombstone(base.Values[2].Value)
 	if err != nil || tombstone.TargetID != task.Target ||
 		tombstone.TargetRevision != base.Values[0].ModRevision || tombstone.TaskID != task.ID {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner deletion tombstone does not match its task")
 	}
-	intent, err := decodeRunnerRemovalIntent(base.Values[3].Value)
+	intent, err := runnerrecord.DecodeRunnerRemovalIntent(base.Values[3].Value)
 	evidence, evidenceErr := decodeRunnerRemovalTaskEvidence(task)
-	if err != nil || evidenceErr != nil || !runnerIntentMatchesRecord(intent, record, task.ID) ||
+	if err != nil || evidenceErr != nil || !runnerrecord.RunnerIntentMatchesRecord(intent, record, task.ID) ||
 		!evidence.matchesRecord(record) || !evidence.matchesIntent(intent) {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner removal intent does not match its task")
 	}
@@ -175,7 +175,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 				Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 				ModRevision: base.Values[2].ModRevision,
 			},
-			{Key: runnerRemovalIntentKey(task.Target), ModRevision: base.Values[3].ModRevision},
+			{Key: runnerrecord.RunnerRemovalIntentKey(task.Target), ModRevision: base.Values[3].ModRevision},
 			{Key: runnerObservationKey(task.Target), ModRevision: keyValueRevision(base.Values[4])},
 			{Key: runnerRuntimeOwnershipKey(task.Target), ModRevision: keyValueRevision(base.Values[5])},
 			{
@@ -192,7 +192,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
-			{Type: etcdstore.MutationDelete, Key: runnerRemovalIntentKey(task.Target)},
+			{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerRemovalIntentKey(task.Target)},
 		},
 	}
 	if terminalStatus != taskjournal.TaskStatusCompleted {

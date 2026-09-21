@@ -80,7 +80,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
-			runnerRemovalIntentKey(task.Target),
+			runnerrecord.RunnerRemovalIntentKey(task.Target),
 			runnerObservationKey(task.Target),
 			runnerOwnerKey(evidence.ownerKind, evidence.ownerID, task.Target),
 			runnerrecord.RunnerTenantQuotaKey(evidence.tenantID),

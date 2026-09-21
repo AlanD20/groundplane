@@ -237,7 +237,7 @@ func (repository *RunnerRepository) DeleteRunnerRuntimeOwnershipAfterCleanup(
 		return 0, errs.New(errs.KindStateConflict, "runner runtime cleanup ownership changed")
 	}
 	if evidence.Values[2] != nil {
-		tombstone, decodeErr := decodeRunnerDeletionTombstone(evidence.Values[2].Value)
+		tombstone, decodeErr := runnerrecord.DecodeRunnerDeletionTombstone(evidence.Values[2].Value)
 		if decodeErr != nil || tombstone.TargetID != expected.RunnerID {
 			return 0, errs.New(errs.KindStateConflict, "runner runtime cleanup tombstone changed")
 		}

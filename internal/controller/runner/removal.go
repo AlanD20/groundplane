@@ -229,7 +229,7 @@ func newRunnerRemovalTask(record runnerrecord.RunnerRecord, key string, now time
 		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
 		Type: taskjournal.TaskRemove, Target: record.Desired.ID,
-		Params: etcd.RunnerRemovalTaskParams(record),
+		Params: runnerrecord.RunnerRemovalTaskParams(record),
 		Steps: []taskjournal.TaskStepRecord{
 			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		}, TimeoutSeconds: runnerRemoveTimeoutSeconds,

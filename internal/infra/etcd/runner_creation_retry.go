@@ -32,8 +32,8 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	}
 	if retry.RetryOf != sourceTaskID || retry.Executor != taskjournal.TaskExecutorController || retry.Type != taskjournal.TaskCreate ||
 		retry.Status != taskjournal.TaskStatusPending || retry.IdempotencyKey == "" || len(retry.Params) != 2 ||
-		retry.Params[taskjournal.TaskResourceKindParam] != TaskResourceRunner ||
-		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
+		retry.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner ||
+		retry.Params[runnerrecord.RunnerRegistrationTokenPresentParam] != "true" {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"runner creation retry has invalid durable input",
@@ -99,8 +99,8 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		retry.PlanHash != source.PlanHash || retry.RenderGeneration != source.RenderGeneration ||
 		retry.TimeoutSeconds != source.TimeoutSeconds || !runnerTaskStepsEqual(retry.Steps, source.Steps) ||
 		!runnerTaskMaterializationsEqual(retry.Materializations, source.Materializations) ||
-		len(retry.Params) != 2 || retry.Params[taskjournal.TaskResourceKindParam] != TaskResourceRunner ||
-		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
+		len(retry.Params) != 2 || retry.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner ||
+		retry.Params[runnerrecord.RunnerRegistrationTokenPresentParam] != "true" {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"runner creation retry has invalid durable input",

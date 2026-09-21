@@ -124,7 +124,7 @@ func (handler *ResourceHandler) Execute(
 		return nil
 	case taskjournal.TaskResourceBackingZone:
 		return handler.backingZones.Execute(ctx, task)
-	case etcd.TaskResourceRunner:
+	case runnerrecord.TaskResourceRunner:
 		if task.Type == taskjournal.TaskCreate {
 			if handler.runnerLifecycle == nil {
 				return errs.New(errs.KindInternal, "Controller Task Runner lifecycle is not configured")
