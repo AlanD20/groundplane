@@ -130,40 +130,6 @@ func capturedAttachRenderInputFixture(t *testing.T) testattachrender.AttachTaskR
 	}
 }
 
-// AssertAttachRuntimeRoundTrip crosses capture and durable encoding in the
-// Controller renderer fixture without adding a production persistence API.
-func AssertAttachRuntimeRoundTrip(
-	t *testing.T,
-	runtime testenvironmentprojection.EnvironmentComposeProjection,
-	epoch int64,
-	running []string,
-) {
-	t.Helper()
-	input := capturedAttachRenderInputFixture(t)
-	input.EnvironmentID, input.DesiredRevisionID = runtime.EnvironmentID, runtime.RevisionID
-	input.RenderGeneration, input.EnvironmentEpochRevision = runtime.RenderGeneration, epoch
-	input.RuntimeProjection = runtime
-	input.ArtifactID = mustAttachRuntimeArtifact(t, input).ArtifactId
-	input.Services, input.Networks = testattachrender.AttachTaskServiceSnapshots(
-		runtime.DesiredServices,
-	), testattachrender.AttachTaskOwnedNetworkSnapshots(
-		runtime.DesiredZones,
-	)
-	input.Volumes, input.VolumeMounts = runtime.Volumes, runtime.VolumeMounts
-	input.ServiceDependencyPlans = runtime.ServiceDependencyPlans.Clone()
-	input.ConsumerServiceIDs = []string{runtime.DesiredServices[0].Desired.ID}
-	input.RunningServiceIDs = running
-	input.NetworkJoins[0].ServiceIDs = input.ConsumerServiceIDs
-	encoded, err := testattachrender.EncodeAttachTaskRenderInput(input)
-	if err != nil {
-		t.Fatal("captured Attach runtime cannot be persisted", err)
-	}
-	decoded, err := testattachrender.DecodeAttachTaskRenderInput(encoded)
-	if err != nil || !proto.Equal(mustAttachRuntimeArtifact(t, input), mustAttachRuntimeArtifact(t, decoded)) {
-		t.Fatalf("captured Attach runtime changed through persistence: %v", err)
-	}
-}
-
 // Rationale: unchanged desired Blueprint state cannot hide a serving-runtime
 // change between capture and Attach publication.
 func TestAttachRuntimeEpochRejectsStaleCapture(t *testing.T) {

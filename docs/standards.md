@@ -138,6 +138,7 @@ have different evidence boundaries. Formatting, generation, compilation and
 architecture gates are separate from product cases. The Makefile and workflows
 own executable gate commands; do not duplicate them here.
 
-The production restructuring was implementation-only. Existing tests and frozen
-gate metadata were not migrated or run; current compliance is not established.
-See [remaining qualification](issues/runtime-qualification.md#architecture-and-tests).
+Cross-layer integration tests belong with application composition; repository
+tests must respect the same dependency direction as their production package.
+See [the architecture gate](delivery.md#architecture-gate) for the remaining
+baseline allowances and the distinction between local checks and live qualification.

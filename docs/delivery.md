@@ -71,22 +71,17 @@ Default CI does not run sudo or privileged host tests.
 disposable root-capable host. Backup/Restore qualification remains deferred;
 an unrun privileged check is not a pass.
 
-### Approved architecture debt for 0.0.1
+### Architecture gate
 
-The [deferred snapshot](../architecture-deferred.json) and
-[baseline](../architecture-baseline.json) record the exact previously approved
-0.0.1 structural exceptions, including Custom hooks and the 92-line deletion guard.
-The release checker permits only matching historical findings; it does not accept
-new debt. Do not regenerate allowances without approval.
+CI runs the architecture checker directly. The temporary 0.0.1 deferral mechanism
+has been removed: cross-layer integration tests live with application composition,
+while storage-only tests remain with their repositories.
 
-The production restructuring and test migration are integrated. Approved totals
-were re-anchored below the previous ceilings; per-file limits were not raised.
-Existing test-import deferrals now name the replacement child modules, preserving
-the same test files, dependency layers and 0.0.1 expiry. These changes do not
-authorize new exceptions. Strict compliance and live qualification remain unproved.
-See [remaining qualification](issues/runtime-qualification.md#architecture-and-tests).
-The 0.0.1 exception does not automatically extend to later releases or waive
-security, data safety, builds, races or generated-artifact parity.
+The [baseline](../architecture-baseline.json) still records older, separately
+approved legacy findings, oversized-file ceilings and frozen production totals.
+A passing checker means no violations beyond that baseline, not that all legacy
+debt is gone. Do not expand allowances without approval. Architecture checks do
+not replace behavioral tests or [live qualification](issues/runtime-qualification.md).
 
 ## Release and deployment
 

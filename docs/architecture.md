@@ -130,10 +130,10 @@ That feature does not authorize runtime Component plugins.
 
 ## Maintenance and qualification
 
-The production ownership migration is integrated on `main`. It was performed
-without builds, tests, generation or architecture validation at the owner's
-request. Test imports and gate metadata were not migrated. Do not infer a green
-build or qualified behavior from the new layout.
+Cross-layer integration journeys live in application composition and construct
+repositories through their public APIs. Storage tests retain private fixtures
+where they check repository internals. Production APIs are not expanded merely
+to expose test fixtures. Local gate results do not establish live qualification.
 
 [Delivery](delivery.md) owns checks and release criteria. Toolchain versions,
 file limits and import checks are sourced from repository manifests and gates;

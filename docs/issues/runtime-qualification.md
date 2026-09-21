@@ -5,18 +5,13 @@ automatically authorized work. Recheck the candidate and current user scope befo
 acting. Completed fix narratives belong in Git history or the
 [acceptance register](../acceptance.md#historical-evidence-register), not among open defects.
 
-## Architecture and tests
+## Architecture baseline
 
-Tests and generated clients have been reconciled with the new module owners.
-The release architecture gate passes with 83 previously approved findings
-deferred for 0.0.1; this is not strict architecture compliance. Production totals
-remain below the approved ceilings, and renamed test-import entries retain their
-original dependency layers and expiry.
-
-Closure of the remaining architecture debt requires removing those findings, not
-extending exceptions automatically. No exception permits ignoring a demonstrated
-safety, security, compilation or runtime defect. Local delivery checks do not
-replace the live qualification below.
+The temporary 0.0.1 deferrals have been retired. Older baseline allowances remain
+explicit in [the baseline](../../architecture-baseline.json); they were not expanded
+by the integration-test migration. [Delivery](../delivery.md#architecture-gate)
+explains what a passing architecture gate establishes. Local checks do not replace
+the live qualification below.
 
 ## Live logs and observations
 
