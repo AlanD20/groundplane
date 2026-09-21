@@ -172,13 +172,13 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		return true, nil
 	}
 	if read.Values[4] == nil {
-		return true, corruptTaskPruneIntent()
+		return true, taskjournal.CorruptPruneIntent()
 	}
 	latest, decodeErr := decodeTaskRecord(read.Values[4].Value)
 	if decodeErr != nil || latest.ID != root.AttemptID() || latest.OperationID != task.OperationID ||
 		latest.Configuration == nil || latest.Configuration.SecretPins == nil ||
 		*latest.Configuration.SecretPins != *task.Configuration.SecretPins {
-		return true, corruptTaskPruneIntent()
+		return true, taskjournal.CorruptPruneIntent()
 	}
 	if hookInputIndex >= 0 {
 		if read.Values[hookInputIndex] == nil || latest.Configuration.BackingHookInputs == nil ||
@@ -186,7 +186,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 				latest.Configuration.BackingHookInputs,
 				task.Configuration.BackingHookInputs,
 			) {
-			return true, corruptTaskPruneIntent()
+			return true, taskjournal.CorruptPruneIntent()
 		}
 		stored, decodeErr := taskconfiguration.DecodeBackingHookEncryptedInputs(read.Values[hookInputIndex].Value)
 		if decodeErr != nil {
@@ -195,7 +195,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		clear(stored.Ciphertext)
 		if stored.OperationID != task.OperationID ||
 			stored.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
-			return true, corruptTaskPruneIntent()
+			return true, taskjournal.CorruptPruneIntent()
 		}
 	}
 	if !taskjournal.IsTerminalTaskStatus(latest.Status) || latest.RetainUntil == nil || latest.RetainUntil.After(now) {
@@ -284,7 +284,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 	defer clear(stored.Ciphertext)
 	if stored.OperationID != task.OperationID ||
 		stored.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
-		return true, corruptTaskPruneIntent()
+		return true, taskjournal.CorruptPruneIntent()
 	}
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -17,7 +18,7 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 	ctx context.Context,
 	task TaskRecord,
 	assignment taskassignments.TaskAssignmentRecord,
-	input AttachTaskRenderInput,
+	input attachrender.AttachTaskRenderInput,
 	revision int64,
 	change *attachTaskChange,
 ) error {

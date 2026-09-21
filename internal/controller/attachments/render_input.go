@@ -3,6 +3,7 @@ package attachments
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -90,12 +91,12 @@ func buildAttachTaskRenderInput(
 	attaches []etcdstore.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	artifactID string,
-) (etcd.AttachTaskRenderInput, error) {
+) (attachrender.AttachTaskRenderInput, error) {
 	if scope.Tenant.Revision <= 0 || scope.Project.Revision <= 0 || scope.Environment.Revision <= 0 ||
 		scope.DesiredHead.Revision <= 0 || scope.ComposeProjection.Revision <= 0 ||
 		scope.BackingProject.Revision <= 0 || scope.BackingEnvironment.Revision <= 0 ||
 		scope.BackingService.Revision <= 0 {
-		return etcd.AttachTaskRenderInput{}, errs.New(
+		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach render scope records must be versioned",
 		)
@@ -104,7 +105,7 @@ func buildAttachTaskRenderInput(
 		runtime.Projection.EnvironmentID != scope.ComposeProjection.Record.EnvironmentID ||
 		runtime.Projection.RevisionID != scope.ComposeProjection.Record.RevisionID ||
 		runtime.Projection.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration {
-		return etcd.AttachTaskRenderInput{}, errs.New(
+		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindStateConflict,
 			"Attach captured runtime does not match the desired projection",
 		)
@@ -112,7 +113,7 @@ func buildAttachTaskRenderInput(
 	if ids.Validate(ids.KindPlan, task.PlanID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil ||
 		task.Target != record.ID || task.RenderGeneration <= 0 ||
 		uint64(task.RenderGeneration) != scope.ComposeProjection.Record.RenderGeneration {
-		return etcd.AttachTaskRenderInput{}, errs.New(
+		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach render Task identity is invalid",
 		)
@@ -131,7 +132,7 @@ func buildAttachTaskRenderInput(
 		record.BackingEnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingServiceID != scope.BackingService.Record.Desired.ID ||
 		record.BackingNetworkID != scope.BackingService.Record.BackingNetworkID {
-		return etcd.AttachTaskRenderInput{}, errs.New(
+		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"Attach render hierarchy is invalid",
 		)
@@ -143,7 +144,7 @@ func buildAttachTaskRenderInput(
 	case taskjournal.TaskAttach:
 		if record.Status != core.AttachPending || record.Operation != attachrecord.AttachOperationProvision ||
 			record.TaskID != task.ID {
-			return etcd.AttachTaskRenderInput{}, errs.New(
+			return attachrender.AttachTaskRenderInput{}, errs.New(
 				errs.KindValidationFailed,
 				"Attach create render requires its pending provision record",
 			)
@@ -157,14 +158,14 @@ func buildAttachTaskRenderInput(
 	case taskjournal.TaskDetach:
 		if record.Status != core.AttachDetaching || record.Operation != attachrecord.AttachOperationDetach ||
 			record.TaskID != task.ID {
-			return etcd.AttachTaskRenderInput{}, errs.New(
+			return attachrender.AttachTaskRenderInput{}, errs.New(
 				errs.KindValidationFailed,
 				"Attach detach render requires its detaching record",
 			)
 		}
 		excludedAttachID = record.ID
 	default:
-		return etcd.AttachTaskRenderInput{}, errs.New(
+		return attachrender.AttachTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach render Task type is invalid",
 		)
@@ -177,9 +178,9 @@ func buildAttachTaskRenderInput(
 		excludedAttachID,
 	)
 	if err != nil {
-		return etcd.AttachTaskRenderInput{}, err
+		return attachrender.AttachTaskRenderInput{}, err
 	}
-	return etcd.AttachTaskRenderInput{
+	return attachrender.AttachTaskRenderInput{
 		PlanID: task.PlanID, AttachID: record.ID,
 		AttachName: record.Name,
 		TenantID:   scope.Tenant.Record.ID, TenantSlug: scope.Tenant.Record.Slug,
@@ -210,20 +211,20 @@ func buildAttachTaskRenderInput(
 
 func attachTaskServiceSnapshots(
 	values []servicerecord.EnvironmentServiceProjection,
-) []etcd.AttachTaskServiceSnapshot {
-	snapshots := make([]etcd.AttachTaskServiceSnapshot, len(values))
+) []attachrender.AttachTaskServiceSnapshot {
+	snapshots := make([]attachrender.AttachTaskServiceSnapshot, len(values))
 	for index, value := range values {
-		snapshots[index] = etcd.AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+		snapshots[index] = attachrender.AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
 	}
 	return snapshots
 }
 
 func attachTaskOwnedNetworkSnapshots(
 	values []projectionrecord.EnvironmentZoneProjection,
-) []etcd.AttachTaskOwnedNetworkSnapshot {
-	snapshots := make([]etcd.AttachTaskOwnedNetworkSnapshot, len(values))
+) []attachrender.AttachTaskOwnedNetworkSnapshot {
+	snapshots := make([]attachrender.AttachTaskOwnedNetworkSnapshot, len(values))
 	for index, value := range values {
-		snapshots[index] = etcd.AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+		snapshots[index] = attachrender.AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
 	}
 	return snapshots
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -20,7 +21,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	scope AttachCreateScope,
 	record attachrecord.Record,
 	facts *attachrecord.EncryptedFacts,
-	renderInput AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -33,7 +34,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	record attachrecord.Record,
 	facts *attachrecord.EncryptedFacts,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	renderInput AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, returnErr error) {
@@ -103,7 +104,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(recordValue)
-	renderInputValue, err := encodeAttachTaskRenderInput(renderInput)
+	renderInputValue, err := attachrender.EncodeAttachTaskRenderInput(renderInput)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -160,7 +161,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Key: deletionrecord.TombstoneKey("project", record.BackingProjectID)},
 		{Key: deletionrecord.TombstoneKey("service", record.BackingServiceID)},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), record.BackingNetworkID)},
-		{Key: attachTaskRenderInputKey(task.PlanID)},
+		{Key: attachrender.AttachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
@@ -179,7 +180,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
-		{Type: etcdstore.MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: etcdstore.MutationPut, Key: attachrender.AttachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}

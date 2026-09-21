@@ -30,13 +30,13 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		return false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 5 || read.Values[1] == nil {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](read.Values[1].Value, "script-execution")
 	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		execution.OperationID != task.OperationID || execution.PlanHash != task.PlanHash ||
 		execution.EnvironmentID != task.Owner.EnvironmentID {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	if read.Values[0] == nil {
 		if execution.ActiveReference || execution.State != scriptexecutions.ScriptExecutionCleanupProven {
@@ -46,7 +46,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	}
 	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || !manualScriptRootMatches(execution, root) {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	if execution.CurrentTaskID != task.ID || (root.Phase == scriptsourceevidence.ScriptOperationSourceActive &&
 		(root.RetryDisposition == sourceref.RetryDispositionUndecided || root.RetryDisposition == sourceref.RetryDispositionTransferred)) {
@@ -55,7 +55,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	if root.RetryExpiresAt == nil || task.RetainUntil == nil || !root.RetryExpiresAt.Equal(*task.RetainUntil) ||
 		now.Before(*root.RetryExpiresAt) || read.Values[2] != nil || read.Values[3] != nil || read.Values[4] != nil ||
 		(task.Status != taskjournal.TaskStatusFailed && task.Status != taskjournal.TaskStatusTimedOut) {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	guards := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
@@ -97,7 +97,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		guards[len(guards)-1].ModRevision = transaction.Revision
 	} else if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseRetryExpiry ||
 		root.RetryDisposition != sourceref.RetryDispositionExpired || !manualScriptExpiryExecutionMatches(execution, *root.RetryExpiresAt) {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	for {
 		processed, drained, err := authority.ReleaseRetryExpiryNext(ctx, task.OperationID, guards)
@@ -108,7 +108,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 			continue
 		}
 		if !drained {
-			return false, corruptTaskPruneIntent()
+			return false, taskjournal.CorruptPruneIntent()
 		}
 		break
 	}

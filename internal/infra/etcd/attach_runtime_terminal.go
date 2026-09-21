@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -29,7 +30,7 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 	prepared := *input.RuntimePreparation
 	change.conditions = append(
 		change.conditions,
-		etcdstore.Condition{Key: attachTaskRenderInputKey(terminal.PlanID), ModRevision: inputRevision},
+		etcdstore.Condition{Key: attachrender.AttachTaskRenderInputKey(terminal.PlanID), ModRevision: inputRevision},
 	)
 	if err := repository.applyBackingHookTerminal(
 		ctx, terminal, assignment, input, revision, &change,
@@ -110,24 +111,24 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 
 func (repository *TaskRepository) readAttachRuntimePreparation(
 	ctx context.Context, task TaskRecord, revision int64,
-) (AttachTaskRenderInput, int64, error) {
+) (attachrender.AttachTaskRenderInput, int64, error) {
 	snapshot, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{attachTaskRenderInputKey(task.PlanID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{attachrender.AttachTaskRenderInputKey(task.PlanID)}, Revision: revision},
 	)
 	if err != nil {
-		return AttachTaskRenderInput{}, 0, err
+		return attachrender.AttachTaskRenderInput{}, 0, err
 	}
 	if snapshot == nil || snapshot.ReadRevision != revision || len(snapshot.Values) != 1 || snapshot.Values[0] == nil {
-		return AttachTaskRenderInput{}, 0, errs.New(errs.KindStateConflict, "Attach runtime preparation is missing")
+		return attachrender.AttachTaskRenderInput{}, 0, errs.New(errs.KindStateConflict, "Attach runtime preparation is missing")
 	}
 	defer etcdstore.ClearValues(snapshot.Values)
-	input, err := decodeAttachTaskRenderInput(snapshot.Values[0].Value)
+	input, err := attachrender.DecodeAttachTaskRenderInput(snapshot.Values[0].Value)
 	if err != nil {
-		return AttachTaskRenderInput{}, 0, err
+		return attachrender.AttachTaskRenderInput{}, 0, err
 	}
 	if input.AttachID != task.Target || input.EnvironmentID != task.Params[taskjournal.TaskMutationEnvironmentParam] {
-		return AttachTaskRenderInput{}, 0, errs.New(
+		return attachrender.AttachTaskRenderInput{}, 0, errs.New(
 			errs.KindStateConflict,
 			"Attach runtime preparation ownership differs",
 		)
@@ -142,7 +143,7 @@ func (repository *TaskRepository) attachRuntimeClaimConditions(
 	if err != nil {
 		return nil, err
 	}
-	conditions := []etcdstore.Condition{{Key: attachTaskRenderInputKey(task.PlanID), ModRevision: inputRevision}}
+	conditions := []etcdstore.Condition{{Key: attachrender.AttachTaskRenderInputKey(task.PlanID), ModRevision: inputRevision}}
 	for _, update := range input.RuntimePreparation.Updates {
 		key := serviceruntimerecord.Key(update.Runtime.ServiceID)
 		snapshot, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})

@@ -57,7 +57,3 @@ func taskPruneConflict(err error) bool {
 	kind, ok := errs.KindOf(err)
 	return ok && kind == errs.KindStateConflict
 }
-
-func corruptTaskPruneIntent() error {
-	return errs.New(errs.KindInternal, "task prune state is corrupt")
-}

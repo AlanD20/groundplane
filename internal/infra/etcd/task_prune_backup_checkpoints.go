@@ -4,13 +4,14 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 	ctx context.Context,
-	current etcdstore.Versioned[taskPruneIntent],
+	current etcdstore.Versioned[taskjournal.PruneIntent],
 	cursors bool,
-) (etcdstore.Versioned[taskPruneIntent], error) {
+) (etcdstore.Versioned[taskjournal.PruneIntent], error) {
 	prefix := backupruntime.BackupCheckpointDedupTaskPrefix(current.Record.TaskID)
 	if cursors {
 		prefix = backupruntime.BackupCheckpointCursorTaskPrefix(current.Record.TaskID)
@@ -20,10 +21,10 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 		Limit:  int64(maximumTaskPruneBatchRecords + 1),
 	})
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
 	}
 	if page == nil || page.ReadRevision <= 0 {
-		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, taskjournal.CorruptPruneIntent()
 	}
 	defer clearKeyValueSlice(page.Values)
 	next := current.Record
@@ -54,7 +55,7 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 			entry,
 			cursors,
 		); err != nil {
-			return etcdstore.Versioned[taskPruneIntent]{}, err
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, err
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entry.Key})
@@ -68,7 +69,7 @@ func validateTaskBackupCheckpointPruneEntry(
 	cursor bool,
 ) error {
 	if entry.ModRevision <= 0 {
-		return corruptTaskPruneIntent()
+		return taskjournal.CorruptPruneIntent()
 	}
 	if cursor {
 		record, err := backupruntime.DecodeBackupCheckpointCursorRecord(entry.Value)
@@ -76,7 +77,7 @@ func validateTaskBackupCheckpointPruneEntry(
 			backupruntime.BackupCheckpointCursorKey(backupruntime.BackupCheckpointInput{
 				TaskID: record.TaskID, AssignmentID: record.AssignmentID, StepID: record.StepID,
 			}) != entry.Key {
-			return corruptTaskPruneIntent()
+			return taskjournal.CorruptPruneIntent()
 		}
 		return nil
 	}
@@ -86,7 +87,7 @@ func validateTaskBackupCheckpointPruneEntry(
 			TaskID: record.TaskID, AssignmentID: record.AssignmentID,
 			StepID: record.StepID, Sequence: record.Sequence,
 		}) != entry.Key {
-		return corruptTaskPruneIntent()
+		return taskjournal.CorruptPruneIntent()
 	}
 	return nil
 }

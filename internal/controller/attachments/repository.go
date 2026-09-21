@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -38,7 +39,7 @@ type attachMutationRepository interface {
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
-	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error)
+	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[attachrender.AttachTaskRenderInput], error)
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
 	RenameAttachIdempotent(
 		context.Context,
@@ -54,7 +55,7 @@ type attachMutationRepository interface {
 		attachrecord.Record,
 		*attachrecord.EncryptedFacts,
 		*taskconfiguration.BackingHookEncryptedInputs,
-		etcd.AttachTaskRenderInput,
+		attachrender.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -63,7 +64,7 @@ type attachMutationRepository interface {
 		etcd.AttachCreateScope,
 		etcdstore.Versioned[attachrecord.Record],
 		*taskconfiguration.BackingHookEncryptedInputs,
-		etcd.AttachTaskRenderInput,
+		attachrender.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -72,7 +73,7 @@ type attachMutationRepository interface {
 		etcd.AttachCreateScope,
 		etcdstore.Versioned[attachrecord.Record],
 		*taskconfiguration.BackingHookEncryptedInputs,
-		etcd.AttachTaskRenderInput,
+		attachrender.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 		etcd.TaskInitiation,
@@ -164,7 +165,7 @@ func (repository *durableAttachMutationRepository) GetAttach(
 func (repository *durableAttachMutationRepository) GetAttachTaskRenderInput(
 	ctx context.Context,
 	planID string,
-) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error) {
+) (etcdstore.Versioned[attachrender.AttachTaskRenderInput], error) {
 	return repository.attaches.GetAttachTaskRenderInput(ctx, planID)
 }
 
@@ -193,7 +194,7 @@ func (repository *durableAttachMutationRepository) CreateAttachWithTaskHookInput
 	record attachrecord.Record,
 	facts *attachrecord.EncryptedFacts,
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	renderInput etcd.AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -207,7 +208,7 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskHook
 	scope etcd.AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	renderInput etcd.AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -221,7 +222,7 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskInit
 	scope etcd.AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	renderInput etcd.AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	initiation etcd.TaskInitiation,

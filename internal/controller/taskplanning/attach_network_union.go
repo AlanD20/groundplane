@@ -3,6 +3,7 @@ package taskplanning
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -42,7 +43,7 @@ func ResolveAttachNetworkJoins(
 	projection projectionrecord.EnvironmentComposeProjection,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 	excludedAttachID string,
-) ([]etcd.AttachTaskNetworkJoin, error) {
+) ([]attachrender.AttachTaskNetworkJoin, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || projection.EnvironmentID != environmentID {
 		return nil, errs.New(errs.KindValidationFailed, "Attach network union Environment is invalid")
 	}
@@ -101,14 +102,14 @@ func ResolveAttachNetworkJoins(
 		networkIDs = append(networkIDs, networkID)
 	}
 	sort.Strings(networkIDs)
-	joins := make([]etcd.AttachTaskNetworkJoin, len(networkIDs))
+	joins := make([]attachrender.AttachTaskNetworkJoin, len(networkIDs))
 	for index, networkID := range networkIDs {
 		serviceIDs := make([]string, 0, len(union[networkID]))
 		for serviceID := range union[networkID] {
 			serviceIDs = append(serviceIDs, serviceID)
 		}
 		sort.Strings(serviceIDs)
-		joins[index] = etcd.AttachTaskNetworkJoin{NetworkID: networkID, ServiceIDs: serviceIDs}
+		joins[index] = attachrender.AttachTaskNetworkJoin{NetworkID: networkID, ServiceIDs: serviceIDs}
 	}
 	return joins, nil
 }

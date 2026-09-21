@@ -20,12 +20,12 @@ func (repository *TaskRepository) prepareEnvironmentDeletionIntentTerminal(
 		return nil, nil, err
 	}
 	conditions := []etcdstore.Condition{{
-		Key: environmentDeletionIntentKey(task.OperationID), ModRevision: intent.Revision,
+		Key: deletionrecord.EnvironmentDeletionIntentKey(task.OperationID), ModRevision: intent.Revision,
 	}}
 	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return conditions, nil, nil
 	}
-	if intent.Record.CleanupPhase != EnvironmentDeletionCleanupComplete {
+	if intent.Record.CleanupPhase != deletionrecord.EnvironmentDeletionCleanupComplete {
 		return nil, nil, errs.New(
 			errs.KindStateConflict,
 			"environment deletion cleanup enumeration is incomplete",
@@ -37,6 +37,6 @@ func (repository *TaskRepository) prepareEnvironmentDeletionIntentTerminal(
 		return nil, nil, err
 	}
 	return conditions, []etcdstore.Mutation{{
-		Type: etcdstore.MutationDelete, Key: environmentDeletionIntentKey(task.OperationID),
+		Type: etcdstore.MutationDelete, Key: deletionrecord.EnvironmentDeletionIntentKey(task.OperationID),
 	}}, nil
 }

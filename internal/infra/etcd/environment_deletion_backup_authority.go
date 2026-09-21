@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -36,7 +37,7 @@ func initialEnvironmentDeletionCleanupPhase(
 	environmentID string,
 	operationID string,
 	revision int64,
-) (EnvironmentDeletionCleanupPhase, error) {
+) (deletions.EnvironmentDeletionCleanupPhase, error) {
 	present, err := environmentDeletionBackupAuthorityPresent(
 		ctx, store, environmentID, operationID, revision,
 	)
@@ -44,9 +45,9 @@ func initialEnvironmentDeletionCleanupPhase(
 		return "", err
 	}
 	if present {
-		return EnvironmentDeletionCleanupEnumerating, nil
+		return deletions.EnvironmentDeletionCleanupEnumerating, nil
 	}
-	return EnvironmentDeletionCleanupComplete, nil
+	return deletions.EnvironmentDeletionCleanupComplete, nil
 }
 
 func environmentDeletionBackupAuthorityPresent(
@@ -98,7 +99,7 @@ func environmentDeletionBackupAuthorityPresent(
 		backupruntime.BackupOrphanEnvironmentPrefix + environmentID + "/",
 		backupruntime.BackupRestoreEnvironmentPrefix + environmentID + "/",
 		backupruntime.BackupKeyRotationEnvironmentPrefix + environmentID + "/",
-		environmentDeletionWorkOperationPrefix(operationID),
+		deletions.EnvironmentDeletionWorkOperationPrefix(operationID),
 	}
 	for _, prefix := range prefixes {
 		page, err := store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})

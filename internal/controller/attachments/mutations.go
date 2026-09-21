@@ -10,6 +10,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
@@ -65,7 +66,7 @@ type attachDraftPlanSealer interface {
 	SealDraft(
 		context.Context,
 		etcdstore.Versioned[attachrecord.Record],
-		etcd.AttachTaskRenderInput,
+		attachrender.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		*taskplanning.AttachPlanIdentity,
 		*attachrecord.EncryptedFacts,

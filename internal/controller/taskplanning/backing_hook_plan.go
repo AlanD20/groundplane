@@ -4,6 +4,7 @@ import (
 	"context"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -17,7 +18,7 @@ func (resolver *TaskPlanResolver) resolveCustomAttachPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	current etcdstore.Versioned[attachrecord.Record],
-	renderInput etcd.AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	operation agentpb.PlanOperation,
 	artifact *agentpb.ComposeArtifact,
 	applyRuntime bool,

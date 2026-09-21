@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -234,7 +235,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	revision int64,
 ) error {
 	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{attachTaskRenderInputKey(task.PlanID)}, Revision: revision,
+		Keys: []string{attachrender.AttachTaskRenderInputKey(task.PlanID)}, Revision: revision,
 	})
 	if err != nil {
 		return err
@@ -243,7 +244,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		return errs.New(errs.KindInternal, "attach detach replay evidence is incomplete")
 	}
 	defer etcdstore.ClearValues(evidence.Values)
-	input, err := decodeAttachTaskRenderInput(evidence.Values[0].Value)
+	input, err := attachrender.DecodeAttachTaskRenderInput(evidence.Values[0].Value)
 	if err != nil || input.PlanID != task.PlanID || input.AttachID != task.Target ||
 		input.EnvironmentID != task.Params[taskjournal.TaskMutationEnvironmentParam] {
 		return errs.New(errs.KindInternal, "attach detach replay evidence is corrupt")

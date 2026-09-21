@@ -3,11 +3,12 @@ package taskplanning
 import (
 	"context"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/networkname"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -48,7 +49,7 @@ func loadPinnedEnvironmentProject(
 	return entries.Project, nil
 }
 
-func sealedReleaseAttachJoins(projection projectionrecord.EnvironmentComposeProjection) ([]etcd.AttachTaskNetworkJoin, error) {
+func sealedReleaseAttachJoins(projection projectionrecord.EnvironmentComposeProjection) ([]attachrender.AttachTaskNetworkJoin, error) {
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil ||
 		artifact.OwnerId != projection.EnvironmentID ||
@@ -102,9 +103,9 @@ func sealedReleaseAttachJoins(projection projectionrecord.EnvironmentComposeProj
 			members[networkID][service.ServiceId] = true
 		}
 	}
-	joins := make([]etcd.AttachTaskNetworkJoin, 0, len(members))
+	joins := make([]attachrender.AttachTaskNetworkJoin, 0, len(members))
 	for networkID, services := range members {
-		join := etcd.AttachTaskNetworkJoin{NetworkID: networkID}
+		join := attachrender.AttachTaskNetworkJoin{NetworkID: networkID}
 		for serviceID := range services {
 			join.ServiceIDs = append(join.ServiceIDs, serviceID)
 		}

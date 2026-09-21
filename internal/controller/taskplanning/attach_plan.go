@@ -5,6 +5,7 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -49,7 +50,7 @@ type BackingHookInputConsumer func(backinghook.Input) error
 
 type attachPlanRecordReader interface {
 	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
-	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error)
+	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[attachrender.AttachTaskRenderInput], error)
 	GetBlueprintAttachTaskIntent(
 		context.Context,
 		string,
@@ -285,18 +286,18 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	return plan, nil
 }
 
-func attachPlanServiceSnapshots(values []servicerecord.EnvironmentServiceProjection) []etcd.AttachTaskServiceSnapshot {
-	snapshots := make([]etcd.AttachTaskServiceSnapshot, len(values))
+func attachPlanServiceSnapshots(values []servicerecord.EnvironmentServiceProjection) []attachrender.AttachTaskServiceSnapshot {
+	snapshots := make([]attachrender.AttachTaskServiceSnapshot, len(values))
 	for index, value := range values {
-		snapshots[index] = etcd.AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+		snapshots[index] = attachrender.AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
 	}
 	return snapshots
 }
 
-func attachPlanOwnedNetworkSnapshots(values []projectionrecord.EnvironmentZoneProjection) []etcd.AttachTaskOwnedNetworkSnapshot {
-	snapshots := make([]etcd.AttachTaskOwnedNetworkSnapshot, len(values))
+func attachPlanOwnedNetworkSnapshots(values []projectionrecord.EnvironmentZoneProjection) []attachrender.AttachTaskOwnedNetworkSnapshot {
+	snapshots := make([]attachrender.AttachTaskOwnedNetworkSnapshot, len(values))
 	for index, value := range values {
-		snapshots[index] = etcd.AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+		snapshots[index] = attachrender.AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
 	}
 	return snapshots
 }

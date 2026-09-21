@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"maps"
 	"sort"
@@ -15,7 +16,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -31,7 +32,7 @@ type environmentComposeTransform func(
 func ProjectAttachNetworks(
 	project *composetypes.Project,
 	projection projectionrecord.EnvironmentComposeProjection,
-	joins []etcd.AttachTaskNetworkJoin,
+	joins []attachrender.AttachTaskNetworkJoin,
 ) ([]composeidentity.Resource, error) {
 	if project == nil || ids.Validate(ids.KindEnvironment, projection.EnvironmentID) != nil {
 		return nil, errs.New(errs.KindInternal, "Attach network projection input is invalid")
@@ -109,7 +110,7 @@ func MutateAttachNetworkArtifact(
 	ctx context.Context,
 	current *agentpb.ComposeArtifact,
 	projection projectionrecord.EnvironmentComposeProjection,
-	joins []etcd.AttachTaskNetworkJoin,
+	joins []attachrender.AttachTaskNetworkJoin,
 	artifactID string,
 ) (*agentpb.ComposeArtifact, error) {
 	if ctx == nil || current == nil ||
@@ -153,7 +154,7 @@ func projectAttachRuntimeNetworks(
 	project *composetypes.Project,
 	projection projectionrecord.EnvironmentComposeProjection,
 	artifact *agentpb.ComposeArtifact,
-	joins []etcd.AttachTaskNetworkJoin,
+	joins []attachrender.AttachTaskNetworkJoin,
 ) error {
 	if project == nil || artifact == nil {
 		return errs.New(errs.KindInternal, "Attach runtime network projection is invalid")

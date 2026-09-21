@@ -7,6 +7,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -126,6 +127,6 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 		backupruntime.BackupOrphanEnvironmentPrefix + environmentID + "/",
 		backupruntime.BackupRestoreEnvironmentPrefix + environmentID + "/",
 		backupruntime.BackupKeyRotationEnvironmentPrefix + environmentID + "/",
-		environmentDeletionWorkOperationPrefix(operationID),
+		deletions.EnvironmentDeletionWorkOperationPrefix(operationID),
 	}
 }

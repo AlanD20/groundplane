@@ -24,12 +24,12 @@ func prepareBackupTerminalReceiptPruneCompanion(
 		)
 	}
 	if value == nil || value.ModRevision != taskRevision || value.Key != backupruntime.BackupTerminalReceiptKey(task.ID) {
-		return backupTerminalReceiptPruneCompanion{}, corruptTaskPruneIntent()
+		return backupTerminalReceiptPruneCompanion{}, taskjournal.CorruptPruneIntent()
 	}
 	receipt, err := backupruntime.DecodeBackupTerminalReceiptRecord(value.Value)
 	if err != nil || receipt.PriorTaskRevision >= taskRevision ||
 		validateBackupTerminalReceiptTaskBinding(task, receipt) != nil {
-		return backupTerminalReceiptPruneCompanion{}, corruptTaskPruneIntent()
+		return backupTerminalReceiptPruneCompanion{}, taskjournal.CorruptPruneIntent()
 	}
 	return backupTerminalReceiptPruneCompanion{key: value.Key, revision: value.ModRevision}, nil
 }
@@ -44,7 +44,7 @@ func (companion backupTerminalReceiptPruneCompanion) appendStartCondition(
 }
 
 func appendBackupTerminalReceiptPruneFinalization(
-	intent taskPruneIntent,
+	intent taskjournal.PruneIntent,
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) ([]etcdstore.Condition, []etcdstore.Mutation) {

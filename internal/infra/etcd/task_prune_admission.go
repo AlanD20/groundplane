@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -19,40 +20,40 @@ import (
 func (repository *TaskRepository) beginTaskPrune(
 	ctx context.Context,
 	now time.Time,
-) (etcdstore.Versioned[taskPruneIntent], bool, error) {
+) (etcdstore.Versioned[taskjournal.PruneIntent], bool, error) {
 	page, err := repository.nextTaskRetentionPruneCandidate(ctx, now)
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}
 	if page == nil || page.ReadRevision <= 0 || len(page.Values) > 1 {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	if len(page.Values) == 0 {
-		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskjournal.PruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	retentionEntry := page.Values[0]
 	defer clear(retentionEntry.Value)
 	taskID, retainUntil, err := taskjournal.ParseTaskRetentionIndexKey(retentionEntry.Key)
 	if err != nil || retentionEntry.ModRevision <= 0 {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	if retainUntil.After(now) {
-		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskjournal.PruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	indexedTaskID, err := idempotencyrecord.DecodeTaskReference(retentionEntry.Value)
 	if err != nil || indexedTaskID != taskID {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: page.ReadRevision,
 	})
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}
 	if taskResult == nil || taskResult.ReadRevision != page.ReadRevision ||
 		len(taskResult.Values) != 1 ||
 		taskResult.Values[0] == nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	defer etcdstore.ClearValues(taskResult.Values)
 	taskValue := taskResult.Values[0]
@@ -60,20 +61,20 @@ func (repository *TaskRepository) beginTaskPrune(
 	if err != nil || task.ID != taskID || !taskjournal.IsTerminalTaskStatus(task.Status) ||
 		task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(retainUntil) {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	stop, err := repository.prepareTaskPruneBoundary(
 		ctx, task, taskValue.ModRevision, retentionEntry, page.ReadRevision, now,
 	)
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}
 	if stop {
-		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskjournal.PruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	companionKeys := []string{
 		markerKey,
@@ -94,20 +95,20 @@ func (repository *TaskRepository) beginTaskPrune(
 		environmentDeletionFenceKeys = []string{
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
-			environmentDeletionIntentKey(task.OperationID),
+			deletionrecord.EnvironmentDeletionIntentKey(task.OperationID),
 		}
 		companionKeys = append(companionKeys, environmentDeletionFenceKeys...)
 	}
 	ownerIndexStart := len(companionKeys)
 	ownerIndexKeys, err := taskJournalIndexKeys(task)
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	companionKeys = append(companionKeys, ownerIndexKeys...)
 	planReferenceIndex := -1
 	if task.Type == taskjournal.TaskAttach || task.Type == taskjournal.TaskDetach {
 		planReferenceIndex = len(companionKeys)
-		companionKeys = append(companionKeys, attachTaskPlanReferenceKey(task.PlanID, task.ID))
+		companionKeys = append(companionKeys, attachrender.AttachTaskPlanReferenceKey(task.PlanID, task.ID))
 	}
 	backupPruneDispatchIndex := -1
 	if task.Type == taskjournal.TaskBackupPrune {
@@ -123,15 +124,15 @@ func (repository *TaskRepository) beginTaskPrune(
 		Keys: companionKeys, Revision: page.ReadRevision,
 	})
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}
 	if companions == nil || companions.ReadRevision != page.ReadRevision ||
 		len(companions.Values) != len(companionKeys) {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	defer etcdstore.ClearValues(companions.Values)
 	if companions.Values[0] != nil {
-		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskjournal.PruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	environmentDeletionBlocked := false
 	environmentDeletionOwnerTaskID := ""
@@ -142,34 +143,34 @@ func (repository *TaskRepository) beginTaskPrune(
 				companions.Values[environmentDeletionFenceStart:ownerIndexStart],
 			)
 		if err != nil {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, err
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 		}
 	}
 	activeOperationCondition := etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}
 	if companions.Values[1] != nil {
 		activeTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(companions.Values[1].Value)
 		if decodeErr != nil {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 		if environmentDeletionBlocked || environmentDeletionOwnerTaskID == "" ||
 			activeTaskID != environmentDeletionOwnerTaskID {
-			return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+			return etcdstore.Versioned[taskjournal.PruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 		}
 		activeOperationCondition.ModRevision = companions.Values[1].ModRevision
 	}
 	if companions.Values[2] == nil || companions.Values[3] != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	historyTaskID, err := idempotencyrecord.DecodeTaskReference(companions.Values[2].Value)
 	if err != nil || historyTaskID != task.ID {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	if companions.Values[4] != nil {
 		componentIntent, decodeErr := decodeComponentTaskIntent(companions.Values[4].Value)
 		if decodeErr != nil || validateComponentTaskOwner(task, componentIntent) != nil ||
 			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!componentIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
 	if companions.Values[5] != nil {
@@ -177,7 +178,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateRouteRemovalTaskOwner(task, routeIntent) != nil ||
 			routeIntent.Status != task.Status || routeIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!routeIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
 	if companions.Values[6] != nil {
@@ -185,7 +186,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateRouteMutationTaskOwner(task, mutationIntent) != nil ||
 			mutationIntent.Status != task.Status || mutationIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!mutationIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
 	if companions.Values[7] != nil {
@@ -193,7 +194,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateEntryRemovalTaskOwner(task, entryIntent) != nil ||
 			entryIntent.Status != task.Status || entryIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!entryIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
 	if companions.Values[8] != nil {
@@ -201,11 +202,11 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateBlueprintAttachTaskOwner(task, attachIntent) != nil ||
 			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
 	if backupPruneDispatchIndex >= 0 && companions.Values[backupPruneDispatchIndex] != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	var backupReceiptCompanion backupTerminalReceiptPruneCompanion
 	if backupTerminalReceiptIndex >= 0 {
@@ -215,7 +216,7 @@ func (repository *TaskRepository) beginTaskPrune(
 			companions.Values[backupTerminalReceiptIndex],
 		)
 		if err != nil {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, err
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 		}
 	}
 	if environmentDeletionFenceStart >= 0 {
@@ -236,26 +237,26 @@ func (repository *TaskRepository) beginTaskPrune(
 				[]etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: retentionEntry.Key}},
 			)
 			if transactErr != nil {
-				return etcdstore.Versioned[taskPruneIntent]{}, false, transactErr
+				return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, transactErr
 			}
 			etcdstore.ClearValues(transaction.FailureReads)
 			if !transaction.Succeeded {
-				return etcdstore.Versioned[taskPruneIntent]{}, false, errs.New(
+				return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, errs.New(
 					errs.KindStateConflict,
 					"task prune retained ownership changed",
 				)
 			}
-			return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+			return etcdstore.Versioned[taskjournal.PruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 		}
 	}
 	for index, key := range ownerIndexKeys {
 		value := companions.Values[ownerIndexStart+index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 ||
 			string(value.Value) != task.ID {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 	}
-	intent := taskPruneIntent{
+	intent := taskjournal.PruneIntent{
 		TaskID: task.ID, TaskRevision: taskValue.ModRevision, RemainingEvents: task.EventCount,
 		BackupTerminalReceiptRevision: backupReceiptCompanion.revision,
 		RemainingDeduplications:       task.EventCount,
@@ -263,20 +264,20 @@ func (repository *TaskRepository) beginTaskPrune(
 	if planReferenceIndex >= 0 {
 		planReferenceValue := companions.Values[planReferenceIndex]
 		if planReferenceValue == nil {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
-		if _, decodeErr := decodeAttachTaskPlanReference(
+		if _, decodeErr := attachrender.DecodeAttachTaskPlanReference(
 			planReferenceValue.Key,
 			planReferenceValue.Value,
 			task.PlanID,
 		); decodeErr != nil {
-			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
 		intent.AttachPlanID = task.PlanID
 	}
-	intentValue, err := encodeTaskPruneIntent(intent)
+	intentValue, err := taskjournal.EncodePruneIntent(intent)
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}
 	defer clear(intentValue)
 	conditions := []etcdstore.Condition{
@@ -361,16 +362,16 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}
 	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, errs.New(
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, errs.New(
 			errs.KindStateConflict,
 			"task prune start changed",
 		)
 	}
-	return etcdstore.Versioned[taskPruneIntent]{
+	return etcdstore.Versioned[taskjournal.PruneIntent]{
 		Record: intent, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 	}, true, nil
 }

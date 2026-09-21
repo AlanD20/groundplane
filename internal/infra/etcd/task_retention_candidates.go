@@ -24,7 +24,7 @@ func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 			return nil, err
 		}
 		if page == nil || page.ReadRevision <= 0 || len(page.Values) > 1 {
-			return nil, corruptTaskPruneIntent()
+			return nil, taskjournal.CorruptPruneIntent()
 		}
 		if len(page.Values) == 0 {
 			return page, nil
@@ -59,13 +59,13 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		return false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	defer etcdstore.ClearValues(read.Values)
 	task, err := decodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != taskID || !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(deadline) {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	if task.Type != taskjournal.TaskScript {
 		return false, nil
@@ -77,14 +77,14 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		return false, err
 	}
 	if sources == nil || sources.ReadRevision != revision || len(sources.Values) != 2 {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	defer etcdstore.ClearValues(sources.Values)
 	if sources.Values[0] == nil {
 		return false, nil
 	}
 	if sources.Values[1] == nil {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(sources.Values[0].Value)
 	if err != nil {
@@ -96,7 +96,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 			execution,
 			root,
 		) || execution.PlanHash != task.PlanHash || execution.OperationID != task.OperationID {
-		return false, corruptTaskPruneIntent()
+		return false, taskjournal.CorruptPruneIntent()
 	}
 	return execution.CurrentTaskID != task.ID || (root.Phase == scriptsourceevidence.ScriptOperationSourceActive &&
 		(root.RetryDisposition == sourceref.RetryDispositionUndecided || root.RetryDisposition == sourceref.RetryDispositionTransferred)), nil

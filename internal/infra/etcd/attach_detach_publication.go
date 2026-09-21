@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -20,7 +21,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 	ctx context.Context,
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
-	renderInput AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -32,7 +33,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskHookInputs(
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	renderInput AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -43,7 +44,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskInitiation(
 	ctx context.Context,
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
-	renderInput AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	initiation TaskInitiation,
@@ -58,7 +59,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskInitiationHookInput
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	renderInput AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	initiation TaskInitiation,
@@ -71,7 +72,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
 	hookInputs *taskconfiguration.BackingHookEncryptedInputs,
-	renderInput AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	provided *TaskInitiation,
@@ -206,7 +207,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(attachValue)
-	renderInputValue, err := encodeAttachTaskRenderInput(renderInput)
+	renderInputValue, err := attachrender.EncodeAttachTaskRenderInput(renderInput)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -260,7 +261,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: deletions.TombstoneKey("environment", current.Record.BackingEnvironmentID)},
 		{Key: deletions.TombstoneKey("project", current.Record.BackingProjectID)},
 		{Key: deletions.TombstoneKey("service", current.Record.BackingServiceID)},
-		{Key: attachTaskRenderInputKey(task.PlanID)},
+		{Key: attachrender.AttachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
@@ -275,7 +276,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(detaching.ID), Value: attachValue},
-		{Type: etcdstore.MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: etcdstore.MutationPut, Key: attachrender.AttachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -11,7 +12,7 @@ import (
 // publishAttachRuntimeTask keeps the acknowledged source fences in the same
 // publication as the Task, immutable preparation, Attach and Environment epoch.
 func (repository *AttachRepository) publishAttachRuntimeTask(
-	ctx context.Context, task TaskRecord, input AttachTaskRenderInput, initiation TaskInitiation,
+	ctx context.Context, task TaskRecord, input attachrender.AttachTaskRenderInput, initiation TaskInitiation,
 	marker idempotencyrecord.IdempotencyMarker, mutationContext *ordinaryEnvironmentMutationContext,
 	conditions []etcdstore.Condition, mutations []etcdstore.Mutation, classifyConflict func(int64, []*etcdstore.KeyValue) error,
 ) (IdempotencyTransactionResult, error) {

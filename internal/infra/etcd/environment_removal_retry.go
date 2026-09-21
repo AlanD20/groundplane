@@ -121,7 +121,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 		clear(tombstoneValue)
 		return environmentTaskChange{}, err
 	}
-	intentValue, err := encodeEnvironmentDeletionIntent(intent.Record)
+	intentValue, err := deletionrecord.EncodeEnvironmentDeletionIntent(intent.Record)
 	if err != nil {
 		clear(tombstoneValue)
 		clear(lockValue)
@@ -145,7 +145,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	conditions := fence.TransactionConditions()
 	conditions = append(conditions,
 		etcdstore.Condition{
-			Key: environmentDeletionIntentKey(source.OperationID), ModRevision: intent.Revision,
+			Key: deletionrecord.EnvironmentDeletionIntentKey(source.OperationID), ModRevision: intent.Revision,
 		},
 		retentionCondition,
 	)
@@ -161,7 +161,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 			{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Target), Value: lockValue},
 			{
 				Type:  etcdstore.MutationPut,
-				Key:   environmentDeletionIntentKey(source.OperationID),
+				Key:   deletionrecord.EnvironmentDeletionIntentKey(source.OperationID),
 				Value: intentValue,
 			},
 			epochMutation,

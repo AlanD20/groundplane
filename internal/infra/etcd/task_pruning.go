@@ -53,31 +53,31 @@ func (repository *TaskRepository) PruneExpiredTasks(
 
 func (repository *TaskRepository) nextTaskPruneIntent(
 	ctx context.Context,
-) (etcdstore.Versioned[taskPruneIntent], bool, error) {
+) (etcdstore.Versioned[taskjournal.PruneIntent], bool, error) {
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskjournal.TaskPruneIntentPrefix, Limit: 1})
 	if err != nil {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}
 	if page == nil || page.ReadRevision <= 0 || len(page.Values) > 1 {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	if len(page.Values) == 0 {
-		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskjournal.PruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	entry := page.Values[0]
 	defer clear(entry.Value)
-	intent, err := decodeTaskPruneIntent(entry.Value)
+	intent, err := taskjournal.DecodePruneIntent(entry.Value)
 	if err != nil || entry.Key != taskjournal.TaskPruneIntentKey(intent.TaskID) || entry.ModRevision <= 0 {
-		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
-	return etcdstore.Versioned[taskPruneIntent]{
+	return etcdstore.Versioned[taskjournal.PruneIntent]{
 		Record: intent, Revision: entry.ModRevision, ReadRevision: page.ReadRevision,
 	}, true, nil
 }
 
 func (repository *TaskRepository) drainTaskPruneIntent(
 	ctx context.Context,
-	current etcdstore.Versioned[taskPruneIntent],
+	current etcdstore.Versioned[taskjournal.PruneIntent],
 ) error {
 	var err error
 	for !current.Record.BackupCheckpointCursorsComplete {

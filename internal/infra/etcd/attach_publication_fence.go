@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -47,7 +48,7 @@ func attachDesiredHeadConditions(
 func validateAttachRuntimeEpoch(
 	mutationContext *ordinaryEnvironmentMutationContext,
 	environmentID string,
-	input AttachTaskRenderInput,
+	input attachrender.AttachTaskRenderInput,
 ) error {
 	epoch, ok := mutationContext.revisionForKey(hierarchyrecord.EnvironmentMutationEpochKey(environmentID))
 	if !ok || epoch != input.EnvironmentEpochRevision {

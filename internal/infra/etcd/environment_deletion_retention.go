@@ -14,7 +14,7 @@ func environmentDeletionTaskPruneFence(
 	values []*etcdstore.KeyValue,
 ) (bool, string, error) {
 	if len(values) != 3 {
-		return false, "", corruptTaskPruneIntent()
+		return false, "", taskjournal.CorruptPruneIntent()
 	}
 	absent := 0
 	for _, value := range values {
@@ -26,26 +26,26 @@ func environmentDeletionTaskPruneFence(
 		return false, "", nil
 	}
 	if absent != 0 {
-		return false, "", corruptTaskPruneIntent()
+		return false, "", taskjournal.CorruptPruneIntent()
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(values[0].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment ||
 		tombstone.TargetID != task.Target {
-		return false, "", corruptTaskPruneIntent()
+		return false, "", taskjournal.CorruptPruneIntent()
 	}
 	lock, err := decodeEnvironmentOperationLock(values[1], task.Target)
 	if err != nil || lock.Kind != backupruntime.BackupOperationDeletion || lock.EnvironmentID != task.Target ||
 		lock.OperationID != task.OperationID {
-		return false, "", corruptTaskPruneIntent()
+		return false, "", taskjournal.CorruptPruneIntent()
 	}
-	intent, err := decodeEnvironmentDeletionIntent(values[2].Value)
+	intent, err := deletionrecord.DecodeEnvironmentDeletionIntent(values[2].Value)
 	if err != nil || intent.EnvironmentID != task.Target ||
 		intent.OperationID != task.OperationID ||
 		intent.TargetRevision != tombstone.TargetRevision ||
 		!intent.CreatedAt.Equal(tombstone.CreatedAt) ||
 		tombstone.TaskID != lock.TaskID ||
 		tombstone.TaskID != intent.TaskID {
-		return false, "", corruptTaskPruneIntent()
+		return false, "", taskjournal.CorruptPruneIntent()
 	}
 	return tombstone.TaskID == task.ID, tombstone.TaskID, nil
 }
@@ -58,7 +58,7 @@ func (repository *TaskRepository) validateEnvironmentDeletionIntentReplay(
 	revision int64,
 ) error {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentDeletionIntentKey(task.OperationID)}, Revision: revision,
+		Keys: []string{deletionrecord.EnvironmentDeletionIntentKey(task.OperationID)}, Revision: revision,
 	})
 	if err != nil {
 		return err
@@ -89,7 +89,7 @@ func (repository *TaskRepository) validateEnvironmentDeletionIntentReplay(
 	if tombstone == nil || result.Values[0] == nil {
 		return errs.New(errs.KindStateConflict, "environment deletion retry state is missing")
 	}
-	intent, err := decodeEnvironmentDeletionIntent(result.Values[0].Value)
+	intent, err := deletionrecord.DecodeEnvironmentDeletionIntent(result.Values[0].Value)
 	if err != nil {
 		return err
 	}

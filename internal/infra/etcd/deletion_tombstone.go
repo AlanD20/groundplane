@@ -346,7 +346,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	intent, err := newEnvironmentDeletionIntent(
+	intent, err := deletionrecord.NewEnvironmentDeletionIntent(
 		environment.Record.ID,
 		task.OperationID,
 		task.ID,
@@ -357,14 +357,14 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	intentValue, err := encodeEnvironmentDeletionIntent(intent)
+	intentValue, err := deletionrecord.EncodeEnvironmentDeletionIntent(intent)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	conditions = append(conditions, etcdstore.Condition{Key: environmentDeletionIntentKey(task.OperationID)})
+	conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.EnvironmentDeletionIntentKey(task.OperationID)})
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: environmentDeletionIntentKey(task.OperationID), Value: intentValue,
+		Type: etcdstore.MutationPut, Key: deletionrecord.EnvironmentDeletionIntentKey(task.OperationID), Value: intentValue,
 	})
 
 	plan, err := newTaskIdempotencyMutationPlan(

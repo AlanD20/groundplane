@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/hex"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"slices"
@@ -104,7 +105,7 @@ func decodeAcknowledgedServiceRuntime(
 	return record, nil
 }
 
-func validateAttachRuntimePreparation(input AttachTaskRenderInput, task TaskRecord) error {
+func validateAttachRuntimePreparation(input attachrender.AttachTaskRenderInput, task TaskRecord) error {
 	prepared := input.RuntimePreparation
 	if prepared == nil || prepared.EnvironmentID != input.EnvironmentID || prepared.PlanID != task.PlanID ||
 		prepared.PlanHash != task.PlanHash || prepared.RenderGeneration != input.RenderGeneration {
@@ -139,7 +140,7 @@ func validateAttachRuntimePreparation(input AttachTaskRenderInput, task TaskReco
 	return nil
 }
 
-func attachRuntimeSourceConditions(input AttachTaskRenderInput) []etcdstore.Condition {
+func attachRuntimeSourceConditions(input attachrender.AttachTaskRenderInput) []etcdstore.Condition {
 	conditions := make([]etcdstore.Condition, len(input.RuntimePreparation.Updates))
 	for index, update := range input.RuntimePreparation.Updates {
 		conditions[index] = etcdstore.Condition{

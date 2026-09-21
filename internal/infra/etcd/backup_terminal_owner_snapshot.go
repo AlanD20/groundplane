@@ -82,7 +82,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 		return false, nil, false, errs.New(errs.KindStateConflict, "terminal backup deletion authority changed")
 	}
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentDeletionIntentKey(lock.OperationID)}, Revision: readRevision,
+		Keys: []string{deletionrecord.EnvironmentDeletionIntentKey(lock.OperationID)}, Revision: readRevision,
 	})
 	if err != nil {
 		return false, nil, false, err
@@ -95,7 +95,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 		return false, nil, false, errs.New(errs.KindStateConflict, "terminal backup deletion intent is missing")
 	}
 	defer etcdstore.ClearValues(intentRead.Values)
-	intent, err := decodeEnvironmentDeletionIntent(intentRead.Values[0].Value)
+	intent, err := deletionrecord.DecodeEnvironmentDeletionIntent(intentRead.Values[0].Value)
 	if err != nil {
 		return false, nil, false, err
 	}

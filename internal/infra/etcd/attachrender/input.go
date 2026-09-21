@@ -1,0 +1,319 @@
+package attachrender
+
+import (
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"slices"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const MaximumAttachTaskRenderInputBytes = 256 << 10
+
+type AttachTaskNetworkJoin struct {
+	NetworkID  string   `json:"network_id"`
+	ServiceIDs []string `json:"service_ids"`
+}
+
+type AttachTaskServiceSnapshot struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type AttachTaskOwnedNetworkSnapshot struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// AttachTaskRenderInput is the immutable, non-secret desired-state projection
+// needed to reproduce an Attach plan after restart. Retries retain PlanID and
+// therefore consume the exact same input without reading mutable topology.
+type AttachTaskRenderInput struct {
+	PlanID                   string                                           `json:"plan_id"`
+	AttachID                 string                                           `json:"attach_id"`
+	AttachName               string                                           `json:"attach_name"`
+	TenantID                 string                                           `json:"tenant_id"`
+	TenantSlug               string                                           `json:"tenant_slug"`
+	ProjectID                string                                           `json:"project_id"`
+	ProjectSlug              string                                           `json:"project_slug"`
+	EnvironmentID            string                                           `json:"environment_id"`
+	EnvironmentName          string                                           `json:"environment_name"`
+	AuthorizedVolumeDir      string                                           `json:"authorized_volume_dir"`
+	BackingServiceID         string                                           `json:"backing_service_id"`
+	BackingProjectID         string                                           `json:"backing_project_id"`
+	AdapterKey               string                                           `json:"adapter_key"`
+	Authentication           core.BackingAuthentication                       `json:"authentication,omitempty"`
+	HookConfiguration        *backinghook.Configuration                       `json:"hook_configuration,omitempty"`
+	DesiredRevisionID        string                                           `json:"desired_revision_id"`
+	ArtifactID               string                                           `json:"artifact_id"`
+	RenderGeneration         uint64                                           `json:"render_generation"`
+	EnvironmentEpochRevision int64                                            `json:"environment_epoch_revision"`
+	RuntimeProjection        projectionrecord.EnvironmentComposeProjection    `json:"runtime_projection"`
+	RuntimePreparation       *serviceruntimerecord.AttachPreparation          `json:"runtime_preparation,omitempty"`
+	RunningServiceIDs        []string                                         `json:"running_service_ids,omitempty"`
+	Services                 []AttachTaskServiceSnapshot                      `json:"services"`
+	Networks                 []AttachTaskOwnedNetworkSnapshot                 `json:"networks,omitempty"`
+	Volumes                  []projectionrecord.EnvironmentVolumeIdentity     `json:"volumes,omitempty"`
+	VolumeMounts             []projectionrecord.EnvironmentServiceVolumeMount `json:"volume_mounts,omitempty"`
+	NetworkJoins             []AttachTaskNetworkJoin                          `json:"network_joins"`
+	ConsumerServiceIDs       []string                                         `json:"consumer_service_ids"`
+	GrantAttachIDs           []string                                         `json:"grant_attach_ids,omitempty"`
+	core.ServiceDependencyPlans
+}
+
+func AttachTaskRenderInputKey(planID string) string {
+	return "/v1/records/attach-task-render-inputs/" + planID
+}
+
+func EncodeAttachTaskRenderInput(input AttachTaskRenderInput) ([]byte, error) {
+	if err := ValidateAttachTaskRenderInput(input); err != nil {
+		return nil, err
+	}
+	value, err := recordcodec.Encode("attach-task-render-input", input)
+	if err != nil {
+		return nil, err
+	}
+	if len(value) > MaximumAttachTaskRenderInputBytes {
+		clear(value)
+		return nil, errs.New(errs.KindValidationFailed, "Attach Task render input exceeds the durable size limit")
+	}
+	return value, nil
+}
+
+func DecodeAttachTaskRenderInput(value []byte) (AttachTaskRenderInput, error) {
+	input, err := recordcodec.Decode[AttachTaskRenderInput](value, "attach-task-render-input")
+	if err != nil {
+		return AttachTaskRenderInput{}, err
+	}
+	if err := ValidateAttachTaskRenderInput(input); err != nil {
+		return AttachTaskRenderInput{}, corruptAttachTaskRenderInput()
+	}
+	return input, nil
+}
+
+func ValidateAttachTaskRenderInput(input AttachTaskRenderInput) error {
+	if input.RuntimePreparation != nil {
+		if err := serviceruntimerecord.ValidateAttachPreparation(*input.RuntimePreparation); err != nil {
+			return err
+		}
+	}
+	if recordcodec.ValidateID(ids.KindPlan, input.PlanID) != nil ||
+		recordcodec.ValidateID(ids.KindAttach, input.AttachID) != nil ||
+		recordcodec.ValidateLabel("Attach name", input.AttachName) != nil ||
+		recordcodec.ValidateID(ids.KindTenant, input.TenantID) != nil ||
+		recordcodec.ValidateID(ids.KindProject, input.ProjectID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, input.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindService, input.BackingServiceID) != nil ||
+		recordcodec.ValidateID(ids.KindProject, input.BackingProjectID) != nil ||
+		recordcodec.ValidateID(ids.KindTask, input.DesiredRevisionID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, input.ArtifactID) != nil || input.RenderGeneration == 0 ||
+		input.EnvironmentEpochRevision <= 0 {
+		return errs.New(errs.KindValidationFailed, "Attach Task render input identity is invalid")
+	}
+	switch input.Authentication {
+	case "", core.BackingAuthenticationUsernamePassword,
+		core.BackingAuthenticationPassword, core.BackingAuthenticationNone:
+	default:
+		return errs.New(errs.KindValidationFailed, "Attach Task authentication mode is invalid")
+	}
+	if input.HookConfiguration != nil {
+		if input.AdapterKey != "custom" {
+			return errs.New(errs.KindValidationFailed, "Attach Task hooks require the custom adapter")
+		}
+		if err := backinghook.ValidateConfiguration(*input.HookConfiguration); err != nil {
+			return err
+		}
+	}
+	if !validAttachTaskRenderLabel(input.TenantSlug) || !validAttachTaskRenderLabel(input.ProjectSlug) ||
+		!validAttachTaskRenderLabel(input.EnvironmentName) ||
+		!validAttachTaskRenderLabel(input.AdapterKey) ||
+		!strings.HasPrefix(input.AuthorizedVolumeDir, "/") ||
+		strings.IndexByte(input.AuthorizedVolumeDir, 0) >= 0 {
+		return errs.New(errs.KindValidationFailed, "Attach Task render input hierarchy is invalid")
+	}
+	if err := validateAttachTaskServiceSnapshots(input.Services); err != nil {
+		return err
+	}
+	if projectionrecord.ValidateEnvironmentProjection(input.RuntimeProjection, projectionrecord.EnvironmentArtifactCapturedRuntime) != nil ||
+		input.RuntimeProjection.EnvironmentID != input.EnvironmentID ||
+		input.RuntimeProjection.RevisionID != input.DesiredRevisionID ||
+		input.RuntimeProjection.RenderGeneration != input.RenderGeneration {
+		return errs.New(errs.KindValidationFailed, "Attach Task runtime projection is invalid")
+	}
+	if len(input.Services) == 0 {
+		return errs.New(errs.KindValidationFailed, "Attach Task render input has no consumer Services")
+	}
+	names := make([]string, len(input.Services))
+	for index, service := range input.Services {
+		names[index] = service.Name
+	}
+	if err := input.ServiceDependencyPlans.Validate(names); err != nil {
+		return err
+	}
+	if len(input.ConsumerServiceIDs) == 0 ||
+		attachrecord.ValidateSortedStableIDs(input.ConsumerServiceIDs, ids.KindService, "Attach consumer service_ids") != nil ||
+		attachrecord.ValidateSortedStableIDs(input.GrantAttachIDs, ids.KindAttach, "Attach grant_attach_ids") != nil {
+		return errs.New(errs.KindValidationFailed, "attach task removal evidence is invalid or unsorted")
+	}
+	serviceIDs := make(map[string]struct{}, len(input.Services))
+	for _, service := range input.Services {
+		serviceIDs[service.ID] = struct{}{}
+	}
+	for _, serviceID := range input.ConsumerServiceIDs {
+		if _, exists := serviceIDs[serviceID]; !exists {
+			return errs.New(errs.KindValidationFailed, "attach task removal evidence references an unknown service")
+		}
+	}
+	if attachrecord.ValidateSortedStableIDs(input.RunningServiceIDs, ids.KindService, "Attach running service_ids") != nil {
+		return errs.New(errs.KindValidationFailed, "Attach running service_ids are invalid or unsorted")
+	}
+	for _, serviceID := range input.RunningServiceIDs {
+		if _, exists := serviceIDs[serviceID]; !exists {
+			return errs.New(errs.KindValidationFailed, "Attach running service references an unknown Service")
+		}
+	}
+	if err := validateAttachTaskOwnedNetworkSnapshots(input.Networks); err != nil {
+		return err
+	}
+	if err := projectionrecord.ValidateEnvironmentVolumeIdentities(input.Volumes); err != nil {
+		return err
+	}
+	if err := validateAttachTaskVolumeMounts(input); err != nil {
+		return err
+	}
+	ownedNetworkIDs := make(map[string]struct{}, len(input.Networks))
+	for _, network := range input.Networks {
+		ownedNetworkIDs[network.ID] = struct{}{}
+	}
+	previousNetworkID := ""
+	for _, join := range input.NetworkJoins {
+		if recordcodec.ValidateID(ids.KindNetwork, join.NetworkID) != nil || join.NetworkID <= previousNetworkID ||
+			len(join.ServiceIDs) == 0 {
+			return errs.New(errs.KindValidationFailed, "Attach Task network joins are invalid or unsorted")
+		}
+		if _, owned := ownedNetworkIDs[join.NetworkID]; owned {
+			return errs.New(
+				errs.KindValidationFailed,
+				"Attach Task external network is owned by the consumer Environment",
+			)
+		}
+		previousServiceID := ""
+		for _, serviceID := range join.ServiceIDs {
+			if recordcodec.ValidateID(ids.KindService, serviceID) != nil || serviceID <= previousServiceID {
+				return errs.New(errs.KindValidationFailed, "Attach Task network Service ids are invalid or unsorted")
+			}
+			if _, exists := serviceIDs[serviceID]; !exists {
+				return errs.New(errs.KindValidationFailed, "Attach Task network references an unknown consumer Service")
+			}
+			previousServiceID = serviceID
+		}
+		previousNetworkID = join.NetworkID
+	}
+	return nil
+}
+
+func AttachTaskServiceSnapshots(values []servicerecord.EnvironmentServiceProjection) []AttachTaskServiceSnapshot {
+	snapshots := make([]AttachTaskServiceSnapshot, len(values))
+	for index, value := range values {
+		snapshots[index] = AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+	}
+	return snapshots
+}
+
+func AttachTaskOwnedNetworkSnapshots(values []projectionrecord.EnvironmentZoneProjection) []AttachTaskOwnedNetworkSnapshot {
+	snapshots := make([]AttachTaskOwnedNetworkSnapshot, len(values))
+	for index, value := range values {
+		snapshots[index] = AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
+	}
+	return snapshots
+}
+
+func validateAttachTaskServiceSnapshots(values []AttachTaskServiceSnapshot) error {
+	previousName := ""
+	idsSeen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if recordcodec.ValidateID(ids.KindService, value.ID) != nil || value.Name <= previousName ||
+			!core.ValidEnvironmentComposeName(value.Name) {
+			return errs.New(errs.KindValidationFailed, "Attach Task Service snapshots are invalid or unsorted")
+		}
+		if _, duplicate := idsSeen[value.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Attach Task Service snapshot id is duplicated")
+		}
+		idsSeen[value.ID] = struct{}{}
+		previousName = value.Name
+	}
+	return nil
+}
+
+func validateAttachTaskOwnedNetworkSnapshots(values []AttachTaskOwnedNetworkSnapshot) error {
+	previousName := ""
+	idsSeen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if recordcodec.ValidateID(ids.KindNetwork, value.ID) != nil || value.Name <= previousName ||
+			!core.ValidEnvironmentComposeName(value.Name) {
+			return errs.New(errs.KindValidationFailed, "Attach Task owned Network snapshots are invalid or unsorted")
+		}
+		if _, duplicate := idsSeen[value.ID]; duplicate {
+			return errs.New(errs.KindValidationFailed, "Attach Task owned Network snapshot id is duplicated")
+		}
+		idsSeen[value.ID] = struct{}{}
+		previousName = value.Name
+	}
+	return nil
+}
+
+func validateAttachTaskVolumeMounts(input AttachTaskRenderInput) error {
+	serviceIDs := make(map[string]struct{}, len(input.Services))
+	for _, service := range input.Services {
+		serviceIDs[service.ID] = struct{}{}
+	}
+	volumeIDs := make(map[string]struct{}, len(input.Volumes))
+	for _, volume := range input.Volumes {
+		volumeIDs[volume.ID] = struct{}{}
+	}
+	previous := ""
+	for _, mount := range input.VolumeMounts {
+		ordering := mount.ServiceID + "\x00" + mount.Target
+		if ordering <= previous || recordcodec.ValidateID(ids.KindService, mount.ServiceID) != nil ||
+			recordcodec.ValidateID(ids.KindVolume, mount.VolumeID) != nil || mount.Target == "" ||
+			!strings.HasPrefix(mount.Target, "/") || !utf8.ValidString(mount.Target) ||
+			strings.IndexByte(mount.Target, 0) >= 0 {
+			return errs.New(errs.KindValidationFailed, "Attach Task Volume mounts are invalid or unsorted")
+		}
+		if _, exists := serviceIDs[mount.ServiceID]; !exists {
+			return errs.New(errs.KindValidationFailed, "Attach Task Volume mount Service is absent")
+		}
+		if _, exists := volumeIDs[mount.VolumeID]; !exists {
+			return errs.New(errs.KindValidationFailed, "Attach Task Volume mount Volume is absent")
+		}
+		previous = ordering
+	}
+	return nil
+}
+
+func EqualServiceDependencyPlans(left, right core.ServiceDependencyPlans) bool {
+	return equalServiceDependencyPhasePlan(left.DeployDependencyPlan, right.DeployDependencyPlan) &&
+		equalServiceDependencyPhasePlan(left.RollbackDependencyPlan, right.RollbackDependencyPlan)
+}
+
+func equalServiceDependencyPhasePlan(left, right core.ServiceDependencyPhasePlan) bool {
+	return left.Phase == right.Phase &&
+		slices.Equal(left.OrderedServices, right.OrderedServices) &&
+		slices.Equal(left.Edges, right.Edges)
+}
+
+func validAttachTaskRenderLabel(value string) bool {
+	return value != "" && len(value) <= 255 && utf8.ValidString(value) && strings.IndexByte(value, 0) < 0
+}
+
+func corruptAttachTaskRenderInput() error {
+	return errs.New(errs.KindInternal, "Attach Task render input is corrupt")
+}

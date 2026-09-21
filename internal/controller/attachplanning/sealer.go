@@ -7,6 +7,7 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	attachrender "github.com/AlanD20/groundplane/internal/infra/etcd/attachrender"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -42,7 +43,7 @@ type Repository interface {
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
-	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error)
+	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[attachrender.AttachTaskRenderInput], error)
 }
 
 type Facts interface {
@@ -100,7 +101,7 @@ func New(
 func (sealer *Sealer) SealDraft(
 	ctx context.Context,
 	current etcdstore.Versioned[attachrecord.Record],
-	renderInput etcd.AttachTaskRenderInput,
+	renderInput attachrender.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	identity *taskplanning.AttachPlanIdentity,
 	hookBundle *attachrecord.EncryptedFacts,
@@ -129,7 +130,7 @@ type draftAttachPlanState struct {
 	repository  Repository
 	facts       Facts
 	current     etcdstore.Versioned[attachrecord.Record]
-	renderInput etcd.AttachTaskRenderInput
+	renderInput attachrender.AttachTaskRenderInput
 	identity    *taskplanning.AttachPlanIdentity
 	hookBundle  *attachrecord.EncryptedFacts
 	hookInputs  *taskconfiguration.BackingHookEncryptedInputs
@@ -163,9 +164,9 @@ func (state *draftAttachPlanState) GetAttach(
 func (state *draftAttachPlanState) GetAttachTaskRenderInput(
 	ctx context.Context,
 	planID string,
-) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error) {
+) (etcdstore.Versioned[attachrender.AttachTaskRenderInput], error) {
 	if planID == state.renderInput.PlanID {
-		return etcdstore.Versioned[etcd.AttachTaskRenderInput]{Record: state.renderInput}, nil
+		return etcdstore.Versioned[attachrender.AttachTaskRenderInput]{Record: state.renderInput}, nil
 	}
 	return state.repository.GetAttachTaskRenderInput(ctx, planID)
 }
