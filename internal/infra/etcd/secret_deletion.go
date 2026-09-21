@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	secretmutations "github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -155,7 +156,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	conditions = append(conditions, etcdstore.Condition{
 		Key: componentSecretReferencePrefix(secretID), Prefix: true,
 	})
-	conditions = append(conditions, secretScriptAbsenceConditions(secretID)...)
+	conditions = append(conditions, secretmutations.SecretScriptAbsenceConditions(secretID)...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{
@@ -213,7 +214,7 @@ func classifySecretDeletionStartConflict(
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
-		guardCount := len(secretScriptAbsenceConditions(current.Record.Secret.ID))
+		guardCount := len(secretmutations.SecretScriptAbsenceConditions(current.Record.Secret.ID))
 		expected := 10 + guardCount
 		if owner.Project != nil {
 			expected += 2
@@ -225,7 +226,7 @@ func classifySecretDeletionStartConflict(
 			return errs.New(errs.KindInternal, "Secret deletion compare evidence is incomplete")
 		}
 		guardPosition := len(values) - guardCount
-		if err := classifySecretScriptReferences(current.Record.Secret.ID, values[guardPosition:]); err != nil {
+		if err := secretmutations.ClassifySecretScriptReferences(current.Record.Secret.ID, values[guardPosition:]); err != nil {
 			return err
 		}
 		referencePosition := guardPosition - 1

@@ -1,4 +1,4 @@
-package etcd
+package secretmutations
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func secretScriptSource(secretID string) sourceref.SourceIdentity {
 	}
 }
 
-func secretScriptAbsenceConditions(secretID string) []etcdstore.Condition {
+func SecretScriptAbsenceConditions(secretID string) []etcdstore.Condition {
 	source := secretScriptSource(secretID)
 	return []etcdstore.Condition{
 		{Key: scriptsourceevidence.ScriptSourceCountKey(source)},
@@ -28,7 +28,7 @@ func secretScriptAbsenceConditions(secretID string) []etcdstore.Condition {
 	}
 }
 
-func classifySecretScriptReferences(secretID string, values []*etcdstore.KeyValue) error {
+func ClassifySecretScriptReferences(secretID string, values []*etcdstore.KeyValue) error {
 	if len(values) != 3 || (values[0] == nil) != (values[1] == nil) {
 		return errs.New(errs.KindInternal, "Secret Script reference absence proof is inconsistent")
 	}
@@ -65,12 +65,12 @@ func classifySecretScriptReferences(secretID string, values []*etcdstore.KeyValu
 // All reads share one revision, and every absence condition remains in the
 // final removal transaction so a Script reservation or recovery pin cannot
 // race the read proof.
-func prepareSecretScriptAbsence(
+func PrepareSecretScriptAbsence(
 	ctx context.Context,
-	store hierarchyStore,
+	store readStore,
 	secretID string,
 ) ([]etcdstore.Condition, error) {
-	conditions := secretScriptAbsenceConditions(secretID)
+	conditions := SecretScriptAbsenceConditions(secretID)
 	count, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{conditions[0].Key}})
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func prepareSecretScriptAbsence(
 	if len(pins.Values) == 1 {
 		firstPin = &pins.Values[0]
 	}
-	if err := classifySecretScriptReferences(secretID, []*etcdstore.KeyValue{count.Values[0], first, firstPin}); err != nil {
+	if err := ClassifySecretScriptReferences(secretID, []*etcdstore.KeyValue{count.Values[0], first, firstPin}); err != nil {
 		return nil, err
 	}
 	return conditions, nil

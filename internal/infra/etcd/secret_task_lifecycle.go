@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	secretmutations "github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -55,7 +56,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 	if err != nil || record.Secret.ID != source.Target {
 		return secretTaskChange{}, secretrecord.CorruptRecord()
 	}
-	fences, err := prepareSecretScriptAbsence(ctx, repository.store, source.Target)
+	fences, err := secretmutations.PrepareSecretScriptAbsence(ctx, repository.store, source.Target)
 	if err != nil {
 		return secretTaskChange{}, err
 	}
@@ -213,7 +214,7 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 		}},
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		fences, err := prepareSecretScriptAbsence(ctx, repository.store, task.Target)
+		fences, err := secretmutations.PrepareSecretScriptAbsence(ctx, repository.store, task.Target)
 		if err != nil {
 			return secretTaskChange{}, err
 		}

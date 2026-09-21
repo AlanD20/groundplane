@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	secretmutations "github.com/AlanD20/groundplane/internal/infra/etcd/secretmutations"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 )
 
@@ -21,7 +22,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionSecretFin
 	if err != nil || record.Secret.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	fences, err := prepareSecretScriptAbsence(ctx, repository.store, action.TargetID)
+	fences, err := secretmutations.PrepareSecretScriptAbsence(ctx, repository.store, action.TargetID)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
