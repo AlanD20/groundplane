@@ -3,115 +3,72 @@ package etcd
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
-	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-type BackingHookCheckpointState string
-
-const (
-	BackingHookCheckpointStarted BackingHookCheckpointState = "started"
-	BackingHookCheckpointResult  BackingHookCheckpointState = "result"
-)
-
-type BackingHookCheckpointInput struct {
-	TaskID          string
-	OperationID     string
-	AssignmentID    string
-	AgentID         string
-	AgentGeneration uint64
-	ExecutionEpoch  uint32
-	StepID          string
-	PlanHash        string
-	AttachID        string
-	Event           string
-	State           BackingHookCheckpointState
-	ResultSHA256    string
-	Facts           *attachrecord.EncryptedFacts
-	At              time.Time
-}
-
-type BackingHookCheckpointRecord struct {
-	TaskID         string                       `json:"task_id"`
-	OperationID    string                       `json:"operation_id"`
-	AssignmentID   string                       `json:"assignment_id"`
-	ExecutionEpoch uint32                       `json:"execution_epoch"`
-	StepID         string                       `json:"step_id"`
-	PlanHash       string                       `json:"plan_hash"`
-	AttachID       string                       `json:"attach_id,omitempty"`
-	Event          string                       `json:"event"`
-	State          BackingHookCheckpointState   `json:"state"`
-	ResultSHA256   string                       `json:"result_sha256,omitempty"`
-	Facts          *attachrecord.EncryptedFacts `json:"facts,omitempty"`
-	StartedAt      time.Time                    `json:"started_at"`
-	ResultAt       *time.Time                   `json:"result_at,omitempty"`
-}
 
 // CheckpointBackingHook fences one execution boundary against the exact live
 // assignment. The durable record contains only ciphertext for hook results.
 func (repository *AttachRepository) CheckpointBackingHook(
 	ctx context.Context,
-	input BackingHookCheckpointInput,
-) (etcdstore.Versioned[BackingHookCheckpointRecord], bool, error) {
+	input backinghooks.CheckpointInput,
+) (etcdstore.Versioned[backinghooks.CheckpointRecord], bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
+		return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
 	}
-	if repository == nil || repository.store == nil || validateBackingHookCheckpointInput(input) != nil {
-		return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false,
+	if repository == nil || repository.store == nil || backinghooks.ValidateCheckpointInput(input) != nil {
+		return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false,
 			errs.New(errs.KindValidationFailed, "Backing hook checkpoint input is invalid")
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		anchor, err := repository.loadBackingHookCheckpointAnchor(ctx, input)
 		if err != nil {
-			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
+			return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
 		}
 		if anchor.current != nil {
-			if sameBackingHookCheckpoint(*anchor.current, input) {
-				return etcdstore.Versioned[BackingHookCheckpointRecord]{
+			if backinghooks.SameCheckpoint(*anchor.current, input) {
+				return etcdstore.Versioned[backinghooks.CheckpointRecord]{
 					Record: *anchor.current, Revision: anchor.checkpointRevision, ReadRevision: anchor.readRevision,
 				}, true, nil
 			}
-			if input.State != BackingHookCheckpointResult || anchor.current.State != BackingHookCheckpointStarted {
-				return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false,
+			if input.State != backinghooks.CheckpointResult || anchor.current.State != backinghooks.CheckpointStarted {
+				return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false,
 					errs.New(errs.KindStateConflict, "Backing hook checkpoint already exists with different evidence")
 			}
 		}
-		next, err := advanceBackingHookCheckpoint(anchor.current, input)
+		next, err := backinghooks.AdvanceCheckpoint(anchor.current, input)
 		if err != nil {
-			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
+			return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
 		}
 		value, err := recordcodec.Encode("backing-hook-checkpoint", next)
 		if err != nil {
-			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
+			return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
 		}
 		transaction, err := repository.store.Transact(ctx, anchor.conditions, []etcdstore.Mutation{{
-			Type: etcdstore.MutationPut, Key: backingHookCheckpointKey(input.TaskID, input.StepID), Value: value,
+			Type: etcdstore.MutationPut, Key: backinghooks.CheckpointKey(input.TaskID, input.StepID), Value: value,
 		}})
 		clear(value)
 		etcdstore.ClearValues(transaction.FailureReads)
 		if err != nil {
-			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
+			return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false, err
 		}
 		if transaction.Succeeded {
-			return etcdstore.Versioned[BackingHookCheckpointRecord]{
+			return etcdstore.Versioned[backinghooks.CheckpointRecord]{
 				Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 			}, false, nil
 		}
 	}
-	return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false,
+	return etcdstore.Versioned[backinghooks.CheckpointRecord]{}, false,
 		errs.New(errs.KindStateConflict, "Backing hook checkpoint changed concurrently")
 }
 
 type backingHookCheckpointAnchor struct {
-	current            *BackingHookCheckpointRecord
+	current            *backinghooks.CheckpointRecord
 	checkpointRevision int64
 	readRevision       int64
 	conditions         []etcdstore.Condition
@@ -119,9 +76,9 @@ type backingHookCheckpointAnchor struct {
 
 func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 	ctx context.Context,
-	input BackingHookCheckpointInput,
+	input backinghooks.CheckpointInput,
 ) (backingHookCheckpointAnchor, error) {
-	checkpointKey := backingHookCheckpointKey(input.TaskID, input.StepID)
+	checkpointKey := backinghooks.CheckpointKey(input.TaskID, input.StepID)
 	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskjournal.TaskStorageKey(input.TaskID), taskjournal.TaskAssignmentIndexKey(input.TaskID), checkpointKey,
 	}})
@@ -179,118 +136,15 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		anchor.conditions = append(anchor.conditions, etcdstore.Condition{Key: checkpointKey, ModRevision: 0})
 		return anchor, nil
 	}
-	record, err := recordcodec.Decode[BackingHookCheckpointRecord](
+	record, err := recordcodec.Decode[backinghooks.CheckpointRecord](
 		primary.Values[2].Value,
 		"backing-hook-checkpoint",
 	)
-	if err != nil || validateBackingHookCheckpointRecord(record) != nil {
+	if err != nil || backinghooks.ValidateCheckpointRecord(record) != nil {
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindInternal, "Backing hook checkpoint is corrupt")
 	}
 	anchor.current = &record
 	anchor.checkpointRevision = primary.Values[2].ModRevision
 	anchor.conditions = append(anchor.conditions, etcdstore.Condition{Key: checkpointKey, ModRevision: primary.Values[2].ModRevision})
 	return anchor, nil
-}
-
-func advanceBackingHookCheckpoint(
-	current *BackingHookCheckpointRecord,
-	input BackingHookCheckpointInput,
-) (BackingHookCheckpointRecord, error) {
-	if input.State == BackingHookCheckpointStarted {
-		if current != nil {
-			return BackingHookCheckpointRecord{}, errs.New(errs.KindStateConflict, "Backing hook STARTED checkpoint already exists")
-		}
-		return BackingHookCheckpointRecord{
-			TaskID: input.TaskID, OperationID: input.OperationID, AssignmentID: input.AssignmentID,
-			ExecutionEpoch: input.ExecutionEpoch, StepID: input.StepID, PlanHash: input.PlanHash,
-			AttachID: input.AttachID, Event: input.Event, State: input.State, StartedAt: input.At.UTC(),
-		}, nil
-	}
-	if current == nil || current.State != BackingHookCheckpointStarted ||
-		!sameBackingHookCheckpointIdentity(*current, input) {
-		return BackingHookCheckpointRecord{}, errs.New(errs.KindStateConflict, "Backing hook RESULT has no exact STARTED checkpoint")
-	}
-	next := *current
-	next.State = BackingHookCheckpointResult
-	next.ResultSHA256 = input.ResultSHA256
-	next.Facts = cloneAttachEncryptedFacts(input.Facts)
-	at := input.At.UTC()
-	next.ResultAt = &at
-	return next, nil
-}
-
-func validateBackingHookCheckpointInput(input BackingHookCheckpointInput) error {
-	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindOperation, input.OperationID) != nil ||
-		ids.Validate(ids.KindAssignment, input.AssignmentID) != nil || ids.Validate(ids.KindStep, input.StepID) != nil ||
-		input.AgentID == "" || input.AgentGeneration == 0 || input.ExecutionEpoch == 0 ||
-		len(input.PlanHash) != 64 || input.At.IsZero() || input.Event == "" {
-		return errs.New(errs.KindValidationFailed, "Backing hook checkpoint identity is invalid")
-	}
-	if _, err := hex.DecodeString(input.PlanHash); err != nil {
-		return errs.New(errs.KindValidationFailed, "Backing hook plan digest is invalid")
-	}
-	switch input.State {
-	case BackingHookCheckpointStarted:
-		if input.ResultSHA256 != "" || input.Facts != nil {
-			return errs.New(errs.KindValidationFailed, "Backing hook STARTED checkpoint carries result data")
-		}
-	case BackingHookCheckpointResult:
-		if len(input.ResultSHA256) != 64 {
-			return errs.New(errs.KindValidationFailed, "Backing hook RESULT digest is invalid")
-		}
-		if input.Event == "attach" {
-			if input.Facts == nil || attachrecord.ValidateAttachEncryptedFacts(*input.Facts) != nil || input.Facts.AttachID != input.AttachID {
-				return errs.New(errs.KindValidationFailed, "Backing hook RESULT facts are invalid")
-			}
-		} else if input.Facts != nil {
-			return errs.New(errs.KindValidationFailed, "Non-Attach backing hook cannot persist facts")
-		}
-	default:
-		return errs.New(errs.KindValidationFailed, "Backing hook checkpoint state is invalid")
-	}
-	return nil
-}
-
-func validateBackingHookCheckpointRecord(record BackingHookCheckpointRecord) error {
-	input := BackingHookCheckpointInput{
-		TaskID: record.TaskID, OperationID: record.OperationID, AssignmentID: record.AssignmentID,
-		AgentID: "durable", AgentGeneration: 1, ExecutionEpoch: record.ExecutionEpoch,
-		StepID: record.StepID, PlanHash: record.PlanHash, AttachID: record.AttachID,
-		Event: record.Event, State: record.State, ResultSHA256: record.ResultSHA256,
-		Facts: record.Facts, At: record.StartedAt,
-	}
-	if record.State == BackingHookCheckpointResult && record.ResultAt == nil ||
-		record.State == BackingHookCheckpointStarted && record.ResultAt != nil {
-		return errs.New(errs.KindValidationFailed, "Backing hook checkpoint timestamps are invalid")
-	}
-	return validateBackingHookCheckpointInput(input)
-}
-
-func sameBackingHookCheckpoint(record BackingHookCheckpointRecord, input BackingHookCheckpointInput) bool {
-	return sameBackingHookCheckpointIdentity(record, input) && record.State == input.State &&
-		record.ResultSHA256 == input.ResultSHA256 && (record.Facts == nil) == (input.Facts == nil)
-}
-
-func sameBackingHookCheckpointIdentity(record BackingHookCheckpointRecord, input BackingHookCheckpointInput) bool {
-	return record.TaskID == input.TaskID && record.OperationID == input.OperationID &&
-		record.AssignmentID == input.AssignmentID && record.ExecutionEpoch == input.ExecutionEpoch &&
-		record.StepID == input.StepID && record.PlanHash == input.PlanHash &&
-		record.AttachID == input.AttachID && record.Event == input.Event
-}
-
-func cloneAttachEncryptedFacts(value *attachrecord.EncryptedFacts) *attachrecord.EncryptedFacts {
-	if value == nil {
-		return nil
-	}
-	clone := *value
-	clone.Ciphertext = append([]byte(nil), value.Ciphertext...)
-	return &clone
-}
-
-func backingHookCheckpointKey(taskID, stepID string) string {
-	return backingHookCheckpointTaskPrefix(taskID) + stepID
-}
-
-func backingHookCheckpointTaskPrefix(taskID string) string {
-	return "/v1/records/backing-hook-checkpoints/" + taskID + "/"
 }

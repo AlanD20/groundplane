@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -85,37 +86,37 @@ func (repository *TaskRepository) requireBackingHookResultCheckpoint(
 	attachID string,
 	event backinghook.Event,
 	revision int64,
-) (BackingHookCheckpointRecord, etcdstore.Condition, error) {
-	key := backingHookCheckpointKey(task.ID, stepID)
+) (backinghooks.CheckpointRecord, etcdstore.Condition, error) {
+	key := backinghooks.CheckpointKey(task.ID, stepID)
 	checkpointResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
-		return BackingHookCheckpointRecord{}, etcdstore.Condition{}, err
+		return backinghooks.CheckpointRecord{}, etcdstore.Condition{}, err
 	}
 	if checkpointResult == nil || checkpointResult.ReadRevision != revision ||
 		len(checkpointResult.Values) != 1 || checkpointResult.Values[0] == nil {
 		if checkpointResult != nil {
 			etcdstore.ClearValues(checkpointResult.Values)
 		}
-		return BackingHookCheckpointRecord{}, etcdstore.Condition{}, errs.New(
+		return backinghooks.CheckpointRecord{}, etcdstore.Condition{}, errs.New(
 			errs.KindStateConflict,
 			"Backing hook RESULT checkpoint is missing",
 		)
 	}
 	defer etcdstore.ClearValues(checkpointResult.Values)
-	checkpoint, err := recordcodec.Decode[BackingHookCheckpointRecord](
+	checkpoint, err := recordcodec.Decode[backinghooks.CheckpointRecord](
 		checkpointResult.Values[0].Value,
 		"backing-hook-checkpoint",
 	)
-	if err != nil || validateBackingHookCheckpointRecord(checkpoint) != nil ||
+	if err != nil || backinghooks.ValidateCheckpointRecord(checkpoint) != nil ||
 		checkpoint.TaskID != task.ID || checkpoint.OperationID != task.OperationID ||
 		checkpoint.AssignmentID != assignment.AssignmentID || checkpoint.ExecutionEpoch != assignment.ExecutionEpoch ||
 		checkpoint.StepID != stepID || checkpoint.PlanHash != task.PlanHash ||
 		checkpoint.AttachID != attachID || checkpoint.Event != string(event) ||
-		checkpoint.State != BackingHookCheckpointResult {
+		checkpoint.State != backinghooks.CheckpointResult {
 		if checkpoint.Facts != nil {
 			clear(checkpoint.Facts.Ciphertext)
 		}
-		return BackingHookCheckpointRecord{}, etcdstore.Condition{}, errs.New(
+		return backinghooks.CheckpointRecord{}, etcdstore.Condition{}, errs.New(
 			errs.KindStateConflict,
 			"Backing hook RESULT checkpoint does not match the terminal Task",
 		)

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -300,7 +301,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskPruneIntentKey(task.ID), Value: intentValue},
 		{Type: etcdstore.MutationDelete, Key: serviceLifecycleRenderInputKey(task.ID)},
-		{Type: etcdstore.MutationDelete, Key: backingHookCheckpointTaskPrefix(task.ID), Prefix: true},
+		{Type: etcdstore.MutationDelete, Key: backinghooks.CheckpointTaskPrefix(task.ID), Prefix: true},
 		{Type: etcdstore.MutationDelete, Key: retentionEntry.Key},
 		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 	}

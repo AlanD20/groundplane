@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -28,8 +29,8 @@ type backingHookCheckpointRepository interface {
 	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
 	CheckpointBackingHook(
 		context.Context,
-		etcd.BackingHookCheckpointInput,
-	) (etcdstore.Versioned[etcd.BackingHookCheckpointRecord], bool, error)
+		backinghooks.CheckpointInput,
+	) (etcdstore.Versioned[backinghooks.CheckpointRecord], bool, error)
 }
 
 type backingHookFactSealer interface {
@@ -106,10 +107,10 @@ func (service *BackingHookCheckpointService) CheckpointBackingHook(
 	if err != nil || procedure.GetEvent() != validated.GetEvent() || definition.TimeoutSeconds == 0 {
 		return nil, errs.New(errs.KindStateConflict, "Backing hook checkpoint step changed")
 	}
-	state := etcd.BackingHookCheckpointStarted
+	state := backinghooks.CheckpointStarted
 	var sealed *attachrecord.EncryptedFacts
 	if validated.GetState() == agentpb.BackingHookCheckpointState_BACKING_HOOK_CHECKPOINT_STATE_RESULT {
-		state = etcd.BackingHookCheckpointResult
+		state = backinghooks.CheckpointResult
 		output := backingHookCheckpointOutput(schema, validated.GetFacts())
 		defer output.Clear()
 		if err := backinghook.ValidateOutput(schema, output); err != nil {
@@ -128,7 +129,7 @@ func (service *BackingHookCheckpointService) CheckpointBackingHook(
 			defer clear(facts.Ciphertext)
 		}
 	}
-	_, existing, err := service.repository.CheckpointBackingHook(ctx, etcd.BackingHookCheckpointInput{
+	_, existing, err := service.repository.CheckpointBackingHook(ctx, backinghooks.CheckpointInput{
 		TaskID: validated.GetTaskId(), OperationID: validated.GetOperationId(),
 		AssignmentID: validated.GetAssignmentId(), AgentID: agentID, AgentGeneration: agentGeneration,
 		ExecutionEpoch: validated.GetExecutionEpoch(), StepID: validated.GetStepId(),
