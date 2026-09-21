@@ -1,4 +1,4 @@
-package etcd
+package componentplanning
 
 import (
 	"context"
@@ -15,22 +15,22 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type componentTaskRouteObservationChange struct {
+type RouteObservationChange struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
-func (repository *TaskRepository) prepareComponentTaskRouteObservationAcknowledgement(
+func (repository *Planner) PrepareRouteObservationAcknowledgement(
 	ctx context.Context,
 	intent environmentchanges.ComponentTaskIntent,
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
-) (componentTaskRouteObservationChange, error) {
+) (RouteObservationChange, error) {
 	projection := intent.RouteProjection
 	if projection == nil || len(projection.Routes) == 0 ||
 		projection.Provider == nil && terminalStatus != taskjournal.TaskStatusCompleted {
-		return componentTaskRouteObservationChange{}, nil
+		return RouteObservationChange{}, nil
 	}
 	status := routerecord.ObservedUnserved
 	if projection.Provider != nil {
@@ -42,40 +42,40 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationAcknowledg
 	return repository.prepareComponentTaskRouteObservationStatus(ctx, intent, status, revision)
 }
 
-func (repository *TaskRepository) prepareComponentTaskRouteObservationRetry(
+func (repository *Planner) PrepareRouteObservationRetry(
 	ctx context.Context,
 	intent environmentchanges.ComponentTaskIntent,
 	revision int64,
-) (componentTaskRouteObservationChange, error) {
+) (RouteObservationChange, error) {
 	if intent.RouteProjection == nil || intent.RouteProjection.Provider == nil ||
 		len(intent.RouteProjection.Routes) == 0 {
-		return componentTaskRouteObservationChange{}, nil
+		return RouteObservationChange{}, nil
 	}
 	return repository.prepareComponentTaskRouteObservationStatus(
 		ctx, intent, routerecord.ObservedPending, revision,
 	)
 }
 
-func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
+func (repository *Planner) prepareComponentTaskRouteObservationStatus(
 	ctx context.Context,
 	intent environmentchanges.ComponentTaskIntent,
 	status routerecord.ObservedStatus,
 	revision int64,
-) (componentTaskRouteObservationChange, error) {
+) (RouteObservationChange, error) {
 	projection := intent.RouteProjection
 	desiredProjection, found, err := blueprints.ReadCurrentProjection(
 		ctx, repository.store, intent.EnvironmentID, revision,
 	)
 	if err != nil {
-		return componentTaskRouteObservationChange{}, err
+		return RouteObservationChange{}, err
 	}
 	if !found {
-		return componentTaskRouteObservationChange{}, errs.New(
+		return RouteObservationChange{}, errs.New(
 			errs.KindStateConflict,
 			"Component Route desired head is missing",
 		)
 	}
-	change := componentTaskRouteObservationChange{}
+	change := RouteObservationChange{}
 	for _, candidate := range projection.Routes {
 		var desired *projectionrecord.EnvironmentRouteProjection
 		for index := range desiredProjection.Record.DesiredRoutes {
@@ -86,8 +86,8 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 		}
 		if desired == nil || desired.EnvironmentID != intent.EnvironmentID ||
 			desired.DesiredGeneration != candidate.DesiredGeneration ||
-			!routeDesiredEqual(desired.Desired, candidate.Desired) {
-			return componentTaskRouteObservationChange{}, errs.New(
+			!RouteDesiredEqual(desired.Desired, candidate.Desired) {
+			return RouteObservationChange{}, errs.New(
 				errs.KindStateConflict,
 				"Component Route desired state changed during reconciliation",
 			)
@@ -106,21 +106,21 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 			intent.EnvironmentID, candidate.Desired.ID, candidate.DesiredGeneration, observation,
 		)
 		if recordErr != nil {
-			return componentTaskRouteObservationChange{}, recordErr
+			return RouteObservationChange{}, recordErr
 		}
 		encoded, encodeErr := routerecord.EncodeObservation(observationRecord)
 		if encodeErr != nil {
-			return componentTaskRouteObservationChange{}, encodeErr
+			return RouteObservationChange{}, encodeErr
 		}
 		key := routerecord.ObservationKey(candidate.Desired.ID)
 		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 		if readErr != nil {
 			clear(encoded)
-			return componentTaskRouteObservationChange{}, readErr
+			return RouteObservationChange{}, readErr
 		}
 		if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
 			clear(encoded)
-			return componentTaskRouteObservationChange{}, errs.New(
+			return RouteObservationChange{}, errs.New(
 				errs.KindInternal,
 				"Component Route observation read is incomplete",
 			)
@@ -131,7 +131,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 			if decodeErr != nil || prior.EnvironmentID != intent.EnvironmentID ||
 				prior.RouteID != candidate.Desired.ID {
 				clear(encoded)
-				return componentTaskRouteObservationChange{}, recordcodec.CorruptRecord()
+				return RouteObservationChange{}, recordcodec.CorruptRecord()
 			}
 			condition.ModRevision = read.Values[0].ModRevision
 		}
@@ -149,7 +149,7 @@ func validateComponentTaskRouteIdentity(route environmentchanges.ComponentTaskRo
 	return nil
 }
 
-func routeDesiredEqual(left, right core.Route) bool {
+func RouteDesiredEqual(left, right core.Route) bool {
 	return left.ID == right.ID && left.Host == right.Host && left.Path == right.Path &&
 		left.TargetServiceID == right.TargetServiceID && left.TargetPort == right.TargetPort &&
 		left.Exposure == right.Exposure

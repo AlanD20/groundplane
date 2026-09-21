@@ -27,3 +27,8 @@ type TaskIdentity struct {
 // Conditions and Mutations borrow the prepared transaction buffers.
 func (publication Publication) Conditions() []keyvalue.Condition { return publication.conditions }
 func (publication Publication) Mutations() []keyvalue.Mutation   { return publication.mutations }
+
+// These slices retain the prepared Route observation buffers until publication.
+func (change RouteObservationChange) Conditions() []keyvalue.Condition { return change.conditions }
+func (change RouteObservationChange) Mutations() []keyvalue.Mutation   { return change.mutations }
+func (change RouteObservationChange) Values() [][]byte                 { return change.values }

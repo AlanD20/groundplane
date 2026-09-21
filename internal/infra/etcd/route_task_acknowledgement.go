@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -215,7 +216,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		}
 	}
 	if desired == nil || desired.DesiredGeneration != intent.Route.DesiredGeneration ||
-		!routeDesiredEqual(desired.Desired, intent.Route.Desired) {
+		!componentplanning.RouteDesiredEqual(desired.Desired, intent.Route.Desired) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation desired state changed")
 	}
 	status := routerecord.ObservedUnserved

@@ -233,16 +233,16 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		change.mutations = append(change.mutations, componentrecord.WriteFenceMutation(task.ID))
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted || task.Params[releaserender.TaskReleasePublicationParam] == "" {
-		routeObservationChange, routeErr := repository.prepareComponentTaskRouteObservationAcknowledgement(
+		routeObservationChange, routeErr := componentplanning.NewPlanner(repository.store).PrepareRouteObservationAcknowledgement(
 			ctx, intent, terminalStatus, revision,
 		)
 		if routeErr != nil {
 			clearComponentTaskChange(change)
 			return componentTaskChange{}, routeErr
 		}
-		change.conditions = append(change.conditions, routeObservationChange.conditions...)
-		change.mutations = append(change.mutations, routeObservationChange.mutations...)
-		change.values = append(change.values, routeObservationChange.values...)
+		change.conditions = append(change.conditions, routeObservationChange.Conditions()...)
+		change.mutations = append(change.mutations, routeObservationChange.Mutations()...)
+		change.values = append(change.values, routeObservationChange.Values()...)
 	}
 	secretMutations, err := componentplanning.ComponentTaskTerminalSecretMutations(intent, task.ID, terminalStatus)
 	if err != nil {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -105,7 +106,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 					}
 					if route.EnvironmentID != intent.EnvironmentID ||
 						route.DesiredGeneration != candidate.DesiredGeneration ||
-						!routeDesiredEqual(route.Desired, candidate.Desired) {
+						!componentplanning.RouteDesiredEqual(route.Desired, candidate.Desired) {
 						return "", nil, nil, errs.New(
 							errs.KindStateConflict,
 							"Component Route desired state changed during host reconciliation",

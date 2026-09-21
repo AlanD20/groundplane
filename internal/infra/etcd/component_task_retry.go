@@ -336,16 +336,16 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	)
 	change.conditions = append(change.conditions, secretConditions...)
 	change.mutations = append(change.mutations, secretMutations...)
-	routeRetryChange, err := repository.prepareComponentTaskRouteObservationRetry(
+	routeRetryChange, err := componentplanning.NewPlanner(repository.store).PrepareRouteObservationRetry(
 		ctx, retryIntent, revision,
 	)
 	if err != nil {
 		clearComponentTaskChange(change)
 		return componentTaskChange{}, err
 	}
-	change.conditions = append(change.conditions, routeRetryChange.conditions...)
-	change.mutations = append(change.mutations, routeRetryChange.mutations...)
-	change.values = append(change.values, routeRetryChange.values...)
+	change.conditions = append(change.conditions, routeRetryChange.Conditions()...)
+	change.mutations = append(change.mutations, routeRetryChange.Mutations()...)
+	change.values = append(change.values, routeRetryChange.Values()...)
 	return change, nil
 }
 

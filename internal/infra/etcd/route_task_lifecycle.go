@@ -2,6 +2,7 @@ package etcd
 
 import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -36,7 +37,7 @@ func routeMutationSelectedProjection(
 	for _, route := range projection.DesiredRoutes {
 		if route.Desired.ID == intent.RouteID {
 			return route.DesiredGeneration == intent.Route.DesiredGeneration &&
-				routeDesiredEqual(route.Desired, intent.Route.Desired)
+				componentplanning.RouteDesiredEqual(route.Desired, intent.Route.Desired)
 		}
 	}
 	return false
