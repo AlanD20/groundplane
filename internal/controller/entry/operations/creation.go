@@ -40,7 +40,7 @@ type entryCreationRepository interface {
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		entryrecord.Record,
-		etcd.EntryValueGeneration,
+		entryrecord.EntryValueGeneration,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -53,7 +53,7 @@ type entryCreationGenerator interface {
 		core.EnvEntry,
 		string,
 		time.Time,
-	) (etcd.EntryValueGeneration, error)
+	) (entryrecord.EntryValueGeneration, error)
 }
 
 type entryCreationEvidence struct {
@@ -584,7 +584,7 @@ func (repository *durableEntryCreationRepository) CreateEntryIdempotent(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
-	generation etcd.EntryValueGeneration,
+	generation entryrecord.EntryValueGeneration,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.entries.CreateEntryIdempotent(ctx, environment, project, record, generation, marker)

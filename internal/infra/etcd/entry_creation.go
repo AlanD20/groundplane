@@ -10,74 +10,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *EntryRepository) CreateEntry(
-	ctx context.Context,
-	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	record entryrecord.Record,
-	generation EntryValueGeneration,
-) (etcdstore.Versioned[entryrecord.Record], error) {
-	if err := validateEntryHierarchy(ctx, environment, project, record); err != nil {
-		return etcdstore.Versioned[entryrecord.Record]{}, err
-	}
-	primaryValue, err := entryrecord.EncodeRecord(record)
-	if err != nil {
-		return etcdstore.Versioned[entryrecord.Record]{}, err
-	}
-	defer clear(primaryValue)
-	generationKey, generationValue, err := prepareEntryGeneration(record, generation)
-	if err != nil {
-		return etcdstore.Versioned[entryrecord.Record]{}, err
-	}
-	defer clear(generationValue)
-	fence, _, err := repository.loadEntryMutationFence(
-		ctx,
-		environment,
-		project,
-		[]string{
-			entryrecord.RecordKey(record.Entry.ID),
-			entryOwnerKey(record.EnvironmentID, record.Entry.ID),
-			generationKey,
-			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), record.Entry.ID),
-		},
-		-1,
-		record.Entry.ID,
-	)
-	if err != nil {
-		return etcdstore.Versioned[entryrecord.Record]{}, err
-	}
-	epochMutation, err := fence.EpochRewriteMutation()
-	if err != nil {
-		return etcdstore.Versioned[entryrecord.Record]{}, err
-	}
-	defer clear(epochMutation.Value)
-	conditions := append(
-		entryWriteConditions(record, generationKey, 0, 0),
-		fence.TransactionConditions()...,
-	)
-	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: entryrecord.RecordKey(record.Entry.ID), Value: primaryValue},
-		{
-			Type: etcdstore.MutationPut, Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID),
-			Value: []byte(record.Entry.ID),
-		},
-		{Type: etcdstore.MutationPut, Key: generationKey, Value: generationValue},
-		epochMutation,
-	})
-	if err != nil {
-		return etcdstore.Versioned[entryrecord.Record]{}, err
-	}
-	if !result.Succeeded {
-		defer etcdstore.ClearValues(result.FailureReads)
-		return etcdstore.Versioned[entryrecord.Record]{}, classifyEntryWriteConflict(
-			result.FailureReads, record, 0, 0, fence,
-		)
-	}
-	return etcdstore.Versioned[entryrecord.Record]{
-		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
-	}, nil
-}
-
 // CreateEntryIdempotent atomically commits desired metadata, its owner index,
 // one immutable value generation, and the exact completed replay marker.
 func (repository *EntryRepository) CreateEntryIdempotent(
@@ -85,10 +17,10 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
-	generation EntryValueGeneration,
+	generation entryrecord.EntryValueGeneration,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateEntryHierarchy(ctx, environment, project, record); err != nil {
+	if err := entryrecord.ValidateEntryHierarchy(ctx, environment, project, record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
@@ -105,18 +37,18 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(primaryValue)
-	generationKey, generationValue, err := prepareEntryGeneration(record, generation)
+	generationKey, generationValue, err := entryrecord.PrepareEntryGeneration(record, generation)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(generationValue)
-	fence, _, err := repository.loadEntryMutationFence(
+	fence, _, err := repository.LoadEntryMutationFence(
 		ctx,
 		environment,
 		project,
 		[]string{
 			entryrecord.RecordKey(record.Entry.ID),
-			entryOwnerKey(record.EnvironmentID, record.Entry.ID),
+			entryrecord.EntryOwnerKey(record.EnvironmentID, record.Entry.ID),
 			generationKey,
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), record.Entry.ID),
 		},
@@ -133,20 +65,20 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 	defer clear(epochMutation.Value)
 	plan, err := NewIdempotencyMutationPlan(
 		append(
-			entryWriteConditions(record, generationKey, 0, 0),
+			entryrecord.EntryWriteConditions(record, generationKey, 0, 0),
 			fence.TransactionConditions()...,
 		),
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: entryrecord.RecordKey(record.Entry.ID), Value: primaryValue},
 			{
-				Type: etcdstore.MutationPut, Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID),
+				Type: etcdstore.MutationPut, Key: entryrecord.EntryOwnerKey(record.EnvironmentID, record.Entry.ID),
 				Value: []byte(record.Entry.ID),
 			},
 			{Type: etcdstore.MutationPut, Key: generationKey, Value: generationValue},
 			epochMutation,
 		},
 		func(_ int64, values []*etcdstore.KeyValue) error {
-			return classifyEntryWriteConflict(values, record, 0, 0, fence)
+			return entryrecord.ClassifyEntryWriteConflict(values, record, 0, 0, fence)
 		},
 	)
 	if err != nil {

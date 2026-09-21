@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -28,7 +29,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 		blueprints.EnvironmentBlueprintRootKey(
 			intent.EnvironmentID,
 			desired.RevisionID,
-		), blueprintEntryEnvironmentPrefix + intent.EntryID,
+		), entries.BlueprintEntryEnvironmentPrefix + intent.EntryID,
 		taskjournal.TaskMaterializationWriterKey(intent.EnvironmentID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -79,7 +80,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 			}
 		}
 	}
-	sources, err := prepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
+	sources, err := entries.PrepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
 	if err != nil {
 		return routeTaskChange{}, err
 	}

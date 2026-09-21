@@ -1,16 +1,15 @@
-package etcd
+package entries
 
 import (
-	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func classifyEntryWriteConflict(
+func ClassifyEntryWriteConflict(
 	values []*etcdstore.KeyValue,
-	record entryrecord.Record,
+	record Record,
 	expectedEntryRevision int64,
 	expectedOwnerRevision int64,
 	fence environmentfence.Evidence,
@@ -51,7 +50,7 @@ func classifyEntryWriteConflict(
 
 func classifyEntryDeleteConflict(
 	values []*etcdstore.KeyValue,
-	current etcdstore.Versioned[entryrecord.Record],
+	current etcdstore.Versioned[Record],
 	expectedOwnerRevision int64,
 	fence environmentfence.Evidence,
 ) error {
@@ -80,10 +79,10 @@ func classifyEntryDeleteConflict(
 	return recordcodec.StateConflict("entry", current.Record.Entry.ID)
 }
 
-func entryOwnerCollectionPrefix(environmentID string) string {
+func EntryOwnerCollectionPrefix(environmentID string) string {
 	return entryOwnerPrefix + environmentID + "/"
 }
 
-func entryOwnerKey(environmentID string, entryID string) string {
-	return entryOwnerCollectionPrefix(environmentID) + entryID
+func EntryOwnerKey(environmentID string, entryID string) string {
+	return EntryOwnerCollectionPrefix(environmentID) + entryID
 }

@@ -1,4 +1,4 @@
-package etcd
+package entries
 
 import (
 	"context"
@@ -39,8 +39,10 @@ func classifyEntryScriptReferences(entryID string, values []*etcdstore.KeyValue)
 	return errs.New(errs.KindResourceInUse, "Entry is referenced by a Script")
 }
 
-func prepareEntryScriptAbsence(
-	ctx context.Context, store hierarchyStore, entryID string, readRevision int64,
+func PrepareEntryScriptAbsence(
+	ctx context.Context, store interface {
+		Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	}, entryID string, readRevision int64,
 ) ([]etcdstore.Condition, error) {
 	conditions := entryScriptAbsenceConditions(entryID)
 	values := make([]*etcdstore.KeyValue, 2)
@@ -65,9 +67,9 @@ func prepareEntryScriptAbsence(
 	return conditions, nil
 }
 
-func classifyEntryScriptAbsenceConflict(
-	entryIDs []string, baseCount int, base idempotencyPlanClassifier,
-) idempotencyPlanClassifier {
+func ClassifyEntryScriptAbsenceConflict(
+	entryIDs []string, baseCount int, base func(int64, []*etcdstore.KeyValue) error,
+) func(int64, []*etcdstore.KeyValue) error {
 	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseCount+2*len(entryIDs) {
 			return errs.New(errs.KindInternal, "Entry Script compare evidence is incomplete")

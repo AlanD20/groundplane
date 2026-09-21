@@ -22,7 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -34,7 +34,7 @@ func (service *CreationService) backingCreationEntries(
 	spec adapters.CreationSpec,
 	allocator *desiredrevision.BlueprintIdentityAllocator,
 	createdAt time.Time,
-) ([]entryrecord.Record, []etcd.EntryValueGeneration, []secretrecord.Record, []secretrecord.EncryptedValue, map[string]string, error) {
+) ([]entryrecord.Record, []entryrecord.EntryValueGeneration, []secretrecord.Record, []secretrecord.EncryptedValue, map[string]string, error) {
 	bootstrapValues := make(map[string][]byte)
 	bootstrapSecrets := make(map[string]string)
 	var secrets []secretrecord.Record
@@ -78,7 +78,7 @@ func (service *CreationService) backingCreationEntries(
 		}
 	}()
 	entries := make([]entryrecord.Record, 0, len(spec.Environment))
-	generations := make([]etcd.EntryValueGeneration, 0, len(spec.Environment))
+	generations := make([]entryrecord.EntryValueGeneration, 0, len(spec.Environment))
 	resolved := make(map[string]string, len(spec.Environment))
 	for _, declaration := range spec.Environment {
 		entryID := allocator.Named(ids.KindEnvEntry, "bootstrap-entry-"+declaration.Name)
@@ -101,7 +101,7 @@ func (service *CreationService) backingCreationEntries(
 		if err != nil {
 			return nil, nil, nil, nil, nil, err
 		}
-		var generation etcd.EntryValueGeneration
+		var generation entryrecord.EntryValueGeneration
 		if declaration.Secret {
 			encrypted, err := sealBackingEntry(
 				ctx,
@@ -135,7 +135,7 @@ func (service *CreationService) backingCreationEntries(
 		return entries[order[left]].Entry.ID < entries[order[right]].Entry.ID
 	})
 	sortedEntries := make([]entryrecord.Record, len(entries))
-	sortedGenerations := make([]etcd.EntryValueGeneration, len(generations))
+	sortedGenerations := make([]entryrecord.EntryValueGeneration, len(generations))
 	for index, source := range order {
 		sortedEntries[index] = entries[source]
 		sortedGenerations[index] = generations[source]

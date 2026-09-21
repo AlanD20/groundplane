@@ -107,7 +107,7 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	scriptConditions, err := prepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
+	scriptConditions, err := entryrecord.PrepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -161,7 +161,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	ctx context.Context, source TaskRecord, entry entryrecord.Record, intent environmentchanges.EntryRemovalIntent, revision int64,
 ) (*etcdstore.GetManyResult, []string, error) {
 	baseKeys := []string{
-		entryOwnerKey(entry.EnvironmentID, entry.Entry.ID),
+		entryrecord.EntryOwnerKey(entry.EnvironmentID, entry.Entry.ID),
 		hierarchyrecord.EnvironmentKey(entry.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), entry.EnvironmentID),
 	}
@@ -303,7 +303,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 		tombstone.Phase != entryRemovalTombstonePhase(intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "entry deletion tombstone changed")
 	}
-	companionKeys := []string{entryOwnerKey(entry.EnvironmentID, entry.Entry.ID)}
+	companionKeys := []string{entryrecord.EntryOwnerKey(entry.EnvironmentID, entry.Entry.ID)}
 	if intent.CurrentProjection != nil {
 		companionKeys = append(companionKeys,
 			projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
@@ -364,14 +364,14 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 		})
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		scriptConditions, err := prepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
+		scriptConditions, err := entryrecord.PrepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
 		if err != nil {
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, err
 		}
 		change.conditions = append(change.conditions, scriptConditions...)
 		change.mutations = append(change.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryOwnerKey(entry.EnvironmentID, entry.Entry.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryrecord.EntryOwnerKey(entry.EnvironmentID, entry.Entry.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryrecord.RecordKey(intent.EntryID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.PlainPrefix + intent.EntryID + "/", Prefix: true},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + intent.EntryID + "/", Prefix: true},

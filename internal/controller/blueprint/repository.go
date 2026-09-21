@@ -49,7 +49,7 @@ type environmentBlueprintRepository interface {
 	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
 	ListEntries(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[entryrecord.Record], error)
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
-	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
+	CreateBlueprintEntryValueGeneration(context.Context, entryrecord.EntryValueGeneration) error
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
 	ListEnvironmentComponents(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
@@ -171,7 +171,7 @@ func (repository *durableRepository) BlueprintEntryValueGenerationExists(
 }
 func (repository *durableRepository) CreateBlueprintEntryValueGeneration(
 	ctx context.Context,
-	generation etcd.EntryValueGeneration,
+	generation entryrecord.EntryValueGeneration,
 ) error {
 	if generation.Plain != nil && generation.Secret == nil {
 		return repository.values.CreatePlain(ctx, *generation.Plain)

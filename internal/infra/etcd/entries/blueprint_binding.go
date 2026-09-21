@@ -1,4 +1,4 @@
-package etcd
+package entries
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 // BindBlueprintEntryEnvironment installs a derived lookup route. The current
 // Environment projection remains the authority, so an index written before
 // head publication cannot make staged Entry state visible.
-func (repository *EntryRepository) BindBlueprintEntryEnvironment(
+func (repository *Repository) BindBlueprintEntryEnvironment(
 	ctx context.Context,
 	environmentID string,
 	entryID string,
@@ -23,7 +23,7 @@ func (repository *EntryRepository) BindBlueprintEntryEnvironment(
 		recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil {
 		return errs.New(errs.KindValidationFailed, "Blueprint Entry lookup identity is invalid")
 	}
-	key := blueprintEntryEnvironmentPrefix + entryID
+	key := BlueprintEntryEnvironmentPrefix + entryID
 	result, err := repository.store.Transact(
 		ctx,
 		[]etcdstore.Condition{{Key: key}},
@@ -45,7 +45,7 @@ func (repository *EntryRepository) BindBlueprintEntryEnvironment(
 	return errs.New(errs.KindStateConflict, "Blueprint Entry lookup identity is already occupied")
 }
 
-func (repository *EntryRepository) ResolveBlueprintEntryEnvironment(
+func (repository *Repository) ResolveBlueprintEntryEnvironment(
 	ctx context.Context,
 	entryID string,
 ) (string, bool, error) {
@@ -55,7 +55,7 @@ func (repository *EntryRepository) ResolveBlueprintEntryEnvironment(
 	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil {
 		return "", false, errs.New(errs.KindValidationFailed, "Blueprint Entry lookup id is invalid")
 	}
-	result, err := repository.store.Get(ctx, blueprintEntryEnvironmentPrefix+entryID)
+	result, err := repository.store.Get(ctx, BlueprintEntryEnvironmentPrefix+entryID)
 	if err != nil {
 		return "", false, err
 	}

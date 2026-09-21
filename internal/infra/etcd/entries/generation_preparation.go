@@ -1,15 +1,14 @@
-package etcd
+package entries
 
 import (
 	"bytes"
 	"github.com/AlanD20/groundplane/internal/core"
-	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func prepareEntryGeneration(
-	record entryrecord.Record,
+func PrepareEntryGeneration(
+	record Record,
 	generation EntryValueGeneration,
 ) (string, []byte, error) {
 	if (generation.Plain == nil) == (generation.Secret == nil) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -13,7 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -68,9 +69,9 @@ func (service *EntryGenerationService) Generate(
 	entry core.EnvEntry,
 	generationID string,
 	createdAt time.Time,
-) (etcd.EntryValueGeneration, error) {
+) (entries.EntryValueGeneration, error) {
 	if ctx == nil {
-		return etcd.EntryValueGeneration{}, errs.New(errs.KindValidationFailed, "Entry generation context is required")
+		return entries.EntryValueGeneration{}, errs.New(errs.KindValidationFailed, "Entry generation context is required")
 	}
 	for _, check := range []struct {
 		kind  ids.Kind
@@ -83,7 +84,7 @@ func (service *EntryGenerationService) Generate(
 		{ids.KindConfig, generationID, "Entry generation"},
 	} {
 		if ids.Validate(check.kind, check.value) != nil {
-			return etcd.EntryValueGeneration{}, errs.Newf(
+			return entries.EntryValueGeneration{}, errs.Newf(
 				errs.KindValidationFailed,
 				"%s stable id is invalid",
 				check.field,
@@ -95,16 +96,16 @@ func (service *EntryGenerationService) Generate(
 		validationEntry.Source.Literal = ""
 	}
 	if err := validationEntry.Validate(); err != nil {
-		return etcd.EntryValueGeneration{}, errs.Wrap(errs.KindValidationFailed, err)
+		return entries.EntryValueGeneration{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	if createdAt.IsZero() {
-		return etcd.EntryValueGeneration{}, errs.New(
+		return entries.EntryValueGeneration{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry generation created_at is required",
 		)
 	}
 
-	var generation etcd.EntryValueGeneration
+	var generation entries.EntryValueGeneration
 	err := service.withResolvedEntrySource(ctx, projectID, environmentID, entry, func(value []byte) error {
 		if len(value) > recordcodec.MaximumValueBytes {
 			return errs.New(errs.KindValidationFailed, "Resolved Entry value exceeds the maximum size")
@@ -146,7 +147,7 @@ func (service *EntryGenerationService) Generate(
 	})
 	if err != nil {
 		ClearEntryValueGeneration(&generation)
-		return etcd.EntryValueGeneration{}, err
+		return entries.EntryValueGeneration{}, err
 	}
 	return generation, nil
 }
@@ -203,7 +204,7 @@ func entrySecretKindMatches(entryKind core.EntryKind, secretKind core.SecretKind
 		entryKind == core.EntryKindFile && secretKind == core.SecretKindFile
 }
 
-func ClearEntryValueGeneration(generation *etcd.EntryValueGeneration) {
+func ClearEntryValueGeneration(generation *entries.EntryValueGeneration) {
 	if generation == nil {
 		return
 	}

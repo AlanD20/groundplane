@@ -40,7 +40,7 @@ type entryDesiredMutationRepository interface {
 	ListEnvironmentComponents(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
 	ResolveBlueprintEntryEnvironment(context.Context, string) (string, bool, error)
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
-	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
+	CreateBlueprintEntryValueGeneration(context.Context, entryrecord.EntryValueGeneration) error
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
 }
 

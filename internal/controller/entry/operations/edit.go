@@ -44,7 +44,7 @@ type entryEditRepository interface {
 		etcdstore.Versioned[entryrecord.Record],
 		core.EnvEntry,
 		string,
-		etcd.EntryValueGeneration,
+		entryrecord.EntryValueGeneration,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -470,7 +470,7 @@ func (repository *durableEntryEditRepository) ReplaceEntryIdempotent(
 	current etcdstore.Versioned[entryrecord.Record],
 	desired core.EnvEntry,
 	generationID string,
-	generation etcd.EntryValueGeneration,
+	generation entryrecord.EntryValueGeneration,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.entries.ReplaceEntryIdempotent(

@@ -26,10 +26,10 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord, intent environmentchanges.EntryRemovalIntent, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
-	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
+	if err := entryrecord.ValidateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEntryVersion(entry); err != nil {
+	if err := entryrecord.ValidateEntryVersion(entry); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
@@ -103,7 +103,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		taskjournal.TaskActiveOperationKey(task.OperationID),
 		taskjournal.TaskQueueKey(task.Executor, task.ID),
 		entryrecord.RecordKey(entry.Record.Entry.ID),
-		entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID),
+		entryrecord.EntryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID),
 		environmentchanges.EntryRemovalIntentKey(task.ID),
 		tombstoneKey,
 	}
@@ -114,7 +114,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 			environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
 		)
 	}
-	fence, ownerRevision, err := repository.loadEntryMutationFence(
+	fence, ownerRevision, err := repository.LoadEntryMutationFence(
 		ctx,
 		environment,
 		project,
@@ -150,7 +150,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: entryrecord.RecordKey(entry.Record.Entry.ID), ModRevision: entry.Revision},
-		{Key: entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID), ModRevision: ownerRevision},
+		{Key: entryrecord.EntryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID), ModRevision: ownerRevision},
 		{Key: environmentchanges.EntryRemovalIntentKey(task.ID)},
 		{Key: tombstoneKey},
 	}
@@ -161,7 +161,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		)
 	}
 	conditions = append(conditions, fence.TransactionConditions()...)
-	scriptConditions, err := prepareEntryScriptAbsence(
+	scriptConditions, err := entryrecord.PrepareEntryScriptAbsence(
 		ctx,
 		repository.store,
 		entry.Record.Entry.ID,
@@ -199,7 +199,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	classify := classifyEntryScriptAbsenceConflict(
+	classify := entryrecord.ClassifyEntryScriptAbsenceConflict(
 		[]string{entry.Record.Entry.ID},
 		baseCount,
 		classifyEntryDeletionStartConflict(

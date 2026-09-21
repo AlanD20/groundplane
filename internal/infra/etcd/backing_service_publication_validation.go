@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -126,7 +127,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 			return errs.New(errs.KindValidationFailed, "Backing-service bootstrap Entry identity is duplicated")
 		}
 		seenEntries[entry.Entry.ID] = struct{}{}
-		_, value, err := prepareEntryGeneration(entry, creation.EntryValues[index])
+		_, value, err := entries.PrepareEntryGeneration(entry, creation.EntryValues[index])
 		if err != nil {
 			return err
 		}

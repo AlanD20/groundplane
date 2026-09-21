@@ -1,9 +1,8 @@
-package etcd
+package entries
 
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -11,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *EntryRepository) loadEntryMutationFence(
+func (repository *Repository) LoadEntryMutationFence(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -83,15 +82,15 @@ func (repository *EntryRepository) loadEntryMutationFence(
 	return fence, ownerRevision, nil
 }
 
-func entryWriteConditions(
-	record entryrecord.Record,
+func EntryWriteConditions(
+	record Record,
 	generationKey string,
 	entryRevision int64,
 	ownerRevision int64,
 ) []etcdstore.Condition {
 	conditions := []etcdstore.Condition{
-		{Key: entryrecord.RecordKey(record.Entry.ID), ModRevision: entryRevision},
-		{Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID), ModRevision: ownerRevision},
+		{Key: RecordKey(record.Entry.ID), ModRevision: entryRevision},
+		{Key: EntryOwnerKey(record.EnvironmentID, record.Entry.ID), ModRevision: ownerRevision},
 		{Key: generationKey},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), record.Entry.ID)},
 	}
@@ -99,22 +98,22 @@ func entryWriteConditions(
 }
 
 func entryDeleteConditions(
-	current etcdstore.Versioned[entryrecord.Record],
+	current etcdstore.Versioned[Record],
 	ownerRevision int64,
 ) []etcdstore.Condition {
 	conditions := []etcdstore.Condition{
-		{Key: entryrecord.RecordKey(current.Record.Entry.ID), ModRevision: current.Revision},
-		{Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID), ModRevision: ownerRevision},
+		{Key: RecordKey(current.Record.Entry.ID), ModRevision: current.Revision},
+		{Key: EntryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID), ModRevision: ownerRevision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID)},
 	}
 	return conditions
 }
 
-func validateEntryHierarchy(
+func ValidateEntryHierarchy(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	record entryrecord.Record,
+	record Record,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
@@ -125,7 +124,7 @@ func validateEntryHierarchy(
 	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
-	if err := entryrecord.ValidateRecord(record); err != nil {
+	if err := ValidateRecord(record); err != nil {
 		return err
 	}
 	if environment.Revision <= 0 || environment.ReadRevision < environment.Revision ||
@@ -136,8 +135,8 @@ func validateEntryHierarchy(
 	return nil
 }
 
-func validateEntryVersion(current etcdstore.Versioned[entryrecord.Record]) error {
-	if err := entryrecord.ValidateRecord(current.Record); err != nil {
+func ValidateEntryVersion(current etcdstore.Versioned[Record]) error {
+	if err := ValidateRecord(current.Record); err != nil {
 		return err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision {

@@ -65,7 +65,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		{
 			targetKind:    "entry",
 			actionKind:    hierarchydeletion.HierarchyDeletionEntryRemove,
-			ownerPrefix:   entryOwnerCollectionPrefix,
+			ownerPrefix:   entryrecord.EntryOwnerCollectionPrefix,
 			primaryKey:    entryrecord.RecordKey,
 			stableIDKind:  ids.KindEnvEntry,
 			validateOwner: validateHierarchyDeletionEntryOwner,

@@ -69,7 +69,7 @@ func backingServiceCreationConditions(
 		}
 		conditions = append(conditions,
 			etcdstore.Condition{Key: entryrecord.RecordKey(entry.Entry.ID)},
-			etcdstore.Condition{Key: entryOwnerKey(creation.Environment.ID, entry.Entry.ID)},
+			etcdstore.Condition{Key: entryrecord.EntryOwnerKey(creation.Environment.ID, entry.Entry.ID)},
 			etcdstore.Condition{Key: generationKey},
 		)
 	}

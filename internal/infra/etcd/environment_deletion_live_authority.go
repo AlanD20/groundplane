@@ -9,6 +9,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -116,7 +117,7 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 	return []string{
 		blueprints.EnvironmentBlueprintRevisionsPrefix(environmentID),
 		routerecord.OwnerPrefix(environmentID),
-		entryOwnerCollectionPrefix(environmentID),
+		entries.EntryOwnerCollectionPrefix(environmentID),
 		attachrecord.AttachOwnerPrefix(environmentID),
 		componentrecord.EnvironmentOwnerPrefix(environmentID),
 		connectors.ConnectorEnvironmentPrefix(environmentID),

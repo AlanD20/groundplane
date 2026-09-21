@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -94,7 +95,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	keys := []string{blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintDescriptorKeyByID(desired.DescriptorID),
 		blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desired.RevisionID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), blueprintEntryEnvironmentPrefix + intent.EntryID}
+		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), entries.BlueprintEntryEnvironmentPrefix + intent.EntryID}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -149,7 +150,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal candidate retains its target")
 		}
 	}
-	sources, err := prepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
+	sources, err := entries.PrepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
 	if err != nil {
 		return routeTaskChange{}, err
 	}

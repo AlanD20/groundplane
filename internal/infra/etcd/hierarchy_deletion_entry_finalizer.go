@@ -21,12 +21,12 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEntryFina
 	if err != nil || record.Entry.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	fences, err := prepareEntryScriptAbsence(ctx, repository.store, action.TargetID, 0)
+	fences, err := entryrecord.PrepareEntryScriptAbsence(ctx, repository.store, action.TargetID, 0)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, []string{
-		entryOwnerKey(record.EnvironmentID, record.Entry.ID),
+		entryrecord.EntryOwnerKey(record.EnvironmentID, record.Entry.ID),
 	})
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err

@@ -38,7 +38,7 @@ type BackingServiceCreation struct {
 	Secrets      []secretrecord.Record
 	SecretValues []secretrecord.EncryptedValue
 	Entries      []entryrecord.Record
-	EntryValues  []EntryValueGeneration
+	EntryValues  []entryrecord.EntryValueGeneration
 	Claim        blueprints.EnvironmentBlueprintStageClaim
 	Revision     blueprints.EnvironmentDesiredRevisionIdentity
 	Projection   projectionrecord.EnvironmentComposeProjection
@@ -174,7 +174,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clear(entryValues[index])
-		entryGenerationKeys[index], entryGenerationValues[index], err = prepareEntryGeneration(
+		entryGenerationKeys[index], entryGenerationValues[index], err = entryrecord.PrepareEntryGeneration(
 			creation.Entries[index],
 			creation.EntryValues[index],
 		)
@@ -271,7 +271,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: entryrecord.RecordKey(entry.Entry.ID), Value: entryValues[index]},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   entryOwnerKey(creation.Environment.ID, entry.Entry.ID),
+				Key:   entryrecord.EntryOwnerKey(creation.Environment.ID, entry.Entry.ID),
 				Value: []byte(entry.Entry.ID),
 			},
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: entryGenerationKeys[index], Value: entryGenerationValues[index]},

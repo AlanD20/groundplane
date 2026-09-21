@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -51,7 +52,7 @@ func (repository *HierarchyRepository) prepareDesiredScriptRemoval(
 		if _, exists := retained[entry.Entry.ID]; exists {
 			continue
 		}
-		fences, err := prepareEntryScriptAbsence(ctx, repository.store, entry.Entry.ID, readRevision)
+		fences, err := entries.PrepareEntryScriptAbsence(ctx, repository.store, entry.Entry.ID, readRevision)
 		if err != nil {
 			return preparedDesiredScriptRemoval{}, err
 		}
@@ -82,7 +83,7 @@ func (repository *HierarchyRepository) prepareDesiredScriptRemoval(
 func (removal preparedDesiredScriptRemoval) classifyConflict(
 	baseCount int, base idempotencyPlanClassifier,
 ) idempotencyPlanClassifier {
-	entries := classifyEntryScriptAbsenceConflict(removal.entryIDs, baseCount, base)
+	entries := entries.ClassifyEntryScriptAbsenceConflict(removal.entryIDs, baseCount, base)
 	if removal.volumeID == "" {
 		return entries
 	}
