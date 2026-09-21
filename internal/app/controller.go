@@ -12,9 +12,7 @@ import (
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"log/slog"
 	"os"
@@ -61,7 +59,6 @@ import (
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
-	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -522,72 +519,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	coreDNSRenderer, err := registeredCoreDNSRenderer()
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize CoreDNS renderer: %w", err)
-	}
-	actionCatalog, err := componentregistration.NewCatalog()
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize registered Component action catalog: %w", err)
-	}
-	platformRenderPlanner, err := controllerdns.NewPlatformRenderPlanner(
-		componentRecords,
-		resolverBaselines,
-		componentRecords,
-		controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
-		coreDNSRenderer,
-		actionCatalog,
-		actionCatalog,
-		componentregistration.ManagedConfigActivateAction,
+	resolverComposition, err := newControllerResolverComposition(
+		ctx, cfg.Storage.VolumeRoot, componentRecords, resolverBaselines, tasks, intentCoordinator, planResolver,
 	)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize platform Component render planner: %w", err)
-	}
-	if err := tasks.SetPlatformResolverTaskPreparer(func(
-		ctx context.Context,
-		current etcdstore.Versioned[componentrecord.Record],
-		projection etcd.HostResolutionProjectionRecord,
-		task etcd.TaskRecord,
-		priorObservation *etcd.ComponentObservationRecord,
-	) (etcd.PlatformComponentTaskRenderInput, error) {
-		desired, err := componentrecord.ProjectRecord(current.Record)
-		if err != nil {
-			return etcd.PlatformComponentTaskRenderInput{}, err
-		}
-		return platformRenderPlanner.PrepareConfigTaskAtProjection(
-			ctx, current, desired, task, projection, priorObservation,
-		)
-	}); err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: configure platform resolver Task preparer: %w", err)
-	}
-	if err := tasks.SetPlatformResolverComponentSelector(platformRenderPlanner.SelectResolver); err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: configure platform resolver Component selector: %w", err)
-	}
-	if err := controllerdns.EnsurePlatformResolverTask(
-		ctx, componentRecords, tasks, platformRenderPlanner, intentCoordinator,
-	); err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize platform resolver projection: %w", err)
-	}
-	platformComponentExecution, err := controllerdns.NewPlatformComponentExecutionPlanner(
-		cfg.Storage.VolumeRoot, componentRecords, resolverBaselines, actionCatalog,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Platform Component execution planner: %w", err)
-	}
-	if err := planResolver.EnableComponentPlans(platformComponentExecution); err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Platform Component plan resolver: %w", err)
+		return nil, err
 	}
 	agentRuntime := channeltransport.New(
 		authenticator, tasks, planResolver, materializationResolver, backupSecrets, backupCheckpoints,
-		platformComponentExecution, scriptArtifacts, scriptCheckpoints, backingHookCheckpoints,
+		resolverComposition.executionPlanner, scriptArtifacts, scriptCheckpoints, backingHookCheckpoints,
 	)
 	blueprintReleases, err := blueprintrelease.NewService(
 		releaseLedger, scriptRecords, planResolver, scriptArtifacts, scriptSourceReferences,
@@ -1048,7 +989,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Component credentials: %w", err)
 	}
 	platformComponentMutations, err := controllerdns.NewPlatformMutationService(
-		componentRecords, tasks, idempotency, intentCoordinator, coreDNSRenderer, platformRenderPlanner,
+		componentRecords, tasks, idempotency, intentCoordinator, resolverComposition.renderer, resolverComposition.renderPlanner,
 	)
 	if err != nil {
 		_ = store.Close()

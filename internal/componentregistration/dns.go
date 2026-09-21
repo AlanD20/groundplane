@@ -7,11 +7,11 @@ import (
 )
 
 func validateRegisteredCoreDNSComponent() error {
-	_, err := registeredCoreDNSRenderer()
+	_, err := NewDNSRenderer()
 	return err
 }
 
-func registeredCoreDNSRenderer() (dnsresolver.Renderer, error) {
+func NewDNSRenderer() (dnsresolver.Renderer, error) {
 	if _, err := registeredcoredns.Definition(); err != nil {
 		return nil, err
 	}
@@ -22,7 +22,7 @@ func NewDNSManagedConfigProjector(
 	projections controllerdns.PlatformProjectionReader,
 	baselines controllerdns.ResolverBaselineReader,
 ) (*controllerdns.ManagedConfigProjector, error) {
-	renderer, err := registeredCoreDNSRenderer()
+	renderer, err := NewDNSRenderer()
 	if err != nil {
 		return nil, err
 	}
