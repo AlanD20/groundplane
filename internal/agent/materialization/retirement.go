@@ -24,6 +24,11 @@ func (inbox *Inbox) Retire(taskID string) {
 			continue
 		}
 		step.retired = true
+		select {
+		case <-step.ready:
+		default:
+			close(step.ready)
+		}
 		switch step.state {
 		case materializationReceiving:
 			if step.digest != nil {

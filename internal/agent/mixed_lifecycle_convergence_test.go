@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -36,7 +38,7 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 			ArtifactId: artifactID, ServiceIds: []string{serviceID},
 		}},
 	}
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		TaskID: "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAV", OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan: &agentpb.ExecutionPlan{
 			TargetId: serviceID, Artifacts: []*agentpb.ComposeArtifact{artifact},
@@ -75,13 +77,13 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 			Name: "gp_net_net_01M1V6VJ2Z6E1PWY17MMR17YHH",
 		})
 		helper := completedComposeHelper()
-		runtime, err := NewComposeRuntime(helper, &fakeComposeObserver{
+		runtime, err := testcomposeruntime.New(helper, &fakeComposeObserver{
 			projects: []*agentpb.ObservedProject{observed},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := runtime.executeStep(context.Background(), assignment, step)
+		result, err := runtime.ExecuteStep(context.Background(), assignment, step)
 		if err != nil || result.ReconciliationRequired {
 			t.Fatalf(
 				"native Start with healthy selected footprint and later sibling network: result=%#v, error=%v",
@@ -104,13 +106,13 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 			observed.Collisions = append(observed.Collisions, &agentpb.ObservedCollision{
 				Kind: agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_NETWORK, Name: networkName,
 			})
-			runtime, err := NewComposeRuntime(completedComposeHelper(), &fakeComposeObserver{
+			runtime, err := testcomposeruntime.New(completedComposeHelper(), &fakeComposeObserver{
 				projects: []*agentpb.ObservedProject{observed},
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := runtime.executeStep(context.Background(), selected, step)
+			result, err := runtime.ExecuteStep(context.Background(), selected, step)
 			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired {
 				t.Fatalf(
 					"native Start accepted selected or unnamed network collision: result=%#v, error=%v",
@@ -124,11 +126,11 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 	t.Run("unrelated Component collision", func(t *testing.T) {
 		helper := completedComposeHelper()
 		observer := &fakeComposeObserver{projects: []*agentpb.ObservedProject{warming, healthy}}
-		runtime, err := NewComposeRuntime(helper, observer)
+		runtime, err := testcomposeruntime.New(helper, observer)
 		if err != nil {
 			t.Fatalf("NewComposeRuntime() error = %v", err)
 		}
-		result, err := runtime.executeStep(context.Background(), assignment, step)
+		result, err := runtime.ExecuteStep(context.Background(), assignment, step)
 		if err != nil {
 			t.Fatalf("executeStep() error = %v", err)
 		}
@@ -147,14 +149,14 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 		selectedCollision.Collisions[0].ComposeServiceName = "api--singleton"
 		selectedCollision.Collisions[0].ServiceId = serviceID
 		helper := completedComposeHelper()
-		runtime, err := NewComposeRuntime(
+		runtime, err := testcomposeruntime.New(
 			helper,
 			&fakeComposeObserver{projects: []*agentpb.ObservedProject{selectedCollision}},
 		)
 		if err != nil {
 			t.Fatalf("NewComposeRuntime() error = %v", err)
 		}
-		result, err := runtime.executeStep(context.Background(), assignment, step)
+		result, err := runtime.ExecuteStep(context.Background(), assignment, step)
 		if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired ||
 			helper.request == nil {
 			t.Fatalf("executeStep() result = %#v, error = %v; want selected ownership conflict", result, err)
@@ -168,11 +170,11 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 		collision.Collisions[0].ServiceId = serviceID
 		helper := completedComposeHelper()
 		observer := &fakeComposeObserver{projects: []*agentpb.ObservedProject{warming, collision}}
-		runtime, err := NewComposeRuntime(helper, observer)
+		runtime, err := testcomposeruntime.New(helper, observer)
 		if err != nil {
 			t.Fatalf("NewComposeRuntime() error = %v", err)
 		}
-		result, err := runtime.executeStep(context.Background(), assignment, step)
+		result, err := runtime.ExecuteStep(context.Background(), assignment, step)
 		if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired {
 			t.Fatalf("executeStep() result = %#v, error = %v; want renamed target conflict", result, err)
 		}
@@ -203,11 +205,11 @@ func TestComposeRuntimeServiceLifecycleStartScopesMixedProjectCollisions(t *test
 			}
 			helper := completedComposeHelper()
 			observer := &fakeComposeObserver{projects: []*agentpb.ObservedProject{collision}}
-			runtime, err := NewComposeRuntime(helper, observer)
+			runtime, err := testcomposeruntime.New(helper, observer)
 			if err != nil {
 				t.Fatalf("NewComposeRuntime() error = %v", err)
 			}
-			result, err := runtime.executeStep(context.Background(), assignment, mutation)
+			result, err := runtime.ExecuteStep(context.Background(), assignment, mutation)
 			if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired ||
 				helper.request != nil {
 				t.Fatalf(

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/version"
@@ -66,7 +67,7 @@ func TestClientSendsAuthenticationFirstAndCopiesToken(t *testing.T) {
 func TestClientSendsExactFailedTaskAcknowledgement(t *testing.T) {
 	t.Parallel()
 	assignment := workerAssignment(workerTestTaskID, "plan-a")
-	planHash := hashForPlan(assignment.Plan)
+	planHash := testtaskassignment.PlanDigest(assignment.Plan)
 	stream := newFakeStream(
 		configMessage(60, 1),
 		&agentpb.ControllerMessage{

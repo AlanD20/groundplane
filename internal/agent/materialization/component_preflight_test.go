@@ -1,4 +1,4 @@
-package agent
+package materialization
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -18,11 +19,11 @@ func TestMaterializationRejectsComponentFileWithoutPreflight(t *testing.T) {
 	// its last serving file before discovering an invalid native configuration.
 	assignment, payload, source := componentPreflightFixture(t)
 	helper := &decodingMaterializationHelper{}
-	runtime, err := NewMaterializationRuntime(helper, nil)
+	runtime, err := New(helper, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = runtime.executeStep(context.Background(), assignment, assignment.Plan.Steps[0], payload)
+	err = runtime.ExecuteStep(context.Background(), assignment, assignment.Plan.Steps[0], payload)
 	if err == nil || helper.volumeDir != "" || helper.content != nil || !source.closed {
 		t.Fatalf("unvalidated Component file reached writer: error=%v, directory=%q", err, helper.volumeDir)
 	}
@@ -38,11 +39,11 @@ func TestMaterializationPreflightPrecedesWriterAndPreservesExactBytes(t *testing
 			t.Fatal("validator did not precede the writer with owned complete bytes")
 		}
 	}}
-	runtime, err := NewMaterializationRuntime(helper, validator)
+	runtime, err := New(helper, validator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.executeStep(t.Context(), assignment, assignment.Plan.Steps[0], payload); err != nil {
+	if err := runtime.ExecuteStep(t.Context(), assignment, assignment.Plan.Steps[0], payload); err != nil {
 		t.Fatal(err)
 	}
 	if validator.calls != 1 || validator.destination != payload.Header.Destination() ||
@@ -81,11 +82,11 @@ func TestMaterializationPreflightFailureNeverReachesWriter(t *testing.T) {
 			case "cancel":
 				validator.check = func([]byte) { cancel() }
 			}
-			runtime, err := NewMaterializationRuntime(helper, validator)
+			runtime, err := New(helper, validator)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = runtime.executeStep(ctx, assignment, assignment.Plan.Steps[0], payload)
+			err = runtime.ExecuteStep(ctx, assignment, assignment.Plan.Steps[0], payload)
 			if err == nil || helper.volumeDir != "" || !source.closed {
 				t.Fatalf(
 					"unsafe preflight reached writer: error=%v, writer=%q, closed=%v",
@@ -114,11 +115,11 @@ func TestMaterializationPreflightFollowsRouteComposePrerequisite(t *testing.T) {
 	}
 	helper := &decodingMaterializationHelper{}
 	validator := &componentPreflightValidator{}
-	runtime, err := NewMaterializationRuntime(helper, validator)
+	runtime, err := New(helper, validator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.executeStep(t.Context(), assignment, assignment.Plan.Steps[0], payload); err != nil {
+	if err := runtime.ExecuteStep(t.Context(), assignment, assignment.Plan.Steps[0], payload); err != nil {
 		t.Fatalf("transitive file prerequisite rejected: %v", err)
 	}
 	if validator.calls != 1 || helper.volumeDir == "" {
@@ -156,7 +157,7 @@ func (source *componentPreflightSource) Close() error {
 	return source.err
 }
 
-func componentPreflightFixture(t *testing.T) (Assignment, materializationPayload, *componentPreflightSource) {
+func componentPreflightFixture(t *testing.T) (testtaskassignment.Assignment, Payload, *componentPreflightSource) {
 	t.Helper()
 	content := []byte("native candidate\n")
 	assignment := materializationAssignment(t, content)
@@ -182,5 +183,5 @@ func componentPreflightFixture(t *testing.T) (Assignment, materializationPayload
 		t.Fatal(err)
 	}
 	source := &componentPreflightSource{Reader: bytes.NewReader(content)}
-	return assignment, materializationPayload{Header: header, Source: source}, source
+	return assignment, Payload{Header: header, Source: source}, source
 }

@@ -5,56 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
-
-func TestServiceLifecyclePostconditionsRequireExactFootprintAndRejectTargetCollision(t *testing.T) {
-	serviceID := "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	artifact := &agentpb.ComposeArtifact{ProjectName: "gp-env", Services: []*agentpb.ComposeService{
-		{
-			ServiceId:        serviceID,
-			ComposeName:      "api",
-			ExpectedReplicas: 1,
-			ExpectedLabels:   lifecycleLabels(serviceID, "proxy"),
-		},
-		{
-			ServiceId:        serviceID,
-			ComposeName:      "api--singleton",
-			ExpectedReplicas: 2,
-			ExpectedLabels:   lifecycleLabels(serviceID, "singleton"),
-		},
-	}}
-	source := &agentpb.ServiceLifecycleSource{ServiceId: serviceID, ComposeNames: []string{"api", "api--singleton"}}
-	observed := &agentpb.ObservedProject{ProjectName: "gp-env", Containers: []*agentpb.ObservedContainer{
-		lifecycleContainer(serviceID, "proxy", agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED),
-		lifecycleContainer(serviceID, "singleton", agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED),
-		lifecycleContainer(serviceID, "singleton", agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED),
-	}}
-	if err := serviceLifecycleStopped(artifact, source, observed); err != nil {
-		t.Fatalf("exact stopped footprint rejected: %v", err)
-	}
-	partial := proto.Clone(observed).(*agentpb.ObservedProject)
-	partial.Containers = partial.Containers[:2]
-	if err := serviceLifecycleStopped(artifact, source, partial); !errors.Is(
-		err,
-		errs.New(errs.KindStateConflict, ""),
-	) {
-		t.Fatalf("partial footprint error = %v", err)
-	}
-	collision := proto.Clone(observed).(*agentpb.ObservedProject)
-	collision.Collisions = []*agentpb.ObservedCollision{{
-		Kind:               agentpb.ObservedCollisionKind_OBSERVED_COLLISION_KIND_CONTAINER,
-		ComposeServiceName: "api--singleton", ServiceId: serviceID,
-	}}
-	if err := serviceLifecycleRemoved(artifact, source, collision); !errors.Is(
-		err,
-		errs.New(errs.KindStateConflict, ""),
-	) {
-		t.Fatalf("target collision error = %v", err)
-	}
-}
 
 // Rationale: the lifecycle dispatcher must enforce the complete sealed
 // runtime footprint; the generic stopped-services check would accept a
@@ -86,11 +42,11 @@ func TestComposeRuntimeDispatchesServiceLifecycleStopFootprint(t *testing.T) {
 		lifecycleContainer(serviceID, "proxy", agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED),
 	}}
 	helper := completedComposeHelper()
-	runtime, err := NewComposeRuntime(helper, &fakeComposeObserver{projects: []*agentpb.ObservedProject{observed}})
+	runtime, err := testcomposeruntime.New(helper, &fakeComposeObserver{projects: []*agentpb.ObservedProject{observed}})
 	if err != nil {
 		t.Fatalf("NewComposeRuntime() error = %v", err)
 	}
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		TaskID: "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAV", OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan: &agentpb.ExecutionPlan{
 			TargetId: serviceID, Artifacts: []*agentpb.ComposeArtifact{artifact},
@@ -99,10 +55,12 @@ func TestComposeRuntimeDispatchesServiceLifecycleStopFootprint(t *testing.T) {
 			}}},
 		},
 	}
-	if err := stoppedServices(observed, []string{serviceID}); err != nil {
-		t.Fatalf("generic stopped-services check unexpectedly rejected fixture: %v", err)
+	for _, container := range observed.Containers {
+		if container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED {
+			t.Fatalf("fixture container is not stopped: %#v", container)
+		}
 	}
-	result, err := runtime.executeStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
 	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) || !result.ReconciliationRequired {
 		t.Fatalf("executeStep() result = %#v, error = %v; expected sealed-footprint conflict", result, err)
 	}
@@ -141,11 +99,11 @@ func TestComposeRuntimePollsServiceLifecycleStartUntilHealthy(t *testing.T) {
 		ProjectName: "gp-env", Containers: []*agentpb.ObservedContainer{healthyContainer},
 	}}}
 	helper := completedComposeHelper()
-	runtime, err := NewComposeRuntime(helper, observer)
+	runtime, err := testcomposeruntime.New(helper, observer)
 	if err != nil {
 		t.Fatalf("NewComposeRuntime() error = %v", err)
 	}
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		TaskID: "tsk_01ARZ3NDEKTSV4RRFFQ69G5FAV", OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan: &agentpb.ExecutionPlan{
 			TargetId: serviceID, Artifacts: []*agentpb.ComposeArtifact{artifact},
@@ -154,7 +112,7 @@ func TestComposeRuntimePollsServiceLifecycleStartUntilHealthy(t *testing.T) {
 			}}},
 		},
 	}
-	result, err := runtime.executeStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
 	if err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}

@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	testenvironmentdirectory "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	"github.com/AlanD20/groundplane/internal/infra/docker/environmentdirectoryhelper"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -26,14 +29,14 @@ func (helper *fakeEnvironmentDirectoryHelper) Execute(
 
 func TestEnvironmentDirectoryRuntimeReturnsClosedHelperResult(t *testing.T) {
 	helper := &fakeEnvironmentDirectoryHelper{response: &agentpb.EnvironmentDirectoryHelperResponse{
-		Schema: environmentDirectoryHelperSchema,
+		Schema: environmentdirectoryhelper.SchemaVersion,
 	}}
-	runtime, err := NewEnvironmentDirectoryRuntime(helper)
+	runtime, err := testenvironmentdirectory.New(helper)
 	if err != nil {
 		t.Fatalf("NewEnvironmentDirectoryRuntime() error = %v", err)
 	}
 	assignment := environmentDirectoryAssignment(t)
-	result, err := runtime.executeStep(context.Background(), assignment, assignment.Plan.Steps[0], nil)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, assignment.Plan.Steps[0], nil)
 	if err != nil || result.ExitCode != 0 || result.FailedStepID != "" {
 		t.Fatalf("executeStep() = %#v, %v", result, err)
 	}
@@ -43,9 +46,9 @@ func TestEnvironmentDirectoryRuntimeReturnsClosedHelperResult(t *testing.T) {
 	}
 
 	helper.response = &agentpb.EnvironmentDirectoryHelperResponse{
-		Schema: environmentDirectoryHelperSchema, ExitCode: 1, FailedStepId: workerTestStepID,
+		Schema: environmentdirectoryhelper.SchemaVersion, ExitCode: 1, FailedStepId: workerTestStepID,
 	}
-	result, err = runtime.executeStep(context.Background(), assignment, assignment.Plan.Steps[0], nil)
+	result, err = runtime.ExecuteStep(context.Background(), assignment, assignment.Plan.Steps[0], nil)
 	if result.ExitCode != 1 || result.FailedStepID != workerTestStepID ||
 		!errors.Is(err, errs.New(errs.KindRequestFailed, "")) {
 		t.Fatalf("executeStep(failed) = %#v, %v", result, err)
@@ -54,9 +57,9 @@ func TestEnvironmentDirectoryRuntimeReturnsClosedHelperResult(t *testing.T) {
 
 func TestWorkerPoolReturnsEnvironmentDirectoryResultOnly(t *testing.T) {
 	helper := &fakeEnvironmentDirectoryHelper{response: &agentpb.EnvironmentDirectoryHelperResponse{
-		Schema: environmentDirectoryHelperSchema,
+		Schema: environmentdirectoryhelper.SchemaVersion,
 	}}
-	directories, err := NewEnvironmentDirectoryRuntime(helper)
+	directories, err := testenvironmentdirectory.New(helper)
 	if err != nil {
 		t.Fatalf("NewEnvironmentDirectoryRuntime() error = %v", err)
 	}
@@ -93,9 +96,9 @@ func TestWorkerPoolReturnsEnvironmentDirectoryResultOnly(t *testing.T) {
 // step rather than from the operation alone.
 func TestWorkerPoolReturnsEnvironmentDirectoryResultForRemoval(t *testing.T) {
 	helper := &fakeEnvironmentDirectoryHelper{response: &agentpb.EnvironmentDirectoryHelperResponse{
-		Schema: environmentDirectoryHelperSchema,
+		Schema: environmentdirectoryhelper.SchemaVersion,
 	}}
-	directories, err := NewEnvironmentDirectoryRuntime(helper)
+	directories, err := testenvironmentdirectory.New(helper)
 	if err != nil {
 		t.Fatalf("NewEnvironmentDirectoryRuntime() error = %v", err)
 	}
@@ -152,7 +155,7 @@ func TestSendTaskAckPreservesEnvironmentDirectoryResultVariant(t *testing.T) {
 	}
 }
 
-func environmentDirectoryAssignment(t *testing.T) Assignment {
+func environmentDirectoryAssignment(t *testing.T) testtaskassignment.Assignment {
 	t.Helper()
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion,
@@ -172,7 +175,7 @@ func environmentDirectoryAssignment(t *testing.T) Assignment {
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
 	}
-	return Assignment{
+	return testtaskassignment.Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan: plan, ExecutionEpoch: 1,
@@ -181,7 +184,7 @@ func environmentDirectoryAssignment(t *testing.T) Assignment {
 	}
 }
 
-func environmentDirectoryRemovalAssignment(t *testing.T) Assignment {
+func environmentDirectoryRemovalAssignment(t *testing.T) testtaskassignment.Assignment {
 	t.Helper()
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema: executionplan.SchemaVersion,
@@ -201,7 +204,7 @@ func environmentDirectoryRemovalAssignment(t *testing.T) Assignment {
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
 	}
-	return Assignment{
+	return testtaskassignment.Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       workerTestTaskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan: plan, ExecutionEpoch: 1,

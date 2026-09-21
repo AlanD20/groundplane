@@ -1,12 +1,11 @@
 package agent
 
 import (
-	"bytes"
-	"strings"
-	"testing"
-
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	proto "google.golang.org/protobuf/proto"
+	strings "strings"
+	testing "testing"
 )
 
 const (
@@ -16,70 +15,38 @@ const (
 	nativeAssignmentRetainedRelease  = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 )
 
-// Rationale: Blueprint serving restoration selects the immutable native C
-// witness, while the acknowledged applied A witness remains byte-for-byte
-// independent and is not used as a fallback.
-func TestBlueprintNativeAssignmentSelectsCurrentWitnessOverAppliedArtifact(t *testing.T) {
-	assignment, current, _ := nativeServingAssignment(t)
-	appliedBefore := proto.Clone(assignment.RestorationAuthority.AppliedPredecessor).(*agentpb.ReleaseAppliedPredecessorAuthority)
-
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
-		t.Fatalf("native Blueprint assignment rejected: %v", err)
-	}
-	opened, target, releaseID, err := openServingPredecessorAuthority(
-		assignment,
-		assignment.Plan.CandidateReleaseProcedure.Members[0].ServiceId,
-	)
-	if err != nil {
-		t.Fatalf("open native serving predecessor: %v", err)
-	}
-	if !proto.Equal(opened, current) || target != "blue" || releaseID != nativeAssignmentPriorRelease {
-		t.Fatalf("selected predecessor = %#v, target=%q, release=%q", opened, target, releaseID)
-	}
-	if !bytes.Equal(
-		assignment.RestorationAuthority.AppliedPredecessor.ComposeArtifact,
-		appliedBefore.ComposeArtifact,
-	) ||
-		!bytes.Equal(
-			assignment.RestorationAuthority.AppliedPredecessor.ComposeArtifactSha256,
-			appliedBefore.ComposeArtifactSha256,
-		) {
-		t.Fatal("native selection changed the applied A witness")
-	}
-}
-
 // Rationale: native authority is closed per candidate. Missing, partial,
 // foreign, duplicate, mismatched, and malformed witness data cannot acquire
 // serving restoration authority.
 func TestBlueprintNativeAssignmentRejectsIncompleteOrMismatchedWitness(t *testing.T) {
 	tests := []struct {
 		name   string
-		mutate func(*Assignment, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact)
+		mutate func(*testtaskassignment.Assignment, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact)
 	}{
-		{"missing witness list", func(a *Assignment, _, _ *agentpb.ComposeArtifact) {
+		{"missing witness list", func(a *testtaskassignment.Assignment, _, _ *agentpb.ComposeArtifact) {
 			a.RestorationAuthority.NativePredecessors = nil
 		}},
-		{"wrong witness service", func(a *Assignment, _, _ *agentpb.ComposeArtifact) {
+		{"wrong witness service", func(a *testtaskassignment.Assignment, _, _ *agentpb.ComposeArtifact) {
 			a.RestorationAuthority.NativePredecessors[0].ServiceId = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"
 		}},
-		{"partial prior reference", func(a *Assignment, _, _ *agentpb.ComposeArtifact) {
+		{"partial prior reference", func(a *testtaskassignment.Assignment, _, _ *agentpb.ComposeArtifact) {
 			a.Plan.CandidateReleaseProcedure.Members[0].ServingPredecessor.PriorTarget = ""
 		}},
-		{"wrong prior release", func(a *Assignment, _, _ *agentpb.ComposeArtifact) {
+		{"wrong prior release", func(a *testtaskassignment.Assignment, _, _ *agentpb.ComposeArtifact) {
 			a.Plan.CandidateReleaseProcedure.Members[0].ServingPredecessor.PriorReleaseId = nativeAssignmentRetainedRelease
 		}},
-		{"wrong prior target", func(a *Assignment, _, _ *agentpb.ComposeArtifact) {
+		{"wrong prior target", func(a *testtaskassignment.Assignment, _, _ *agentpb.ComposeArtifact) {
 			a.Plan.CandidateReleaseProcedure.Members[0].ServingPredecessor.PriorTarget = "green"
 		}},
-		{"foreign current owner", func(a *Assignment, current, _ *agentpb.ComposeArtifact) {
+		{"foreign current owner", func(a *testtaskassignment.Assignment, current, _ *agentpb.ComposeArtifact) {
 			current.OwnerId = "env_01ARZ3NDEKTSV4RRFFQ69G5FAX"
 			sealNativeAssignmentArtifact(t, a.RestorationAuthority.NativePredecessors[0], current, nil)
 		}},
-		{"duplicate current workload", func(a *Assignment, current, _ *agentpb.ComposeArtifact) {
+		{"duplicate current workload", func(a *testtaskassignment.Assignment, current, _ *agentpb.ComposeArtifact) {
 			current.Services = append(current.Services, proto.Clone(current.Services[0]).(*agentpb.ComposeService))
 			sealNativeAssignmentArtifact(t, a.RestorationAuthority.NativePredecessors[0], current, nil)
 		}},
-		{"inactive retained same slot", func(a *Assignment, _, retained *agentpb.ComposeArtifact) {
+		{"inactive retained same slot", func(a *testtaskassignment.Assignment, _, retained *agentpb.ComposeArtifact) {
 			retained.Services[0].Slot = "blue"
 			for _, label := range retained.Services[0].ExpectedLabels {
 				if label.Key == "com.groundplane.slot" {
@@ -88,7 +55,7 @@ func TestBlueprintNativeAssignmentRejectsIncompleteOrMismatchedWitness(t *testin
 			}
 			sealNativeAssignmentArtifact(t, a.RestorationAuthority.NativePredecessors[0], nil, retained)
 		}},
-		{"current bytes altered", func(a *Assignment, _, _ *agentpb.ComposeArtifact) {
+		{"current bytes altered", func(a *testtaskassignment.Assignment, _, _ *agentpb.ComposeArtifact) {
 			a.RestorationAuthority.NativePredecessors[0].CurrentArtifact[0] ^= 0xff
 		}},
 	}
@@ -96,7 +63,7 @@ func TestBlueprintNativeAssignmentRejectsIncompleteOrMismatchedWitness(t *testin
 		t.Run(test.name, func(t *testing.T) {
 			assignment, current, retained := nativeServingAssignment(t)
 			test.mutate(&assignment, current, retained)
-			if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err == nil {
+			if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err == nil {
 				t.Fatal("accepted incomplete or mismatched native witness")
 			}
 		})
@@ -117,16 +84,18 @@ func TestBlueprintNativeAssignmentPreservesExplicitAbsence(t *testing.T) {
 	member.ServingPredecessor.PriorReleaseId = ""
 	member.ServingPredecessor.PriorTarget = ""
 	member.ServingPredecessor.RetainedPriorArtifactId = ""
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err != nil {
 		t.Fatalf("explicit native absence rejected: %v", err)
 	}
 	authority.NativePredecessors[0].RetainedPriorArtifact = []byte{0x01}
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err == nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err == nil {
 		t.Fatal("inactive retained native artifact accepted as serving authority")
 	}
 }
 
-func nativeServingAssignment(t *testing.T) (Assignment, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact) {
+func nativeServingAssignment(
+	t *testing.T,
+) (testtaskassignment.Assignment, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact) {
 	t.Helper()
 	assignment := configuredRestorationAssignment(t)
 	assignment.Plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY

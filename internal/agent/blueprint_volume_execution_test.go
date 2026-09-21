@@ -4,6 +4,8 @@ import (
 	"slices"
 	"testing"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -15,7 +17,7 @@ func TestBlueprintVolumePreparationGatesHooksAndConsumers(t *testing.T) {
 			map[bool]string{false: "prepared before hook", true: "failure prevents hook and consumer"}[fail],
 			func(t *testing.T) {
 				response := &agentpb.ComposeHelperResponse{
-					Schema: composeHelperSchema, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
+					Schema: composehelper.SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 					Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 				}
 				if fail {
@@ -24,11 +26,11 @@ func TestBlueprintVolumePreparationGatesHooksAndConsumers(t *testing.T) {
 					response.Diagnostic = agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED
 				}
 				consumer := releaseExecutionSuccess("api", false)
-				consumer.Schema = composeHelperSchema
+				consumer.Schema = composehelper.SchemaVersion
 				runtime := &orderedReleaseRuntime{responses: map[string]*agentpb.ComposeHelperResponse{
 					"volume": response, "consumer": consumer,
 				}}
-				compose, err := NewComposeRuntime(runtime, blueprintPhaseObserver{runtime})
+				compose, err := testcomposeruntime.New(runtime, blueprintPhaseObserver{runtime})
 				if err != nil {
 					t.Fatal(err)
 				}

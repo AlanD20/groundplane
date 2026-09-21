@@ -232,7 +232,11 @@ func (inbox *Inbox) failStep(step *materializationStepInbox, message string) err
 		inbox.destroyStep(step)
 		step.err = err
 		if step.state != materializationComplete {
-			close(step.ready)
+			select {
+			case <-step.ready:
+			default:
+				close(step.ready)
+			}
 		}
 		step.state = materializationFailed
 	}

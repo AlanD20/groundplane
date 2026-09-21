@@ -3,6 +3,7 @@ package agent
 import (
 	"testing"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -17,13 +18,13 @@ func TestOrdinaryAssignmentBindsNativePredecessorBytes(t *testing.T) {
 			assignment, current, _ := nativeServingAssignment(t)
 			assignment.Plan.Operation = operation
 			assignment.Plan.CandidateReleaseProcedure.Members[0].CandidateAbsence = nil
-			if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+			if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err != nil {
 				t.Fatalf("ordinary per-Service predecessor rejected: %v", err)
 			}
 			changed := proto.CloneOf(current)
 			changed.CanonicalYaml = []byte("changed historical configuration")
 			sealNativeAssignmentArtifact(t, assignment.RestorationAuthority.NativePredecessors[0], changed, nil)
-			if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err == nil {
+			if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err == nil {
 				t.Fatal("same-ID predecessor with different bytes accepted")
 			}
 		})

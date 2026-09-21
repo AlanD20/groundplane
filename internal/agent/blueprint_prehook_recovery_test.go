@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -12,7 +13,7 @@ func TestBlueprintPrehookFailureRequiresRestorationBeforeTerminal(t *testing.T) 
 		scriptExit: map[string]int32{"pre": 1},
 		scriptErr:  map[string]error{"pre": errors.New("connection check failed")},
 	}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		runtime,
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
 	)

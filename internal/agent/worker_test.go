@@ -9,8 +9,12 @@ import (
 	"testing"
 	"time"
 
+	testcomponentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
+	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -45,7 +49,7 @@ func (helper workerComposeHelper) Execute(
 	apply := request.GetPlan().GetSteps()[0].GetComposeApply()
 	*helper.events = append(*helper.events, "compose:"+apply.GetArtifactId())
 	return &agentpb.ComposeHelperResponse{
-		Schema: composeHelperSchema, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
+		Schema: composehelper.SchemaVersion, Outcome: agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 	}, nil
 }
@@ -57,44 +61,46 @@ func (runtime workerRollbackActionStub) record(event string) {
 }
 
 func (runtime workerComponentActionStub) ExecuteComponentAction(
-	context.Context,
-	Assignment,
-	*agentpb.ExecutionStep,
-	ManagedConfigPayload,
-) (*ComponentActionResult, error) {
-	return &ComponentActionResult{DNSResolverObservation: runtime.evidence}, nil
+	context.Context, testtaskassignment.Assignment,
+
+	*agentpb.ExecutionStep, testcomponentaction.ManagedConfigPayload,
+
+) (*testcomponentaction.ComponentActionResult, error) {
+	return &testcomponentaction.ComponentActionResult{DNSResolverObservation: runtime.evidence}, nil
 }
 
 func (workerComponentActionStub) FinalizeManagedConfig(
-	context.Context,
-	Assignment,
+	context.Context, testtaskassignment.Assignment,
+
 	*agentpb.ExecutionStep,
 	bool,
-) (ManagedConfigTransactionState, error) {
-	return ManagedConfigTransactionState{}, nil
+) (testcomponentaction.ManagedConfigTransactionState, error) {
+	return testcomponentaction.ManagedConfigTransactionState{}, nil
 }
 
 func (runtime workerRollbackActionStub) ExecuteComponentAction(
 	_ context.Context,
-	_ Assignment,
+	_ testtaskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	_ ManagedConfigPayload,
-) (*ComponentActionResult, error) {
+	_ testcomponentaction.ManagedConfigPayload,
+) (*testcomponentaction.ComponentActionResult, error) {
 	action := step.GetComponentApply()
 	if action.GetManagedConfigContent() {
 		runtime.record("managed-config-apply")
 		if runtime.publishErr != nil {
-			return &ComponentActionResult{}, runtime.publishErr
+			return &testcomponentaction.ComponentActionResult{}, runtime.publishErr
 		}
-		return &ComponentActionResult{ManagedConfig: &ManagedConfigTransactionState{
-			Live:     managedConfigTestFileState(runtime.candidateDigest),
-			Previous: managedConfigTestFileState(runtime.previousDigest),
-		}}, nil
+		return &testcomponentaction.ComponentActionResult{
+			ManagedConfig: &testcomponentaction.ManagedConfigTransactionState{
+				Live:     managedConfigTestFileState(runtime.candidateDigest),
+				Previous: managedConfigTestFileState(runtime.previousDigest),
+			},
+		}, nil
 	}
 	if bytes.Equal(action.GetArtifactDigest(), runtime.candidateDigest) {
 		runtime.record("candidate-observation")
 		if runtime.candidateEvidence != nil {
-			return &ComponentActionResult{DNSResolverObservation: runtime.candidateEvidence}, nil
+			return &testcomponentaction.ComponentActionResult{DNSResolverObservation: runtime.candidateEvidence}, nil
 		}
 		return nil, errors.New("candidate resolver is unhealthy")
 	}
@@ -103,18 +109,20 @@ func (runtime workerRollbackActionStub) ExecuteComponentAction(
 		if runtime.rollbackObservationErr != nil {
 			return nil, runtime.rollbackObservationErr
 		}
-		return &ComponentActionResult{DNSResolverObservation: runtime.rollbackEvidence}, nil
+		return &testcomponentaction.ComponentActionResult{DNSResolverObservation: runtime.rollbackEvidence}, nil
 	}
 	return nil, errors.New("unexpected resolver observation digest")
 }
 
 func (runtime workerRollbackActionStub) FinalizeManagedConfig(
 	_ context.Context,
-	_ Assignment,
+	_ testtaskassignment.Assignment,
 	_ *agentpb.ExecutionStep,
 	commit bool,
-) (ManagedConfigTransactionState, error) {
-	state := ManagedConfigTransactionState{Previous: managedConfigTestFileState(runtime.previousDigest)}
+) (testcomponentaction.ManagedConfigTransactionState, error) {
+	state := testcomponentaction.ManagedConfigTransactionState{
+		Previous: managedConfigTestFileState(runtime.previousDigest),
+	}
 	if commit {
 		runtime.record("managed-config-commit")
 		state.Live = managedConfigTestFileState(runtime.candidateDigest)
@@ -128,8 +136,8 @@ func (runtime workerRollbackActionStub) FinalizeManagedConfig(
 	return state, nil
 }
 
-func managedConfigTestFileState(digest []byte) ManagedConfigFileState {
-	state := ManagedConfigFileState{Present: len(digest) != 0}
+func managedConfigTestFileState(digest []byte) testcomponentaction.ManagedConfigFileState {
+	state := testcomponentaction.ManagedConfigFileState{Present: len(digest) != 0}
 	copy(state.SHA256[:], digest)
 	return state
 }
@@ -143,7 +151,7 @@ func TestWorkerReturnsDNSResolverObservationFromGenericComponentAction(t *testin
 	pool.SetComponentActionRuntime(workerComponentActionStub{evidence: evidence})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		AssignmentID:   workerTestAssignmentID,
 		TaskID:         workerTestTaskID,
 		ExecutionEpoch: 1,
@@ -219,7 +227,7 @@ func TestWorkerRestoresPredecessorComposeArtifactBeforeRollbackObservation(t *te
 		workerComponentComposeArtifact(workerPreviousComposeArtifactID, workerPreviousPlanID, "6", "previous"),
 	}
 	var composeRequest *agentpb.ComposeHelperRequest
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		workerComposeHelper{request: &composeRequest, events: &events},
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "groundplane-infra"}}},
 	)
@@ -385,7 +393,7 @@ func runWorkerResolverRollbackScenario(
 func workerResolverRollbackAssignment(
 	candidate [sha256.Size]byte,
 	previous [sha256.Size]byte,
-) (Assignment, *agentpb.ExecutionStep) {
+) (testtaskassignment.Assignment, *agentpb.ExecutionStep) {
 	managed := &agentpb.ExecutionStep{
 		StepId: "publish", TimeoutSeconds: 1,
 		Payload: &agentpb.ExecutionStep_ComponentApply{ComponentApply: &agentpb.ComponentApply{
@@ -404,7 +412,7 @@ func workerResolverRollbackAssignment(
 			ArtifactId: "cfg_exact", ArtifactDigest: candidate[:], Generation: 7,
 		}},
 	}
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		AssignmentID: workerTestAssignmentID, TaskID: workerTestTaskID,
 		ExecutionEpoch: 1,
 		Plan: &agentpb.ExecutionPlan{
@@ -449,13 +457,13 @@ func workerComponentComposeArtifact(
 func workerAcceptManagedConfig(
 	t *testing.T,
 	pool *WorkerPool,
-	assignment Assignment,
+	assignment testtaskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	content []byte,
 ) {
 	t.Helper()
 	digest := sha256.Sum256(content)
-	planHash := hashForPlan(assignment.Plan)
+	planHash := testtaskassignment.PlanDigest(assignment.Plan)
 	base := &agentpb.ManagedConfigTransfer{
 		AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
 		PlanHash: planHash[:], StepId: step.GetStepId(),
@@ -632,7 +640,7 @@ func TestWorkerPoolDeduplicatesMatchingLiveAssignmentAndRejectsHashMismatch(t *t
 		t.Fatalf("Abort() error = %v", err)
 	}
 	result := nextWorkerResult(t, pool)
-	if result.TaskID != workerTestTaskID || result.PlanHash != hashForPlan(assignment.Plan) ||
+	if result.TaskID != workerTestTaskID || result.PlanHash != testtaskassignment.PlanDigest(assignment.Plan) ||
 		result.Terminal != TaskTerminalAborted {
 		t.Fatalf("result = %#v", result)
 	}
@@ -769,7 +777,7 @@ func TestWorkerPoolCompletionClearsAdapterPlanSecret(t *testing.T) {
 	}}}
 	ctx, cancel := context.WithCancel(context.Background())
 	reservation := &taskReservation{
-		assignment: Assignment{TaskID: workerTestTaskID, Plan: plan},
+		assignment: testtaskassignment.Assignment{TaskID: workerTestTaskID, Plan: plan},
 		ctx:        ctx, cancel: cancel,
 	}
 	pool.reservations[workerTestTaskID] = reservation
@@ -784,7 +792,7 @@ func TestWorkerPoolCompletionClearsAdapterPlanSecret(t *testing.T) {
 	}
 }
 
-func workerAssignment(taskID, plan string) Assignment {
+func workerAssignment(taskID, plan string) testtaskassignment.Assignment {
 	planID := "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	if plan == "plan-b" {
 		planID = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
@@ -822,7 +830,7 @@ func workerAssignment(taskID, plan string) Assignment {
 	if err != nil {
 		panic(err)
 	}
-	return Assignment{
+	return testtaskassignment.Assignment{
 		AssignmentID: workerTestAssignmentID,
 		TaskID:       taskID, OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Plan: sealed, ExecutionEpoch: 1,

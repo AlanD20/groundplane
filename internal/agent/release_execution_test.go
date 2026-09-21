@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -138,7 +140,7 @@ func TestExecuteReleaseWaitsForDurableRunningEventBeforeCandidateMutation(t *tes
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	reservation := &taskReservation{assignment: Assignment{
+	reservation := &taskReservation{assignment: testtaskassignment.Assignment{
 		AssignmentID: "assignment-event-fence", TaskID: "task-event-fence", OperationID: "operation-event-fence",
 		Plan: plan, ExecutionEpoch: 2, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 		Deadline: time.Now().Add(5 * time.Second),
@@ -201,7 +203,7 @@ func TestExecuteReleaseRecoveryProofFailurePublishesFailedProgress(t *testing.T)
 	bindProxyRecoveryFixture(t, plan)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	reservation := &taskReservation{assignment: Assignment{
+	reservation := &taskReservation{assignment: testtaskassignment.Assignment{
 		AssignmentID: "assignment-proof-progress", TaskID: "task-proof-progress", OperationID: "operation-proof-progress",
 		Plan: plan, ExecutionEpoch: 1, ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY,
 		ReleaseRecoveryDirective: &agentpb.ReleaseRecoveryDirective{
@@ -244,7 +246,7 @@ func TestExecuteReleaseRejectedRunningEventRemainsTerminalWithoutRecovery(t *tes
 		Steps: []*agentpb.ExecutionStep{releaseForwardSwitch("switch-api")},
 	}
 	taskCtx, cancel := context.WithCancel(context.Background())
-	reservation := &taskReservation{assignment: Assignment{
+	reservation := &taskReservation{assignment: testtaskassignment.Assignment{
 		AssignmentID: "assignment-rejected-event", TaskID: "task-rejected-event",
 		OperationID: "operation-rejected-event", Plan: plan, ExecutionEpoch: 2,
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD, Deadline: time.Now().Add(5 * time.Second),
@@ -355,7 +357,7 @@ func TestExecuteReleaseCandidateAbsenceCompensationClosesWithExactProof(t *testi
 			},
 		}}},
 	}
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		AssignmentID: "assignment-absence", TaskID: "task-absence", OperationID: "operation-absence",
 		Plan: plan, Deadline: time.Now().Add(5 * time.Second), ExecutionEpoch: 1,
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
@@ -543,7 +545,7 @@ func TestExecuteReleaseConcurrentRetriesKeepEvidenceIsolated(t *testing.T) {
 
 func releaseExecutionPool(t *testing.T, helper *releaseExecutionHelper) *WorkerPool {
 	t.Helper()
-	runtime, err := NewComposeRuntime(helper, releaseExecutionObserver{})
+	runtime, err := testcomposeruntime.New(helper, releaseExecutionObserver{})
 	if err != nil {
 		t.Fatalf("NewComposeRuntime() error = %v", err)
 	}
@@ -561,14 +563,14 @@ func runReleaseExecution(
 ) TaskResult {
 	t.Helper()
 	plan = proto.Clone(plan).(*agentpb.ExecutionPlan)
-	if composeArtifact(plan, "candidate-artifact") == nil {
+	if testtaskassignment.ComposeArtifact(plan, "candidate-artifact") == nil {
 		plan.Artifacts = append(plan.Artifacts, releaseTestArtifact("candidate-artifact"))
 	}
-	if composeArtifact(plan, "prior-artifact") == nil {
+	if testtaskassignment.ComposeArtifact(plan, "prior-artifact") == nil {
 		plan.Artifacts = append(plan.Artifacts, releaseTestArtifact("prior-artifact"))
 	}
 	taskCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	reservation := &taskReservation{assignment: Assignment{
+	reservation := &taskReservation{assignment: testtaskassignment.Assignment{
 		AssignmentID: "assignment-" + taskID, TaskID: taskID, OperationID: "operation-" + taskID,
 		RetryOf: retryOf, Plan: plan, Deadline: time.Now().Add(5 * time.Second), ExecutionEpoch: 1,
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,

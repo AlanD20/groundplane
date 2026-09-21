@@ -1,4 +1,4 @@
-package agent
+package logstream
 
 import (
 	"context"
@@ -27,7 +27,7 @@ func TestLogManagerClassifiesOpenFailures(t *testing.T) {
 		{name: "source", err: errs.New(errs.KindInternal, "managed source invalid"), reason: agentpb.LogEndReason_LOG_END_REASON_SOURCE_FAILED},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			manager := newLogManager(logReaderStub{err: test.err})
+			manager := New(logReaderStub{err: test.err})
 			manager.Subscribe(context.Background(), validAgentLogSubscribe())
 			select {
 			case message := <-manager.Outputs():
@@ -47,7 +47,7 @@ func TestLogManagerClassifiesOpenFailures(t *testing.T) {
 func TestLogManagerReadiesAndCompletesZeroSources(t *testing.T) {
 	t.Parallel()
 
-	manager := newLogManager(logReaderStub{sources: emptyLogSources{}})
+	manager := New(logReaderStub{sources: emptyLogSources{}})
 	manager.Subscribe(context.Background(), validAgentLogSubscribe())
 	for _, want := range []string{"ready", "complete"} {
 		select {
@@ -79,7 +79,7 @@ func TestLogManagerBackpressuresReplayLargerThanQueueUntilCancellation(t *testin
 	sources := &burstLogSources{
 		exited: make(chan struct{}), allSent: make(chan struct{}), records: records,
 	}
-	manager := newLogManager(logReaderStub{sources: sources})
+	manager := New(logReaderStub{sources: sources})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	manager.Subscribe(ctx, validAgentLogSubscribe())

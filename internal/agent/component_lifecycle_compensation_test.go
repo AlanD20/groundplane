@@ -10,6 +10,9 @@ import (
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	testcomponentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
@@ -36,7 +39,7 @@ func (helper compensationOrderingHelper) Execute(
 		*helper.events = append(*helper.events, "compose-remove")
 	}
 	return &agentpb.ComposeHelperResponse{
-		Schema:     composeHelperSchema,
+		Schema:     composehelper.SchemaVersion,
 		Outcome:    agentpb.ComposeHelperOutcome_COMPOSE_HELPER_OUTCOME_COMPLETED,
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE,
 	}, nil
@@ -53,27 +56,29 @@ func (helper *compensationSelectionHelper) Execute(
 type compensationActionRuntime struct{ events *[]string }
 
 func (runtime compensationActionRuntime) ExecuteComponentAction(
-	context.Context,
-	Assignment,
-	*agentpb.ExecutionStep,
-	ManagedConfigPayload,
-) (*ComponentActionResult, error) {
+	context.Context, testtaskassignment.Assignment,
+
+	*agentpb.ExecutionStep, testcomponentaction.ManagedConfigPayload,
+
+) (*testcomponentaction.ComponentActionResult, error) {
 	*runtime.events = append(*runtime.events, "observe")
-	return &ComponentActionResult{DNSResolverObservation: &agentpb.DNSResolverObservationEvidence{}}, nil
+	return &testcomponentaction.ComponentActionResult{
+		DNSResolverObservation: &agentpb.DNSResolverObservationEvidence{},
+	}, nil
 }
 
 func (runtime compensationActionRuntime) FinalizeManagedConfig(
 	_ context.Context,
-	_ Assignment,
+	_ testtaskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	commit bool,
-) (ManagedConfigTransactionState, error) {
+) (testcomponentaction.ManagedConfigTransactionState, error) {
 	if commit {
 		*runtime.events = append(*runtime.events, "commit")
 	} else {
 		*runtime.events = append(*runtime.events, "rollback")
 	}
-	state := ManagedConfigTransactionState{}
+	state := testcomponentaction.ManagedConfigTransactionState{}
 	expected := step.GetComponentApply().GetExpectedPreviousArtifactDigest()
 	if len(expected) == sha256.Size {
 		state.Live.Present = true
@@ -88,7 +93,7 @@ type compensationHostRuntime struct{ events *[]string }
 
 func (runtime compensationHostRuntime) ExecuteHostResolution(
 	_ context.Context,
-	_ Assignment,
+	_ testtaskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) error {
 	if step.GetHostResolutionApply() != nil {
@@ -101,7 +106,7 @@ func (runtime compensationHostRuntime) ExecuteHostResolution(
 
 func TestEnableCompensationReversesResolverServiceAndCandidate(t *testing.T) {
 	events := []string{}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		compensationOrderingHelper{events: &events},
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "groundplane-infra"}}},
 	)
@@ -138,7 +143,7 @@ func TestEnableCompensationReversesResolverServiceAndCandidate(t *testing.T) {
 
 func TestDisableCompensationReappliesServiceBeforeResolver(t *testing.T) {
 	events := []string{}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		compensationOrderingHelper{events: &events},
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "groundplane-infra"}}},
 	)
@@ -204,7 +209,7 @@ func TestEnableCompensationSealsComposeRemovePlan(t *testing.T) {
 	)
 	taskRunner := runner.NewFake()
 	helper := &compensationSelectionHelper{taskRunner: taskRunner}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		helper,
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "groundplane-infra"}}},
 	)
@@ -245,7 +250,7 @@ func TestDisableCompensationSealsComposeApplyPlan(t *testing.T) {
 	)
 	taskRunner := runner.NewFake()
 	helper := &compensationSelectionHelper{taskRunner: taskRunner}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		helper,
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{{ProjectName: "groundplane-infra"}}},
 	)
@@ -322,7 +327,7 @@ func requireSealedComposeCompensationPlan(
 func sealedLifecycleCompensationAssignment(
 	t *testing.T,
 	mode agentpb.ComponentLifecycleMode,
-) (Assignment, *agentpb.ExecutionStep) {
+) (testtaskassignment.Assignment, *agentpb.ExecutionStep) {
 	t.Helper()
 	now := time.Date(2026, time.August, 31, 12, 0, 0, 0, time.UTC)
 	componentID := ids.NewAt(ids.KindComponent, now, 1)
@@ -406,7 +411,7 @@ func sealedLifecycleCompensationAssignment(
 	if err != nil {
 		t.Fatalf("executionplan.Seal() error = %v", err)
 	}
-	return Assignment{
+	return testtaskassignment.Assignment{
 		AssignmentID: ids.NewAt(ids.KindAssignment, now, 9),
 		TaskID:       ids.NewAt(ids.KindTask, now, 10),
 		OperationID:  ids.NewAt(ids.KindOperation, now, 11),

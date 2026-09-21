@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"testing"

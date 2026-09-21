@@ -1,12 +1,14 @@
 package agent
 
 import (
-	"bytes"
-	"crypto/sha256"
-	"testing"
+	bytes "bytes"
+	sha256 "crypto/sha256"
+	testing "testing"
 
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	proto "google.golang.org/protobuf/proto"
 )
 
 // Rationale: a completed compensation helper response closes reconciliation
@@ -19,23 +21,26 @@ func TestReleaseRestorationEvidenceProvenForProxy(t *testing.T) {
 	}
 	tests := []struct {
 		name   string
-		result composeStepResult
+		result testcomposeruntime.StepResult
 		want   bool
 	}{
 		{name: "missing proof"},
-		{name: "wrong proof kind", result: composeStepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
-			ServiceId: "api", ReleaseId: "prior-api", ArtifactId: "prior-artifact", Target: "green", Compensated: true,
-		}}},
-		{name: "mismatched proof", result: composeStepResult{ProxyEvidence: &agentpb.ServiceProxyEvidence{
+		{
+			name: "wrong proof kind",
+			result: testcomposeruntime.StepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
+				ServiceId: "api", ReleaseId: "prior-api", ArtifactId: "prior-artifact", Target: "green", Compensated: true,
+			}},
+		},
+		{name: "mismatched proof", result: testcomposeruntime.StepResult{ProxyEvidence: &agentpb.ServiceProxyEvidence{
 			ServiceId: "api", Target: "blue", ProxyGeneration: 7,
 			ConfigSha256: bytes.Repeat([]byte{0x31}, 32), ReleaseId: "prior-api", Compensated: true,
 		}}},
-		{name: "exact proof", result: composeStepResult{ProxyEvidence: exact}, want: true},
+		{name: "exact proof", result: testcomposeruntime.StepResult{ProxyEvidence: exact}, want: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := releaseRestorationEvidenceProven(Assignment{}, step, test.result); got != test.want {
-				t.Fatalf("releaseRestorationEvidenceProven() = %t, want %t", got, test.want)
+			if got := testcomposeruntime.ReleaseRestorationEvidenceProven(testtaskassignment.Assignment{}, step, test.result); got != test.want {
+				t.Fatalf("testcomposeruntime.ReleaseRestorationEvidenceProven() = %t, want %t", got, test.want)
 			}
 		})
 	}
@@ -51,24 +56,27 @@ func TestReleaseRestorationEvidenceProvenForRecreate(t *testing.T) {
 	}
 	tests := []struct {
 		name   string
-		result composeStepResult
+		result testcomposeruntime.StepResult
 		want   bool
 	}{
 		{name: "missing proof"},
-		{name: "wrong proof kind", result: composeStepResult{ProxyEvidence: &agentpb.ServiceProxyEvidence{
+		{name: "wrong proof kind", result: testcomposeruntime.StepResult{ProxyEvidence: &agentpb.ServiceProxyEvidence{
 			ServiceId: "worker", Target: "green", ProxyGeneration: 1,
 			ConfigSha256: bytes.Repeat([]byte{0x41}, 32), ReleaseId: "prior-worker", Compensated: true,
 		}}},
-		{name: "mismatched proof", result: composeStepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
-			ServiceId: "worker", ReleaseId: "prior-worker", ArtifactId: "candidate-artifact",
-			Target: "singleton", Compensated: true,
-		}}},
-		{name: "exact proof", result: composeStepResult{RecreateEvidence: exact}, want: true},
+		{
+			name: "mismatched proof",
+			result: testcomposeruntime.StepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
+				ServiceId: "worker", ReleaseId: "prior-worker", ArtifactId: "candidate-artifact",
+				Target: "singleton", Compensated: true,
+			}},
+		},
+		{name: "exact proof", result: testcomposeruntime.StepResult{RecreateEvidence: exact}, want: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := releaseRestorationEvidenceProven(Assignment{}, step, test.result); got != test.want {
-				t.Fatalf("releaseRestorationEvidenceProven() = %t, want %t", got, test.want)
+			if got := testcomposeruntime.ReleaseRestorationEvidenceProven(testtaskassignment.Assignment{}, step, test.result); got != test.want {
+				t.Fatalf("testcomposeruntime.ReleaseRestorationEvidenceProven() = %t, want %t", got, test.want)
 			}
 		})
 	}
@@ -81,17 +89,20 @@ func TestReleaseRestorationEvidenceProvenForCandidateAbsence(t *testing.T) {
 	assignment, step, exact := exactCandidateAbsenceCompensation()
 	tests := []struct {
 		name   string
-		result composeStepResult
+		result testcomposeruntime.StepResult
 		want   bool
 	}{
 		{name: "missing proof"},
-		{name: "wrong proof kind", result: composeStepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
-			ServiceId: "api", ReleaseId: "release-api", ArtifactId: "candidate-artifact",
-			Target: "singleton", Compensated: true,
-		}}},
+		{
+			name: "wrong proof kind",
+			result: testcomposeruntime.StepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
+				ServiceId: "api", ReleaseId: "release-api", ArtifactId: "candidate-artifact",
+				Target: "singleton", Compensated: true,
+			}},
+		},
 		{
 			name: "mismatched proof",
-			result: composeStepResult{CandidateAbsenceEvidence: &agentpb.CandidateAbsenceEvidence{
+			result: testcomposeruntime.StepResult{CandidateAbsenceEvidence: &agentpb.CandidateAbsenceEvidence{
 				AssignmentId: exact.GetAssignmentId(), PlanHash: append([]byte(nil), exact.GetPlanHash()...),
 				AuthoritySha256: append(
 					[]byte(nil),
@@ -99,12 +110,12 @@ func TestReleaseRestorationEvidenceProvenForCandidateAbsence(t *testing.T) {
 				CandidateArtifactId: exact.GetCandidateArtifactId(), Candidates: exact.GetCandidates(), AbsenceProven: true,
 			}},
 		},
-		{name: "exact proof", result: composeStepResult{CandidateAbsenceEvidence: exact}, want: true},
+		{name: "exact proof", result: testcomposeruntime.StepResult{CandidateAbsenceEvidence: exact}, want: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := releaseRestorationEvidenceProven(assignment, step, test.result); got != test.want {
-				t.Fatalf("releaseRestorationEvidenceProven() = %t, want %t", got, test.want)
+			if got := testcomposeruntime.ReleaseRestorationEvidenceProven(assignment, step, test.result); got != test.want {
+				t.Fatalf("testcomposeruntime.ReleaseRestorationEvidenceProven() = %t, want %t", got, test.want)
 			}
 		})
 	}
@@ -125,14 +136,26 @@ func TestCandidateAbsenceEvidenceUsesExactMember(t *testing.T) {
 		extra.Candidates,
 		&agentpb.CandidateReleaseService{ServiceId: "web", ReleaseId: "release-web"},
 	)
-	if !releaseRestorationEvidenceProven(assignment, step, composeStepResult{CandidateAbsenceEvidence: exact}) {
+	if !testcomposeruntime.ReleaseRestorationEvidenceProven(
+		assignment,
+		step,
+		testcomposeruntime.StepResult{CandidateAbsenceEvidence: exact},
+	) {
 		t.Fatal("exact member proof rejected")
 	}
-	if releaseRestorationEvidenceProven(assignment, step, composeStepResult{CandidateAbsenceEvidence: duplicate}) {
+	if testcomposeruntime.ReleaseRestorationEvidenceProven(
+		assignment,
+		step,
+		testcomposeruntime.StepResult{CandidateAbsenceEvidence: duplicate},
+	) {
 		t.Fatal("canonical candidate membership accepted a duplicate")
 	}
 	for name, evidence := range map[string]*agentpb.CandidateAbsenceEvidence{"missing": missing, "extra": extra, "other": other} {
-		if releaseRestorationEvidenceProven(assignment, step, composeStepResult{CandidateAbsenceEvidence: evidence}) {
+		if testcomposeruntime.ReleaseRestorationEvidenceProven(
+			assignment,
+			step,
+			testcomposeruntime.StepResult{CandidateAbsenceEvidence: evidence},
+		) {
 			t.Fatalf("canonical candidate membership accepted %s membership", name)
 		}
 	}
@@ -142,7 +165,7 @@ func TestCandidateAbsenceEvidenceUsesExactMember(t *testing.T) {
 // exact recreate or proxy shape without consulting the applied witness.
 func TestCandidateServingPredecessorAcceptsExactTypedRestorationVariant(t *testing.T) {
 	assignment, artifact, _ := nativeServingAssignment(t)
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err != nil {
 		t.Fatalf("valid native recreate authority: %v", err)
 	}
 	member := assignment.Plan.CandidateReleaseProcedure.Members[0]
@@ -152,15 +175,15 @@ func TestCandidateServingPredecessorAcceptsExactTypedRestorationVariant(t *testi
 			CandidateArtifactId: member.CandidateArtifactId,
 		},
 	}}
-	exact := composeStepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
+	exact := testcomposeruntime.StepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
 		ServiceId: member.ServiceId, ArtifactId: artifact.ArtifactId,
 		ReleaseId: nativeAssignmentPriorRelease, Target: "blue", Compensated: true,
 	}}
-	if !releaseRestorationEvidenceProven(assignment, step, exact) {
+	if !testcomposeruntime.ReleaseRestorationEvidenceProven(assignment, step, exact) {
 		t.Fatal("exact serving predecessor recreate evidence was rejected")
 	}
 	exact.RecreateEvidence.ArtifactId = "wrong-artifact"
-	if releaseRestorationEvidenceProven(assignment, step, exact) {
+	if testcomposeruntime.ReleaseRestorationEvidenceProven(assignment, step, exact) {
 		t.Fatal("mismatched serving predecessor recreate evidence was accepted")
 	}
 	proxyAssignment, proxyArtifact, _ := nativeServingAssignment(t)
@@ -177,33 +200,33 @@ func TestCandidateServingPredecessorAcceptsExactTypedRestorationVariant(t *testi
 	})
 	proxyAssignment.Plan.Artifacts[0] = proto.CloneOf(proxyArtifact)
 	sealNativeAssignmentArtifact(t, proxyAssignment.RestorationAuthority.NativePredecessors[0], proxyArtifact, nil)
-	if err := validateCandidateReleaseAssignmentAuthority(proxyAssignment, proxyAssignment.Plan); err != nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(proxyAssignment, proxyAssignment.Plan); err != nil {
 		t.Fatalf("valid native proxy authority: %v", err)
 	}
 	if !proto.Equal(appliedBefore, proxyAssignment.RestorationAuthority.AppliedPredecessor) {
 		t.Fatal("native proxy fixture rewrote the independently sealed applied witness")
 	}
-	proxy := composeStepResult{ProxyEvidence: &agentpb.ServiceProxyEvidence{
+	proxy := testcomposeruntime.StepResult{ProxyEvidence: &agentpb.ServiceProxyEvidence{
 		ServiceId: member.ServiceId, Target: "blue", ProxyGeneration: 7, ConfigSha256: configDigest[:],
 		ReleaseId: nativeAssignmentPriorRelease, Compensated: true,
 	}}
-	if !releaseRestorationEvidenceProven(proxyAssignment, step, proxy) {
+	if !testcomposeruntime.ReleaseRestorationEvidenceProven(proxyAssignment, step, proxy) {
 		t.Fatal("exact serving predecessor proxy evidence was rejected")
 	}
 }
 
 func TestReleaseProbeEvidenceStatusRequiresExactSealedAuthority(t *testing.T) {
 	proxyStep := releaseProbe("probe-api")
-	proxyAssignment := Assignment{Plan: &agentpb.ExecutionPlan{Artifacts: []*agentpb.ComposeArtifact{
+	proxyAssignment := testtaskassignment.Assignment{Plan: &agentpb.ExecutionPlan{Artifacts: []*agentpb.ComposeArtifact{
 		releaseTestArtifact("candidate-artifact"), releaseTestArtifact("prior-artifact"),
 	}}}
-	proxy := composeStepResult{ProxyEvidence: releaseExecutionSuccess("api", false).GetProxyEvidence()}
-	required, err := releaseProbeEvidenceStatus(proxyAssignment, proxyStep, proxy)
+	proxy := testcomposeruntime.StepResult{ProxyEvidence: releaseExecutionSuccess("api", false).GetProxyEvidence()}
+	required, err := testcomposeruntime.ReleaseProbeEvidenceStatus(proxyAssignment, proxyStep, proxy)
 	if err != nil || !required {
 		t.Fatalf("exact proxy probe = %t/%v, want compensation", required, err)
 	}
 	proxy.ProxyEvidence.ProxyGeneration++
-	if _, err := releaseProbeEvidenceStatus(proxyAssignment, proxyStep, proxy); err == nil {
+	if _, err := testcomposeruntime.ReleaseProbeEvidenceStatus(proxyAssignment, proxyStep, proxy); err == nil {
 		t.Fatal("proxy probe accepted mismatched generation")
 	}
 
@@ -212,13 +235,14 @@ func TestReleaseProbeEvidenceStatusRequiresExactSealedAuthority(t *testing.T) {
 			PriorArtifactId: "prior-artifact", ServiceId: "worker", CandidateReleaseId: "candidate-worker",
 			PriorReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 	}}
-	recreate := composeStepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{ServiceId: "worker",
+	recreate := testcomposeruntime.StepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{ServiceId: "worker",
 		ArtifactId: "prior-artifact", ReleaseId: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", Target: "singleton", Compensated: true}}
-	if required, err := releaseProbeEvidenceStatus(proxyAssignment, recreateStep, recreate); err != nil || required {
+	if required, err := testcomposeruntime.ReleaseProbeEvidenceStatus(proxyAssignment, recreateStep, recreate); err != nil ||
+		required {
 		t.Fatalf("exact recreate probe = %t/%v, want restored", required, err)
 	}
 	recreate.RecreateEvidence.Target = "blue"
-	if _, err := releaseProbeEvidenceStatus(proxyAssignment, recreateStep, recreate); err == nil {
+	if _, err := testcomposeruntime.ReleaseProbeEvidenceStatus(proxyAssignment, recreateStep, recreate); err == nil {
 		t.Fatal("recreate probe accepted mismatched target")
 	}
 
@@ -227,43 +251,15 @@ func TestReleaseProbeEvidenceStatusRequiresExactSealedAuthority(t *testing.T) {
 		CandidateRestorationProbe: &agentpb.CandidateRestorationProbe{CandidateArtifactId: "candidate-artifact",
 			ServiceId: "api", CandidateReleaseId: "release-api"},
 	}}
-	if required, err := releaseProbeEvidenceStatus(absenceAssignment, absenceStep,
-		composeStepResult{CandidateAbsenceEvidence: absence}); err != nil || required {
+	if required, err := testcomposeruntime.ReleaseProbeEvidenceStatus(absenceAssignment, absenceStep,
+		testcomposeruntime.StepResult{CandidateAbsenceEvidence: absence}); err != nil || required {
 		t.Fatalf("exact absence probe = %t/%v, want restored", required, err)
 	}
 	absence = proto.Clone(absence).(*agentpb.CandidateAbsenceEvidence)
 	absence.AuthoritySha256[0]++
-	if _, err := releaseProbeEvidenceStatus(absenceAssignment, absenceStep,
-		composeStepResult{CandidateAbsenceEvidence: absence}); err == nil {
+	if _, err := testcomposeruntime.ReleaseProbeEvidenceStatus(absenceAssignment, absenceStep,
+		testcomposeruntime.StepResult{CandidateAbsenceEvidence: absence}); err == nil {
 		t.Fatal("absence probe accepted mismatched authority")
-	}
-}
-
-// Rationale: recreate recovery may prove a sealed blue-green predecessor, but only
-// from one exact valid slot; missing, unsupported, or replicated slots are not authority.
-func TestRecreateEvidenceExpectationAcceptsOnlyExactSealedPriorSlot(t *testing.T) {
-	plan := &agentpb.ExecutionPlan{Artifacts: []*agentpb.ComposeArtifact{releaseTestArtifact("prior-artifact")}}
-	expected, ok := recreateEvidenceExpectation(plan, "prior-artifact", "api", "prior-api", true)
-	if !ok || expected.target != "green" {
-		t.Fatalf("sealed prior expectation = %#v, valid = %t", expected, ok)
-	}
-	for _, test := range []struct {
-		name   string
-		mutate func(*agentpb.ComposeService)
-	}{
-		{name: "missing slot", mutate: func(service *agentpb.ComposeService) { service.Slot = "" }},
-		{name: "unsupported slot", mutate: func(service *agentpb.ComposeService) { service.Slot = "red" }},
-		{name: "replicated slot", mutate: func(service *agentpb.ComposeService) { service.ExpectedReplicas = 2 }},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			owned := proto.Clone(plan).(*agentpb.ExecutionPlan)
-			test.mutate(owned.Artifacts[0].Services[1])
-			if _, valid := recreateEvidenceExpectation(
-				owned, "prior-artifact", "api", "prior-api", true,
-			); valid {
-				t.Fatal("invalid prior slot produced recreate evidence authority")
-			}
-		})
 	}
 }
 
@@ -285,7 +281,7 @@ func exactRecreateCompensationStep() *agentpb.ExecutionStep {
 	}}
 }
 
-func exactCandidateAbsenceCompensation() (Assignment, *agentpb.ExecutionStep, *agentpb.CandidateAbsenceEvidence) {
+func exactCandidateAbsenceCompensation() (testtaskassignment.Assignment, *agentpb.ExecutionStep, *agentpb.CandidateAbsenceEvidence) {
 	planHash := bytes.Repeat([]byte{0x51}, 32)
 	authorityDigest := bytes.Repeat([]byte{0x61}, 32)
 	candidates := []*agentpb.ReleaseRestorationCandidate{
@@ -304,7 +300,7 @@ func exactCandidateAbsenceCompensation() (Assignment, *agentpb.ExecutionStep, *a
 		{ServiceId: "api", ReleaseId: "release-api"},
 		{ServiceId: "worker", ReleaseId: "release-worker"},
 	}
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		AssignmentID: "assignment-api", Plan: &agentpb.ExecutionPlan{
 			PlanHash: planHash,
 			CandidateReleaseProcedure: &agentpb.CandidateReleaseProcedure{Members: []*agentpb.CandidateReleaseMember{

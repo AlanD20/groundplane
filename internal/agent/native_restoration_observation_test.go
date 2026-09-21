@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -57,15 +58,19 @@ func TestNativeRestorationObservationUsesCapturedRelease(t *testing.T) {
 func TestNativeRestorationObservationRejectsChangedAuthority(t *testing.T) {
 	for _, test := range []struct {
 		name   string
-		mutate func(*Assignment)
+		mutate func(*testtaskassignment.Assignment)
 	}{
-		{"missing native", func(a *Assignment) { a.RestorationAuthority.NativePredecessors = nil }},
-		{"missing current", func(a *Assignment) { a.RestorationAuthority.NativePredecessors[0].CurrentArtifact = nil }},
-		{"foreign service", func(a *Assignment) {
+		{"missing native", func(a *testtaskassignment.Assignment) { a.RestorationAuthority.NativePredecessors = nil }},
+		{"missing current", func(a *testtaskassignment.Assignment) {
+			a.RestorationAuthority.NativePredecessors[0].CurrentArtifact = nil
+		}},
+		{"foreign service", func(a *testtaskassignment.Assignment) {
 			a.RestorationAuthority.NativePredecessors[0].ServiceId = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 		}},
-		{"changed bytes", func(a *Assignment) { a.RestorationAuthority.NativePredecessors[0].CurrentArtifact[0] ^= 0xff }},
-		{"same identity different content", func(a *Assignment) {
+		{"changed bytes", func(a *testtaskassignment.Assignment) {
+			a.RestorationAuthority.NativePredecessors[0].CurrentArtifact[0] ^= 0xff
+		}},
+		{"same identity different content", func(a *testtaskassignment.Assignment) {
 			current := &agentpb.ComposeArtifact{}
 			if err := proto.Unmarshal(a.RestorationAuthority.NativePredecessors[0].CurrentArtifact, current); err != nil {
 				t.Fatal(err)
@@ -73,15 +78,17 @@ func TestNativeRestorationObservationRejectsChangedAuthority(t *testing.T) {
 			current.Services[0].ExpectedReplicas++
 			a.RestorationAuthority.NativePredecessors[0].CurrentArtifact = marshalNativeAssignmentArtifact(t, current)
 		}},
-		{"unbound retained", func(a *Assignment) {
+		{"unbound retained", func(a *testtaskassignment.Assignment) {
 			a.RestorationAuthority.NativePredecessors[0].RetainedPriorArtifact =
 				bytes.Clone(a.RestorationAuthority.NativePredecessors[0].CurrentArtifact)
 		}},
-		{"changed selection", func(a *Assignment) {
+		{"changed selection", func(a *testtaskassignment.Assignment) {
 			a.RestorationAuthority.Candidates[0].Target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE
 		}},
-		{"changed applied digest", func(a *Assignment) { a.RestorationAuthority.AppliedPredecessor.ComposeArtifactSha256[0] ^= 1 }},
-		{"changed plan hash", func(a *Assignment) { a.Plan.PlanHash[0] ^= 1 }},
+		{"changed applied digest", func(a *testtaskassignment.Assignment) {
+			a.RestorationAuthority.AppliedPredecessor.ComposeArtifactSha256[0] ^= 1
+		}},
+		{"changed plan hash", func(a *testtaskassignment.Assignment) { a.Plan.PlanHash[0] ^= 1 }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			assignment, probe := sealedRecreateProbeAssignment(t, 1, "singleton")
@@ -91,10 +98,13 @@ func TestNativeRestorationObservationRejectsChangedAuthority(t *testing.T) {
 			}
 		})
 	}
-	assignment, _ := sealedRecreateProbeAssignment(t, 1, "singleton")
+	assignment, probe := sealedRecreateProbeAssignment(t, 1, "singleton")
 	assignment.RestorationAuthority.NativePredecessors = nil
-	if _, _, _, err := openServingPredecessorAuthority(assignment,
-		assignment.RestorationAuthority.Candidates[0].ServiceId); err == nil {
+	if _, err := executionplan.NewRestorationObservation(
+		assignment.Plan,
+		assignment.RestorationAuthority,
+		probe.StepId,
+	); err == nil {
 		t.Fatal("recovery fell back to the applied Environment artifact")
 	}
 }

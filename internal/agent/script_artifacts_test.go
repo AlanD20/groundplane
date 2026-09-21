@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -25,11 +26,11 @@ func TestValidateAndCopyScriptArtifactsRejectsDuplicateReleaseBody(t *testing.T)
 	artifacts := &agentpb.ScriptAssignmentArtifacts{Bodies: []*agentpb.ScriptBodyArtifact{
 		{Metadata: metadataA, Body: bodyA}, {Metadata: metadataB, Body: bodyB},
 	}}
-	if _, err := validateAndCopyScriptArtifacts(plan, artifacts); err != nil {
+	if _, err := testtaskassignment.ValidateAndCopyScriptArtifacts(plan, artifacts); err != nil {
 		t.Fatalf("distinct body control rejected: %v", err)
 	}
 	artifacts.Bodies[1] = artifacts.Bodies[0]
-	_, err := validateAndCopyScriptArtifacts(plan, artifacts)
+	_, err := testtaskassignment.ValidateAndCopyScriptArtifacts(plan, artifacts)
 	if err == nil {
 		t.Fatal("validateAndCopyScriptArtifacts() error = nil, want duplicate body rejection")
 	}

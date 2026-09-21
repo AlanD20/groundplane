@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -34,24 +35,24 @@ func TestCandidateAssignmentValidatesAbsenceWitness(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			assignment := configuredRestorationAssignment(t)
-			if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+			if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err != nil {
 				t.Fatalf("valid configured witness: %v", err)
 			}
 			test.mutate(assignment.RestorationAuthority)
-			if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err == nil {
+			if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err == nil {
 				t.Fatal("accepted corrupt or contradictory applied witness")
 			}
 		})
 	}
 }
 
-func configuredRestorationAssignment(t *testing.T) Assignment {
+func configuredRestorationAssignment(t *testing.T) testtaskassignment.Assignment {
 	t.Helper()
 	const service = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	const candidate = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	const artifactID = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	const environment = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		TaskID: "task_01ARZ3NDEKTSV4RRFFQ69G5FAV", OperationID: "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
 		Plan: &agentpb.ExecutionPlan{PlanHash: bytes.Repeat([]byte{0x51}, 32),
@@ -122,23 +123,23 @@ func TestCandidateAssignmentPreservesMixedSelection(t *testing.T) {
 		ServiceId: servingService, CurrentArtifact: marshalNativeAssignmentArtifact(t, current),
 	})
 	before := proto.CloneOf(authority)
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err != nil {
 		t.Fatalf("mixed selection rejected: %v", err)
 	}
 	if !proto.Equal(before, authority) {
 		t.Fatal("validation mutated sealed authority")
 	}
 	authority.Candidates[1].Target = agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err == nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err == nil {
 		t.Fatal("serving witness accepted as absence")
 	}
 	authority.Candidates[1].Target = before.Candidates[1].Target
 	authority.AppliedPredecessor = nil
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err != nil {
 		t.Fatalf("native serving member required an applied artifact: %v", err)
 	}
 	authority.NativePredecessors = nil
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err == nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err == nil {
 		t.Fatal("serving member accepted without native witness")
 	}
 }
@@ -147,7 +148,7 @@ func TestCandidateAssignmentPreservesMixedSelection(t *testing.T) {
 func TestCandidateAssignmentAcceptsAbsentWitness(t *testing.T) {
 	assignment := configuredRestorationAssignment(t)
 	assignment.RestorationAuthority.AppliedPredecessor = nil
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, assignment.Plan); err != nil {
+	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, assignment.Plan); err != nil {
 		t.Fatal(err)
 	}
 }

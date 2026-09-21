@@ -1,4 +1,4 @@
-package agent
+package scriptruntime
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -44,7 +45,7 @@ func TestExplicitScriptLostAcknowledgementResumesWithoutDuplicateStart(t *testin
 					return nil
 				}
 				events := []string{}
-				runtime, err := NewDockerScriptRuntime(&checkpointOrderScriptEngine{
+				runtime, err := New(&checkpointOrderScriptEngine{
 					events: &events, bodyDigest: digest, runErr: outcome.runErr,
 				})
 				if err != nil {
@@ -65,7 +66,7 @@ func TestExplicitScriptLostAcknowledgementResumesWithoutDuplicateStart(t *testin
 					t.Fatalf("initial setup events = %v", events)
 				}
 				resumedEvents := []string{}
-				resumed, err := NewDockerScriptRuntime(
+				resumed, err := New(
 					&checkpointOrderScriptEngine{events: &resumedEvents, bodyDigest: digest},
 				)
 				if err != nil {
@@ -128,7 +129,7 @@ func persistScriptCheckpointForTest(
 
 // This is an L1 received-assignment fixture, not a substitute for the separate
 // full-plan sealing and actual-source publication tests.
-func setExplicitScriptFixture(t *testing.T, assignment *Assignment) {
+func setExplicitScriptFixture(t *testing.T, assignment *testtaskassignment.Assignment) {
 	t.Helper()
 	snapshot, projection := assignment.Plan.ScriptRunnerSnapshots[0], assignment.Plan.ScriptRunnerProjections[0]
 	context := &agentpb.ScriptExplicitExecutionContext{
@@ -186,7 +187,11 @@ func (engine *capturedProjectionScriptEngine) CreateContainer(
 	return engine.checkpointOrderScriptEngine.CreateContainer(ctx, request, body)
 }
 
-func assertExplicitScriptCapture(t *testing.T, assignment Assignment, engine *capturedProjectionScriptEngine) {
+func assertExplicitScriptCapture(
+	t *testing.T,
+	assignment testtaskassignment.Assignment,
+	engine *capturedProjectionScriptEngine,
+) {
 	t.Helper()
 	if !proto.Equal(engine.projection, assignment.Plan.ScriptRunnerProjections[0]) {
 		t.Fatal("container creation did not receive the exact explicit runner projection")

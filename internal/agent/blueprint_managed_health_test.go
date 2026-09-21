@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -53,13 +54,16 @@ func TestBlueprintManagedHealthWithoutCandidateReleaseScopesRetainedRuntime(t *t
 			warming.Containers[0].Health = agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_STARTING
 			observer := &fakeComposeObserver{projects: []*agentpb.ObservedProject{warming, healthy}}
 			helper := completedComposeHelper()
-			runtime, err := NewComposeRuntime(helper, observer)
+			runtime, err := testcomposeruntime.New(helper, observer)
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := runtime.waitHealthy(t.Context(), plan, &agentpb.WaitHealthy{
-				ArtifactId: artifact.ArtifactId, ServiceIds: []string{"svc_api"},
-			})
+			step := &agentpb.ExecutionStep{
+				Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
+					ArtifactId: artifact.ArtifactId, ServiceIds: []string{"svc_api"},
+				}},
+			}
+			result, err := runtime.ExecuteStep(t.Context(), assignment, step)
 			if scenario == "retained native" {
 				if err != nil || result.ReconciliationRequired || observer.calls != 2 {
 					t.Fatalf(

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -27,7 +29,7 @@ func (runtime *orderedReleaseRuntime) Execute(
 
 func (runtime *orderedReleaseRuntime) ExecuteScript(
 	_ context.Context,
-	_ Assignment,
+	_ testtaskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	_ func(context.Context, *agentpb.ScriptCheckpointRequest) error,
 ) (int32, error) {
@@ -37,7 +39,7 @@ func (runtime *orderedReleaseRuntime) ExecuteScript(
 
 func (runtime *orderedReleaseRuntime) CompleteScriptWithoutStart(
 	_ context.Context,
-	_ Assignment,
+	_ testtaskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	reason agentpb.ScriptOutcomeReason,
 	_ func(context.Context, *agentpb.ScriptCheckpointRequest) error,
@@ -72,7 +74,7 @@ func TestExecuteReleaseHooksRespectPhasesAndPreservePrimaryFailure(t *testing.T)
 		scriptExit: map[string]int32{"failure": 29},
 		scriptErr:  map[string]error{"failure": errors.New("secondary failure hook error")},
 	}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		runtime,
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
 	)
@@ -170,7 +172,7 @@ func TestExecuteReleaseFailureHookRequiresMatchingServingEvidence(t *testing.T) 
 		Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
 	}
 	runtime := &orderedReleaseRuntime{responses: map[string]*agentpb.ComposeHelperResponse{"fail": failureResponse}}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		runtime,
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
 	)
@@ -203,7 +205,7 @@ func TestExecuteReleaseCompensationFailureSuppressesFailureHooks(t *testing.T) {
 			Diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
 		},
 	}}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		runtime,
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
 	)
@@ -247,7 +249,7 @@ func TestExecuteReleasePostServingFailureWithDisabledCompensationStaysTerminal(t
 		scriptExit: map[string]int32{"post": 23},
 		scriptErr:  map[string]error{"post": errors.New("post hook failed")},
 	}
-	compose, err := NewComposeRuntime(
+	compose, err := testcomposeruntime.New(
 		runtime,
 		&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
 	)
@@ -308,7 +310,7 @@ func TestExecuteReleaseRunsPostDeployAfterCandidateStartBeforeReadiness(t *testi
 				), test.readiness: releaseExecutionSuccess("api", false),
 				test.finalize: releaseExecutionSuccess("api", false),
 			}}
-			compose, err := NewComposeRuntime(
+			compose, err := testcomposeruntime.New(
 				runtime,
 				&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
 			)

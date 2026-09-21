@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/internal/infra/docker/composeobserver"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/moby/moby/api/types/container"
@@ -25,11 +26,10 @@ func TestRecoveryObserverCandidateCreationSequence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := &ComposeRuntime{observer: observer}
-	proof := composeStepResult{RecreateEvidence: &agentpb.ServiceRecreateEvidence{
-		ServiceId: prior.Services[0].ServiceId, ArtifactId: prior.ArtifactId,
-		ReleaseId: probe.GetServiceRecreateProbe().PriorReleaseId, Target: "blue", Compensated: true,
-	}}
+	runtime, err := testcomposeruntime.New(completedComposeHelper(), observer)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, stage := range []string{"before candidate", "candidate created", "candidate ownership changed"} {
 		t.Run(stage, func(t *testing.T) {
 			if stage == "candidate created" {
@@ -38,13 +38,9 @@ func TestRecoveryObserverCandidateCreationSequence(t *testing.T) {
 			if stage == "candidate ownership changed" {
 				engine.items[1].Config.Labels["com.groundplane.plan-id"] = "foreign"
 			}
-			result, err := runtime.verifyReleaseRestorationPostcondition(
-				context.Background(),
-				assignment,
-				probe,
-				proof,
-				nil,
-			)
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			defer cancel()
+			result, err := runtime.ExecuteStep(ctx, assignment, probe)
 			if stage == "candidate ownership changed" {
 				if err == nil || !result.ReconciliationRequired {
 					t.Fatal("foreign candidate closed recovery")
@@ -56,11 +52,7 @@ func TestRecoveryObserverCandidateCreationSequence(t *testing.T) {
 				if len(result.Observed.Containers) != len(engine.items) {
 					t.Fatal("candidate evidence was dropped")
 				}
-				// Bound polling if the native recovery path loses the predecessor.
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-				defer cancel()
-				recovered, err := runtime.observeRecreateRecovery(ctx, assignment, probe)
-				if err != nil || recovered.RecreateEvidence.GetArtifactId() != prior.ArtifactId {
+				if result.RecreateEvidence.GetArtifactId() != prior.ArtifactId {
 					t.Fatalf("native recovery lost healthy predecessor: %v", err)
 				}
 			}

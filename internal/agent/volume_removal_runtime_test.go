@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	testenvironmentdirectory "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -58,7 +59,7 @@ func TestVolumeRemovalRuntimeCheckpointsEveryBoundedCall(t *testing.T) {
 	intent := sha256.Sum256([]byte("removal intent"))
 	step.GetManagedVolumeDirectoryRemove().IntentSha256 = intent[:]
 	helper := &volumeLoopHelper{t: t}
-	runtime, err := NewEnvironmentDirectoryRuntime(helper)
+	runtime, err := testenvironmentdirectory.New(helper)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +103,7 @@ func TestVolumeRemovalRuntimeCheckpointsEveryBoundedCall(t *testing.T) {
 		helper.committed = pending.RequestOrdinal
 		return ack, nil
 	}
-	result, err := runtime.executeVolumeRemoval(context.Background(), assignment, step, checkpoint)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step, checkpoint)
 	if err != nil || !result.Complete || helper.calls != 2 || acknowledged != 2 {
 		t.Fatalf(
 			"bounded removal loop: result=%+v calls=%d acknowledged=%d error=%v",

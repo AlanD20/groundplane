@@ -1,13 +1,12 @@
-package componentrender
+package componentregistration
 
 import (
-	"slices"
-	"testing"
-
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
-
-	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/controller/componentrender"
+	core "github.com/AlanD20/groundplane/internal/core"
+	slices "slices"
+	testing "testing"
 )
 
 // Rationale: production composition must start the remotely managed connector
@@ -91,7 +90,7 @@ func testCloudflareTunnelPlan(
 	environment core.Environment,
 	tunnel core.Component,
 ) (componentsdk.EnvironmentPlan, error) {
-	return PlanCloudflareTunnel(
+	return componentrender.PlanCloudflareTunnel(
 		environment,
 		tunnel,
 		func(serviceID, secretID string, zones []componentsdk.NetworkInput) (componentsdk.EnvironmentPlan, error) {

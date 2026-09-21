@@ -1,18 +1,19 @@
-package agent
+package composeruntime
 
 import (
-	"crypto/sha256"
-	"fmt"
-	"sort"
-	"strconv"
-	"strings"
-	"testing"
-	"time"
+	sha256 "crypto/sha256"
+	fmt "fmt"
+	sort "sort"
+	strconv "strconv"
+	strings "strings"
+	testing "testing"
+	time "time"
 
 	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/proto/agentpb"
+	executionplan "github.com/AlanD20/groundplane/internal/common/executionplan"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	proto "google.golang.org/protobuf/proto"
 )
 
 // The fixture seals an ordinary Release with explicit historical ownership.
@@ -91,8 +92,7 @@ func sealedRecreateProbeAssignment(
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD, Plan: plan,
 	}
 	assignment.RestorationAuthority = &agentpb.ReleaseRestorationAuthority{
-		TaskId: assignment.TaskID, OperationId: assignment.OperationID, PlanHash: plan.PlanHash,
-		EnvironmentId: environmentID, CandidateArtifactId: candidate.ArtifactId,
+		TaskId: assignment.TaskID, OperationId: assignment.OperationID, PlanHash: plan.PlanHash, EnvironmentId: environmentID, CandidateArtifactId: candidate.ArtifactId,
 		Candidates: []*agentpb.ReleaseRestorationCandidate{{ServiceId: serviceID, ReleaseId: candidateRelease,
 			Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR}},
 		AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
@@ -103,8 +103,7 @@ func sealedRecreateProbeAssignment(
 		},
 	}
 	sealAssignmentWitness(assignment.RestorationAuthority, witness)
-	// The Controller's digest is opaque to the Agent; only the plan and witness
-	// hashes are computed and independently checked at this unit-test boundary.
+
 	digest := sha256.Sum256([]byte("controller-owned recreate fixture authority"))
 	assignment.RestorationAuthority.AuthoritySha256 = digest[:]
 	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, plan); err != nil {
@@ -166,4 +165,18 @@ func recreateProbeArtifact(
 	digest := sha256.Sum256(artifact.CanonicalYaml)
 	artifact.YamlSha256 = digest[:]
 	return artifact
+}
+
+func marshalNativeAssignmentArtifact(t *testing.T, artifact *agentpb.ComposeArtifact) []byte {
+	t.Helper()
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+func sealAssignmentWitness(authority *agentpb.ReleaseRestorationAuthority, encoded []byte) {
+	digest := sha256.Sum256(encoded)
+	authority.AppliedPredecessor.ComposeArtifact = encoded
+	authority.AppliedPredecessor.ComposeArtifactSha256 = digest[:]
 }

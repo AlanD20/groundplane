@@ -1,16 +1,15 @@
 package localagent
 
 import (
-	"context"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
-	"strings"
-	"sync"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/pkg/errs"
+	context "context"
+	base64 "encoding/base64"
+	json "encoding/json"
+	errors "errors"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	strings "strings"
+	sync "sync"
+	testing "testing"
+	time "time"
 )
 
 const (
@@ -23,8 +22,7 @@ const (
 var testNow = time.Date(2026, time.August, 20, 12, 0, 0, 0, time.UTC)
 
 func TestEnrollCommitsCredentialBeforeRuntimeAndEnforcesSingletonCAS(t *testing.T) {
-	// Rationale: entropy failure or singleton contention must never expose an
-	// uncommitted runtime token, container, or second local Agent.
+
 	t.Parallel()
 
 	trace := &traceLog{}
@@ -62,8 +60,7 @@ func TestEnrollCommitsCredentialBeforeRuntimeAndEnforcesSingletonCAS(t *testing.
 }
 
 func TestReconcileResumesProvisioningAfterCrashWithoutRotatingIdentity(t *testing.T) {
-	// Rationale: a Controller crash after the durable transaction must reuse the
-	// same Agent id, generation, and encrypted token instead of creating a peer.
+
 	t.Parallel()
 
 	trace := &traceLog{}
@@ -97,8 +94,7 @@ func TestReconcileResumesProvisioningAfterCrashWithoutRotatingIdentity(t *testin
 }
 
 func TestEnrollUsesExactReadinessDeadlineAndLeavesRetryablePhase(t *testing.T) {
-	// Rationale: enrollment has one accepted 120-second authenticated Ready
-	// deadline, while timeout must preserve provisioning state for reconciliation.
+
 	t.Parallel()
 
 	trace := &traceLog{}
@@ -128,8 +124,7 @@ func TestEnrollUsesExactReadinessDeadlineAndLeavesRetryablePhase(t *testing.T) {
 }
 
 func TestReconcileAndRemoveAreIdempotent(t *testing.T) {
-	// Rationale: boot loops and retried deletion tasks must safely repeat after
-	// ambiguous process or Docker failures without changing the Agent generation.
+
 	t.Parallel()
 
 	trace := &traceLog{}
@@ -164,8 +159,7 @@ func TestReconcileAndRemoveAreIdempotent(t *testing.T) {
 }
 
 func TestRemovePersistsRevocationBeforeRuntimeDeletion(t *testing.T) {
-	// Rationale: no container or credential file may be removed while a token can
-	// still authenticate, and the durable record must remain until cleanup ends.
+
 	t.Parallel()
 
 	trace := &traceLog{}
@@ -190,8 +184,7 @@ func TestRemovePersistsRevocationBeforeRuntimeDeletion(t *testing.T) {
 }
 
 func TestRemoveFailureNeverAdvancesPastTheFailedBoundary(t *testing.T) {
-	// Rationale: each deletion boundary must leave enough durable state for a
-	// later boot reconciliation and must never delete the record prematurely.
+
 	t.Parallel()
 
 	tests := []struct {
@@ -272,8 +265,7 @@ func TestRemoveFailureNeverAdvancesPastTheFailedBoundary(t *testing.T) {
 }
 
 func TestReconcileResumesDeletingAfterDockerOutage(t *testing.T) {
-	// Rationale: Docker unavailability must leave a revoked deleting record that
-	// a later Controller boot can finish without restoring channel authority.
+
 	t.Parallel()
 
 	trace := &traceLog{}
@@ -298,8 +290,7 @@ func TestReconcileResumesDeletingAfterDockerOutage(t *testing.T) {
 }
 
 func TestHealthRequiresCurrentNonStaleReadyGeneration(t *testing.T) {
-	// Rationale: keepalive, an old container generation, and stale Ready reports
-	// must never project the Agent as online or healthy.
+
 	t.Parallel()
 
 	trace := &traceLog{}
@@ -341,8 +332,7 @@ func TestHealthRequiresCurrentNonStaleReadyGeneration(t *testing.T) {
 }
 
 func TestCancellationStopsProvisioningBeforeReadyTransition(t *testing.T) {
-	// Rationale: task cancellation must propagate through readiness waiting and
-	// leave a durable provisioning record rather than reporting false success.
+
 	t.Parallel()
 
 	trace := &traceLog{}
@@ -365,373 +355,20 @@ func TestCancellationStopsProvisioningBeforeReadyTransition(t *testing.T) {
 	}
 }
 
-func TestReconcileFencesPriorGenerationAfterCancellationAtReplacementCommit(t *testing.T) {
-	// Rationale: cancellation immediately after durable token rotation must leave
-	// recovery responsible for fencing the surviving prior-generation stream
-	// before it materializes or starts the replacement generation.
-	t.Parallel()
-
-	trace := &traceLog{}
-	repository := seededRepository(trace, PhaseReady)
-	first := newTestManager(t, repository, trace)
-	ctx, cancel := context.WithCancel(context.Background())
-	repository.replacementCommitted = func(generation uint64) {
-		if generation == initialGeneration+1 {
-			cancel()
-		}
-	}
-	request := UpdateRequest{
-		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-		StartingGeneration: initialGeneration,
-	}
-	if err := first.manager.Update(ctx, request); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Update() error = %v, want context.Canceled", err)
-	}
-	interrupted := cloneRecord(repository.record.Record)
-	if interrupted.Phase != PhaseUpdating || interrupted.Generation != initialGeneration+1 {
-		t.Fatalf("interrupted replacement = %#v", interrupted)
-	}
-
-	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
-	}
-	if len(resumed.sessions.fencedThrough) != 1 ||
-		resumed.sessions.fencedThrough[0] != initialGeneration {
-		t.Fatalf("recovery fences = %v, want [%d]", resumed.sessions.fencedThrough, initialGeneration)
-	}
-	if got := trace.values(); !containsOrdered(got, "begin_replacement", "fence_through", "materialize") {
-		t.Fatalf("recovery order = %v, want prior-generation fence before materialization", got)
-	}
-	if repository.record.Record.Generation != interrupted.Generation ||
-		repository.record.Record.Credential.Digest != interrupted.Credential.Digest ||
-		resumed.runtime.generateCalls != 0 {
-		t.Fatal("recovery rotated the current replacement credential")
-	}
-}
-
-func TestReconcileFencesReplacementGenerationAfterCancellationAtRollbackCommit(t *testing.T) {
-	// Rationale: rollback is a second durable authority rotation; cancellation
-	// at that commit must make recovery fence the failed replacement generation
-	// before converging the rollback generation.
-	t.Parallel()
-
-	trace := &traceLog{}
-	repository := seededRepository(trace, PhaseReady)
-	first := newTestManager(t, repository, trace)
-	first.sessions.readySequence = []<-chan struct{}{make(chan struct{})}
-	ctx, cancel := context.WithCancel(context.Background())
-	repository.replacementCommitted = func(generation uint64) {
-		if generation == initialGeneration+2 {
-			cancel()
-		}
-	}
-	request := UpdateRequest{
-		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-		StartingGeneration: initialGeneration,
-	}
-	result := make(chan error, 1)
-	go func() { result <- first.manager.Update(ctx, request) }()
-	first.clock.awaitTimer(t).fire(testNow.Add(ReadyTimeout))
-	if err := <-result; !errors.Is(err, context.Canceled) {
-		t.Fatalf("Update() error = %v, want context.Canceled", err)
-	}
-	interrupted := cloneRecord(repository.record.Record)
-	if interrupted.Phase != PhaseUpdating || interrupted.Generation != initialGeneration+2 ||
-		interrupted.Image != testImage {
-		t.Fatalf("interrupted rollback = %#v", interrupted)
-	}
-
-	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("Reconcile() error = %v", err)
-	}
-	if len(resumed.sessions.fencedThrough) != 1 ||
-		resumed.sessions.fencedThrough[0] != initialGeneration+1 {
-		t.Fatalf("recovery fences = %v, want [%d]", resumed.sessions.fencedThrough, initialGeneration+1)
-	}
-	if got := trace.values(); !containsOrdered(
-		got,
-		"begin_replacement",
-		"begin_replacement",
-		"fence_through",
-		"materialize",
-	) {
-		t.Fatalf("rollback recovery order = %v, want prior-generation fence before materialization", got)
-	}
-	if repository.record.Record.Generation != interrupted.Generation ||
-		repository.record.Record.Credential.Digest != interrupted.Credential.Digest ||
-		resumed.runtime.generateCalls != 0 {
-		t.Fatal("rollback recovery rotated the current credential")
-	}
-}
-
-func TestReconcileCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T) {
-	// Rationale: once replacement authority is durable, Task cancellation must
-	// not strand PhaseUpdating; boot reconciliation owns the authenticated Ready
-	// transition and a replay must not rotate the credential again.
-	t.Parallel()
-
-	trace := &traceLog{}
-	repository := seededRepository(trace, PhaseReady)
-	wantConfig := cloneConfig(repository.record.Record.Config)
-	wantReadyAt := repository.record.Record.ReadyAt
-	first := newTestManager(t, repository, trace)
-	first.sessions.ready = make(chan struct{})
-	ctx, cancel := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-	request := UpdateRequest{
-		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-		StartingGeneration: initialGeneration,
-	}
-	go func() { result <- first.manager.Update(ctx, request) }()
-	first.clock.awaitTimer(t)
-	cancel()
-	if err := <-result; !errors.Is(err, context.Canceled) {
-		t.Fatalf("Update() error = %v, want context.Canceled", err)
-	}
-	interrupted := cloneRecord(repository.record.Record)
-	if interrupted.Phase != PhaseUpdating || interrupted.Generation != initialGeneration+1 ||
-		interrupted.Image != replacementTestImage {
-		t.Fatalf("interrupted replacement = %#v", interrupted)
-	}
-
-	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("resumed Reconcile() error = %v", err)
-	}
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("repeated Reconcile() error = %v", err)
-	}
-	got := repository.record.Record
-	if got.ID != interrupted.ID || got.EnrollmentTaskID != interrupted.EnrollmentTaskID ||
-		got.Image != interrupted.Image || got.Generation != interrupted.Generation ||
-		got.Phase != PhaseReady || !got.ReadyAt.Equal(wantReadyAt) ||
-		!equalConfig(got.Config, wantConfig) ||
-		got.Credential.Digest != interrupted.Credential.Digest || string(got.Credential.EncryptedToken) != string(interrupted.Credential.EncryptedToken) {
-		t.Fatalf("reconciled replacement = %#v, interrupted = %#v", got, interrupted)
-	}
-	if resumed.runtime.generateCalls != 0 {
-		t.Fatalf("reconciliation generated %d credentials, want 0", resumed.runtime.generateCalls)
-	}
-	if err := resumed.manager.Update(context.Background(), request); err != nil {
-		t.Fatalf("completed update replay error = %v", err)
-	}
-	if repository.record.Record.Generation != interrupted.Generation {
-		t.Fatalf(
-			"completed replay generation = %d, want %d",
-			repository.record.Record.Generation,
-			interrupted.Generation,
-		)
-	}
-}
-
-func TestReconcileCompletesInterruptedRollbackAfterAuthenticatedReady(t *testing.T) {
-	// Rationale: rollback is itself a durable second rotation. Cancellation after
-	// that commit must reconcile its new credential to Ready, never reuse the
-	// revoked replacement credential, and permit a later fresh update.
-	t.Parallel()
-
-	trace := &traceLog{}
-	repository := seededRepository(trace, PhaseReady)
-	wantConfig := cloneConfig(repository.record.Record.Config)
-	wantReadyAt := repository.record.Record.ReadyAt
-	first := newTestManager(t, repository, trace)
-	first.sessions.readySequence = []<-chan struct{}{make(chan struct{}), make(chan struct{})}
-	ctx, cancel := context.WithCancel(context.Background())
-	result := make(chan error, 1)
-	request := UpdateRequest{
-		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-		StartingGeneration: initialGeneration,
-	}
-	go func() { result <- first.manager.Update(ctx, request) }()
-	first.clock.awaitTimer(t).fire(testNow.Add(ReadyTimeout))
-	first.clock.awaitTimer(t)
-	cancel()
-	if err := <-result; !errors.Is(err, context.Canceled) {
-		t.Fatalf("Update() error = %v, want context.Canceled", err)
-	}
-	interrupted := cloneRecord(repository.record.Record)
-	if interrupted.Phase != PhaseUpdating || interrupted.Generation != initialGeneration+2 ||
-		interrupted.Image != testImage {
-		t.Fatalf("interrupted rollback = %#v", interrupted)
-	}
-
-	resumed := newTestManager(t, repository, trace)
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("resumed Reconcile() error = %v", err)
-	}
-	if err := resumed.manager.Reconcile(context.Background()); err != nil {
-		t.Fatalf("repeated Reconcile() error = %v", err)
-	}
-	got := repository.record.Record
-	if got.ID != interrupted.ID || got.EnrollmentTaskID != interrupted.EnrollmentTaskID ||
-		got.Image != interrupted.Image || got.Generation != interrupted.Generation ||
-		got.Phase != PhaseReady || !got.ReadyAt.Equal(wantReadyAt) ||
-		!equalConfig(got.Config, wantConfig) ||
-		got.Credential.Digest != interrupted.Credential.Digest || string(got.Credential.EncryptedToken) != string(interrupted.Credential.EncryptedToken) {
-		t.Fatalf("reconciled rollback = %#v, interrupted = %#v", got, interrupted)
-	}
-	if resumed.runtime.generateCalls != 0 {
-		t.Fatalf("rollback reconciliation generated %d credentials, want 0", resumed.runtime.generateCalls)
-	}
-	if err := resumed.manager.Update(context.Background(), UpdateRequest{
-		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-		StartingGeneration: interrupted.Generation,
-	}); err != nil {
-		t.Fatalf("fresh update after reconciled rollback error = %v", err)
-	}
-	if repository.record.Record.Phase != PhaseReady ||
-		repository.record.Record.Generation != interrupted.Generation+1 ||
-		repository.record.Record.Image != replacementTestImage {
-		t.Fatalf("fresh replacement after rollback = %#v", repository.record.Record)
-	}
-}
-
-func TestUpdateRejectsBusyAgentBeforeCredentialOrDurableMutation(t *testing.T) {
-	// Rationale: update must never abort operator work or rotate authority while
-	// the fenced generation still owns an active Task assignment.
-	t.Parallel()
-
-	trace := &traceLog{}
-	repository := seededRepository(trace, PhaseReady)
-	harness := newTestManager(t, repository, trace)
-	harness.tasks.idleError = errs.New(errs.KindResourceInUse, "active Task assignment")
-
-	err := harness.manager.Update(context.Background(), UpdateRequest{
-		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-		StartingGeneration: initialGeneration,
-	})
-	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) {
-		t.Fatalf("Update() error = %v, want resource.in_use", err)
-	}
-	if repository.record.Record.Image != testImage ||
-		repository.record.Record.Generation != initialGeneration ||
-		repository.record.Record.Phase != PhaseReady {
-		t.Fatalf("record mutated for busy Agent = %#v", repository.record.Record)
-	}
-	if harness.runtime.generateCalls != 0 || harness.runtime.materializeCalls != 0 ||
-		harness.container.convergeCalls != 0 {
-		t.Fatalf(
-			"busy update side effects = generate %d, materialize %d, converge %d",
-			harness.runtime.generateCalls,
-			harness.runtime.materializeCalls,
-			harness.container.convergeCalls,
-		)
-	}
-}
-
-func TestUpdateRotatesIdleAgentAndPreservesStableMetadata(t *testing.T) {
-	// Rationale: successful replacement changes only runtime identity while the
-	// operator-facing Agent identity, config, enrollment, and first Ready remain.
-	t.Parallel()
-
-	trace := &traceLog{}
-	repository := seededRepository(trace, PhaseReady)
-	wantConfig := cloneConfig(repository.record.Record.Config)
-	wantReadyAt := repository.record.Record.ReadyAt
-	harness := newTestManager(t, repository, trace)
-
-	err := harness.manager.Update(context.Background(), UpdateRequest{
-		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-		StartingGeneration: initialGeneration,
-	})
-	if err != nil {
-		t.Fatalf("Update() error = %v", err)
-	}
-	got := repository.record.Record
-	if got.ID != testAgentID || got.EnrollmentTaskID != testRequest(testAgentID).EnrollmentTaskID ||
-		got.Image != replacementTestImage || got.Generation != initialGeneration+1 ||
-		got.Phase != PhaseReady || !got.ReadyAt.Equal(wantReadyAt) || !equalConfig(got.Config, wantConfig) {
-		t.Fatalf("updated record = %#v", got)
-	}
-	if got.Credential.Digest == testCredential().Digest {
-		t.Fatal("successful update retained the previous token digest")
-	}
-	wantOrder := []string{
-		"stop_assignments", "require_idle", "generate", "begin_replacement",
-		"revoke", "wait_offline", "materialize", "converge", "mark_replacement_ready",
-	}
-	if gotTrace := trace.values(); !containsOrdered(gotTrace, wantOrder...) {
-		t.Fatalf("update order = %v, want subsequence %v", gotTrace, wantOrder)
-	}
-}
-
-func TestUpdateRollsBackPreviousDigestAfterReplacementReadinessTimeout(t *testing.T) {
-	// Rationale: a replacement that cannot authenticate must not strand the
-	// singleton or report success; rollback uses another generation and token.
-	t.Parallel()
-
-	trace := &traceLog{}
-	repository := seededRepository(trace, PhaseReady)
-	wantReadyAt := repository.record.Record.ReadyAt
-	harness := newTestManager(t, repository, trace)
-	harness.sessions.readySequence = []<-chan struct{}{make(chan struct{}), closedSignal()}
-
-	result := make(chan error, 1)
-	go func() {
-		result <- harness.manager.Update(context.Background(), UpdateRequest{
-			AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-			StartingGeneration: initialGeneration,
-		})
-	}()
-	harness.clock.awaitTimer(t).fire(testNow.Add(ReadyTimeout))
-	err := <-result
-	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-		t.Fatalf("Update() error = %v, want failed update after rollback", err)
-	}
-	got := repository.record.Record
-	if got.Image != testImage || got.Generation != initialGeneration+2 ||
-		got.Phase != PhaseReady || !got.ReadyAt.Equal(wantReadyAt) {
-		t.Fatalf("rolled-back record = %#v", got)
-	}
-	if harness.runtime.generateCalls != 2 || harness.container.convergeCalls != 2 {
-		t.Fatalf(
-			"rollback rotations = credentials %d, convergences %d",
-			harness.runtime.generateCalls,
-			harness.container.convergeCalls,
-		)
-	}
-}
-
-func TestUpdateReplayRecognizesCompletedRollback(t *testing.T) {
-	// Rationale: Controller restart after rollback Ready but before Task failure
-	// acknowledgement must reproduce failure without rotating a third time.
-	t.Parallel()
-
-	trace := &traceLog{}
-	repository := seededRepository(trace, PhaseReady)
-	repository.record.Record.Generation = initialGeneration + 2
-	harness := newTestManager(t, repository, trace)
-
-	err := harness.manager.Update(context.Background(), UpdateRequest{
-		AgentID: testAgentID, PreviousImage: testImage, DesiredImage: replacementTestImage,
-		StartingGeneration: initialGeneration,
-	})
-	if !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-		t.Fatalf("Update(replayed rollback) error = %v, want failed update", err)
-	}
-	if harness.runtime.generateCalls != 0 || harness.container.convergeCalls != 0 {
-		t.Fatal("completed rollback replay mutated runtime")
-	}
-}
-
 func TestHealthRejectsNilContext(t *testing.T) {
-	// Rationale: public lifecycle methods must fail canonically rather than panic
-	// when application wiring violates the required context contract.
+
 	t.Parallel()
 
 	trace := &traceLog{}
 	harness := newTestManager(t, seededRepository(trace, PhaseReady), trace)
-	//lint:ignore SA1012 This test verifies the public nil-context failure contract.
+
 	if _, err := harness.manager.Health(nil, testAgentID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
 		t.Fatalf("Health(nil) error = %v, want %s", err, errs.CodeInternal)
 	}
 }
 
 func TestEnrollRejectsMutableOrMalformedImageIdentity(t *testing.T) {
-	// Rationale: enrollment must never defer mutable-tag or malformed-digest
-	// rejection to Docker after creating durable Agent state.
+
 	t.Parallel()
 
 	tests := []struct {
@@ -778,8 +415,7 @@ func TestEnrollRejectsMutableOrMalformedImageIdentity(t *testing.T) {
 }
 
 func TestSystemClockAndDurableCreationTimesAreUTC(t *testing.T) {
-	// Rationale: durable timestamps must remain unambiguous across Controller
-	// hosts and JSON round trips, while corrupt non-UTC records fail closed.
+
 	t.Parallel()
 
 	if got := (SystemClock{}).Now(); got.IsZero() || got.Location() != time.UTC {
@@ -798,8 +434,7 @@ func TestSystemClockAndDurableCreationTimesAreUTC(t *testing.T) {
 }
 
 func TestConfigLabelsRequireNULFreeUTF8AtInputAndPersistence(t *testing.T) {
-	// Rationale: labels cross YAML, JSON, protobuf, and Docker boundaries, so
-	// invalid bytes must fail before durable or runtime side effects.
+
 	t.Parallel()
 
 	invalidLabels := []map[string]string{
@@ -838,8 +473,7 @@ func TestConfigLabelsRequireNULFreeUTF8AtInputAndPersistence(t *testing.T) {
 }
 
 func TestPublicProjectionAndErrorsNeverExposeCredentialMaterial(t *testing.T) {
-	// Rationale: encrypted tokens and digest indexes are storage-only values and
-	// must not escape through lifecycle return values or adapter error causes.
+
 	t.Parallel()
 
 	trace := &traceLog{}

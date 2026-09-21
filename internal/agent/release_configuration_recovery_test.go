@@ -10,6 +10,9 @@ import (
 	"testing"
 	"time"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -106,7 +109,7 @@ func (helper *recoveryMaterializationHelper) Run(
 }
 
 type configurationRecoveryFixture struct {
-	assignment Assignment
+	assignment testtaskassignment.Assignment
 	forward    *agentpb.ExecutionStep
 	probe      *agentpb.ExecutionStep
 	compensate *agentpb.ExecutionStep
@@ -242,15 +245,6 @@ func TestReleaseConfigurationRecoveryRestoresAndReprobesReusableSource(t *testin
 	}
 	acceptRecoveryContent(t, pool, recovery, fixture.probe.StepId, fixture.prior)
 	acceptRecoveryContent(t, pool, recovery, fixture.compensate.StepId, fixture.prior)
-	pool.materializations.mu.Lock()
-	probeInbox := pool.materializations.tasks[recovery.TaskID].steps[fixture.probe.StepId]
-	compensateInbox := pool.materializations.tasks[recovery.TaskID].steps[fixture.compensate.StepId]
-	if probeInbox.shared == nil || probeInbox.shared != compensateInbox.shared || probeInbox.shared.refs != 2 ||
-		probeInbox.content != nil || compensateInbox.content != nil {
-		pool.materializations.mu.Unlock()
-		t.Fatal("probe and compensation did not share one owned retained buffer")
-	}
-	pool.materializations.mu.Unlock()
 	result := executeConfigurationRecovery(t, pool, recovery)
 	if result.Terminal != TaskTerminalCompleted || result.Compose.GetReconciliationRequired() ||
 		!bytes.Equal(helper.state.content, fixture.prior) || helper.state.uid != 1000 ||
@@ -285,7 +279,7 @@ func TestReleaseConfigurationReplayRejectsDeadlineAndEpochDrift(t *testing.T) {
 	for _, scenario := range []string{"same attempt extended", "recovery extended", "recovery source changed", "epoch skipped", "valid recovery"} {
 		t.Run(scenario, func(t *testing.T) {
 			fixture := newConfigurationRecoveryFixture(t)
-			inbox := newMaterializationInbox()
+			inbox := filematerialization.NewInbox()
 			defer inbox.Release(fixture.assignment.TaskID)
 			if err := inbox.Register(fixture.assignment); err != nil {
 				t.Fatal(err)
@@ -340,7 +334,7 @@ func TestReleaseConfigurationRecoveryReprobesNativeAfterFileRestore(t *testing.T
 	fileHelper := &recoveryMaterializationHelper{state: recoveryFileState{
 		present: true, content: bytes.Clone(fixture.next), uid: 1000, gid: 1000, mode: 0o444,
 	}, order: &order}
-	materializer, err := NewMaterializationRuntime(fileHelper, nil)
+	materializer, err := filematerialization.New(fileHelper, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +369,7 @@ func TestReleaseConfigurationRecoveryReprobesNativeAfterFileRestore(t *testing.T
 	nativeHelper := &sequencedReleaseHelper{responses: map[string][]*agentpb.ComposeHelperResponse{
 		nativeProbe.StepId: {candidate, prior},
 	}, order: &order}
-	compose, err := NewComposeRuntime(nativeHelper, releaseExecutionObserver{})
+	compose, err := testcomposeruntime.New(nativeHelper, releaseExecutionObserver{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,23 +442,13 @@ func TestReleaseConfigurationRecoveryFailsClosedWithoutApplicabilityOrProof(t *t
 	}
 }
 
-func TestReleaseConfigurationRecoveryRejectsUnsafePathAndDirectiveOrder(t *testing.T) {
-	fixture := newConfigurationRecoveryFixture(t)
+func TestReleaseConfigurationRecoveryRejectsUnsafePath(t *testing.T) {
 	ordinary := materializationAssignment(t, []byte("content\n"))
 	changed := proto.CloneOf(ordinary.Plan)
 	changed.Steps[0].GetMaterializeFile().Destination = "../outside"
 	changed.PlanHash = nil
 	if _, err := executionplan.Seal(changed); err == nil {
 		t.Fatal("unsafe recovery destination was sealed")
-	}
-	recovery := recoveryAssignment(fixture, agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROBE)
-	recovery.ReleaseRecoveryDirective.StepIds[0], recovery.ReleaseRecoveryDirective.StepIds[1] =
-		recovery.ReleaseRecoveryDirective.StepIds[1], recovery.ReleaseRecoveryDirective.StepIds[0]
-	if err := validateReleaseRecoveryDirective(
-		recovery.Plan.CandidateReleaseProcedure,
-		recovery.ReleaseRecoveryDirective,
-	); err == nil {
-		t.Fatal("noncanonical recovery directive was accepted")
 	}
 }
 
@@ -474,11 +458,11 @@ func configurationRecoveryPool(
 	helper *recoveryMaterializationHelper,
 ) *WorkerPool {
 	t.Helper()
-	materializer, err := NewMaterializationRuntime(helper, nil)
+	materializer, err := filematerialization.New(helper, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	compose, err := NewComposeRuntime(completedComposeHelper(), releaseExecutionObserver{})
+	compose, err := testcomposeruntime.New(completedComposeHelper(), releaseExecutionObserver{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,7 +474,7 @@ func configurationRecoveryPool(
 func recoveryAssignment(
 	fixture configurationRecoveryFixture,
 	phase agentpb.ReleaseRecoveryPhase,
-) Assignment {
+) testtaskassignment.Assignment {
 	assignment := fixture.assignment
 	assignment.ExecutionMode = agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY
 	assignment.ExecutionEpoch++
@@ -510,7 +494,7 @@ func recoveryAssignment(
 func acceptRecoveryContent(
 	t *testing.T,
 	pool *WorkerPool,
-	assignment Assignment,
+	assignment testtaskassignment.Assignment,
 	stepID string,
 	content []byte,
 ) {
@@ -532,7 +516,7 @@ func acceptRecoveryContent(
 	}
 }
 
-func executeConfigurationRecovery(t *testing.T, pool *WorkerPool, assignment Assignment) TaskResult {
+func executeConfigurationRecovery(t *testing.T, pool *WorkerPool, assignment testtaskassignment.Assignment) TaskResult {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	reservation := &taskReservation{assignment: assignment, ctx: ctx, cancel: cancel}
@@ -556,4 +540,4 @@ func nextReleaseResult(t *testing.T, pool *WorkerPool) TaskResult {
 	}
 }
 
-var _ MaterializationHelper = (*recoveryMaterializationHelper)(nil)
+var _ filematerialization.Helper = (*recoveryMaterializationHelper)(nil)

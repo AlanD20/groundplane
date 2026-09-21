@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -29,9 +30,12 @@ func TestManagedComponentTeardownPreflightRejectsForeignSameName(t *testing.T) {
 			ServiceId: source.ServiceId,
 		}},
 	}}}
-	runtime := &ComposeRuntime{observer: observer}
+	runtime, err := testcomposeruntime.New(completedComposeHelper(), observer)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	stepID, err := runtime.preflightManagedComponentTeardown(context.Background(), plan)
+	stepID, err := runtime.PreflightManagedComponentTeardown(context.Background(), plan)
 	if stepID != source.RemoveStepId || !errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 		t.Fatalf("preflight = %q, %v", stepID, err)
 	}
@@ -55,9 +59,12 @@ func TestManagedComponentTeardownPreflightAcceptsOwnedStaleContainer(t *testing.
 			ComposeServiceName: "caddy", ComponentId: source.ComponentId, ServiceId: source.ServiceId,
 		}},
 	}}}
-	runtime := &ComposeRuntime{observer: observer}
+	runtime, err := testcomposeruntime.New(completedComposeHelper(), observer)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	stepID, err := runtime.preflightManagedComponentTeardown(context.Background(), plan)
+	stepID, err := runtime.PreflightManagedComponentTeardown(context.Background(), plan)
 	if err != nil || stepID != "" {
 		t.Fatalf("preflight = %q, %v", stepID, err)
 	}
@@ -84,11 +91,11 @@ func TestManagedComponentTeardownPostconditionRejectsRemainingContainer(t *testi
 	observer := &fakeComposeObserver{projects: []*agentpb.ObservedProject{{
 		ProjectName: "gp-platform", Containers: []*agentpb.ObservedContainer{{ServiceId: "svc_api"}},
 	}}}
-	runtime, err := NewComposeRuntime(helper, observer)
+	runtime, err := testcomposeruntime.New(helper, observer)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := runtime.executeStep(context.Background(), assignment, step)
+	result, err := runtime.ExecuteStep(context.Background(), assignment, step)
 	if !errors.Is(err, errs.New(errs.KindRequestFailed, "")) || !result.ReconciliationRequired ||
 		helper.request == nil || observer.calls != 1 {
 		t.Fatalf("teardown result = %#v, error = %v, observations = %d", result, err, observer.calls)

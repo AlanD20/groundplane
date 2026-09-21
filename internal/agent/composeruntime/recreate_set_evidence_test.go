@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -256,13 +257,13 @@ func TestObservedRecreateProbeAcceptsSealedBlueGreenPrior(t *testing.T) {
 	observer := &recreateArtifactObserver{
 		restorationProject: recreateTestProject(prior, step.GetServiceRecreateProbe().PriorReleaseId, 1),
 	}
-	runtime, err := NewComposeRuntime(completedComposeHelper(), observer)
+	runtime, err := New(completedComposeHelper(), observer)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	result, err := runtime.executeStep(ctx, assignment, step)
+	result, err := runtime.ExecuteStep(ctx, assignment, step)
 	if err != nil || result.RecreateEvidence.GetTarget() != "blue" ||
 		result.RecreateEvidence.GetArtifactId() != prior.ArtifactId || !result.RecreateEvidence.GetCompensated() {
 		t.Fatalf("blue predecessor evidence = %#v, error = %v", result.RecreateEvidence, err)
@@ -315,14 +316,14 @@ func TestObservedRecreateProbeUsesEachSealedArtifact(t *testing.T) {
 		candidate.ArtifactId: recreateTestProject(candidate, probe.CandidateReleaseId, 1),
 		prior.ArtifactId:     priorObserved,
 	}}
-	runtime, err := NewComposeRuntime(completedComposeHelper(), observer)
+	runtime, err := New(completedComposeHelper(), observer)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	result, err := runtime.executeStep(ctx, assignment, step)
+	result, err := runtime.ExecuteStep(ctx, assignment, step)
 	if err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}
@@ -344,27 +345,29 @@ func TestObservedRecreateProbeUsesEachSealedArtifact(t *testing.T) {
 func TestObservedRecreateProbeRejectsInvalidAuthorityBeforeObservation(t *testing.T) {
 	for _, test := range []struct {
 		name   string
-		mutate func(*Assignment, *agentpb.ExecutionStep)
+		mutate func(*testtaskassignment.Assignment, *agentpb.ExecutionStep)
 	}{
-		{"missing plan seal", func(a *Assignment, _ *agentpb.ExecutionStep) { a.Plan.PlanHash = nil }},
-		{"missing authority", func(a *Assignment, _ *agentpb.ExecutionStep) { a.RestorationAuthority = nil }},
-		{"changed witness", func(a *Assignment, _ *agentpb.ExecutionStep) {
+		{"missing plan seal", func(a *testtaskassignment.Assignment, _ *agentpb.ExecutionStep) { a.Plan.PlanHash = nil }},
+		{"missing authority", func(a *testtaskassignment.Assignment, _ *agentpb.ExecutionStep) { a.RestorationAuthority = nil }},
+		{"changed witness", func(a *testtaskassignment.Assignment, _ *agentpb.ExecutionStep) {
 			a.RestorationAuthority.AppliedPredecessor.ComposeArtifact[0] ^= 1
 		}},
-		{"unselected step", func(a *Assignment, step *agentpb.ExecutionStep) { step.StepId = a.Plan.Steps[0].StepId }},
+		{"unselected step", func(a *testtaskassignment.Assignment, step *agentpb.ExecutionStep) {
+			step.StepId = a.Plan.Steps[0].StepId
+		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			assignment, step := sealedRecreateProbeAssignment(t, 2, "singleton")
 			step = proto.CloneOf(step)
 			test.mutate(&assignment, step)
 			observer := &recreateArtifactObserver{}
-			runtime, err := NewComposeRuntime(completedComposeHelper(), observer)
+			runtime, err := New(completedComposeHelper(), observer)
 			if err != nil {
 				t.Fatal(err)
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			result, err := runtime.executeStep(ctx, assignment, step)
+			result, err := runtime.ExecuteStep(ctx, assignment, step)
 			if err == nil || !result.ReconciliationRequired || result.RecreateEvidence != nil ||
 				observer.restorationArtifact != nil || len(observer.calls) != 0 {
 				t.Fatalf("invalid authority reached observation or produced evidence: result=%#v, err=%v", result, err)

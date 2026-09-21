@@ -1,15 +1,15 @@
-package agent
+package materialization
 
 import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"errors"
 	"io"
 	"strings"
 	"testing"
 	"time"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/docker/materializerrunner"
@@ -18,16 +18,17 @@ import (
 )
 
 const (
-	materializationTaskID        = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	materializationOperationID   = "op_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	materializationPlanID        = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	materializationStepID        = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	materializationSecondStepID  = "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	materializationArtifactID    = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	materializationID            = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	materializationSecondID      = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAX"
-	materializationEnvironmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	materializationVolumeDir     = "/var/lib/groundplane/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
+	materializationTestAssignmentID = "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	materializationTaskID           = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	materializationOperationID      = "op_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	materializationPlanID           = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	materializationStepID           = "step_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	materializationSecondStepID     = "step_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	materializationArtifactID       = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	materializationID               = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+	materializationSecondID         = "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAX"
+	materializationEnvironmentID    = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	materializationVolumeDir        = "/var/lib/groundplane/vol/tnt_01ARZ3NDEKTSV4RRFFQ69G5FAV/" +
 		"prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 )
 
@@ -35,7 +36,7 @@ func TestMaterializationInboxAcceptsExactOrderedTransfer(t *testing.T) {
 	// Rationale: plaintext may enter an Agent task only through a transfer whose
 	// outer correlation and repeated header exactly match its sealed plan step.
 	assignment := materializationAssignment(t, []byte("services: {}\n"))
-	inbox := newMaterializationInbox()
+	inbox := NewInbox()
 	if err := inbox.Register(assignment); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -85,7 +86,7 @@ func TestMaterializationInboxRejectsMalformedTransfer(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assignment := materializationAssignment(t, []byte("services: {}\n"))
-			inbox := newMaterializationInbox()
+			inbox := NewInbox()
 			if err := inbox.Register(assignment); err != nil {
 				t.Fatalf("Register() error = %v", err)
 			}
@@ -110,7 +111,7 @@ func TestMaterializationRuntimeStreamsVerifiedHelperFrame(t *testing.T) {
 	// hardened helper frame without putting plaintext into a plan or subprocess argument.
 	content := []byte("services: {}\n")
 	assignment := materializationAssignment(t, content)
-	inbox := newMaterializationInbox()
+	inbox := NewInbox()
 	if err := inbox.Register(assignment); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -120,155 +121,21 @@ func TestMaterializationRuntimeStreamsVerifiedHelperFrame(t *testing.T) {
 		}
 	}
 	helper := &decodingMaterializationHelper{}
-	runtime, err := NewMaterializationRuntime(helper, nil)
+	runtime, err := New(helper, nil)
 	if err != nil {
-		t.Fatalf("NewMaterializationRuntime() error = %v", err)
+		t.Fatalf("New() error = %v", err)
 	}
 	step := assignment.Plan.Steps[0]
 	payload, err := inbox.Take(context.Background(), assignment.TaskID, step.StepId)
 	if err != nil {
 		t.Fatalf("Take() error = %v", err)
 	}
-	if err := runtime.executeStep(context.Background(), assignment, step, payload); err != nil {
+	if err := runtime.ExecuteStep(context.Background(), assignment, step, payload); err != nil {
 		t.Fatalf("executeStep() error = %v", err)
 	}
 	if helper.volumeDir != materializationVolumeDir || !bytes.Equal(helper.content, content) ||
 		helper.header.TaskID() != assignment.TaskID || helper.header.StepID() != step.StepId {
 		t.Fatalf("helper request = dir %q, header %#v, content %q", helper.volumeDir, helper.header, helper.content)
-	}
-}
-
-func TestWorkerExecutesMaterializationAfterVerifiedTransfer(t *testing.T) {
-	// Rationale: the worker must reserve the task before accepting bytes, block
-	// only that task's step, and resume through the ordinary result path after verification.
-	content := []byte("services: {}\n")
-	assignment := materializationAssignment(t, content)
-	helper := &decodingMaterializationHelper{}
-	runtime, err := NewMaterializationRuntime(helper, nil)
-	if err != nil {
-		t.Fatalf("NewMaterializationRuntime() error = %v", err)
-	}
-	pool := NewWorkerPoolWithRuntimes(
-		1,
-		"/var/lib/groundplane/vol",
-		nil,
-		testLogger(),
-		nil,
-		nil,
-		runtime,
-	)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		pool.Run(ctx)
-		close(done)
-	}()
-	if err := pool.Submit(ctx, assignment); err != nil {
-		cancel()
-		<-done
-		t.Fatalf("Submit() error = %v", err)
-	}
-	for _, transfer := range materializationTransfers(assignment, content, 4) {
-		if err := pool.AcceptMaterializationTransfer(ctx, transfer); err != nil {
-			cancel()
-			<-done
-			t.Fatalf("AcceptMaterializationTransfer() error = %v", err)
-		}
-	}
-	result := nextWorkerResult(t, pool)
-	if result.Terminal != TaskTerminalCompleted || result.Compose == nil || !bytes.Equal(helper.content, content) {
-		t.Fatalf("worker result/helper content = %#v/%q", result, helper.content)
-	}
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("WorkerPool.Run() did not stop")
-	}
-}
-
-func TestWorkerRetiresAndDrainsUnreachedMaterializationAfterTerminalResult(t *testing.T) {
-	// Rationale: the Controller may already have queued a later private transfer
-	// when an earlier materialization terminalizes the worker. The Agent must
-	// clear that late plaintext while retaining exact framing authority through End.
-	firstContent := []byte("first materialization\n")
-	lateContent := []byte("late private materialization\n")
-	assignment := twoMaterializationAssignment(t, firstContent, lateContent)
-	helper := &decodingMaterializationHelper{err: errors.New("stop after first materialization")}
-	runtime, err := NewMaterializationRuntime(helper, nil)
-	if err != nil {
-		t.Fatalf("NewMaterializationRuntime() error = %v", err)
-	}
-	pool := NewWorkerPoolWithRuntimes(
-		1,
-		"/var/lib/groundplane/vol",
-		nil,
-		testLogger(),
-		nil,
-		nil,
-		runtime,
-	)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		pool.Run(ctx)
-		close(done)
-	}()
-	if err := pool.Submit(ctx, assignment); err != nil {
-		cancel()
-		<-done
-		t.Fatalf("Submit() error = %v", err)
-	}
-	for _, transfer := range materializationTransfersForStep(assignment, 0, firstContent, 7) {
-		if err := pool.AcceptMaterializationTransfer(ctx, transfer); err != nil {
-			cancel()
-			<-done
-			t.Fatalf("AcceptMaterializationTransfer(first) error = %v", err)
-		}
-	}
-	result := nextWorkerResult(t, pool)
-	if result.Terminal != TaskTerminalFailed || !bytes.Equal(helper.content, firstContent) {
-		cancel()
-		<-done
-		t.Fatalf("worker result/helper content = %#v/%q", result, helper.content)
-	}
-	assertRetiredMaterializationStepCleared(t, pool.materializations, assignment.TaskID, materializationSecondStepID)
-
-	lateTransfers := materializationTransfersForStep(assignment, 1, lateContent, 5)
-	for index, transfer := range lateTransfers {
-		if err := pool.AcceptMaterializationTransfer(ctx, transfer); err != nil {
-			cancel()
-			<-done
-			t.Fatalf("AcceptMaterializationTransfer(late record %d) error = %v", index, err)
-		}
-		if transfer.GetChunk() != nil && len(transfer.GetChunk().GetContent()) != 0 {
-			cancel()
-			<-done
-			t.Fatalf("late record %d retained inbound plaintext", index)
-		}
-		if transfer.GetEnd() == nil {
-			assertRetiredMaterializationStepCleared(
-				t,
-				pool.materializations,
-				assignment.TaskID,
-				materializationSecondStepID,
-			)
-		}
-	}
-	pool.materializations.mu.Lock()
-	_, retained := pool.materializations.tasks[assignment.TaskID]
-	pool.materializations.mu.Unlock()
-	if retained {
-		cancel()
-		<-done
-		t.Fatal("materialization retirement retained task after valid End")
-	}
-
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("WorkerPool.Run() did not stop")
 	}
 }
 
@@ -296,7 +163,7 @@ func TestMaterializationInboxRetiredTransferRejectsMalformedRecords(t *testing.T
 		t.Run(test.name, func(t *testing.T) {
 			content := []byte("late private materialization\n")
 			assignment := materializationAssignment(t, content)
-			inbox := newMaterializationInbox()
+			inbox := NewInbox()
 			if err := inbox.Register(assignment); err != nil {
 				t.Fatalf("Register() error = %v", err)
 			}
@@ -323,12 +190,12 @@ func TestMaterializationInboxClearsEveryRejectedChunk(t *testing.T) {
 	content := []byte("rejected private materialization\n")
 	tests := []struct {
 		name  string
-		setup func(*testing.T, *materializationInbox, Assignment) (*agentpb.MaterializationTransfer, context.Context)
+		setup func(*testing.T, *Inbox, testtaskassignment.Assignment) (*agentpb.MaterializationTransfer, context.Context)
 	}{
 		{name: "canceled context", setup: func(
 			t *testing.T,
-			_ *materializationInbox,
-			assignment Assignment,
+			_ *Inbox,
+			assignment testtaskassignment.Assignment,
 		) (*agentpb.MaterializationTransfer, context.Context) {
 			t.Helper()
 			ctx, cancel := context.WithCancel(context.Background())
@@ -337,8 +204,8 @@ func TestMaterializationInboxClearsEveryRejectedChunk(t *testing.T) {
 		}},
 		{name: "wrong correlation", setup: func(
 			t *testing.T,
-			_ *materializationInbox,
-			assignment Assignment,
+			_ *Inbox,
+			assignment testtaskassignment.Assignment,
 		) (*agentpb.MaterializationTransfer, context.Context) {
 			t.Helper()
 			transfer := materializationTransfers(assignment, content, len(content))[1]
@@ -347,8 +214,8 @@ func TestMaterializationInboxClearsEveryRejectedChunk(t *testing.T) {
 		}},
 		{name: "unknown step", setup: func(
 			t *testing.T,
-			_ *materializationInbox,
-			assignment Assignment,
+			_ *Inbox,
+			assignment testtaskassignment.Assignment,
 		) (*agentpb.MaterializationTransfer, context.Context) {
 			t.Helper()
 			transfer := materializationTransfers(assignment, content, len(content))[1]
@@ -357,8 +224,8 @@ func TestMaterializationInboxClearsEveryRejectedChunk(t *testing.T) {
 		}},
 		{name: "extra after end", setup: func(
 			t *testing.T,
-			inbox *materializationInbox,
-			assignment Assignment,
+			inbox *Inbox,
+			assignment testtaskassignment.Assignment,
 		) (*agentpb.MaterializationTransfer, context.Context) {
 			t.Helper()
 			for _, transfer := range materializationTransfers(assignment, content, len(content)) {
@@ -372,7 +239,7 @@ func TestMaterializationInboxClearsEveryRejectedChunk(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assignment := materializationAssignment(t, content)
-			inbox := newMaterializationInbox()
+			inbox := NewInbox()
 			if err := inbox.Register(assignment); err != nil {
 				t.Fatalf("Register() error = %v", err)
 			}
@@ -392,7 +259,7 @@ func TestMaterializationInboxRetiresMidReceiveAndDrainsValidEnd(t *testing.T) {
 	// inline queue and must carry its digest forward without retaining content.
 	content := []byte("mid-receive private materialization\n")
 	assignment := materializationAssignment(t, content)
-	inbox := newMaterializationInbox()
+	inbox := NewInbox()
 	if err := inbox.Register(assignment); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -432,7 +299,7 @@ func TestMaterializationInboxExpiresRetiredTransferWithoutEnd(t *testing.T) {
 	content := []byte("expiring private materialization\n")
 	assignment := materializationAssignment(t, content)
 	assignment.Deadline = time.Now().Add(25 * time.Millisecond)
-	inbox := newMaterializationInbox()
+	inbox := NewInbox()
 	if err := inbox.Register(assignment); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -465,7 +332,7 @@ func TestMaterializationInboxReplacesIdenticalRetiredAssignmentOnReplay(t *testi
 	// a duplicate while the replacement is active.
 	content := []byte("replayed private materialization\n")
 	assignment := materializationAssignment(t, content)
-	inbox := newMaterializationInbox()
+	inbox := NewInbox()
 	if err := inbox.Register(assignment); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -504,19 +371,19 @@ func TestMaterializationInboxDestroysRetiredHasherOnFailureAndRelease(t *testing
 	content := []byte("destroyed private materialization\n")
 	for _, test := range []struct {
 		name   string
-		finish func(*materializationInbox, Assignment, []*agentpb.MaterializationTransfer) error
+		finish func(*Inbox, testtaskassignment.Assignment, []*agentpb.MaterializationTransfer) error
 	}{
 		{name: "failure", finish: func(
-			inbox *materializationInbox,
-			_ Assignment,
+			inbox *Inbox,
+			_ testtaskassignment.Assignment,
 			records []*agentpb.MaterializationTransfer,
 		) error {
 			records[2].GetChunk().Sequence++
 			return inbox.Accept(context.Background(), records[2])
 		}},
 		{name: "hard release", finish: func(
-			inbox *materializationInbox,
-			assignment Assignment,
+			inbox *Inbox,
+			assignment testtaskassignment.Assignment,
 			_ []*agentpb.MaterializationTransfer,
 		) error {
 			inbox.Release(assignment.TaskID)
@@ -525,7 +392,7 @@ func TestMaterializationInboxDestroysRetiredHasherOnFailureAndRelease(t *testing
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			assignment := materializationAssignment(t, content)
-			inbox := newMaterializationInbox()
+			inbox := NewInbox()
 			if err := inbox.Register(assignment); err != nil {
 				t.Fatalf("Register() error = %v", err)
 			}
@@ -557,7 +424,7 @@ func TestMaterializationInboxRejectsChunkThirtyThreeAndClearsIt(t *testing.T) {
 	// when smaller chunks would remain under the byte ceiling.
 	content := bytes.Repeat([]byte{'x'}, 33)
 	assignment := materializationAssignment(t, content)
-	inbox := newMaterializationInbox()
+	inbox := NewInbox()
 	if err := inbox.Register(assignment); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
@@ -576,7 +443,7 @@ func TestMaterializationInboxRejectsChunkThirtyThreeAndClearsIt(t *testing.T) {
 	}
 }
 
-func waitForMaterializationTaskRemoval(t *testing.T, inbox *materializationInbox, taskID string) {
+func waitForMaterializationTaskRemoval(t *testing.T, inbox *Inbox, taskID string) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
@@ -593,7 +460,7 @@ func waitForMaterializationTaskRemoval(t *testing.T, inbox *materializationInbox
 
 func assertRetiredMaterializationStepCleared(
 	t *testing.T,
-	inbox *materializationInbox,
+	inbox *Inbox,
 	taskID string,
 	stepID string,
 ) {
@@ -645,7 +512,7 @@ func (helper *decodingMaterializationHelper) Run(
 	return helper.err
 }
 
-func materializationAssignment(t *testing.T, content []byte) Assignment {
+func materializationAssignment(t *testing.T, content []byte) testtaskassignment.Assignment {
 	t.Helper()
 	yaml := []byte("services: {}\n")
 	yamlDigest := sha256.Sum256(yaml)
@@ -674,8 +541,8 @@ func materializationAssignment(t *testing.T, content []byte) Assignment {
 		t.Fatalf("Seal() error = %v", err)
 	}
 	deadline := time.Now().Add(time.Minute)
-	return Assignment{
-		AssignmentID: workerTestAssignmentID,
+	return testtaskassignment.Assignment{
+		AssignmentID: materializationTestAssignmentID,
 		TaskID:       materializationTaskID, OperationID: materializationOperationID,
 		Plan: plan, Deadline: deadline, ExecutionEpoch: 1,
 		ExecutionMode:   agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD,
@@ -683,7 +550,11 @@ func materializationAssignment(t *testing.T, content []byte) Assignment {
 	}
 }
 
-func twoMaterializationAssignment(t *testing.T, firstContent []byte, secondContent []byte) Assignment {
+func twoMaterializationAssignment(
+	t *testing.T,
+	firstContent []byte,
+	secondContent []byte,
+) testtaskassignment.Assignment {
 	t.Helper()
 	assignment := materializationAssignment(t, firstContent)
 	plan := proto.Clone(assignment.Plan).(*agentpb.ExecutionPlan)
@@ -706,7 +577,7 @@ func twoMaterializationAssignment(t *testing.T, firstContent []byte, secondConte
 }
 
 func materializationTransfers(
-	assignment Assignment,
+	assignment testtaskassignment.Assignment,
 	content []byte,
 	chunkBytes int,
 ) []*agentpb.MaterializationTransfer {
@@ -714,14 +585,14 @@ func materializationTransfers(
 }
 
 func materializationTransfersForStep(
-	assignment Assignment,
+	assignment testtaskassignment.Assignment,
 	stepIndex int,
 	content []byte,
 	chunkBytes int,
 ) []*agentpb.MaterializationTransfer {
 	step := assignment.Plan.Steps[stepIndex]
 	materialization := step.GetMaterializeFile()
-	planHash := hashForPlan(assignment.Plan)
+	planHash := testtaskassignment.PlanDigest(assignment.Plan)
 	outer := func() *agentpb.MaterializationTransfer {
 		return &agentpb.MaterializationTransfer{
 			TaskId: assignment.TaskID, AssignmentId: assignment.AssignmentID,

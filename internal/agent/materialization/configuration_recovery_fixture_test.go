@@ -1,19 +1,73 @@
-package agent
+package materialization
 
 import (
-	"crypto/sha256"
-	"fmt"
-	"sort"
-	"strconv"
-	"strings"
-	"testing"
-	"time"
+	bytes "bytes"
+	sha256 "crypto/sha256"
+	fmt "fmt"
+	sort "sort"
+	strconv "strconv"
+	strings "strings"
+	testing "testing"
+	time "time"
 
 	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/proto/agentpb"
+	executionplan "github.com/AlanD20/groundplane/internal/common/executionplan"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	proto "google.golang.org/protobuf/proto"
 )
+
+func newConfigurationRecoveryFixture(t *testing.T) configurationRecoveryFixture {
+	t.Helper()
+	assignment, _ := sealedRecreateProbeAssignment(t, 1, "singleton")
+	plan := proto.CloneOf(assignment.Plan)
+	plan.Operation = agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
+	plan.CandidateReleaseProcedure.Members = nil
+	at := time.Date(2026, time.September, 14, 12, 0, 0, 0, time.UTC)
+	prior, next := []byte("prior pinned configuration\n"), []byte("candidate configuration\n")
+	forward := recoveryMaterializationStep(
+		plan.Artifacts[0], ids.NewAt(ids.KindStep, at, 21), ids.NewAt(ids.KindConfig, at, 22), next,
+		agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_FORWARD,
+	)
+	probe := recoveryMaterializationStep(
+		plan.Artifacts[0], ids.NewAt(ids.KindStep, at, 23), ids.NewAt(ids.KindConfig, at, 24), prior,
+		agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE,
+	)
+	compensate := recoveryMaterializationStep(
+		plan.Artifacts[0], ids.NewAt(ids.KindStep, at, 25), ids.NewAt(ids.KindConfig, at, 26), prior,
+		agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE,
+	)
+	compensate.PrerequisiteStepId = forward.StepId
+	plan.CandidateReleaseProcedure.ConfigurationRestoration = &agentpb.ConfigurationRestoration{
+		PriorSnapshotId: ids.NewAt(ids.KindConfig, at, 27), PriorSnapshotSha256: bytes.Repeat([]byte{0x41}, 32),
+		Files: []*agentpb.ConfigurationFileRestoration{{
+			ForwardStepId: forward.StepId, ProbeStepId: probe.StepId, CompensateStepId: compensate.StepId,
+		}},
+	}
+	plan.Steps = append([]*agentpb.ExecutionStep{forward}, plan.Steps...)
+	plan.Steps = append(plan.Steps, probe, compensate)
+	assignment.Plan = plan
+	assignment.RestorationAuthority.PlanHash = bytes.Clone(plan.PlanHash)
+	assignment.AssignmentID = ids.NewAt(ids.KindAssignment, at, 28)
+	assignment.ExecutionEpoch = 7
+	assignment.ForwardDeadline = time.Now().Add(time.Minute)
+	assignment.RecoveryDeadline = assignment.ForwardDeadline.Add(time.Minute)
+	assignment.Deadline = assignment.ForwardDeadline
+	return configurationRecoveryFixture{
+		assignment: assignment, forward: plan.Steps[0],
+		probe: plan.Steps[len(plan.Steps)-2], compensate: plan.Steps[len(plan.Steps)-1],
+		prior: prior, next: next,
+	}
+}
+
+type configurationRecoveryFixture struct {
+	assignment testtaskassignment.Assignment
+	forward    *agentpb.ExecutionStep
+	probe      *agentpb.ExecutionStep
+	compensate *agentpb.ExecutionStep
+	prior      []byte
+	next       []byte
+}
 
 // The fixture seals an ordinary Release with explicit historical ownership.
 // Its applied witness happens to equal the selected native predecessor; it is
@@ -91,8 +145,7 @@ func sealedRecreateProbeAssignment(
 		ExecutionMode: agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD, Plan: plan,
 	}
 	assignment.RestorationAuthority = &agentpb.ReleaseRestorationAuthority{
-		TaskId: assignment.TaskID, OperationId: assignment.OperationID, PlanHash: plan.PlanHash,
-		EnvironmentId: environmentID, CandidateArtifactId: candidate.ArtifactId,
+		TaskId: assignment.TaskID, OperationId: assignment.OperationID, PlanHash: plan.PlanHash, EnvironmentId: environmentID, CandidateArtifactId: candidate.ArtifactId,
 		Candidates: []*agentpb.ReleaseRestorationCandidate{{ServiceId: serviceID, ReleaseId: candidateRelease,
 			Target: agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR}},
 		AppliedPredecessor: &agentpb.ReleaseAppliedPredecessorAuthority{
@@ -103,8 +156,7 @@ func sealedRecreateProbeAssignment(
 		},
 	}
 	sealAssignmentWitness(assignment.RestorationAuthority, witness)
-	// The Controller's digest is opaque to the Agent; only the plan and witness
-	// hashes are computed and independently checked at this unit-test boundary.
+
 	digest := sha256.Sum256([]byte("controller-owned recreate fixture authority"))
 	assignment.RestorationAuthority.AuthoritySha256 = digest[:]
 	if err := testtaskassignment.ValidateCandidateReleaseAuthority(assignment, plan); err != nil {
@@ -166,4 +218,71 @@ func recreateProbeArtifact(
 	digest := sha256.Sum256(artifact.CanonicalYaml)
 	artifact.YamlSha256 = digest[:]
 	return artifact
+}
+func recreateTestArtifact(artifactID, releaseID string, replicas uint32) *agentpb.ComposeArtifact {
+	return &agentpb.ComposeArtifact{
+		ArtifactId: artifactID, ProjectName: "gp-project",
+		Services: []*agentpb.ComposeService{{
+			ServiceId: "svc_api", ComposeName: "api", ExpectedReplicas: replicas, HasHealthcheck: true,
+			Role:           agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON,
+			ImageReference: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			ExpectedLabels: []*agentpb.LabelPair{
+				{Key: "com.groundplane.release-id", Value: releaseID},
+				{Key: "com.groundplane.runtime-role", Value: "singleton"},
+			},
+		}},
+	}
+}
+
+func marshalNativeAssignmentArtifact(t *testing.T, artifact *agentpb.ComposeArtifact) []byte {
+	t.Helper()
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+func sealAssignmentWitness(authority *agentpb.ReleaseRestorationAuthority, encoded []byte) {
+	digest := sha256.Sum256(encoded)
+	authority.AppliedPredecessor.ComposeArtifact = encoded
+	authority.AppliedPredecessor.ComposeArtifactSha256 = digest[:]
+}
+
+func recoveryMaterializationStep(
+	artifact *agentpb.ComposeArtifact,
+	stepID string,
+	materializationID string,
+	content []byte,
+	policy agentpb.ExecutionStepPolicy,
+) *agentpb.ExecutionStep {
+	digest := sha256.Sum256(content)
+	return &agentpb.ExecutionStep{
+		StepId: stepID, TimeoutSeconds: 30, Policy: policy,
+		Payload: &agentpb.ExecutionStep_MaterializeFile{MaterializeFile: &agentpb.MaterializeFile{
+			ArtifactId: artifact.ArtifactId, MaterializationId: materializationID,
+			EnvironmentId: artifact.OwnerId, Destination: "config/application.yaml",
+			OutputKind: agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE,
+			Uid:        1000, Gid: 1000, Mode: 0o444, Length: uint64(len(content)), Sha256: digest[:],
+		}},
+	}
+}
+
+func recoveryAssignment(
+	fixture configurationRecoveryFixture,
+	phase agentpb.ReleaseRecoveryPhase,
+) testtaskassignment.Assignment {
+	assignment := fixture.assignment
+	assignment.ExecutionMode = agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY
+	assignment.ExecutionEpoch++
+	assignment.Deadline = assignment.RecoveryDeadline
+	stepIDs := executionplan.RecoveryStepIDs(assignment.Plan.CandidateReleaseProcedure)
+	cursor := uint32(0)
+	if phase == agentpb.ReleaseRecoveryPhase_RELEASE_RECOVERY_PHASE_PROVEN {
+		cursor = uint32(len(stepIDs))
+	}
+	assignment.ReleaseRecoveryDirective = &agentpb.ReleaseRecoveryDirective{
+		StepIds: stepIDs, Cursor: cursor, Phase: phase,
+		ApplicableCompensationStepIds: []string{fixture.compensate.StepId},
+	}
+	return assignment
 }

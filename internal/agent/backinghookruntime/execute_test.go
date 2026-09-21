@@ -1,4 +1,4 @@
-package agent
+package backinghookruntime
 
 import (
 	"context"
@@ -64,7 +64,7 @@ func TestExecuteBackingHookJoinsCancellationBeforeCleanup(t *testing.T) {
 	}
 	done := make(chan hookResult, 1)
 	go func() {
-		output, err := ExecuteBackingHook(
+		output, err := Execute(
 			ctx,
 			taskRunner,
 			backingHookTestContainer,
@@ -172,7 +172,7 @@ func TestExecuteBackingHookCapsJoinAndRedactsRunnerFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	startedAt := time.Now()
-	output, err := ExecuteBackingHook(
+	output, err := Execute(
 		ctx,
 		taskRunner,
 		backingHookTestContainer,

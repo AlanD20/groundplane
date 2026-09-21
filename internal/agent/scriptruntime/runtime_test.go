@@ -1,4 +1,4 @@
-package agent
+package scriptruntime
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/scriptexecution"
@@ -29,7 +30,7 @@ func TestDockerScriptRuntimeCheckpointsBeforeEachSideEffect(t *testing.T) {
 	snapshotID := ids.NewULID()
 	scriptID := ids.New(ids.KindScript)
 	stepID := ids.New(ids.KindStep)
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		AssignmentID: ids.New(ids.KindAssignment),
 		TaskID:       ids.New(ids.KindTask),
 		OperationID:  ids.New(ids.KindOperation),
@@ -65,7 +66,7 @@ func TestDockerScriptRuntimeCheckpointsBeforeEachSideEffect(t *testing.T) {
 
 	events := make([]string, 0, 10)
 	engine := &checkpointOrderScriptEngine{events: &events, bodyDigest: bodyDigest}
-	runtime, err := NewDockerScriptRuntime(engine)
+	runtime, err := New(engine)
 	if err != nil {
 		t.Fatalf("create Script runtime: %v", err)
 	}
@@ -108,7 +109,7 @@ func TestDockerScriptRuntimePreservesRunFailureAfterTypedCheckpoint(t *testing.T
 	planDigest := sha256.Sum256([]byte("sealed failure plan"))
 	executionID, snapshotID := ids.NewULID(), ids.NewULID()
 	scriptID, stepID := ids.New(ids.KindScript), ids.New(ids.KindStep)
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
 		OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
 		Plan: &agentpb.ExecutionPlan{
@@ -136,7 +137,7 @@ func TestDockerScriptRuntimePreservesRunFailureAfterTypedCheckpoint(t *testing.T
 	}}
 	sentinel := errors.New("connect secondary network gp_net_secondary: endpoint denied")
 	events := make([]string, 0, 10)
-	runtime, err := NewDockerScriptRuntime(&checkpointOrderScriptEngine{
+	runtime, err := New(&checkpointOrderScriptEngine{
 		events: &events, bodyDigest: bodyDigest, runErr: sentinel,
 	})
 	if err != nil {
@@ -171,7 +172,7 @@ func TestDockerScriptRuntimeCheckpointsCreateEvidenceBeforeFailureOutcome(t *tes
 	planDigest := sha256.Sum256([]byte("sealed create failure plan"))
 	executionID, snapshotID := ids.NewULID(), ids.NewULID()
 	scriptID, stepID := ids.New(ids.KindScript), ids.New(ids.KindStep)
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
 		OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
 		Plan: &agentpb.ExecutionPlan{
@@ -200,7 +201,7 @@ func TestDockerScriptRuntimeCheckpointsCreateEvidenceBeforeFailureOutcome(t *tes
 	createErr := errors.New("created container failed validation")
 	events := make([]string, 0, 10)
 	engine := &checkpointOrderScriptEngine{events: &events, bodyDigest: bodyDigest, createErr: createErr}
-	runtime, err := NewDockerScriptRuntime(engine)
+	runtime, err := New(engine)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +250,7 @@ func TestDockerScriptRuntimeJoinsCreateAndCleanupFailures(t *testing.T) {
 	engine := &checkpointOrderScriptEngine{
 		events: &[]string{}, bodyDigest: bodyDigest, createErr: createErr, cleanupErr: cleanupErr,
 	}
-	runtime, err := NewDockerScriptRuntime(engine)
+	runtime, err := New(engine)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +290,7 @@ func TestDockerScriptRuntimePreservesCapturedContainerFailurePrecedence(t *testi
 			engine := &checkpointOrderScriptEngine{
 				events: &[]string{}, bodyDigest: bodyDigest, createErr: test.createErr, cancelCreate: cancel,
 			}
-			runtime, err := NewDockerScriptRuntime(engine)
+			runtime, err := New(engine)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -324,37 +325,37 @@ func TestDockerScriptRuntimePreservesCapturedContainerFailurePrecedence(t *testi
 	}
 }
 
-func capturedContainerFailureFixture() (Assignment, *agentpb.ExecutionStep, [sha256.Size]byte) {
+func capturedContainerFailureFixture() (testtaskassignment.Assignment, *agentpb.ExecutionStep, [sha256.Size]byte) {
 	body := []byte("echo migration\n")
 	bodyDigest := sha256.Sum256(body)
 	planDigest := sha256.Sum256([]byte("sealed captured-container failure plan"))
 	executionID, snapshotID := ids.NewULID(), ids.NewULID()
 	scriptID, stepID := ids.New(ids.KindScript), ids.New(ids.KindStep)
-	return Assignment{
-			AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
-			OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
-			Plan: &agentpb.ExecutionPlan{
-				PlanHash:                append([]byte(nil), planDigest[:]...),
-				ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{{SnapshotId: snapshotID}},
-				ScriptRunnerSnapshots:   []*agentpb.ResolvedRunnerSnapshot{{SnapshotId: snapshotID}},
+	return testtaskassignment.Assignment{
+		AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
+		OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
+		Plan: &agentpb.ExecutionPlan{
+			PlanHash:                append([]byte(nil), planDigest[:]...),
+			ScriptRunnerProjections: []*agentpb.ScriptRunnerProjection{{SnapshotId: snapshotID}},
+			ScriptRunnerSnapshots:   []*agentpb.ResolvedRunnerSnapshot{{SnapshotId: snapshotID}},
+		},
+		ScriptArtifacts: &agentpb.ScriptAssignmentArtifacts{Bodies: []*agentpb.ScriptBodyArtifact{{
+			Metadata: &agentpb.ScriptBodyArtifactMetadata{
+				ScriptExecutionId: executionID, ScriptId: scriptID, Generation: 1,
+				Size: uint32(len(body)), Sha256: append([]byte(nil), bodyDigest[:]...),
 			},
-			ScriptArtifacts: &agentpb.ScriptAssignmentArtifacts{Bodies: []*agentpb.ScriptBodyArtifact{{
-				Metadata: &agentpb.ScriptBodyArtifactMetadata{
-					ScriptExecutionId: executionID, ScriptId: scriptID, Generation: 1,
-					Size: uint32(len(body)), Sha256: append([]byte(nil), bodyDigest[:]...),
-				},
-				Body: append([]byte(nil), body...),
-			}}},
-			ScriptCheckpoints: []*agentpb.ScriptExecutionCheckpoint{{
-				ScriptExecutionId: executionID,
-				State:             agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED,
-			}},
-		}, &agentpb.ExecutionStep{StepId: stepID, Payload: &agentpb.ExecutionStep_RunScript{
-			RunScript: &agentpb.RunScript{
-				ScriptExecutionId: executionID, ScriptId: scriptID, ScriptGeneration: 1,
-				RunnerSnapshotId: snapshotID,
-			},
-		}}, bodyDigest
+			Body: append([]byte(nil), body...),
+		}}},
+		ScriptCheckpoints: []*agentpb.ScriptExecutionCheckpoint{{
+			ScriptExecutionId: executionID,
+			State:             agentpb.ScriptExecutionState_SCRIPT_EXECUTION_STATE_NOT_STARTED,
+		}},
+	}, &agentpb.ExecutionStep{StepId: stepID, Payload: &agentpb.ExecutionStep_RunScript{
+		RunScript: &agentpb.RunScript{
+			ScriptExecutionId: executionID, ScriptId: scriptID, ScriptGeneration: 1,
+			RunnerSnapshotId: snapshotID,
+		},
+	}}, bodyDigest
 }
 
 func TestDockerScriptRuntimeCompletesNoServingReleaseWithoutStarting(t *testing.T) {
@@ -364,7 +365,7 @@ func TestDockerScriptRuntimeCompletesNoServingReleaseWithoutStarting(t *testing.
 	planDigest := sha256.Sum256([]byte("sealed no-serving plan"))
 	executionID, snapshotID := ids.NewULID(), ids.NewULID()
 	scriptID, stepID := ids.New(ids.KindScript), ids.New(ids.KindStep)
-	assignment := Assignment{
+	assignment := testtaskassignment.Assignment{
 		AssignmentID: ids.New(ids.KindAssignment), TaskID: ids.New(ids.KindTask),
 		OperationID: ids.New(ids.KindOperation), Deadline: time.Now().Add(time.Minute),
 		Plan: &agentpb.ExecutionPlan{
@@ -391,7 +392,7 @@ func TestDockerScriptRuntimeCompletesNoServingReleaseWithoutStarting(t *testing.
 		},
 	}}
 	events := []string{}
-	runtime, err := NewDockerScriptRuntime(&checkpointOrderScriptEngine{events: &events, bodyDigest: bodyDigest})
+	runtime, err := New(&checkpointOrderScriptEngine{events: &events, bodyDigest: bodyDigest})
 	if err != nil {
 		t.Fatal(err)
 	}

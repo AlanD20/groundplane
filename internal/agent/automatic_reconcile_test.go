@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -15,7 +16,7 @@ import (
 func TestAutomaticReconcileAssignmentRequiresComponentApply(t *testing.T) {
 	t.Parallel()
 
-	component := Assignment{
+	component := testtaskassignment.Assignment{
 		AssignmentID:       workerTestAssignmentID,
 		TaskID:             workerTestTaskID,
 		OperationID:        "op_01ARZ3NDEKTSV4RRFFQ69G5FAV",

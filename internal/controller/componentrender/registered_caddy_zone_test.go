@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
-	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
@@ -47,8 +46,8 @@ func TestProjectRegisteredCaddyInputPreservesOrderedZones(t *testing.T) {
 		GeneratedServices: []string{"svc_01ARZ3NDEKTSV4RRFFQ69G5FAW"}, PinnedIPv4: "10.40.0.2",
 	}
 	input, _, err := ProjectCaddyInput(environment, caddy, componentsdk.HTTPRouterOrigin{
-		ServiceName: registeredcaddy.ServiceName,
-		URL:         registeredcaddy.OriginURL,
+		ServiceName: "router",
+		URL:         "http://router:80",
 	})
 	if err != nil {
 		t.Fatalf("ProjectCaddyInput() error = %v", err)

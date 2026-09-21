@@ -8,6 +8,11 @@ import (
 	"testing"
 	"time"
 
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testenvironmentdirectory "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	testscriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
+	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
+	"github.com/AlanD20/groundplane/internal/infra/docker/environmentdirectoryhelper"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -29,12 +34,12 @@ func (helper blueprintPrefixHelper) Execute(
 	request *agentpb.EnvironmentDirectoryHelperRequest,
 ) (*agentpb.EnvironmentDirectoryHelperResponse, error) {
 	helper.runtime.record("prefix:" + request.StepId)
-	return &agentpb.EnvironmentDirectoryHelperResponse{Schema: environmentDirectoryHelperSchema}, nil
+	return &agentpb.EnvironmentDirectoryHelperResponse{Schema: environmentdirectoryhelper.SchemaVersion}, nil
 }
 
 func TestExecuteBlueprintReleaseMissingSetupRuntimePreventsHooks(t *testing.T) {
 	runtime := &orderedReleaseRuntime{}
-	compose, err := NewComposeRuntime(runtime, blueprintPhaseObserver{runtime})
+	compose, err := testcomposeruntime.New(runtime, blueprintPhaseObserver{runtime})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,17 +74,17 @@ func TestExecuteBlueprintReleaseRunsSetupBeforeHooksAndStopsOnHookFailure(t *tes
 				"apply-worker": releaseExecutionSuccess("worker", false),
 			}, scriptErr: map[string]error{}, scriptExit: map[string]int32{}}
 			for _, response := range runtime.responses {
-				response.Schema = composeHelperSchema
+				response.Schema = composehelper.SchemaVersion
 			}
 			if fail {
 				runtime.scriptErr["pre-worker"] = errors.New("migration failed")
 				runtime.scriptExit["pre-worker"] = 23
 			}
-			compose, err := NewComposeRuntime(runtime, blueprintPhaseObserver{runtime})
+			compose, err := testcomposeruntime.New(runtime, blueprintPhaseObserver{runtime})
 			if err != nil {
 				t.Fatal(err)
 			}
-			directories, err := NewEnvironmentDirectoryRuntime(blueprintPrefixHelper{runtime})
+			directories, err := testenvironmentdirectory.New(blueprintPrefixHelper{runtime})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -201,23 +206,23 @@ func TestExecuteBlueprintReleaseWaitsForRealScriptCleanupAcknowledgement(t *test
 				if test.abort {
 					engine.runErr = context.Canceled
 				}
-				scripts, err := NewDockerScriptRuntime(engine)
+				scripts, err := testscriptruntime.New(engine)
 				if err != nil {
 					t.Fatal(err)
 				}
 				response := releaseExecutionSuccess("worker", false)
-				response.Schema = composeHelperSchema
+				response.Schema = composehelper.SchemaVersion
 				runtime := &orderedReleaseRuntime{
 					responses: map[string]*agentpb.ComposeHelperResponse{"candidate": response},
 				}
-				compose, err := NewComposeRuntime(
+				compose, err := testcomposeruntime.New(
 					runtime,
 					&fakeComposeObserver{projects: []*agentpb.ObservedProject{releaseObservedProject()}},
 				)
 				if err != nil {
 					t.Fatal(err)
 				}
-				directories, err := NewEnvironmentDirectoryRuntime(blueprintPrefixHelper{runtime})
+				directories, err := testenvironmentdirectory.New(blueprintPrefixHelper{runtime})
 				if err != nil {
 					t.Fatal(err)
 				}

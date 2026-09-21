@@ -7,12 +7,17 @@ import (
 	"testing"
 	"time"
 
+	testcomponentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
+	testcomposeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	testenvironmentdirectory "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type blueprintComponentRuntime struct {
 	runtime *orderedReleaseRuntime
-	result  *ComponentActionResult
+	result  *testcomponentaction.ComponentActionResult
 	err     error
 }
 
@@ -22,7 +27,7 @@ func TestExecuteBlueprintComponentRequiresAcceptedRunningEvent(t *testing.T) {
 			map[bool]string{false: "unaccepted event prevents action", true: "accepted event permits action"}[accept],
 			func(t *testing.T) {
 				runtime := &orderedReleaseRuntime{}
-				compose, err := NewComposeRuntime(runtime, blueprintPhaseObserver{runtime})
+				compose, err := testcomposeruntime.New(runtime, blueprintPhaseObserver{runtime})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -41,7 +46,7 @@ func TestExecuteBlueprintComponentRequiresAcceptedRunningEvent(t *testing.T) {
 					eventsDurable: true,
 					ctx:           ctx,
 					cancel:        cancel,
-					assignment: Assignment{
+					assignment: testtaskassignment.Assignment{
 						AssignmentID:   "assignment",
 						TaskID:         "task",
 						ExecutionEpoch: 1,
@@ -91,10 +96,10 @@ func TestExecuteBlueprintComponentRequiresAcceptedRunningEvent(t *testing.T) {
 
 func (runtime blueprintComponentRuntime) ExecuteComponentAction(
 	_ context.Context,
-	_ Assignment,
+	_ testtaskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	payload ManagedConfigPayload,
-) (*ComponentActionResult, error) {
+	payload testcomponentaction.ManagedConfigPayload,
+) (*testcomponentaction.ComponentActionResult, error) {
 	runtime.runtime.record("component:" + step.StepId)
 	if payload.Source != nil {
 		return nil, errors.New("unexpected managed payload")
@@ -103,13 +108,13 @@ func (runtime blueprintComponentRuntime) ExecuteComponentAction(
 }
 
 func (runtime blueprintComponentRuntime) FinalizeManagedConfig(
-	context.Context,
-	Assignment,
+	context.Context, testtaskassignment.Assignment,
+
 	*agentpb.ExecutionStep,
 	bool,
-) (ManagedConfigTransactionState, error) {
+) (testcomponentaction.ManagedConfigTransactionState, error) {
 	runtime.runtime.record("forbidden:finalize")
-	return ManagedConfigTransactionState{}, errors.New("host-only finalization")
+	return testcomponentaction.ManagedConfigTransactionState{}, errors.New("host-only finalization")
 }
 
 func TestExecuteBlueprintComponentAfterHealthPreservesUncertainEffects(t *testing.T) {
@@ -119,9 +124,9 @@ func TestExecuteBlueprintComponentAfterHealthPreservesUncertainEffects(t *testin
 				"apply": releaseExecutionSuccess("api", false), "restore": releaseExecutionSuccess("api", true),
 			}}
 			for _, response := range runtime.responses {
-				response.Schema = composeHelperSchema
+				response.Schema = composehelper.SchemaVersion
 			}
-			compose, err := NewComposeRuntime(runtime, blueprintPhaseObserver{runtime})
+			compose, err := testcomposeruntime.New(runtime, blueprintPhaseObserver{runtime})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -186,7 +191,7 @@ func TestExecuteBlueprintComponentRejectsHostLifecycleAuthorityAndEvidence(t *te
 		name   string
 		action *agentpb.ComponentApply
 		mode   agentpb.ComponentLifecycleMode
-		result *ComponentActionResult
+		result *testcomponentaction.ComponentActionResult
 		called bool
 	}{
 		{name: "managed content", action: &agentpb.ComponentApply{ManagedConfigContent: true}},
@@ -194,12 +199,12 @@ func TestExecuteBlueprintComponentRejectsHostLifecycleAuthorityAndEvidence(t *te
 		{name: "previous digest", action: &agentpb.ComponentApply{ExpectedPreviousArtifactDigest: []byte("digest")}},
 		{name: "previous generation", action: &agentpb.ComponentApply{ExpectedPreviousGeneration: 1}},
 		{name: "host mode", action: &agentpb.ComponentApply{}, mode: agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE},
-		{name: "DNS evidence", action: &agentpb.ComponentApply{}, result: &ComponentActionResult{DNSResolverObservation: &agentpb.DNSResolverObservationEvidence{}}, called: true},
-		{name: "managed evidence", action: &agentpb.ComponentApply{}, result: &ComponentActionResult{ManagedConfig: &ManagedConfigTransactionState{}}, called: true},
+		{name: "DNS evidence", action: &agentpb.ComponentApply{}, result: &testcomponentaction.ComponentActionResult{DNSResolverObservation: &agentpb.DNSResolverObservationEvidence{}}, called: true},
+		{name: "managed evidence", action: &agentpb.ComponentApply{}, result: &testcomponentaction.ComponentActionResult{ManagedConfig: &testcomponentaction.ManagedConfigTransactionState{}}, called: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			runtime := &orderedReleaseRuntime{}
-			compose, err := NewComposeRuntime(runtime, blueprintPhaseObserver{runtime})
+			compose, err := testcomposeruntime.New(runtime, blueprintPhaseObserver{runtime})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -239,11 +244,11 @@ func TestExecuteBlueprintComponentRejectsHostLifecycleAuthorityAndEvidence(t *te
 
 func TestExecuteBlueprintEnvironmentDirectoryBeforeComponent(t *testing.T) {
 	runtime := &orderedReleaseRuntime{}
-	compose, err := NewComposeRuntime(runtime, blueprintPhaseObserver{runtime})
+	compose, err := testcomposeruntime.New(runtime, blueprintPhaseObserver{runtime})
 	if err != nil {
 		t.Fatal(err)
 	}
-	directories, err := NewEnvironmentDirectoryRuntime(blueprintPrefixHelper{runtime})
+	directories, err := testenvironmentdirectory.New(blueprintPrefixHelper{runtime})
 	if err != nil {
 		t.Fatal(err)
 	}
