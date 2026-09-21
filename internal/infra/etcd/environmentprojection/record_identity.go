@@ -1,4 +1,4 @@
-package etcd
+package environmentprojection
 
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -11,13 +11,13 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
+func ValidateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
 	previous EnvironmentComposeProjection,
 	hasPrevious bool,
 	next EnvironmentComposeProjection,
 	removedVolumeID string,
 ) error {
-	if err := validateEnvironmentComposeProjection(next); err != nil {
+	if err := ValidateEnvironmentComposeProjection(next); err != nil {
 		return err
 	}
 	if !hasPrevious {
@@ -32,7 +32,7 @@ func validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
 	return preserveEnvironmentVolumeIdentities(previous.Volumes, next.Volumes, removedVolumeID)
 }
 
-func validateEnvironmentVolumeIdentities(values []EnvironmentVolumeIdentity) error {
+func ValidateEnvironmentVolumeIdentities(values []EnvironmentVolumeIdentity) error {
 	previousKey := ""
 	idsSeen := make(map[string]struct{}, len(values))
 	slugsSeen := make(map[string]struct{}, len(values))
@@ -119,6 +119,6 @@ func preserveEnvironmentVolumeIdentities(
 	return nil
 }
 
-func corruptEnvironmentComposeProjection() error {
+func CorruptEnvironmentComposeProjection() error {
 	return errs.New(errs.KindInternal, "Environment Compose projection is corrupt")
 }

@@ -3,7 +3,8 @@ package composerender
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -11,7 +12,7 @@ import (
 )
 
 func ComposeIdentitySnapshotFromProjection(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) (composeidentity.Snapshot, error) {
 	componentOwners := make(map[string]string)
 	for _, component := range projection.Components {
@@ -112,7 +113,7 @@ func ComposeIdentitySnapshotFromProjection(
 	}, nil
 }
 
-func DesiredZoneResourceIdentities(values []etcd.EnvironmentZoneProjection) []composeidentity.Resource {
+func DesiredZoneResourceIdentities(values []projectionrecord.EnvironmentZoneProjection) []composeidentity.Resource {
 	result := make([]composeidentity.Resource, len(values))
 	for index, value := range values {
 		result[index] = composeidentity.Resource{ID: value.Desired.ID, Name: value.Desired.Name}
@@ -120,7 +121,7 @@ func DesiredZoneResourceIdentities(values []etcd.EnvironmentZoneProjection) []co
 	return result
 }
 
-func ComposeVolumeResourceIdentities(values []etcd.EnvironmentVolumeIdentity) []composeidentity.Resource {
+func ComposeVolumeResourceIdentities(values []projectionrecord.EnvironmentVolumeIdentity) []composeidentity.Resource {
 	result := make([]composeidentity.Resource, len(values))
 	for index, value := range values {
 		result[index] = composeidentity.Resource{ID: value.ID, Name: value.Key}

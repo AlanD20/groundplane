@@ -3,6 +3,7 @@ package attachments
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -22,7 +23,7 @@ import (
 type attachRuntimeCapture interface {
 	CaptureEntryMutationRuntime(
 		context.Context,
-		etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	) (taskplanning.EntryMutationRuntime, error)
 }
 
@@ -217,7 +218,7 @@ func attachTaskServiceSnapshots(
 }
 
 func attachTaskOwnedNetworkSnapshots(
-	values []etcd.EnvironmentZoneProjection,
+	values []projectionrecord.EnvironmentZoneProjection,
 ) []etcd.AttachTaskOwnedNetworkSnapshot {
 	snapshots := make([]etcd.AttachTaskOwnedNetworkSnapshot, len(values))
 	for index, value := range values {

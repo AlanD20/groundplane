@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -92,7 +93,7 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	ctx context.Context,
 	environmentID string,
 	projectionRevision int64,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	desired *routerecord.Record,
 	removedRouteID string,
 	inputGeneration uint64,
@@ -141,7 +142,7 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 }
 
 func (resolver *TaskPlanResolver) routeProviderRegistration(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) (componentrender.EnvironmentComponentRegistration, core.Component, bool, error) {
 	var selected componentrender.EnvironmentComponentRegistration
 	var component core.Component
@@ -184,7 +185,7 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 	ctx context.Context,
 	environmentID string,
 	projectionRevision int64,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	desired *routerecord.Record,
 	removedRouteID string,
 ) (core.Environment, int64, error) {
@@ -229,7 +230,7 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 
 func (resolver *TaskPlanResolver) renderPinnedRouteProvider(
 	pin etcd.RouteProviderPin,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) (componentsdk.EnvironmentPlan, core.Component, [sha256.Size]byte, [sha256.Size]byte, error) {
 	definitionBytes, err := hex.DecodeString(pin.DefinitionDigest)
 	if err != nil || len(definitionBytes) != sha256.Size {

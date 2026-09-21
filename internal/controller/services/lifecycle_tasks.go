@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -23,7 +24,7 @@ func serviceLifecycleContract(taskType etcd.TaskType) (string, core.ServiceRunti
 	}
 }
 
-func serviceInComposeProjection(projection etcd.EnvironmentComposeProjection, serviceID string) bool {
+func serviceInComposeProjection(projection projectionrecord.EnvironmentComposeProjection, serviceID string) bool {
 	for _, service := range projection.DesiredServices {
 		if service.Desired.ID == serviceID {
 			return true

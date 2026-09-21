@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -69,7 +70,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		servicerecord.ServiceRuntimeKey(intent.ServiceID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		environmentBlueprintHeadKey(intent.EnvironmentID),
-		environmentComposeProjectionKey(intent.EnvironmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -101,7 +102,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal tombstone changed")
 	}
-	projection, err := decodeEnvironmentComposeProjection(state.Values[3].Value)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
 	if err != nil || !sameRouteRemovalProjection(projection, intent.CurrentProjection) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal projection changed")
 	}
@@ -158,7 +159,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err
 	}
-	candidateValue, err := encodeEnvironmentComposeProjection(intent.CandidateProjection)
+	candidateValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(intent.CandidateProjection)
 	if err != nil {
 		clear(publication.publishedDescriptor)
 		clear(headReference)
@@ -217,7 +218,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		servicerecord.ServiceRuntimeKey(intent.ServiceID), deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
-		environmentBlueprintHeadKey(intent.EnvironmentID), environmentComposeProjectionKey(intent.EnvironmentID),
+		environmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}, Revision: revision})
 	if err != nil {
@@ -238,7 +239,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	} else if !conditionMatchesRead(etcdstore.Condition{Key: servicerecord.ServiceRuntimeKey(intent.ServiceID), ModRevision: intent.RuntimeRevision}, state.Values[0]) {
 		return errs.New(errs.KindStateConflict, "failed Service removal lost its target")
 	}
-	projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[3].Value)
+	projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
 	if state.Values[2].ModRevision != wantRevision || decodeErr != nil ||
 		!sameRouteRemovalProjection(projection, wantProjection) {
 		return errs.New(errs.KindStateConflict, "Service removal terminal desired state is inconsistent")

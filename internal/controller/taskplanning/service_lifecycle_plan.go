@@ -7,6 +7,7 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
@@ -312,7 +313,7 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 			AuthorizedVolumeDir: source.AuthorizedVolumeDir,
 		},
 		projection.RevisionID, source.ArtifactID, projection, phase,
-		func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
+		func(project *composetypes.Project, _ projectionrecord.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
 			if err := projectReleaseWorkloadServices(project, projection); err != nil {
 				return nil, err
 			}

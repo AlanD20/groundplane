@@ -2,10 +2,10 @@ package volume
 
 import (
 	"cmp"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -13,7 +13,7 @@ import (
 // volumeRemovalEvidence materializes only the accepted Volume's mount intent.
 // The desired projection remains the source of truth; these rows authorize no
 // execution until the existing staging, sealing and publication path accepts it.
-func volumeRemovalEvidence(runtime removal.Runtime, source etcdstore.Versioned[etcd.EnvironmentComposeProjection]) (
+func volumeRemovalEvidence(runtime removal.Runtime, source etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]) (
 	removal.EvidenceManifest, []removal.EvidenceRow, error,
 ) {
 	if source.Revision <= 0 || source.ReadRevision < source.Revision ||
@@ -36,13 +36,13 @@ func volumeRemovalEvidence(runtime removal.Runtime, source etcdstore.Versioned[e
 			"Volume removal source identity changed",
 		)
 	}
-	var mounts []etcd.EnvironmentServiceVolumeMount
+	var mounts []projectionrecord.EnvironmentServiceVolumeMount
 	for _, mount := range source.Record.VolumeMounts {
 		if mount.VolumeID == runtime.VolumeID {
 			mounts = append(mounts, mount)
 		}
 	}
-	slices.SortFunc(mounts, func(left, right etcd.EnvironmentServiceVolumeMount) int {
+	slices.SortFunc(mounts, func(left, right projectionrecord.EnvironmentServiceVolumeMount) int {
 		if order := cmp.Compare(left.ServiceID, right.ServiceID); order != 0 {
 			return order
 		}

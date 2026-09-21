@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
@@ -31,7 +32,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 	ctx context.Context,
 	publication BlueprintReleasePublication,
 	task TaskRecord,
-	captured etcdstore.Versioned[EnvironmentComposeProjection],
+	captured etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	sources []BlueprintRetainedRuntimeSource,
 	mixed *agentpb.ComposeArtifact,
 ) (BlueprintReleasePublication, error) {
@@ -87,7 +88,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 		)
 	}
 	conditions = append(
-		[]etcdstore.Condition{{Key: environmentComposeProjectionKey(environmentID), ModRevision: captured.Revision}},
+		[]etcdstore.Condition{{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), ModRevision: captured.Revision}},
 		conditions...)
 	if !publication.IsZero() {
 		if err := publication.validate(environmentID, task); err != nil {
@@ -168,7 +169,7 @@ func (ledger *ReleaseLedger) blueprintRuntimePlanningConditions(
 
 func (publication BlueprintReleasePublication) validateRetainedRuntime(
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) error {
 	artifact := &agentpb.ComposeArtifact{}
 	if proto.Unmarshal(projection.ComposeArtifact, artifact) != nil {

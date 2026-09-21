@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -21,8 +22,8 @@ type hierarchyDeletionZoneEvidence struct {
 }
 
 func newHierarchyDeletionZoneEvidence(
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
-	desired EnvironmentZoneProjection,
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	desired projectionrecord.EnvironmentZoneProjection,
 ) (hierarchyDeletionZoneEvidence, error) {
 	evidence := hierarchyDeletionZoneEvidence{
 		EnvironmentID: desired.EnvironmentID, ZoneID: desired.Desired.ID,

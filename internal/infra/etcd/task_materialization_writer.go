@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -100,7 +101,7 @@ func (repository *TaskRepository) readTaskMaterializationAppliedPredecessor(
 	candidateGeneration int32,
 	readRevision int64,
 ) (taskMaterializationAppliedPredecessor, etcdstore.Condition, error) {
-	key := environmentComposeProjectionKey(environmentID)
+	key := projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: readRevision})
 	if err != nil {
 		return taskMaterializationAppliedPredecessor{}, etcdstore.Condition{}, err
@@ -134,7 +135,7 @@ func taskMaterializationAppliedPredecessorFromValue(
 	if value == nil {
 		return taskMaterializationAppliedPredecessor{}, nil
 	}
-	projection, err := decodeEnvironmentComposeProjection(value.Value)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(value.Value)
 	if err != nil || projection.EnvironmentID != environmentID ||
 		recordcodec.ValidateID(ids.KindTask, projection.RevisionID) != nil ||
 		projection.RenderGeneration >= uint64(candidateGeneration) {
@@ -266,7 +267,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	}
 
 	rootKey := environmentBlueprintRootKey(environmentID, revisionID)
-	projectionKey := environmentComposeProjectionKey(environmentID)
+	projectionKey := projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID)
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{rootKey, projectionKey}, Revision: readRevision,
 	})
@@ -289,7 +290,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		record.Type == TaskUpdate && !entryMutation && !configuredApply && !taskHasBlueprintCandidateAppliedAuthority(record) &&
 			state.Values[1] != nil {
 		if state.Values[1] != nil {
-			if _, err := decodeEnvironmentComposeProjection(state.Values[1].Value); err != nil {
+			if _, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[1].Value); err != nil {
 				return taskMaterializationProjectionChange{}, err
 			}
 		}
@@ -297,7 +298,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(state.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
-		return taskMaterializationProjectionChange{}, corruptEnvironmentComposeProjection()
+		return taskMaterializationProjectionChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	chunkKeys := make([]string, seal.ProjectionChunks)
 	for index := range chunkKeys {
@@ -326,7 +327,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			"task desired projection read changed revision",
 		)
 	}
-	projection, err := decodeEnvironmentComposeProjection(projectionValue)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(projectionValue)
 	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID ||
 		projection.RenderGeneration != uint64(record.RenderGeneration) {
 		clear(projectionValue)
@@ -337,10 +338,10 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	}
 	projectionRevisionCondition := int64(0)
 	if state.Values[1] != nil {
-		current, decodeErr := decodeEnvironmentComposeProjection(state.Values[1].Value)
+		current, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[1].Value)
 		if decodeErr != nil || current.EnvironmentID != environmentID {
 			clear(projectionValue)
-			return taskMaterializationProjectionChange{}, corruptEnvironmentComposeProjection()
+			return taskMaterializationProjectionChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 		}
 		if projection.RenderGeneration <= current.RenderGeneration {
 			clear(projectionValue)
@@ -359,7 +360,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			current.Entries = projection.Entries
 			projection = current
 			clear(projectionValue)
-			projectionValue, err = encodeEnvironmentComposeProjection(projection)
+			projectionValue, err = projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
 			if err != nil {
 				return taskMaterializationProjectionChange{}, err
 			}
@@ -377,7 +378,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		}
 		projection.ComposeArtifact = artifact
 		clear(projectionValue)
-		projectionValue, err = encodeEnvironmentComposeProjection(projection)
+		projectionValue, err = projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
 		if err != nil {
 			return taskMaterializationProjectionChange{}, err
 		}

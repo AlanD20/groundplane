@@ -5,6 +5,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -202,7 +203,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 		values = append(values, tenantRead.Values[0])
 	}
 	if intent.CurrentProjection != nil {
-		projectionKey := environmentComposeProjectionKey(intent.EnvironmentID)
+		projectionKey := projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID)
 		activeKey := componentTaskActiveEnvironmentKey(intent.EnvironmentID)
 		projectionRead, readErr := getManyBatchedAtRevision(
 			ctx, repository.store, []string{projectionKey, activeKey}, revision)
@@ -213,7 +214,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 			projectionRead.Values[0].ModRevision != intent.CurrentProjectionRevision {
 			return nil, nil, errs.New(errs.KindStateConflict, "entry retry applied projection changed")
 		}
-		projection, decodeErr := decodeEnvironmentComposeProjection(projectionRead.Values[0].Value)
+		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(projectionRead.Values[0].Value)
 		if decodeErr != nil || !sameEntryRemovalProjection(projection, *intent.CurrentProjection) {
 			return nil, nil, errs.New(errs.KindStateConflict, "entry retry applied projection changed")
 		}
@@ -301,7 +302,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 	companionKeys := []string{entryOwnerKey(entry.EnvironmentID, entry.Entry.ID)}
 	if intent.CurrentProjection != nil {
 		companionKeys = append(companionKeys,
-			environmentComposeProjectionKey(intent.EnvironmentID),
+			projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		)
 	}
@@ -319,7 +320,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 			string(companions.Values[2].Value) != task.ID {
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "entry removal projection ownership changed")
 		}
-		projection, decodeErr := decodeEnvironmentComposeProjection(companions.Values[1].Value)
+		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(companions.Values[1].Value)
 		if decodeErr != nil || !sameEntryRemovalProjection(projection, *intent.CurrentProjection) {
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "entry removal applied projection changed")
 		}
@@ -372,14 +373,14 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + intent.EntryID + "/", Prefix: true},
 		)
 		if intent.CandidateProjection != nil {
-			projectionValue, encodeErr := encodeEnvironmentComposeProjection(*intent.CandidateProjection)
+			projectionValue, encodeErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(*intent.CandidateProjection)
 			if encodeErr != nil {
 				clearRouteTaskChange(change)
 				return routeTaskChange{}, encodeErr
 			}
 			change.values = append(change.values, projectionValue)
 			change.mutations = append(change.mutations, etcdstore.Mutation{
-				Type: etcdstore.MutationPut, Key: environmentComposeProjectionKey(intent.EnvironmentID), Value: projectionValue,
+				Type: etcdstore.MutationPut, Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), Value: projectionValue,
 			})
 		}
 	}

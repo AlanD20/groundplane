@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -65,7 +66,7 @@ func (repository *ZoneRepository) ListZones(
 	if !found {
 		return etcdstore.Page[zonerecord.Record]{Items: []etcdstore.Versioned[zonerecord.Record]{}, Revision: projection.ReadRevision}, nil
 	}
-	desired := append([]EnvironmentZoneProjection(nil), projection.Record.DesiredZones...)
+	desired := append([]projectionrecord.EnvironmentZoneProjection(nil), projection.Record.DesiredZones...)
 	sort.Slice(desired, func(left, right int) bool {
 		return desired[left].Desired.ID < desired[right].Desired.ID
 	})
@@ -126,7 +127,7 @@ func findZoneAtRevision(
 				strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix), "/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
-				return etcdstore.Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
+				return etcdstore.Versioned[zonerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
 				ctx, store, environmentID, fixedRevision,
@@ -142,7 +143,7 @@ func findZoneAtRevision(
 					continue
 				}
 				if matched != nil {
-					return etcdstore.Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
+					return etcdstore.Versioned[zonerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
 				joined, joinErr := joinEnvironmentZone(projection, desired)
 				if joinErr != nil {

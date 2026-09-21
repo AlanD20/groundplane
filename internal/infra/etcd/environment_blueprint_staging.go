@@ -2,15 +2,16 @@ package etcd
 
 import (
 	"crypto/sha256"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"time"
 )
 
 const (
-	EnvironmentBlueprintChunkBytes              = 60 * 1024
-	EnvironmentBlueprintStageBatchChunks        = 12
-	environmentBlueprintMaximumAuditBytes       = 1_049_100
-	EnvironmentBlueprintProjectionMaxBytes      = 2 * 1024 * 1024
+	EnvironmentBlueprintChunkBytes        = 60 * 1024
+	EnvironmentBlueprintStageBatchChunks  = 12
+	environmentBlueprintMaximumAuditBytes = 1_049_100
+
 	environmentBlueprintMaximumAuditChunks      = 18
 	environmentBlueprintMaximumProjectionChunks = 35
 	environmentBlueprintMaximumChunks           = 53
@@ -103,7 +104,7 @@ type EnvironmentBlueprintStageRequest struct {
 	Claim            EnvironmentBlueprintStageClaim
 	Blueprint        *EnvironmentBlueprintRevision
 	Mutation         *EnvironmentDesiredMutationAudit
-	Projection       EnvironmentComposeProjection
+	Projection       projectionrecord.EnvironmentComposeProjection
 	DependencyDigest [sha256.Size]byte
 }
 

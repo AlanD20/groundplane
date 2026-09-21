@@ -2,7 +2,8 @@ package taskplanning
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -15,7 +16,7 @@ type entryRemovalServiceIdentity struct {
 }
 
 func entryRemovalEnvironmentServiceIdentities(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]entryRemovalServiceIdentity, error) {
 	identities := make([]entryRemovalServiceIdentity, 0, len(projection.DesiredServices))
 	seenIDs := make(map[string]struct{}, len(projection.DesiredServices))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -26,8 +27,8 @@ func prepareRouteHeadPublication(
 	store hierarchyStore,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
-	current *EnvironmentComposeProjection,
-	candidate EnvironmentComposeProjection,
+	current *projectionrecord.EnvironmentComposeProjection,
+	candidate projectionrecord.EnvironmentComposeProjection,
 	audit EnvironmentDesiredMutationAudit,
 	expectedHeadRevision int64,
 ) (routeHeadPublication, error) {
@@ -41,7 +42,7 @@ func prepareRouteHeadPublication(
 		(current.EnvironmentID != candidate.EnvironmentID || current.RenderGeneration >= candidate.RenderGeneration) {
 		return routeHeadPublication{}, errs.New(errs.KindStateConflict, "Route desired candidate head does not advance")
 	}
-	if err := validateEnvironmentComposeProjection(candidate); err != nil {
+	if err := projectionrecord.ValidateEnvironmentComposeProjection(candidate); err != nil {
 		return routeHeadPublication{}, err
 	}
 	if err := validateEnvironmentDesiredMutationAudit(audit); err != nil {
@@ -89,7 +90,7 @@ func prepareRouteHeadPublication(
 	descriptor := streams.Descriptor
 	publishHead := audit.Route.Action != EnvironmentRouteMutationRemove
 	if publishHead {
-		previous := EnvironmentComposeProjection{}
+		previous := projectionrecord.EnvironmentComposeProjection{}
 		if current != nil {
 			previous = *current
 		}
@@ -354,7 +355,7 @@ func validateCompletedRouteHeadReplay(
 		return errs.New(errs.KindStateConflict, "Route removal completed replay projection is unavailable")
 	}
 	projection := selected.Record
-	encoded, err := encodeEnvironmentComposeProjection(projection)
+	encoded, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -18,7 +19,7 @@ import (
 
 type pinnedEnvironmentBlueprintArtifact struct {
 	artifact     *agentpb.ComposeArtifact
-	projection   etcd.EnvironmentComposeProjection
+	projection   projectionrecord.EnvironmentComposeProjection
 	components   []componentrecord.Record
 	requirements core.BlueprintRequirements
 }
@@ -98,7 +99,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifact(
 	identity pinnedEnvironmentIdentity,
 	revisionID string,
 	artifactID string,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	transform environmentComposeTransform,
 ) (*agentpb.ComposeArtifact, error) {
 	return resolver.renderPinnedEnvironmentArtifactForPhase(
@@ -119,7 +120,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhase(
 	identity pinnedEnvironmentIdentity,
 	revisionID string,
 	artifactID string,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	phase core.ServiceLifecyclePhase,
 	transform environmentComposeTransform,
 ) (*agentpb.ComposeArtifact, error) {
@@ -134,7 +135,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactWithReleases(
 	identity pinnedEnvironmentIdentity,
 	revisionID string,
 	artifactID string,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	transform environmentComposeTransform,
 	releases map[string]composerender.ComposeReleaseIdentity,
 ) (*agentpb.ComposeArtifact, error) {
@@ -149,7 +150,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	identity pinnedEnvironmentIdentity,
 	revisionID string,
 	artifactID string,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	phase core.ServiceLifecyclePhase,
 	transform environmentComposeTransform,
 	releases map[string]composerender.ComposeReleaseIdentity,

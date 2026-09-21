@@ -4,6 +4,7 @@ import (
 	"context"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -40,13 +41,13 @@ type routeMutationRepository interface {
 type routeMutationProjectionRepository interface {
 	GetEnvironmentAppliedComposeProjection(
 		context.Context, string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 }
 
 type routeMutationDesiredProjectionRepository interface {
 	GetEnvironmentComposeProjection(
 		context.Context, string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 }
 
 type routeMutationTaskPlanner interface {

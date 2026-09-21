@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -387,7 +388,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 		hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 		environmentBlueprintHeadKey(task.Owner.EnvironmentID),
 		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
-		environmentComposeProjectionKey(task.Owner.EnvironmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

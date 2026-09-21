@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -37,7 +38,7 @@ type routeRemovalRepository interface {
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	GetRoute(context.Context, string) (etcdstore.Versioned[routerecord.Record], error)
 	GetEnvironmentComposeProjection(context.Context, string) (
-		etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error,
+		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error,
 	)
 	BeginRouteDeletionWithTask(
 		context.Context,
@@ -45,7 +46,7 @@ type routeRemovalRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[servicerecord.ServiceRecord],
 		etcdstore.Versioned[routerecord.Record],
-		*etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+		*etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 		deletionrecord.DeletionTombstoneRecord,
 		etcd.RouteRemovalIntent,
 		etcd.TaskRecord,
@@ -263,7 +264,7 @@ func (service *routeRemovalService) removeRouteOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	var projectionInput *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+	var projectionInput *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	if hasProjection {
 		projectionInput = &projection
 	}

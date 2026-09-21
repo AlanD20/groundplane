@@ -4,6 +4,7 @@ import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
@@ -90,7 +91,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	keys := []string{environmentBlueprintHeadKey(intent.EnvironmentID),
 		environmentBlueprintDescriptorKeyByID(desired.DescriptorID),
 		environmentBlueprintRootKey(intent.EnvironmentID, desired.RevisionID),
-		environmentComposeProjectionKey(intent.EnvironmentID), blueprintEntryEnvironmentPrefix + intent.EntryID}
+		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), blueprintEntryEnvironmentPrefix + intent.EntryID}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -137,10 +138,10 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 		return routeTaskChange{}, err
 	}
 	defer clear(projectionValue)
-	candidate, err := decodeEnvironmentComposeProjection(projectionValue)
+	candidate, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(projectionValue)
 	if err != nil || candidate.EnvironmentID != intent.EnvironmentID || candidate.RevisionID != desired.RevisionID ||
 		candidate.RenderGeneration != desired.RenderGeneration {
-		return routeTaskChange{}, corruptEnvironmentComposeProjection()
+		return routeTaskChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	for _, entry := range candidate.Entries {
 		if entry.Entry.ID == intent.EntryID {
@@ -186,10 +187,10 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 		etcdstore.Condition{Key: keys[3], ModRevision: keyValueRevision(read.Values[3])},
 	)
 	if intent.CurrentProjection == nil && read.Values[3] != nil {
-		applied, err := decodeEnvironmentComposeProjection(read.Values[3].Value)
+		applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[3].Value)
 		if err != nil || applied.EnvironmentID != intent.EnvironmentID {
 			clearRouteTaskChange(change)
-			return routeTaskChange{}, corruptEnvironmentComposeProjection()
+			return routeTaskChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 		}
 		for _, entry := range applied.Entries {
 			if entry.Entry.ID == intent.EntryID {
@@ -203,12 +204,12 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal applied state changed")
 		}
-		current, err := decodeEnvironmentComposeProjection(read.Values[3].Value)
+		current, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[3].Value)
 		if err != nil || !sameEntryRemovalProjection(current, *intent.CurrentProjection) {
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal applied state changed")
 		}
-		appliedValue, err := encodeEnvironmentComposeProjection(*intent.CandidateProjection)
+		appliedValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(*intent.CandidateProjection)
 		if err != nil {
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, err

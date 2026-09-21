@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -21,7 +22,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	route etcdstore.Versioned[routerecord.Record],
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent RouteRemovalIntent,
 	task TaskRecord,
@@ -211,7 +212,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 }
 
 func validateRouteDeletionProjection(
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	intent RouteRemovalIntent,
 ) error {
 	if intent.CurrentProjection == nil {
@@ -233,7 +234,7 @@ func classifyRouteDeletionStartConflict(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	route etcdstore.Versioned[routerecord.Record],
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	indexes []*etcdstore.KeyValue,
 	operationID string,
 ) idempotencyPlanClassifier {

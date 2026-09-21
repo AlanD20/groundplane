@@ -5,12 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -21,14 +22,14 @@ import (
 // EntryMutationRuntime captures the runtime onto which Entry decorations are
 // applied. The epoch fences its selection in the desired publication.
 type EntryMutationRuntime struct {
-	Projection        etcd.EnvironmentComposeProjection
+	Projection        projectionrecord.EnvironmentComposeProjection
 	EpochRevision     int64
 	RunningServiceIDs []string
 	Sources           []etcdstore.Versioned[serviceruntimerecord.Record]
 }
 
 func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
-	ctx context.Context, current etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	ctx context.Context, current etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) (EntryMutationRuntime, error) {
 	if resolver == nil || resolver.releases == nil {
 		return EntryMutationRuntime{}, errs.New(errs.KindInternal, "Entry runtime capture is not configured")

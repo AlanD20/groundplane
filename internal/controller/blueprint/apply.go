@@ -22,6 +22,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -557,7 +558,7 @@ func (service *Service) applyBlueprintOnce(
 		reconciledEntries.Current,
 	)
 	projection.ManagedComponentRuntimeSources = append(
-		[]etcd.ManagedComponentRuntimeSource(nil),
+		[]projectionrecord.ManagedComponentRuntimeSource(nil),
 		previousProjection.Record.ManagedComponentRuntimeSources...,
 	)
 	projection.ManagedComponentRuntimeSources, err = etcd.ProjectManagedComponentRuntimeSources(

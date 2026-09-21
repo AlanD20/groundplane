@@ -4,25 +4,22 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"sort"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
-
-const maximumManagedComponentRuntimeSources = 2
 
 // ProjectManagedComponentRuntimeSources binds possible managed runtime to an
 // immutable desired revision. Failed attempts therefore remain removable by a
 // later Task without depending on the short-lived Component candidate record.
 func ProjectManagedComponentRuntimeSources(
 	preparation ComponentTaskPreparation,
-	projection EnvironmentComposeProjection,
-) ([]ManagedComponentRuntimeSource, error) {
-	sources := append([]ManagedComponentRuntimeSource(nil), projection.ManagedComponentRuntimeSources...)
+	projection projectionrecord.EnvironmentComposeProjection,
+) ([]projectionrecord.ManagedComponentRuntimeSource, error) {
+	sources := append([]projectionrecord.ManagedComponentRuntimeSource(nil), projection.ManagedComponentRuntimeSources...)
 	if !componentTaskPreparationIsZero(preparation) {
 		if err := validateComponentTaskPreparation(preparation); err != nil {
 			return nil, err
@@ -56,34 +53,34 @@ func ProjectManagedComponentRuntimeSources(
 	})
 	projected := projection
 	projected.ManagedComponentRuntimeSources = sources
-	if err := validateManagedComponentRuntimeSources(projected); err != nil {
+	if err := projectionrecord.ValidateManagedComponentRuntimeSources(projected); err != nil {
 		return nil, err
 	}
-	return append([]ManagedComponentRuntimeSource(nil), sources...), nil
+	return append([]projectionrecord.ManagedComponentRuntimeSource(nil), sources...), nil
 }
 
 func selectManagedComponentRuntimeSources(
-	desired EnvironmentComposeProjection,
-	applied EnvironmentComposeProjection,
+	desired projectionrecord.EnvironmentComposeProjection,
+	applied projectionrecord.EnvironmentComposeProjection,
 	hasApplied bool,
-) ([]ManagedComponentRuntimeSource, error) {
+) ([]projectionrecord.ManagedComponentRuntimeSource, error) {
 	if hasApplied && applied.RevisionID == desired.RevisionID {
 		return seedManagedComponentRuntimeSources(applied)
 	}
-	if err := validateManagedComponentRuntimeSources(desired); err != nil {
+	if err := projectionrecord.ValidateManagedComponentRuntimeSources(desired); err != nil {
 		return nil, err
 	}
-	return append([]ManagedComponentRuntimeSource(nil), desired.ManagedComponentRuntimeSources...), nil
+	return append([]projectionrecord.ManagedComponentRuntimeSource(nil), desired.ManagedComponentRuntimeSources...), nil
 }
 
 func seedManagedComponentRuntimeSources(
-	projection EnvironmentComposeProjection,
-) ([]ManagedComponentRuntimeSource, error) {
+	projection projectionrecord.EnvironmentComposeProjection,
+) ([]projectionrecord.ManagedComponentRuntimeSource, error) {
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
 		return nil, errs.New(errs.KindInternal, "applied managed Component artifact is corrupt")
 	}
-	result := make([]ManagedComponentRuntimeSource, 0, maximumManagedComponentRuntimeSources)
+	result := make([]projectionrecord.ManagedComponentRuntimeSource, 0, projectionrecord.MaximumManagedComponentRuntimeSources)
 	for _, component := range projection.Components {
 		if !component.Desired.Enabled {
 			continue
@@ -101,12 +98,12 @@ func seedManagedComponentRuntimeSources(
 }
 
 func managedComponentRuntimeSource(
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	component componentrecord.Record,
 	artifact *agentpb.ComposeArtifact,
-) (ManagedComponentRuntimeSource, error) {
+) (projectionrecord.ManagedComponentRuntimeSource, error) {
 	if len(component.Runtime.GeneratedServices) != 1 {
-		return ManagedComponentRuntimeSource{}, errs.New(
+		return projectionrecord.ManagedComponentRuntimeSource{}, errs.New(
 			errs.KindInternal,
 			"managed Component source does not own one generated Service",
 		)
@@ -116,7 +113,7 @@ func managedComponentRuntimeSource(
 	for _, candidate := range artifact.GetServices() {
 		if candidate.GetServiceId() == serviceID && candidate.GetOwnerComponentId() == component.Desired.ID {
 			if service != nil {
-				return ManagedComponentRuntimeSource{}, errs.New(
+				return projectionrecord.ManagedComponentRuntimeSource{}, errs.New(
 					errs.KindInternal,
 					"managed Component source Service is duplicated",
 				)
@@ -125,13 +122,13 @@ func managedComponentRuntimeSource(
 		}
 	}
 	if service == nil || service.GetComposeName() == "" {
-		return ManagedComponentRuntimeSource{}, errs.New(
+		return projectionrecord.ManagedComponentRuntimeSource{}, errs.New(
 			errs.KindInternal,
 			"managed Component source Service is absent",
 		)
 	}
 	digest := sha256.Sum256(projection.ComposeArtifact)
-	return ManagedComponentRuntimeSource{
+	return projectionrecord.ManagedComponentRuntimeSource{
 		ComponentKind:  component.Desired.Kind,
 		ComponentID:    component.Desired.ID,
 		ServiceID:      serviceID,
@@ -143,9 +140,9 @@ func managedComponentRuntimeSource(
 }
 
 func replaceManagedComponentRuntimeSource(
-	sources []ManagedComponentRuntimeSource,
-	replacement ManagedComponentRuntimeSource,
-) []ManagedComponentRuntimeSource {
+	sources []projectionrecord.ManagedComponentRuntimeSource,
+	replacement projectionrecord.ManagedComponentRuntimeSource,
+) []projectionrecord.ManagedComponentRuntimeSource {
 	for index := range sources {
 		if sources[index].ComponentID == replacement.ComponentID {
 			sources[index] = replacement
@@ -153,32 +150,4 @@ func replaceManagedComponentRuntimeSource(
 		}
 	}
 	return append(sources, replacement)
-}
-
-func validateManagedComponentRuntimeSources(projection EnvironmentComposeProjection) error {
-	if len(projection.ManagedComponentRuntimeSources) > maximumManagedComponentRuntimeSources {
-		return errs.New(errs.KindValidationFailed, "managed Component runtime source count is invalid")
-	}
-	components := make(map[core.ComponentKind]componentrecord.Record, len(projection.Components))
-	for _, component := range projection.Components {
-		components[component.Desired.Kind] = component
-	}
-	previousKind := core.ComponentKind("")
-	for _, source := range projection.ManagedComponentRuntimeSources {
-		component, known := components[source.ComponentKind]
-		digest, digestErr := hex.DecodeString(source.ArtifactSHA256)
-		if !known || source.ComponentKind <= previousKind || component.Desired.ID != source.ComponentID ||
-			ids.Validate(ids.KindComponent, source.ComponentID) != nil ||
-			ids.Validate(ids.KindService, source.ServiceID) != nil || source.ComposeName == "" ||
-			ids.Validate(ids.KindTask, source.RevisionID) != nil ||
-			ids.Validate(ids.KindConfig, source.ArtifactID) != nil || digestErr != nil || len(digest) != sha256.Size {
-			return errs.New(errs.KindValidationFailed, "managed Component runtime source is invalid or unsorted")
-		}
-		if component.Desired.Enabled && (len(component.Runtime.GeneratedServices) != 1 ||
-			component.Runtime.GeneratedServices[0] != source.ServiceID) {
-			return errs.New(errs.KindValidationFailed, "enabled Component runtime source identity changed")
-		}
-		previousKind = source.ComponentKind
-	}
-	return nil
 }

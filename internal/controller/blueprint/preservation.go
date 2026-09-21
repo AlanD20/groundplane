@@ -2,10 +2,11 @@ package blueprint
 
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -54,7 +55,7 @@ func preserveEnvironmentBlueprintResources(
 	project *composetypes.Project,
 	prior *composetypes.Project,
 	previous composeidentity.Snapshot,
-	previousVolumes []etcd.EnvironmentVolumeIdentity,
+	previousVolumes []projectionrecord.EnvironmentVolumeIdentity,
 	hasPrevious bool,
 ) error {
 	if project == nil || (hasPrevious && prior == nil) {

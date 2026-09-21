@@ -2,6 +2,7 @@ package etcd
 
 import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -17,7 +18,7 @@ type preparedBlueprintAttachTaskPublication struct {
 
 func prepareBlueprintAttachTaskPublication(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 	preparation BlueprintAttachTaskPreparation,
 ) (preparedBlueprintAttachTaskPublication, error) {

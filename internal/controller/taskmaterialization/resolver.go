@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"io"
@@ -28,7 +29,7 @@ type materializationBlueprintReader interface {
 		context.Context,
 		string,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 }
 
 type materializationEntryValueReader interface {

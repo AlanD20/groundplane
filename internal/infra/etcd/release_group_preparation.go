@@ -5,6 +5,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -149,7 +150,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 		releaseGroupRecordKey(group.ID),
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID),
 		releaseGroupNameKey(group.EnvironmentID, group.Name),
-		environmentComposeProjectionKey(group.EnvironmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(group.EnvironmentID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID),
 	}
 	if oldName != "" && oldName != group.Name {
@@ -191,7 +192,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 			"release group environment has no enabled compose project",
 		)
 	}
-	projection, err := decodeEnvironmentComposeProjection(result.Values[7].Value)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(result.Values[7].Value)
 	if err != nil || projection.EnvironmentID != group.EnvironmentID {
 		clear(epochValue)
 		return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()

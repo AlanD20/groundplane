@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -31,7 +32,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemova
 	ctx context.Context,
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord], environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64, claim EnvironmentBlueprintStageClaim,
-	projection EnvironmentComposeProjection, policy VolumeRemovalBackupPolicyPreparation,
+	projection projectionrecord.EnvironmentComposeProjection, policy VolumeRemovalBackupPolicyPreparation,
 	initial removalrecord.InitialPublication, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.publishEnvironmentDesiredRevisionWithTask(
@@ -66,7 +67,7 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 	ctx context.Context,
 	initial removalrecord.InitialPublication,
 	claim EnvironmentBlueprintStageClaim,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	removedVolumeID string,

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -46,7 +47,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	keys := []string{
 		zoneRemovalIntentKey(operationID), deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
 		environmentBlueprintHeadKey(source.Params[TaskZoneEnvironmentParam]),
-		environmentComposeProjectionKey(source.Params[TaskZoneEnvironmentParam]),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[TaskZoneEnvironmentParam]),
 		componentTaskActiveEnvironmentKey(source.Params[TaskZoneEnvironmentParam]),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -68,7 +69,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	if err != nil || headID != intent.DesiredProjection.RevisionID {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
 	}
-	projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[3].Value)
+	projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
 	if decodeErr != nil || !sameServiceRemovalProjection(projection, intent.AppliedProjection) {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry projection changed")
 	}

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -19,24 +20,24 @@ const zoneRemovalIntentPrefix = "/v1/records/zone-removal-intents/"
 // ZoneRemovalIntent is the operation-stable authority for one staged Zone
 // removal. Attempts may change, but the desired claim and candidate do not.
 type ZoneRemovalIntent struct {
-	OperationID               string                         `json:"operation_id"`
-	ActiveTaskID              string                         `json:"active_task_id"`
-	ActiveTaskCreatedAt       time.Time                      `json:"active_task_created_at"`
-	EnvironmentID             string                         `json:"environment_id"`
-	ZoneID                    string                         `json:"zone_id"`
-	ZoneName                  string                         `json:"zone_name"`
-	ZoneRevision              int64                          `json:"zone_revision"`
-	DesiredHeadRevision       int64                          `json:"desired_head_revision"`
-	AppliedProjectionRevision int64                          `json:"applied_projection_revision"`
-	Claim                     EnvironmentBlueprintStageClaim `json:"claim"`
-	DesiredProjection         EnvironmentComposeProjection   `json:"desired_projection"`
-	AppliedProjection         EnvironmentComposeProjection   `json:"applied_projection"`
-	CandidateProjection       EnvironmentComposeProjection   `json:"candidate_projection"`
-	AffectedServiceIDs        []string                       `json:"affected_service_ids"`
-	Status                    TaskStatus                     `json:"status"`
-	CreatedAt                 time.Time                      `json:"created_at"`
-	UpdatedAt                 time.Time                      `json:"updated_at"`
-	TerminalAt                *time.Time                     `json:"terminal_at,omitempty"`
+	OperationID               string                                        `json:"operation_id"`
+	ActiveTaskID              string                                        `json:"active_task_id"`
+	ActiveTaskCreatedAt       time.Time                                     `json:"active_task_created_at"`
+	EnvironmentID             string                                        `json:"environment_id"`
+	ZoneID                    string                                        `json:"zone_id"`
+	ZoneName                  string                                        `json:"zone_name"`
+	ZoneRevision              int64                                         `json:"zone_revision"`
+	DesiredHeadRevision       int64                                         `json:"desired_head_revision"`
+	AppliedProjectionRevision int64                                         `json:"applied_projection_revision"`
+	Claim                     EnvironmentBlueprintStageClaim                `json:"claim"`
+	DesiredProjection         projectionrecord.EnvironmentComposeProjection `json:"desired_projection"`
+	AppliedProjection         projectionrecord.EnvironmentComposeProjection `json:"applied_projection"`
+	CandidateProjection       projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
+	AffectedServiceIDs        []string                                      `json:"affected_service_ids"`
+	Status                    TaskStatus                                    `json:"status"`
+	CreatedAt                 time.Time                                     `json:"created_at"`
+	UpdatedAt                 time.Time                                     `json:"updated_at"`
+	TerminalAt                *time.Time                                    `json:"terminal_at,omitempty"`
 }
 
 func NewZoneRemovalIntent(
@@ -45,7 +46,7 @@ func NewZoneRemovalIntent(
 	zone etcdstore.Versioned[zonerecord.Record],
 	authorities EnvironmentZoneRemovalAuthorities,
 	claim EnvironmentBlueprintStageClaim,
-	candidate EnvironmentComposeProjection,
+	candidate projectionrecord.EnvironmentComposeProjection,
 	affected []string,
 	createdAt time.Time,
 ) (ZoneRemovalIntent, error) {
@@ -56,9 +57,9 @@ func NewZoneRemovalIntent(
 		DesiredHeadRevision:       authorities.Desired.Revision,
 		AppliedProjectionRevision: authorities.Applied.Revision,
 		Claim:                     cloneEnvironmentBlueprintStageClaim(claim),
-		DesiredProjection:         cloneEnvironmentComposeProjection(authorities.Desired.Record),
-		AppliedProjection:         cloneEnvironmentComposeProjection(authorities.Applied.Record),
-		CandidateProjection:       cloneEnvironmentComposeProjection(candidate),
+		DesiredProjection:         projectionrecord.CloneEnvironmentComposeProjection(authorities.Desired.Record),
+		AppliedProjection:         projectionrecord.CloneEnvironmentComposeProjection(authorities.Applied.Record),
+		CandidateProjection:       projectionrecord.CloneEnvironmentComposeProjection(candidate),
 		AffectedServiceIDs:        append([]string(nil), affected...),
 		Status:                    TaskStatusPending, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
@@ -159,9 +160,9 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		intent.DesiredProjection.RevisionID == intent.CandidateProjection.RevisionID ||
 		intent.DesiredProjection.RenderGeneration+1 != intent.CandidateProjection.RenderGeneration ||
 		intent.CandidateProjection.RenderGeneration != intent.Claim.RenderGeneration ||
-		validateEnvironmentComposeProjection(intent.DesiredProjection) != nil ||
-		validateEnvironmentComposeProjection(intent.AppliedProjection) != nil ||
-		validateEnvironmentComposeProjection(intent.CandidateProjection) != nil ||
+		projectionrecord.ValidateEnvironmentComposeProjection(intent.DesiredProjection) != nil ||
+		projectionrecord.ValidateEnvironmentComposeProjection(intent.AppliedProjection) != nil ||
+		projectionrecord.ValidateEnvironmentComposeProjection(intent.CandidateProjection) != nil ||
 		recordcodec.ValidateTimestamp("Zone removal created_at", intent.CreatedAt) != nil ||
 		recordcodec.ValidateTimestamp("Zone removal active Task created_at", intent.ActiveTaskCreatedAt) != nil ||
 		recordcodec.ValidateTimestamp("Zone removal updated_at", intent.UpdatedAt) != nil ||
@@ -177,7 +178,7 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		!intent.TerminalAt.Equal(intent.UpdatedAt) || recordcodec.ValidateTimestamp("Zone removal terminal_at", *intent.TerminalAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Zone removal terminal state is invalid")
 	}
-	expected := cloneEnvironmentComposeProjection(intent.DesiredProjection)
+	expected := projectionrecord.CloneEnvironmentComposeProjection(intent.DesiredProjection)
 	expected.RevisionID = intent.CandidateProjection.RevisionID
 	expected.RenderGeneration = intent.CandidateProjection.RenderGeneration
 	expected.ComposeArtifact = append([]byte(nil), intent.CandidateProjection.ComposeArtifact...)
@@ -222,7 +223,7 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 	return nil
 }
 
-func zoneRemovalProjectionChanged(expected, candidate EnvironmentComposeProjection) error {
+func zoneRemovalProjectionChanged(expected, candidate projectionrecord.EnvironmentComposeProjection) error {
 	switch {
 	case expected.EnvironmentID != candidate.EnvironmentID || expected.RevisionID != candidate.RevisionID ||
 		expected.RenderGeneration != candidate.RenderGeneration:
@@ -239,7 +240,7 @@ func zoneRemovalProjectionChanged(expected, candidate EnvironmentComposeProjecti
 	}
 }
 
-func sameZoneRemovalProjection(left, right EnvironmentComposeProjection) bool {
+func sameZoneRemovalProjection(left, right projectionrecord.EnvironmentComposeProjection) bool {
 	return sameServiceRemovalProjection(left, right)
 }
 
@@ -283,9 +284,9 @@ func decodeZoneRemovalIntent(value []byte) (ZoneRemovalIntent, error) {
 func cloneZoneRemovalIntent(intent ZoneRemovalIntent) ZoneRemovalIntent {
 	clone := intent
 	clone.Claim = cloneEnvironmentBlueprintStageClaim(intent.Claim)
-	clone.DesiredProjection = cloneEnvironmentComposeProjection(intent.DesiredProjection)
-	clone.AppliedProjection = cloneEnvironmentComposeProjection(intent.AppliedProjection)
-	clone.CandidateProjection = cloneEnvironmentComposeProjection(intent.CandidateProjection)
+	clone.DesiredProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.DesiredProjection)
+	clone.AppliedProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.AppliedProjection)
+	clone.CandidateProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.CandidateProjection)
 	clone.AffectedServiceIDs = append([]string(nil), intent.AffectedServiceIDs...)
 	clone.TerminalAt = cloneTimePointer(intent.TerminalAt)
 	return clone

@@ -9,6 +9,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -186,7 +187,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMembership(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) ([]HierarchyDeletionMembershipNode, error) {
 	if projection.Revision == 0 {
 		return nil, nil

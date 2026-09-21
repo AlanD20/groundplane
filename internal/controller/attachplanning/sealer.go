@@ -7,6 +7,7 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -32,12 +33,12 @@ type Repository interface {
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetEnvironmentComposeProjectionRevision(
 		context.Context,
 		string,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
 	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error)
 }

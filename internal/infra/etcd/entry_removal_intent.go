@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -17,17 +18,17 @@ const entryRemovalIntentPrefix = "/v1/records/entry-removal-intents/"
 // Task. Public Entry and applied projection state stay active until successful
 // terminal acknowledgement promotes CandidateProjection and removes Entry.
 type EntryRemovalIntent struct {
-	TaskID                    string                        `json:"task_id"`
-	EnvironmentID             string                        `json:"environment_id"`
-	EntryID                   string                        `json:"entry_id"`
-	EntryRevision             int64                         `json:"entry_revision"`
-	CurrentProjectionRevision int64                         `json:"current_projection_revision,omitempty"`
-	CurrentProjection         *EnvironmentComposeProjection `json:"current_projection,omitempty"`
-	CandidateProjection       *EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
-	Desired                   *EntryRemovalDesiredRevision  `json:"desired,omitempty"`
-	Status                    TaskStatus                    `json:"status"`
-	CreatedAt                 time.Time                     `json:"created_at"`
-	TerminalAt                *time.Time                    `json:"terminal_at,omitempty"`
+	TaskID                    string                                         `json:"task_id"`
+	EnvironmentID             string                                         `json:"environment_id"`
+	EntryID                   string                                         `json:"entry_id"`
+	EntryRevision             int64                                          `json:"entry_revision"`
+	CurrentProjectionRevision int64                                          `json:"current_projection_revision,omitempty"`
+	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
+	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
+	Desired                   *EntryRemovalDesiredRevision                   `json:"desired,omitempty"`
+	Status                    TaskStatus                                     `json:"status"`
+	CreatedAt                 time.Time                                      `json:"created_at"`
+	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
 }
 
 // EntryRemovalDesiredRevision binds the existing staged desired revision to
@@ -41,7 +42,7 @@ type EntryRemovalDesiredRevision struct {
 
 func NewDesiredEntryRemovalIntent(
 	entryID, baseRevisionID string, claim EnvironmentBlueprintStageClaim,
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) (EntryRemovalIntent, error) {
 	if err := validateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return EntryRemovalIntent{}, err
@@ -68,7 +69,7 @@ func NewEntryRemovalIntent(
 	environmentID string,
 	entryID string,
 	entryRevision int64,
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	createdAt time.Time,
 ) (EntryRemovalIntent, error) {
 	intent := EntryRemovalIntent{
@@ -76,12 +77,12 @@ func NewEntryRemovalIntent(
 		EntryRevision: entryRevision, Status: TaskStatusPending, CreatedAt: createdAt,
 	}
 	if projection != nil {
-		candidate, changed, err := RemoveEnvironmentEntry(projection.Record, entryID)
+		candidate, changed, err := projectionrecord.RemoveEnvironmentEntry(projection.Record, entryID)
 		if err != nil {
 			return EntryRemovalIntent{}, err
 		}
 		if changed {
-			current := cloneEnvironmentComposeProjection(projection.Record)
+			current := projectionrecord.CloneEnvironmentComposeProjection(projection.Record)
 			intent.CurrentProjectionRevision = projection.Revision
 			intent.CurrentProjection = &current
 			intent.CandidateProjection = &candidate
@@ -207,11 +208,11 @@ func validateEntryRemovalIntent(intent EntryRemovalIntent) error {
 	if intent.CurrentProjectionRevision <= 0 ||
 		intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID ||
-		validateEnvironmentComposeProjection(*intent.CurrentProjection) != nil ||
-		validateEnvironmentComposeProjection(*intent.CandidateProjection) != nil {
+		projectionrecord.ValidateEnvironmentComposeProjection(*intent.CurrentProjection) != nil ||
+		projectionrecord.ValidateEnvironmentComposeProjection(*intent.CandidateProjection) != nil {
 		return errs.New(errs.KindValidationFailed, "Entry removal intent projection is invalid")
 	}
-	expected, changed, err := RemoveEnvironmentEntry(*intent.CurrentProjection, intent.EntryID)
+	expected, changed, err := projectionrecord.RemoveEnvironmentEntry(*intent.CurrentProjection, intent.EntryID)
 	if desired := intent.Desired; desired != nil {
 		if desired.RenderGeneration <= intent.CurrentProjection.RenderGeneration {
 			return errs.New(errs.KindValidationFailed, "Entry removal desired generation does not advance")
@@ -224,9 +225,9 @@ func validateEntryRemovalIntent(intent EntryRemovalIntent) error {
 	return nil
 }
 
-func sameEntryRemovalProjection(left EnvironmentComposeProjection, right EnvironmentComposeProjection) bool {
-	leftValue, leftErr := encodeEnvironmentComposeProjection(left)
-	rightValue, rightErr := encodeEnvironmentComposeProjection(right)
+func sameEntryRemovalProjection(left projectionrecord.EnvironmentComposeProjection, right projectionrecord.EnvironmentComposeProjection) bool {
+	leftValue, leftErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(left)
+	rightValue, rightErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(right)
 	return leftErr == nil && rightErr == nil && bytes.Equal(leftValue, rightValue)
 }
 
@@ -237,11 +238,11 @@ func cloneEntryRemovalIntent(source EntryRemovalIntent) EntryRemovalIntent {
 		clone.Desired = &value
 	}
 	if source.CurrentProjection != nil {
-		value := cloneEnvironmentComposeProjection(*source.CurrentProjection)
+		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CurrentProjection)
 		clone.CurrentProjection = &value
 	}
 	if source.CandidateProjection != nil {
-		value := cloneEnvironmentComposeProjection(*source.CandidateProjection)
+		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CandidateProjection)
 		clone.CandidateProjection = &value
 	}
 	clone.TerminalAt = cloneTimePointer(source.TerminalAt)

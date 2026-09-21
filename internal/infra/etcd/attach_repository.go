@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -14,7 +15,7 @@ type AttachCreateScope struct {
 	Project            etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	Environment        etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	DesiredHead        etcdstore.Versioned[EnvironmentBlueprintHead]
-	ComposeProjection  etcdstore.Versioned[EnvironmentComposeProjection]
+	ComposeProjection  etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	Services           []etcdstore.Versioned[servicerecord.ServiceRecord]
 	BackingProject     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	BackingEnvironment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]

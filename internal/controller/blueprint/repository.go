@@ -8,6 +8,7 @@ import (
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -33,11 +34,11 @@ type environmentBlueprintRepository interface {
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	FindEnvironmentVolume(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], projectionrecord.EnvironmentVolumeIdentity, error)
 	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
 	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
@@ -76,7 +77,7 @@ type environmentBlueprintRepository interface {
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
-		etcd.EnvironmentComposeProjection,
+		projectionrecord.EnvironmentComposeProjection,
 		[]etcd.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentBlueprintServiceChange,
 		[]etcd.EnvironmentBlueprintRouteChange,
@@ -285,7 +286,7 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	expectedHeadRevision int64,
 	claim etcd.EnvironmentBlueprintStageClaim,
 	revision etcd.EnvironmentDesiredRevisionIdentity,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	zoneChanges []etcd.EnvironmentBlueprintZoneChange,
 	serviceChanges []etcd.EnvironmentBlueprintServiceChange,
 	routeChanges []etcd.EnvironmentBlueprintRouteChange,

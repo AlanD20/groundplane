@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -43,15 +44,15 @@ type ReleaseRenderInput struct {
 	PriorProxyDigest     string                             `json:"prior_proxy_digest"`
 	ProxyImage           *domain.ProxyImage                 `json:"proxy_image,omitempty"`
 	core.ServiceDependencyPlans
-	TenantID            string                       `json:"tenant_id"`
-	TenantSlug          string                       `json:"tenant_slug"`
-	ProjectID           string                       `json:"project_id"`
-	ProjectSlug         string                       `json:"project_slug"`
-	EnvironmentID       string                       `json:"environment_id"`
-	EnvironmentName     string                       `json:"environment_name"`
-	AuthorizedVolumeDir string                       `json:"authorized_volume_dir"`
-	Projection          EnvironmentComposeProjection `json:"projection"`
-	Hooks               []ReleaseHookRenderInput     `json:"hooks,omitempty"`
+	TenantID            string                                        `json:"tenant_id"`
+	TenantSlug          string                                        `json:"tenant_slug"`
+	ProjectID           string                                        `json:"project_id"`
+	ProjectSlug         string                                        `json:"project_slug"`
+	EnvironmentID       string                                        `json:"environment_id"`
+	EnvironmentName     string                                        `json:"environment_name"`
+	AuthorizedVolumeDir string                                        `json:"authorized_volume_dir"`
+	Projection          projectionrecord.EnvironmentComposeProjection `json:"projection"`
+	Hooks               []ReleaseHookRenderInput                      `json:"hooks,omitempty"`
 }
 
 type ReleaseTaskRenderInput struct {
@@ -188,7 +189,7 @@ func validateReleaseRenderInput(input ReleaseRenderInput) error {
 			return err
 		}
 	}
-	if validateEnvironmentComposeProjection(input.Projection) != nil ||
+	if projectionrecord.ValidateEnvironmentComposeProjection(input.Projection) != nil ||
 		input.Projection.EnvironmentID != input.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "release render projection is invalid")
 	}
@@ -227,7 +228,7 @@ func cloneReleaseRenderInput(input ReleaseRenderInput) ReleaseRenderInput {
 		prior := *input.PriorWorkload
 		input.PriorWorkload = &prior
 	}
-	input.Projection = cloneEnvironmentComposeProjection(input.Projection)
+	input.Projection = projectionrecord.CloneEnvironmentComposeProjection(input.Projection)
 	input.ProxyPorts = slices.Clone(input.ProxyPorts)
 	input.ServiceDependencyPlans = input.ServiceDependencyPlans.Clone()
 	input.Hooks = cloneReleaseHookRenderInputs(input.Hooks)

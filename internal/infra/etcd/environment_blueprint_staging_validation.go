@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
@@ -49,7 +50,7 @@ func validateEnvironmentBlueprintStageDescriptor(value EnvironmentBlueprintStage
 		return nil
 	}
 	if value.AuditBytes == 0 || value.AuditBytes > environmentBlueprintMaximumAuditBytes ||
-		value.ProjectionBytes == 0 || value.ProjectionBytes > EnvironmentBlueprintProjectionMaxBytes ||
+		value.ProjectionBytes == 0 || value.ProjectionBytes > projectionrecord.EnvironmentBlueprintProjectionMaxBytes ||
 		value.AuditChunks != chunkCount32(int(value.AuditBytes)) ||
 		value.ProjectionChunks != chunkCount32(int(value.ProjectionBytes)) ||
 		value.AuditChunks > environmentBlueprintMaximumAuditChunks ||

@@ -6,6 +6,7 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -141,7 +142,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			AuthorizedVolumeDir: first.AuthorizedVolumeDir,
 		},
 		first.Projection.RevisionID, first.ArtifactID, releaseProjection,
-		func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
+		func(project *composetypes.Project, _ projectionrecord.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
 			if err := projectReleaseWorkloadServices(project, releaseProjection); err != nil {
 				return nil, err
 			}
@@ -355,14 +356,14 @@ func releasePostHookAnchorStepID(task etcd.TaskRecord, memberIndex int, strategy
 // releaseWorkloadProjection narrows a Service release to durable workload
 // Services. Registered Component output is validated when the Environment
 // artifact is produced and is not part of a workload-targeted release.
-func releaseWorkloadProjection(projection etcd.EnvironmentComposeProjection) etcd.EnvironmentComposeProjection {
+func releaseWorkloadProjection(projection projectionrecord.EnvironmentComposeProjection) projectionrecord.EnvironmentComposeProjection {
 	projection.Components = nil
 	return projection
 }
 
 func projectReleaseWorkloadServices(
 	project *composetypes.Project,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) error {
 	if project == nil {
 		return errs.New(errs.KindInternal, "release workload Compose project is missing")

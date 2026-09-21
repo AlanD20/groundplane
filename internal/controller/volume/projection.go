@@ -4,6 +4,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
@@ -12,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -20,10 +21,10 @@ import (
 
 func validateVolumeMutationAgainstProjection(
 	request volumeMutationRequest,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	hasProjection bool,
 ) error {
-	var found *etcd.EnvironmentVolumeIdentity
+	var found *projectionrecord.EnvironmentVolumeIdentity
 	for index := range projection.Volumes {
 		volume := &projection.Volumes[index]
 		if volume.ID == request.volumeID {
@@ -49,12 +50,12 @@ func buildVolumeMutationProjection(
 	tenantID string,
 	projectID string,
 	environment hierarchyrecord.EnvironmentRecord,
-	current etcd.EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	hasCurrent bool,
 	request volumeMutationRequest,
 	revisionID string,
 	generation uint64,
-) (etcd.EnvironmentComposeProjection, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact, error) {
+) (projectionrecord.EnvironmentComposeProjection, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact, error) {
 	candidate := cloneVolumeMutationProjection(current)
 	candidate.EnvironmentID = environment.ID
 	candidate.RevisionID = revisionID
@@ -67,7 +68,7 @@ func buildVolumeMutationProjection(
 	}
 	if hasCurrent {
 		if err := proto.Unmarshal(current.ComposeArtifact, oldArtifact); err != nil {
-			return etcd.EnvironmentComposeProjection{}, nil, nil, errs.New(
+			return projectionrecord.EnvironmentComposeProjection{}, nil, nil, errs.New(
 				errs.KindInternal,
 				"Volume baseline artifact is corrupt",
 			)
@@ -78,13 +79,13 @@ func buildVolumeMutationProjection(
 	if hasCurrent {
 		normalizedArtifact, err = composerender.NormalizedEnvironmentArtifact(current)
 		if err != nil {
-			return etcd.EnvironmentComposeProjection{}, nil, nil, err
+			return projectionrecord.EnvironmentComposeProjection{}, nil, nil, err
 		}
 	}
 	action := composerender.VolumeArtifactAdd
 	switch request.action {
 	case volumeMutationActionAdd:
-		candidate.Volumes = append(candidate.Volumes, etcd.EnvironmentVolumeIdentity{
+		candidate.Volumes = append(candidate.Volumes, projectionrecord.EnvironmentVolumeIdentity{
 			ID: request.volumeID, Slug: request.slug, Key: request.key,
 		})
 		sort.Slice(
@@ -115,7 +116,7 @@ func buildVolumeMutationProjection(
 		}
 		candidate.VolumeMounts = keptMounts
 	default:
-		return etcd.EnvironmentComposeProjection{}, nil, nil, errs.New(
+		return projectionrecord.EnvironmentComposeProjection{}, nil, nil, errs.New(
 			errs.KindInternal,
 			"Volume mutation action is invalid",
 		)
@@ -126,7 +127,7 @@ func buildVolumeMutationProjection(
 		TenantID: tenantID, ProjectID: projectID, RenderGeneration: generation,
 	})
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, nil, nil, err
+		return projectionrecord.EnvironmentComposeProjection{}, nil, nil, err
 	}
 	// This second mutation retains only authored YAML. Its logical Service
 	// identities have no execution labels and are not runtime validation input;
@@ -144,7 +145,7 @@ func buildVolumeMutationProjection(
 		},
 	)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, nil, nil, err
+		return projectionrecord.EnvironmentComposeProjection{}, nil, nil, err
 	}
 	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
 	if request.action == volumeMutationActionRemove {
@@ -152,7 +153,7 @@ func buildVolumeMutationProjection(
 			stableIDFromTask(ids.KindConfig, revisionID),
 		)
 		if cleanupErr != nil {
-			return etcd.EnvironmentComposeProjection{}, nil, nil, cleanupErr
+			return projectionrecord.EnvironmentComposeProjection{}, nil, nil, cleanupErr
 		}
 		// The cleanup artifact is the exact historical mount/ownership evidence;
 		// only its plan-local artifact id changes.
@@ -161,7 +162,7 @@ func buildVolumeMutationProjection(
 	return candidate, oldArtifact, newArtifact, nil
 }
 
-func cloneVolumeMutationProjection(current etcd.EnvironmentComposeProjection) etcd.EnvironmentComposeProjection {
+func cloneVolumeMutationProjection(current projectionrecord.EnvironmentComposeProjection) projectionrecord.EnvironmentComposeProjection {
 	runtimeFiles := make([]core.BlueprintFile, len(current.RuntimeFiles))
 	for index, file := range current.RuntimeFiles {
 		runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
@@ -185,20 +186,20 @@ func cloneVolumeMutationProjection(current etcd.EnvironmentComposeProjection) et
 	if current.ServiceExtensions == nil {
 		serviceExtensions = nil
 	}
-	return etcd.EnvironmentComposeProjection{
+	return projectionrecord.EnvironmentComposeProjection{
 		EnvironmentID: current.EnvironmentID, RevisionID: current.RevisionID,
 		RenderGeneration:  current.RenderGeneration,
 		ComposeArtifact:   append([]byte(nil), current.ComposeArtifact...),
 		NormalizedCompose: append([]byte(nil), current.NormalizedCompose...),
 		RuntimeFiles:      runtimeFiles, ServiceExtensions: serviceExtensions,
-		DesiredZones:           append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...),
+		DesiredZones:           append([]projectionrecord.EnvironmentZoneProjection(nil), current.DesiredZones...),
 		DesiredServices:        append([]servicerecord.EnvironmentServiceProjection(nil), current.DesiredServices...),
-		DesiredRoutes:          append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
-		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
-		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
+		DesiredRoutes:          append([]projectionrecord.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
+		Volumes:                append([]projectionrecord.EnvironmentVolumeIdentity(nil), current.Volumes...),
+		VolumeMounts:           append([]projectionrecord.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
 		Components:             append([]componentrecord.Record(nil), current.Components...),
 		Entries:                append([]entryrecord.Record(nil), current.Entries...),
-		Backup:                 etcd.CloneEnvironmentBlueprintBackupPolicy(current.Backup),
+		Backup:                 projectionrecord.CloneEnvironmentBlueprintBackupPolicy(current.Backup),
 		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
 	}
 }
@@ -207,12 +208,12 @@ func buildVolumeMutationCandidate(
 	tenantID string,
 	projectID string,
 	environment hierarchyrecord.EnvironmentRecord,
-	current etcd.EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	hasCurrent bool,
 	request volumeMutationRequest,
 	revisionID string,
 	generation uint64,
-) (volumeMutationRequest, etcd.EnvironmentComposeProjection, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact, error) {
+) (volumeMutationRequest, projectionrecord.EnvironmentComposeProjection, *agentpb.ComposeArtifact, *agentpb.ComposeArtifact, error) {
 	if request.action == volumeMutationActionAdd {
 		request.volumeID = stableIDFromTask(ids.KindVolume, revisionID)
 	}
@@ -220,11 +221,11 @@ func buildVolumeMutationCandidate(
 		tenantID, projectID, environment, current, hasCurrent, request, revisionID, generation,
 	)
 	if err != nil {
-		return volumeMutationRequest{}, etcd.EnvironmentComposeProjection{}, nil, nil, err
+		return volumeMutationRequest{}, projectionrecord.EnvironmentComposeProjection{}, nil, nil, err
 	}
 	artifactBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(newArtifact)
 	if err != nil {
-		return volumeMutationRequest{}, etcd.EnvironmentComposeProjection{}, nil, nil, errs.Wrap(errs.KindInternal, err)
+		return volumeMutationRequest{}, projectionrecord.EnvironmentComposeProjection{}, nil, nil, errs.Wrap(errs.KindInternal, err)
 	}
 	candidate.ComposeArtifact = artifactBytes
 	return request, candidate, oldArtifact, newArtifact, nil

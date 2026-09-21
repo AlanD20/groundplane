@@ -1,4 +1,4 @@
-package etcd
+package environmentprojection
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func validateEnvironmentNormalizedCompose(value []byte) error {
+func ValidateEnvironmentNormalizedCompose(value []byte) error {
 	if len(value) == 0 || len(value) > EnvironmentBlueprintProjectionMaxBytes {
 		return errs.New(errs.KindValidationFailed, "Environment normalized authored Compose is missing or oversized")
 	}
@@ -95,7 +95,7 @@ func validateEnvironmentProjectionArtifact(
 	for _, service := range projection.DesiredServices {
 		expectedServices[service.Desired.ID] = environmentArtifactServiceIdentity{
 			name: service.Desired.Name, renderGeneration: projection.RenderGeneration,
-			capturedRuntime: kind == environmentArtifactCapturedRuntime,
+			capturedRuntime: kind == EnvironmentArtifactCapturedRuntime,
 		}
 	}
 	for _, component := range projection.Components {

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -12,8 +13,8 @@ import (
 // EnvironmentZoneRemovalAuthorities binds the desired revision being edited
 // to the independently mutable projection last acknowledged by the runtime.
 type EnvironmentZoneRemovalAuthorities struct {
-	Desired etcdstore.Versioned[EnvironmentComposeProjection]
-	Applied etcdstore.Versioned[EnvironmentComposeProjection]
+	Desired etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
+	Applied etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 }
 
 // GetEnvironmentZoneRemovalAuthorities reads both authorities required to
@@ -42,51 +43,51 @@ func (repository *HierarchyRepository) GetEnvironmentZoneRemovalAuthorities(
 func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	head, err := repository.store.Get(ctx, environmentBlueprintHeadKey(environmentID))
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if head == nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, errs.New(
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, errs.New(
 			errs.KindInternal,
 			"Environment desired head read is empty",
 		)
 	}
 	if head.Entry == nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: head.ReadRevision}, false, nil
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: head.ReadRevision}, false, nil
 	}
 	revisionID, err := idempotencyrecord.DecodeTaskReference(head.Entry.Value)
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if root == nil || root.Entry == nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(root.Entry.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "projection")
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	defer clear(stream)
-	projection, err := decodeEnvironmentComposeProjection(stream)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(stream)
 	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
-	return etcdstore.Versioned[EnvironmentComposeProjection]{
+	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: projection, Revision: head.Entry.ModRevision, ReadRevision: readRevision,
 	}, true, nil
 }
@@ -98,41 +99,41 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
-) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTask, revisionID); err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if root == nil || root.Entry == nil {
 		readRevision := int64(0)
 		if root != nil {
 			readRevision = root.ReadRevision
 		}
-		return etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: readRevision}, false, nil
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: readRevision}, false, nil
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(root.Entry.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "projection")
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	defer clear(stream)
-	projection, err := decodeEnvironmentComposeProjection(stream)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(stream)
 	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
-	return etcdstore.Versioned[EnvironmentComposeProjection]{
+	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: projection, Revision: root.Entry.ModRevision, ReadRevision: readRevision,
 	}, true, nil
 }

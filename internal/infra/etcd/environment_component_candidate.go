@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -29,7 +30,7 @@ type EnvironmentComponentCandidateInput struct {
 // same transaction that publishes its Intent and Task.
 type ComponentTaskPreparation struct {
 	Intent                    ComponentTaskIntent
-	managedRuntimeSources     []ManagedComponentRuntimeSource
+	managedRuntimeSources     []projectionrecord.ManagedComponentRuntimeSource
 	appliedComponentRuntime   []byte
 	appliedProjectionPresent  bool
 	appliedProjectionRevision int64
@@ -141,7 +142,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		}
 	}
 	appliedState, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentComposeProjectionKey(environmentID)}, Revision: fixedRevision,
+		Keys: []string{projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID)}, Revision: fixedRevision,
 	})
 	if err != nil {
 		return ComponentTaskPreparation{}, err
@@ -154,9 +155,9 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	}
 	appliedValue := appliedState.Values[0]
 	found := appliedValue != nil
-	selected := etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: fixedRevision}
+	selected := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: fixedRevision}
 	if found {
-		projection, decodeErr := decodeEnvironmentComposeProjection(appliedValue.Value)
+		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(appliedValue.Value)
 		if decodeErr != nil {
 			return ComponentTaskPreparation{}, decodeErr
 		}
@@ -446,7 +447,7 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 	if err := validateComponentTaskIntent(preparation.Intent); err != nil {
 		return err
 	}
-	if len(preparation.managedRuntimeSources) > maximumManagedComponentRuntimeSources {
+	if len(preparation.managedRuntimeSources) > projectionrecord.MaximumManagedComponentRuntimeSources {
 		return errs.New(errs.KindValidationFailed, "Component candidate managed runtime source count is invalid")
 	}
 	if preparation.desiredProjectionRevision < 0 || preparation.appliedProjectionRevision < 0 ||
@@ -493,7 +494,7 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) ComponentTaskPreparation {
 	clone := ComponentTaskPreparation{
 		Intent:                    cloneComponentTaskIntent(preparation.Intent),
-		managedRuntimeSources:     append([]ManagedComponentRuntimeSource(nil), preparation.managedRuntimeSources...),
+		managedRuntimeSources:     append([]projectionrecord.ManagedComponentRuntimeSource(nil), preparation.managedRuntimeSources...),
 		appliedComponentRuntime:   append([]byte(nil), preparation.appliedComponentRuntime...),
 		appliedProjectionPresent:  preparation.appliedProjectionPresent,
 		appliedProjectionRevision: preparation.appliedProjectionRevision,

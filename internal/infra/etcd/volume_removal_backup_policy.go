@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -32,7 +33,7 @@ type volumeRemovalBackupPolicyState struct {
 
 // Projection supplies the replacement decisions for ADR0051 staging. It does
 // not capture policy_now; the final publisher supplies that scheduling boundary.
-func (prepared VolumeRemovalBackupPolicyPreparation) Projection() *EnvironmentBlueprintBackupPolicy {
+func (prepared VolumeRemovalBackupPolicyPreparation) Projection() *projectionrecord.EnvironmentBlueprintBackupPolicy {
 	if prepared.state == nil || prepared.state.policy == nil {
 		return nil
 	}
@@ -105,7 +106,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 type volumeRemovalBackupPolicyPublication struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
-	projection *EnvironmentBlueprintBackupPolicy
+	projection *projectionrecord.EnvironmentBlueprintBackupPolicy
 }
 
 func prepareVolumeRemovalBackupPolicyPublication(
@@ -153,10 +154,10 @@ func prepareVolumeRemovalBackupPolicyPublication(
 
 func volumeRemovalPolicyReplacement(
 	state *volumeRemovalBackupPolicyState,
-) (backuppolicy.BackupPolicyRecord, *EnvironmentBlueprintBackupPolicy) {
+) (backuppolicy.BackupPolicyRecord, *projectionrecord.EnvironmentBlueprintBackupPolicy) {
 	replacement := *state.policy
 	replacement.SourceIDs = nil
-	projection := &EnvironmentBlueprintBackupPolicy{
+	projection := &projectionrecord.EnvironmentBlueprintBackupPolicy{
 		Enabled: replacement.Enabled, Frequency: replacement.Frequency, Keep: replacement.Keep,
 		Encryption: replacement.Encryption, ConnectorID: replacement.ConnectorID,
 	}
@@ -165,7 +166,7 @@ func volumeRemovalPolicyReplacement(
 			continue
 		}
 		replacement.SourceIDs = append(replacement.SourceIDs, source.ID)
-		projection.Sources = append(projection.Sources, EnvironmentBlueprintBackupPolicySource{
+		projection.Sources = append(projection.Sources, projectionrecord.EnvironmentBlueprintBackupPolicySource{
 			ID: source.ID, Kind: source.Kind, TargetID: source.TargetID,
 		})
 	}
@@ -177,7 +178,7 @@ func volumeRemovalPolicyReplacement(
 
 func (prepared VolumeRemovalBackupPolicyPreparation) validateDesiredPublication(
 	claim EnvironmentBlueprintStageClaim,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	removedVolumeID string,

@@ -4,6 +4,7 @@ package servicelifecycle
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -19,7 +20,7 @@ type ReleaseReader interface {
 func CaptureRelease(
 	ctx context.Context,
 	reader ReleaseReader,
-	applied etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	applied etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	environmentID string,
 	serviceID string,
 ) (etcd.ServiceLifecycleRelease, error) {

@@ -3,6 +3,7 @@ package blueprint
 import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -61,10 +62,10 @@ func environmentBlueprintTopologyProjection(
 	zones []etcd.EnvironmentBlueprintZoneChange,
 	services []etcd.EnvironmentBlueprintServiceChange,
 	routes []etcd.EnvironmentBlueprintRouteChange,
-) ([]etcd.EnvironmentZoneProjection, []servicerecord.EnvironmentServiceProjection, []etcd.EnvironmentRouteProjection) {
-	zoneProjection := make([]etcd.EnvironmentZoneProjection, len(zones))
+) ([]projectionrecord.EnvironmentZoneProjection, []servicerecord.EnvironmentServiceProjection, []projectionrecord.EnvironmentRouteProjection) {
+	zoneProjection := make([]projectionrecord.EnvironmentZoneProjection, len(zones))
 	for index, change := range zones {
-		zoneProjection[index] = etcd.EnvironmentZoneProjection{
+		zoneProjection[index] = projectionrecord.EnvironmentZoneProjection{
 			EnvironmentID: change.Record.EnvironmentID, Desired: change.Record.Desired,
 		}
 	}
@@ -76,9 +77,9 @@ func environmentBlueprintTopologyProjection(
 			Desired:          change.Record.Desired,
 		}
 	}
-	routeProjection := make([]etcd.EnvironmentRouteProjection, len(routes))
+	routeProjection := make([]projectionrecord.EnvironmentRouteProjection, len(routes))
 	for index, change := range routes {
-		routeProjection[index] = etcd.EnvironmentRouteProjection{
+		routeProjection[index] = projectionrecord.EnvironmentRouteProjection{
 			EnvironmentID:     change.Record.EnvironmentID,
 			Desired:           change.Record.Desired,
 			DesiredGeneration: change.Record.DesiredGeneration,

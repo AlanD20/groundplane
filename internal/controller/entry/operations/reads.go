@@ -4,6 +4,7 @@ import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"unicode/utf8"
@@ -21,12 +22,12 @@ type entryReadRepository interface {
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetEnvironmentComposeProjectionRevision(
 		context.Context,
 		string,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetSecretEntryValue(
 		context.Context,
 		string,
@@ -199,7 +200,7 @@ func (repository *durableEntryReadRepository) GetEntry(
 func (repository *durableEntryReadRepository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 }
 
@@ -207,7 +208,7 @@ func (repository *durableEntryReadRepository) GetEnvironmentComposeProjectionRev
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 }
 

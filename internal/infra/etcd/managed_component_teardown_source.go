@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"unicode/utf8"
 
@@ -11,19 +12,19 @@ import (
 
 // ManagedComponentTeardownSources returns the immutable prior runtime source
 // authority captured by Component candidate preparation.
-func (preparation ComponentTaskPreparation) ManagedComponentTeardownSources() []ManagedComponentRuntimeSource {
+func (preparation ComponentTaskPreparation) ManagedComponentTeardownSources() []projectionrecord.ManagedComponentRuntimeSource {
 	return cloneManagedComponentRuntimeSources(preparation.managedRuntimeSources)
 }
 
-func cloneManagedComponentRuntimeSources(sources []ManagedComponentRuntimeSource) []ManagedComponentRuntimeSource {
-	return append([]ManagedComponentRuntimeSource(nil), sources...)
+func cloneManagedComponentRuntimeSources(sources []projectionrecord.ManagedComponentRuntimeSource) []projectionrecord.ManagedComponentRuntimeSource {
+	return append([]projectionrecord.ManagedComponentRuntimeSource(nil), sources...)
 }
 
 // ValidateManagedComponentTeardownSources validates the closed source shape
 // stored on a Task. Artifact and Service ownership remain checked when the
 // historical artifact is resolved for teardown.
-func ValidateManagedComponentTeardownSources(sources []ManagedComponentRuntimeSource) error {
-	if len(sources) > maximumManagedComponentRuntimeSources {
+func ValidateManagedComponentTeardownSources(sources []projectionrecord.ManagedComponentRuntimeSource) error {
+	if len(sources) > projectionrecord.MaximumManagedComponentRuntimeSources {
 		return errs.New(errs.KindValidationFailed, "managed Component teardown source count is invalid")
 	}
 	seenComponents := make(map[string]struct{}, len(sources))

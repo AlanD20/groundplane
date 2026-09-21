@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -22,9 +23,9 @@ func (service *routeMutationService) prepareRouteMutationTask(
 	previous *etcdstore.Versioned[routerecord.Record],
 	idempotencyKey string,
 ) (etcd.RouteMutationTaskPreparation, error) {
-	var applied *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+	var applied *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	{
-		var projection etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+		var projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 		var found bool
 		var err error
 		if projectionRepository, ok := service.repository.(routeMutationDesiredProjectionRepository); ok {
@@ -69,7 +70,7 @@ func (service *routeMutationService) prepareRouteMutationTask(
 		return etcd.RouteMutationTaskPreparation{}, err
 	}
 	if service.planner == nil && applied != nil {
-		candidate, applyErr := etcd.ApplyEnvironmentRoute(applied.Record, intent.Route)
+		candidate, applyErr := projectionrecord.ApplyEnvironmentRoute(applied.Record, intent.Route)
 		if applyErr != nil {
 			return etcd.RouteMutationTaskPreparation{}, applyErr
 		}

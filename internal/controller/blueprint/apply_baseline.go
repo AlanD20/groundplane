@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -17,7 +18,7 @@ type applyBaseline struct {
 	project              etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	tenant               etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	taskOwner            etcd.TaskOwner
-	previousProjection   etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+	previousProjection   etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	hasProjection        bool
 	expectedHeadRevision int64
 	previous             composeidentity.Snapshot

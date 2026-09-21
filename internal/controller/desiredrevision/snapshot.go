@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ func NextGeneration(
 	environmentID string,
 	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
 	hasHead bool,
-	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	hasProjection bool,
 ) (int64, uint64, error) {
 	if hasHead != hasProjection {
@@ -32,7 +33,7 @@ func NextGeneration(
 	return head.Revision, projection.Record.RenderGeneration + 1, nil
 }
 
-func CloneProjection(current etcd.EnvironmentComposeProjection) etcd.EnvironmentComposeProjection {
+func CloneProjection(current projectionrecord.EnvironmentComposeProjection) projectionrecord.EnvironmentComposeProjection {
 	var runtimeFiles []core.BlueprintFile
 	if current.RuntimeFiles != nil {
 		runtimeFiles = make([]core.BlueprintFile, len(current.RuntimeFiles))
@@ -40,24 +41,24 @@ func CloneProjection(current etcd.EnvironmentComposeProjection) etcd.Environment
 			runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
 		}
 	}
-	result := etcd.EnvironmentComposeProjection{
+	result := projectionrecord.EnvironmentComposeProjection{
 		EnvironmentID: current.EnvironmentID, RevisionID: current.RevisionID,
 		RenderGeneration:       current.RenderGeneration,
 		ComposeArtifact:        append([]byte(nil), current.ComposeArtifact...),
 		NormalizedCompose:      append([]byte(nil), current.NormalizedCompose...),
 		RuntimeFiles:           runtimeFiles,
 		ServiceExtensions:      CloneServiceExtensions(current.ServiceExtensions),
-		DesiredZones:           append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...),
+		DesiredZones:           append([]projectionrecord.EnvironmentZoneProjection(nil), current.DesiredZones...),
 		DesiredServices:        append([]servicerecord.EnvironmentServiceProjection(nil), current.DesiredServices...),
-		DesiredRoutes:          append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
-		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
-		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
+		DesiredRoutes:          append([]projectionrecord.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
+		Volumes:                append([]projectionrecord.EnvironmentVolumeIdentity(nil), current.Volumes...),
+		VolumeMounts:           append([]projectionrecord.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
 		Components:             append([]componentrecord.Record(nil), current.Components...),
 		Entries:                append([]entryrecord.Record(nil), current.Entries...),
 		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
 	}
 	result.ManagedComponentRuntimeSources = append(
-		[]etcd.ManagedComponentRuntimeSource(nil), current.ManagedComponentRuntimeSources...,
+		[]projectionrecord.ManagedComponentRuntimeSource(nil), current.ManagedComponentRuntimeSources...,
 	)
 	return result
 }

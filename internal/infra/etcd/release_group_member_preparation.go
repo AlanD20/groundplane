@@ -5,6 +5,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -92,7 +93,7 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 	ctx context.Context,
 	group domain.Group,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]etcdstore.Condition, error) {
 	desiredMembers := make(map[string]servicerecord.EnvironmentServiceProjection, len(projection.DesiredServices))
 	for _, desired := range projection.DesiredServices {

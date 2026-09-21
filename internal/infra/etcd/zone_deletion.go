@@ -4,6 +4,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -173,7 +174,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: zoneRemovalIntentKey(intent.OperationID)},
 		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: intent.DesiredHeadRevision},
-		{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
+		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		{
 			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
@@ -335,7 +336,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	if err := validateZoneRemovalIntent(intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	projection := etcdstore.Versioned[EnvironmentComposeProjection]{
+	projection := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: zone.ReadRevision,
 	}
 	selected, err := selectedZoneDeletionRecord(projection, zone, intent.ZoneID)
@@ -388,7 +389,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	parentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(parentTaskID), zoneRemovalIntentKey(intent.OperationID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		environmentBlueprintHeadKey(intent.EnvironmentID), environmentComposeProjectionKey(intent.EnvironmentID),
+		environmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 	}, Revision: tombstone.ReadRevision})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -409,7 +410,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	}
 	currentIntent, err := decodeZoneRemovalIntent(parentResult.Values[1].Value)
 	headID, headErr := idempotencyrecord.DecodeTaskReference(parentResult.Values[3].Value)
-	applied, appliedErr := decodeEnvironmentComposeProjection(parentResult.Values[4].Value)
+	applied, appliedErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(parentResult.Values[4].Value)
 	if err != nil || currentIntent.OperationID != intent.OperationID || currentIntent.ActiveTaskID != parentTaskID ||
 		currentIntent.Status != TaskStatusPending || string(parentResult.Values[2].Value) != parentTaskID ||
 		headErr != nil || headID != currentIntent.DesiredProjection.RevisionID ||
@@ -485,7 +486,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: zoneRemovalIntentKey(intent.OperationID), ModRevision: parentResult.Values[1].ModRevision},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: parentResult.Values[2].ModRevision},
 		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: parentResult.Values[3].ModRevision},
-		{Key: environmentComposeProjectionKey(intent.EnvironmentID), ModRevision: parentResult.Values[4].ModRevision},
+		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: parentResult.Values[4].ModRevision},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), intent.EnvironmentID)},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), zone.Record.Desired.OwnerID)},
 		{
@@ -540,7 +541,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 }
 
 func selectedZoneDeletionRecord(
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	supplied etcdstore.Versioned[zonerecord.Record],
 	zoneID string,
 ) (etcdstore.Versioned[zonerecord.Record], error) {
@@ -554,7 +555,7 @@ func selectedZoneDeletionRecord(
 			continue
 		}
 		if selected != nil {
-			return etcdstore.Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
+			return etcdstore.Versioned[zonerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 		}
 		joined, err := joinEnvironmentZone(projection, desired)
 		if err != nil {

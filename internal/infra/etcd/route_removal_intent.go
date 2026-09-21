@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -17,17 +18,17 @@ const routeRemovalIntentPrefix = "/v1/records/route-removal-intents/"
 // Task. Public Route and applied projection state stay active until successful
 // terminal acknowledgement promotes CandidateProjection and removes Route.
 type RouteRemovalIntent struct {
-	TaskID                    string                        `json:"task_id"`
-	EnvironmentID             string                        `json:"environment_id"`
-	RouteID                   string                        `json:"route_id"`
-	RouteRevision             int64                         `json:"route_revision"`
-	CurrentProjectionRevision int64                         `json:"current_projection_revision,omitempty"`
-	CurrentProjection         *EnvironmentComposeProjection `json:"current_projection,omitempty"`
-	CandidateProjection       *EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
-	Provider                  *RouteProviderPin             `json:"provider,omitempty"`
-	Status                    TaskStatus                    `json:"status"`
-	CreatedAt                 time.Time                     `json:"created_at"`
-	TerminalAt                *time.Time                    `json:"terminal_at,omitempty"`
+	TaskID                    string                                         `json:"task_id"`
+	EnvironmentID             string                                         `json:"environment_id"`
+	RouteID                   string                                         `json:"route_id"`
+	RouteRevision             int64                                          `json:"route_revision"`
+	CurrentProjectionRevision int64                                          `json:"current_projection_revision,omitempty"`
+	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
+	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
+	Provider                  *RouteProviderPin                              `json:"provider,omitempty"`
+	Status                    TaskStatus                                     `json:"status"`
+	CreatedAt                 time.Time                                      `json:"created_at"`
+	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
 }
 
 type RouteRemovalTaskPreparation struct {
@@ -38,7 +39,7 @@ type RouteRemovalTaskPreparation struct {
 func NewRouteRemovalIntent(
 	taskID, environmentID, routeID string,
 	routeRevision int64,
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	createdAt time.Time,
 ) (RouteRemovalIntent, error) {
 	intent := RouteRemovalIntent{
@@ -56,7 +57,7 @@ func NewRouteRemovalIntent(
 		}
 		if changed {
 			candidate.RevisionID = taskID
-			current := cloneEnvironmentComposeProjection(projection.Record)
+			current := projectionrecord.CloneEnvironmentComposeProjection(projection.Record)
 			intent.CurrentProjectionRevision = projection.Revision
 			intent.CurrentProjection = &current
 			intent.CandidateProjection = &candidate
@@ -186,30 +187,30 @@ func validateRouteRemovalIntent(intent RouteRemovalIntent) error {
 	return nil
 }
 
-func sameRouteRemovalProjection(left, right EnvironmentComposeProjection) bool {
+func sameRouteRemovalProjection(left, right projectionrecord.EnvironmentComposeProjection) bool {
 	return sameServiceRemovalProjection(left, right)
 }
 
 func removeEnvironmentDesiredRoute(
-	current EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	routeID string,
-) (EnvironmentComposeProjection, bool, error) {
-	if err := validateEnvironmentComposeProjection(current); err != nil {
-		return EnvironmentComposeProjection{}, false, err
+) (projectionrecord.EnvironmentComposeProjection, bool, error) {
+	if err := projectionrecord.ValidateEnvironmentComposeProjection(current); err != nil {
+		return projectionrecord.EnvironmentComposeProjection{}, false, err
 	}
 	if recordcodec.ValidateID(ids.KindRoute, routeID) != nil {
-		return EnvironmentComposeProjection{}, false, errs.New(
+		return projectionrecord.EnvironmentComposeProjection{}, false, errs.New(
 			errs.KindValidationFailed,
 			"removed Environment Route id is invalid",
 		)
 	}
-	next := cloneEnvironmentComposeProjection(current)
+	next := projectionrecord.CloneEnvironmentComposeProjection(current)
 	next.DesiredRoutes = nil
 	removed := false
 	for _, desired := range current.DesiredRoutes {
 		if desired.Desired.ID == routeID {
 			if removed {
-				return EnvironmentComposeProjection{}, false, errs.New(
+				return projectionrecord.EnvironmentComposeProjection{}, false, errs.New(
 					errs.KindInternal,
 					"Environment Route projection contains duplicate desired identity",
 				)
@@ -226,12 +227,12 @@ func removeEnvironmentDesiredRoute(
 	return next, true, nil
 }
 
-func validateRouteRemovalDesiredProjection(projection EnvironmentComposeProjection) error {
+func validateRouteRemovalDesiredProjection(projection projectionrecord.EnvironmentComposeProjection) error {
 	if recordcodec.ValidateID(ids.KindEnvironment, projection.EnvironmentID) != nil ||
 		recordcodec.ValidateID(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 ||
 		len(
 			projection.ComposeArtifact,
-		) == 0 || validateEnvironmentNormalizedCompose(projection.NormalizedCompose) != nil {
+		) == 0 || projectionrecord.ValidateEnvironmentNormalizedCompose(projection.NormalizedCompose) != nil {
 		return errs.New(errs.KindValidationFailed, "Route removal desired projection is invalid")
 	}
 	previousMatch := ""
@@ -261,11 +262,11 @@ func validateRouteRemovalDesiredProjection(projection EnvironmentComposeProjecti
 func cloneRouteRemovalIntent(source RouteRemovalIntent) RouteRemovalIntent {
 	clone := source
 	if source.CurrentProjection != nil {
-		value := cloneEnvironmentComposeProjection(*source.CurrentProjection)
+		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CurrentProjection)
 		clone.CurrentProjection = &value
 	}
 	if source.CandidateProjection != nil {
-		value := cloneEnvironmentComposeProjection(*source.CandidateProjection)
+		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CandidateProjection)
 		clone.CandidateProjection = &value
 	}
 	if source.Provider != nil {

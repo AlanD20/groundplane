@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -28,12 +29,12 @@ type attachMutationRepository interface {
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetEnvironmentComposeProjectionRevision(
 		context.Context,
 		string,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
 	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error)
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
@@ -125,7 +126,7 @@ func (repository *durableAttachMutationRepository) GetEnvironmentBlueprintRevisi
 func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 }
 
@@ -147,7 +148,7 @@ func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjecti
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 }
 

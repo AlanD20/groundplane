@@ -1,4 +1,4 @@
-package etcd
+package environmentprojection
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
@@ -64,12 +64,8 @@ type EnvironmentComposeProjection struct {
 	core.BlueprintRequirements
 }
 
-const environmentComposeProjectionPrefix = "/v1/records/environment-compose-projections/"
-
-func environmentComposeProjectionKey(environmentID string) string {
-	return environmentComposeProjectionPrefix + environmentID
-}
+const EnvironmentComposeProjectionPrefix = "/v1/records/environment-compose-projections/"
 
 func EnvironmentComposeProjectionStorageKey(environmentID string) string {
-	return environmentComposeProjectionKey(environmentID)
+	return EnvironmentComposeProjectionPrefix + environmentID
 }

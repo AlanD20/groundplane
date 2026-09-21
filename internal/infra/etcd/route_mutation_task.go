@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -70,7 +71,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		if readErr != nil || !found {
 			return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
 		}
-		candidate, applyErr := ApplyEnvironmentRoute(selected.Record, record)
+		candidate, applyErr := projectionrecord.ApplyEnvironmentRoute(selected.Record, record)
 		if applyErr != nil {
 			return IdempotencyTransactionResult{}, applyErr
 		}

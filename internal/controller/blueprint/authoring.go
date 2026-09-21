@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -27,7 +28,7 @@ type environmentBlueprintSnapshot struct {
 	project     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	head        etcdstore.Versioned[etcd.EnvironmentBlueprintHead]
-	projection  etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+	projection  etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	hasHead     bool
 }
 
@@ -268,13 +269,13 @@ func (service *Service) environmentBlueprintAuthoringDocument(
 }
 
 func environmentBlueprintAuthoringRequirements(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) []core.Requirement {
 	return projection.BlueprintRequirements.Clone().Authored
 }
 
 func environmentBlueprintAuthoringRoutes(
-	routes []etcd.EnvironmentRouteProjection,
+	routes []projectionrecord.EnvironmentRouteProjection,
 	serviceNames map[string]string,
 ) ([]core.RouteSpec, error) {
 	result := make([]core.RouteSpec, len(routes))
@@ -390,7 +391,7 @@ func environmentBlueprintChanges(
 	current blueprintparser.AuthoringDocument,
 	candidate blueprintparser.Result,
 	hasCurrent bool,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) []apiTypes.EnvironmentBlueprintChange {
 	currentKeys := make(map[string]map[string]struct{})
 	candidateKeys := make(map[string]map[string]struct{})
@@ -507,14 +508,14 @@ func environmentBlueprintBackupValidationTargets(
 	snapshot environmentBlueprintSnapshot,
 	parsed blueprintparser.Result,
 	currentAttaches []etcdstore.Versioned[attachrecord.Record],
-) (etcd.EnvironmentComposeProjection, []etcdstore.Versioned[attachrecord.Record], error) {
+) (projectionrecord.EnvironmentComposeProjection, []etcdstore.Versioned[attachrecord.Record], error) {
 	projection := snapshot.projection.Record
 	projection.EnvironmentID = snapshot.environment.Record.ID
 	volumeSlugs, err := environmentBlueprintVolumeSlugs(parsed.Project, projection, snapshot.hasHead)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, nil, err
+		return projectionrecord.EnvironmentComposeProjection{}, nil, err
 	}
-	byKey := make(map[string]etcd.EnvironmentVolumeIdentity, len(projection.Volumes))
+	byKey := make(map[string]projectionrecord.EnvironmentVolumeIdentity, len(projection.Volumes))
 	for _, volume := range projection.Volumes {
 		byKey[volume.Key] = volume
 	}
@@ -525,7 +526,7 @@ func environmentBlueprintBackupValidationTargets(
 	for key, label := range volumeSlugs {
 		volume, found := byKey[key]
 		if !found {
-			volume = etcd.EnvironmentVolumeIdentity{
+			volume = projectionrecord.EnvironmentVolumeIdentity{
 				ID:  ids.DeriveAt(ids.KindVolume, at, snapshot.environment.Record.ID, "validate-volume/"+key),
 				Key: key,
 			}

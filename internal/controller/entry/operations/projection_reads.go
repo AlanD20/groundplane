@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -23,7 +24,7 @@ func (service *entryReadService) listProjectedEntries(
 	environmentID string,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[entryrecord.Record], bool, error) {
-	var projection etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+	var projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	var found bool
 	var err error
 	offset := 0

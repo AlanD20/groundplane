@@ -1,4 +1,4 @@
-package etcd
+package environmentprojection
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -11,14 +11,14 @@ type environmentArtifactKind uint8
 
 const (
 	environmentArtifactDesired environmentArtifactKind = iota
-	environmentArtifactCapturedRuntime
+	EnvironmentArtifactCapturedRuntime
 )
 
 // Captured Attach runtime can contain a single serving slot at the current
 // desired generation: native Deploy does not advance that generation. Desired
 // publication still requires a complete fresh topology. Both paths validate the
 // same metadata, resource ownership and artifact integrity.
-func validateEnvironmentProjection(projection EnvironmentComposeProjection, kind environmentArtifactKind) error {
+func ValidateEnvironmentProjection(projection EnvironmentComposeProjection, kind environmentArtifactKind) error {
 	if recordcodec.ValidateID(ids.KindEnvironment, projection.EnvironmentID) != nil ||
 		recordcodec.ValidateID(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
 		return errs.New(errs.KindValidationFailed, "Environment Compose projection identity is invalid")
@@ -26,7 +26,7 @@ func validateEnvironmentProjection(projection EnvironmentComposeProjection, kind
 	if err := validateEnvironmentServiceProjections(projection.EnvironmentID, projection.DesiredServices); err != nil {
 		return err
 	}
-	if err := validateEnvironmentNormalizedCompose(projection.NormalizedCompose); err != nil {
+	if err := ValidateEnvironmentNormalizedCompose(projection.NormalizedCompose); err != nil {
 		return err
 	}
 	if err := core.ValidateNormalizedBlueprintFiles(projection.RuntimeFiles); err != nil {
@@ -45,13 +45,13 @@ func validateEnvironmentProjection(projection EnvironmentComposeProjection, kind
 	if err := validateEnvironmentServiceExtensions(names, projection.ServiceExtensions); err != nil {
 		return err
 	}
-	if err := validateEnvironmentBlueprintBackupPolicy(projection.EnvironmentID, projection.Backup); err != nil {
+	if err := ValidateEnvironmentBlueprintBackupPolicy(projection.EnvironmentID, projection.Backup); err != nil {
 		return err
 	}
 	if err := validateEnvironmentZoneProjections(projection.EnvironmentID, projection.DesiredZones); err != nil {
 		return err
 	}
-	if err := validateEnvironmentVolumeIdentities(projection.Volumes); err != nil {
+	if err := ValidateEnvironmentVolumeIdentities(projection.Volumes); err != nil {
 		return err
 	}
 	if err := validateEnvironmentServiceVolumeMounts(projection); err != nil {
@@ -60,7 +60,7 @@ func validateEnvironmentProjection(projection EnvironmentComposeProjection, kind
 	if err := validateEnvironmentComponentProjection(projection.EnvironmentID, projection.Components); err != nil {
 		return err
 	}
-	if err := validateManagedComponentRuntimeSources(projection); err != nil {
+	if err := ValidateManagedComponentRuntimeSources(projection); err != nil {
 		return err
 	}
 	if err := validateEnvironmentProjectionArtifact(projection, kind); err != nil {

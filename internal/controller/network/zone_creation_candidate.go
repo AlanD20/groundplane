@@ -2,13 +2,13 @@ package network
 
 import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -18,22 +18,22 @@ import (
 // revision. Every field is copied from the selected head except the revision
 // identity, the added Zone/network, and the corresponding rendered artifacts.
 func buildZoneCreationProjection(
-	current etcd.EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	project hierarchyrecord.ProjectRecord,
 	zone zonerecord.Record,
 	revisionID string,
 	generation uint64,
-) (etcd.EnvironmentComposeProjection, error) {
+) (projectionrecord.EnvironmentComposeProjection, error) {
 	if ids.Validate(ids.KindEnvironment, current.EnvironmentID) != nil ||
 		zone.EnvironmentID != current.EnvironmentID || ids.Validate(ids.KindTask, revisionID) != nil || generation == 0 {
-		return etcd.EnvironmentComposeProjection{}, errs.New(
+		return projectionrecord.EnvironmentComposeProjection{}, errs.New(
 			errs.KindInternal,
 			"Zone creation projection input is invalid",
 		)
 	}
 	for _, existing := range current.DesiredZones {
 		if existing.Desired.ID == zone.Desired.ID || existing.Desired.Name == zone.Desired.Name {
-			return etcd.EnvironmentComposeProjection{}, errs.New(
+			return projectionrecord.EnvironmentComposeProjection{}, errs.New(
 				errs.KindStateConflict,
 				"Zone identity already exists in the current desired revision",
 			)
@@ -42,14 +42,14 @@ func buildZoneCreationProjection(
 	candidate := current
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
-	candidate.DesiredZones = append(append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...),
-		etcd.EnvironmentZoneProjection(zone))
+	candidate.DesiredZones = append(append([]projectionrecord.EnvironmentZoneProjection(nil), current.DesiredZones...),
+		projectionrecord.EnvironmentZoneProjection(zone))
 	sort.Slice(candidate.DesiredZones, func(left, right int) bool {
 		return candidate.DesiredZones[left].Desired.Name < candidate.DesiredZones[right].Desired.Name
 	})
 	artifact := &agentpb.ComposeArtifact{}
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(current.ComposeArtifact, artifact); err != nil {
-		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Zone baseline artifact is corrupt")
+		return projectionrecord.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Zone baseline artifact is corrupt")
 	}
 	addition := composerender.ZoneArtifactAddition{
 		Zone: zone.Desired, ProjectID: project.ID, TenantID: project.TenantID,
@@ -58,19 +58,19 @@ func buildZoneCreationProjection(
 	}
 	mutated, err := composerender.AddEnvironmentZoneArtifact(artifact, addition)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	candidate.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
+		return projectionrecord.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
 	normalized, err := composerender.NormalizedEnvironmentArtifact(current)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	normalized, err = composerender.AddEnvironmentZoneArtifact(normalized, addition)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	candidate.NormalizedCompose = append([]byte(nil), normalized.GetCanonicalYaml()...)
 	return candidate, nil

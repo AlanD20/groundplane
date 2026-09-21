@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
 	"sort"
@@ -356,7 +357,7 @@ func volumeTaskStepIDsValid(steps []etcd.TaskStepRecord) bool {
 	return true
 }
 
-func volumePlanConsumerIDs(projection etcd.EnvironmentComposeProjection, volumeID string) ([]string, error) {
+func volumePlanConsumerIDs(projection projectionrecord.EnvironmentComposeProjection, volumeID string) ([]string, error) {
 	seen := make(map[string]struct{})
 	for _, mount := range projection.VolumeMounts {
 		if mount.VolumeID != volumeID {

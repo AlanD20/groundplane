@@ -2,6 +2,7 @@ package etcd
 
 import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -221,8 +222,8 @@ type TaskRecord struct {
 	RetainUntil        *time.Time                     `json:"retain_until,omitempty"`
 	idempotencyMarker  *idempotencyrecord.IdempotencyLocator
 
-	ComponentActionStepIDs          []string                        `json:"component_action_step_ids"`
-	ManagedComponentTeardownSources []ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
+	ComponentActionStepIDs          []string                                         `json:"component_action_step_ids"`
+	ManagedComponentTeardownSources []projectionrecord.ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
 }
 
 func newTaskRecord(

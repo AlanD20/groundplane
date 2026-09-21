@@ -6,7 +6,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/compose-spec/compose-go/v2/loader"
@@ -20,7 +21,7 @@ import (
 // optional Blueprint audit stream, is the desired-state authority.
 func LoadNormalizedEnvironmentProject(
 	ctx context.Context,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) (*composetypes.Project, error) {
 	return loadNormalizedEnvironmentProject(ctx, projection)
 }
@@ -56,7 +57,7 @@ func MarshalNormalizedEnvironmentProject(project *composetypes.Project) ([]byte,
 // to the existing deterministic direct-mutation helpers. Runtime-only generated
 // Component and release Service metadata is deliberately excluded.
 func NormalizedEnvironmentArtifact(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) (*agentpb.ComposeArtifact, error) {
 	runtime := &agentpb.ComposeArtifact{}
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(projection.ComposeArtifact, runtime); err != nil ||
@@ -117,7 +118,7 @@ func NormalizedEnvironmentArtifact(
 
 func loadNormalizedEnvironmentProject(
 	ctx context.Context,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) (*composetypes.Project, error) {
 	if len(projection.NormalizedCompose) == 0 {
 		return nil, errs.New(errs.KindInternal, "Environment normalized authored Compose is missing")
@@ -159,7 +160,7 @@ func loadNormalizedEnvironmentProject(
 		}
 		project.Networks[name] = network
 	}
-	ownedVolumes := make(map[string]etcd.EnvironmentVolumeIdentity, len(projection.Volumes))
+	ownedVolumes := make(map[string]projectionrecord.EnvironmentVolumeIdentity, len(projection.Volumes))
 	for _, volume := range projection.Volumes {
 		ownedVolumes[volume.Key] = volume
 	}

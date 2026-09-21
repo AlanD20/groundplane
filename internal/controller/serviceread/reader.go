@@ -3,6 +3,7 @@ package serviceread
 import (
 	"context"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -21,7 +21,7 @@ type Environments interface {
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 }
 
 type Services interface {

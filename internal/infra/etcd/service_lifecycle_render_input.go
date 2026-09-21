@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -20,21 +21,21 @@ const (
 // applied Service lifecycle Task attempt. It prevents queued and retried work
 // from observing a newer Blueprint, hierarchy label, or applied projection.
 type ServiceLifecycleRenderInput struct {
-	PlanID                    string                       `json:"plan_id"`
-	ServiceID                 string                       `json:"service_id"`
-	TenantID                  string                       `json:"tenant_id"`
-	TenantSlug                string                       `json:"tenant_slug"`
-	ProjectID                 string                       `json:"project_id"`
-	ProjectSlug               string                       `json:"project_slug"`
-	EnvironmentID             string                       `json:"environment_id"`
-	EnvironmentName           string                       `json:"environment_name"`
-	AuthorizedVolumeDir       string                       `json:"authorized_volume_dir"`
-	ArtifactID                string                       `json:"artifact_id"`
-	AdapterKey                string                       `json:"adapter_key,omitempty"`
-	HookConfiguration         *backinghook.Configuration   `json:"hook_configuration,omitempty"`
-	Projection                EnvironmentComposeProjection `json:"projection"`
-	AppliedProjectionRevision int64                        `json:"applied_projection_revision"`
-	Release                   ServiceLifecycleRelease      `json:"release"`
+	PlanID                    string                                        `json:"plan_id"`
+	ServiceID                 string                                        `json:"service_id"`
+	TenantID                  string                                        `json:"tenant_id"`
+	TenantSlug                string                                        `json:"tenant_slug"`
+	ProjectID                 string                                        `json:"project_id"`
+	ProjectSlug               string                                        `json:"project_slug"`
+	EnvironmentID             string                                        `json:"environment_id"`
+	EnvironmentName           string                                        `json:"environment_name"`
+	AuthorizedVolumeDir       string                                        `json:"authorized_volume_dir"`
+	ArtifactID                string                                        `json:"artifact_id"`
+	AdapterKey                string                                        `json:"adapter_key,omitempty"`
+	HookConfiguration         *backinghook.Configuration                    `json:"hook_configuration,omitempty"`
+	Projection                projectionrecord.EnvironmentComposeProjection `json:"projection"`
+	AppliedProjectionRevision int64                                         `json:"applied_projection_revision"`
+	Release                   ServiceLifecycleRelease                       `json:"release"`
 }
 
 // ServiceLifecycleRelease freezes the exact serving runtime sources used by a
@@ -130,7 +131,7 @@ func validateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) erro
 			return errs.New(errs.KindValidationFailed, "Service lifecycle hook configuration is invalid")
 		}
 	}
-	if validateEnvironmentComposeProjection(input.Projection) != nil ||
+	if projectionrecord.ValidateEnvironmentComposeProjection(input.Projection) != nil ||
 		input.Projection.EnvironmentID != input.EnvironmentID || input.AppliedProjectionRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle render projection is invalid")
 	}
@@ -180,7 +181,7 @@ func validateServiceLifecycleRelease(authority ServiceLifecycleRelease, input Se
 func cloneServiceLifecycleRenderInput(source ServiceLifecycleRenderInput) ServiceLifecycleRenderInput {
 	clone := source
 	clone.HookConfiguration = backinghook.CloneConfiguration(source.HookConfiguration)
-	clone.Projection = cloneEnvironmentComposeProjection(source.Projection)
+	clone.Projection = projectionrecord.CloneEnvironmentComposeProjection(source.Projection)
 	clone.Release.Current = cloneReleaseRenderInput(source.Release.Current)
 	if source.Release.RetainedPrior != nil {
 		prior := cloneReleaseRenderInput(*source.Release.RetainedPrior)

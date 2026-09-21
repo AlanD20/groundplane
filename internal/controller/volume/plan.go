@@ -3,6 +3,7 @@ package volume
 import (
 	"encoding/json"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
@@ -167,7 +168,7 @@ func stableIDFromTask(kind ids.Kind, taskID string) string {
 	return string(kind) + "_" + strings.TrimPrefix(taskID, "task_")
 }
 
-func volumeMutationConsumerIDs(projection etcd.EnvironmentComposeProjection, volumeID string) []string {
+func volumeMutationConsumerIDs(projection projectionrecord.EnvironmentComposeProjection, volumeID string) []string {
 	seen := make(map[string]struct{})
 	for _, mount := range projection.VolumeMounts {
 		if mount.VolumeID == volumeID {

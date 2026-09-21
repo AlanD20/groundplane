@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -187,7 +188,7 @@ type preparedBlueprintRequirementGatePublication struct {
 func prepareBlueprintRequirementGatePublication(
 	gate BlueprintRequirementGate,
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	required bool,
 ) (preparedBlueprintRequirementGatePublication, error) {
 	marker := task.Params[TaskBlueprintRequirementGateSHA256Param]

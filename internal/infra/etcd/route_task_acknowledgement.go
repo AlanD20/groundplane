@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -202,7 +203,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	if err != nil || !found {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation desired state changed")
 	}
-	var desired *EnvironmentRouteProjection
+	var desired *projectionrecord.EnvironmentRouteProjection
 	for index := range desiredProjection.Record.DesiredRoutes {
 		if desiredProjection.Record.DesiredRoutes[index].Desired.ID == intent.RouteID {
 			desired = &desiredProjection.Record.DesiredRoutes[index]

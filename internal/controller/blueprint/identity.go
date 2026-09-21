@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -16,7 +17,7 @@ func environmentBlueprintState(
 	environmentID string,
 	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
 	hasHead bool,
-	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	hasProjection bool,
 ) (int64, composeidentity.Snapshot, uint64, error) {
 	if hasHead != hasProjection {
@@ -44,7 +45,7 @@ func environmentBlueprintState(
 }
 
 func authoredComposeIdentitySnapshot(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) (composeidentity.Snapshot, error) {
 	project, err := composerender.LoadNormalizedEnvironmentProject(context.Background(), projection)
 	if err != nil {

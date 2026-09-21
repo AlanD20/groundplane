@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"path"
@@ -144,26 +145,26 @@ func (service *ReadService) volumeListProjection(
 	ctx context.Context,
 	environmentID string,
 	encodedCursor string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], volumeListCursor, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], volumeListCursor, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
 			errs.KindValidationFailed, "Volume list requires a stable Environment id",
 		)
 	}
 	if encodedCursor == "" {
 		projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
 		if err != nil {
-			return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, err
+			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, err
 		}
 		if !found {
-			return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, nil
+			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, nil
 		}
 		return projection, volumeListCursor{EnvironmentID: environmentID, RevisionID: projection.Record.RevisionID}, nil
 	}
 	cursor, err := decodeVolumeCursor[volumeListCursor](encodedCursor)
 	if err != nil || cursor.EnvironmentID != environmentID ||
 		ids.Validate(ids.KindTask, cursor.RevisionID) != nil {
-		return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
 			errs.KindValidationFailed, "Volume page cursor is invalid",
 		)
 	}
@@ -171,10 +172,10 @@ func (service *ReadService) volumeListProjection(
 		ctx, environmentID, cursor.RevisionID,
 	)
 	if err != nil {
-		return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, err
 	}
 	if !found {
-		return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
 			errs.KindStateConflict, "Volume page revision is no longer available",
 		)
 	}
@@ -200,8 +201,8 @@ func (service *ReadService) GetVolumeDeletionImpact(
 			errs.KindValidationFailed, "Volume deletion-impact page request is invalid",
 		)
 	}
-	var projection etcdstore.Versioned[etcd.EnvironmentComposeProjection]
-	var identity etcd.EnvironmentVolumeIdentity
+	var projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
+	var identity projectionrecord.EnvironmentVolumeIdentity
 	cursor := volumeImpactCursor{VolumeID: volumeID}
 	if encodedCursor == "" {
 		var err error
@@ -281,7 +282,7 @@ func (service *ReadService) GetVolumeDeletionImpact(
 }
 
 func volumeMountImpactItems(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	volumeID string,
 ) []apiTypes.VolumeDeletionImpactItem {
 	names := volumeConsumerServiceNames(projection, volumeID)
@@ -300,7 +301,7 @@ func volumeMountImpactItems(
 	return items
 }
 
-func volumeConsumerServiceNames(projection etcd.EnvironmentComposeProjection, volumeID string) map[string]string {
+func volumeConsumerServiceNames(projection projectionrecord.EnvironmentComposeProjection, volumeID string) map[string]string {
 	addressed := make(map[string]struct{})
 	for _, mount := range projection.VolumeMounts {
 		if mount.VolumeID == volumeID {
@@ -339,7 +340,7 @@ func volumeConsumerServiceNames(projection etcd.EnvironmentComposeProjection, vo
 }
 
 func volumeRemovalImpactItems(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	volumeID string,
 	backup etcd.BackupVolumeRemovalImpact,
 ) []apiTypes.VolumeDeletionImpactItem {
@@ -372,18 +373,18 @@ func volumeRemovalImpactItems(
 }
 
 func volumeImpactDigest(
-	projection etcd.EnvironmentComposeProjection,
-	identity etcd.EnvironmentVolumeIdentity,
+	projection projectionrecord.EnvironmentComposeProjection,
+	identity projectionrecord.EnvironmentVolumeIdentity,
 	backup etcd.BackupVolumeRemovalImpact,
 	items []apiTypes.VolumeDeletionImpactItem,
 ) (string, error) {
 	value, err := json.Marshal(struct {
-		EnvironmentID string                              `json:"environment_id"`
-		RevisionID    string                              `json:"revision_id"`
-		Generation    uint64                              `json:"generation"`
-		Volume        etcd.EnvironmentVolumeIdentity      `json:"volume"`
-		Backup        etcd.BackupVolumeRemovalImpact      `json:"backup"`
-		Items         []apiTypes.VolumeDeletionImpactItem `json:"items"`
+		EnvironmentID string                                     `json:"environment_id"`
+		RevisionID    string                                     `json:"revision_id"`
+		Generation    uint64                                     `json:"generation"`
+		Volume        projectionrecord.EnvironmentVolumeIdentity `json:"volume"`
+		Backup        etcd.BackupVolumeRemovalImpact             `json:"backup"`
+		Items         []apiTypes.VolumeDeletionImpactItem        `json:"items"`
 	}{projection.EnvironmentID, projection.RevisionID, projection.RenderGeneration, identity, backup, items})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)

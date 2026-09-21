@@ -9,6 +9,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -593,7 +594,7 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 	ctx context.Context,
 	environmentID string,
 	volumeID string,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	fixedRevision int64,
 ) ([]backupruntime.BackupVolumeServiceSnapshot, error) {
 	serviceKeys := make(map[string]string, len(projection.DesiredServices))

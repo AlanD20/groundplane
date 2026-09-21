@@ -5,13 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
-	infraetcd "github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -197,11 +198,11 @@ func decodeService(value []byte) (servicerecord.ServiceRecord, error) {
 	return record, nil
 }
 
-func decodeComposeProjection(value []byte) (infraetcd.EnvironmentComposeProjection, error) {
-	projection, err := decodeDurable[infraetcd.EnvironmentComposeProjection](value, "environment-compose-projection")
+func decodeComposeProjection(value []byte) (projectionrecord.EnvironmentComposeProjection, error) {
+	projection, err := decodeDurable[projectionrecord.EnvironmentComposeProjection](value, "environment-compose-projection")
 	if err != nil || ids.Validate(ids.KindEnvironment, projection.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
-		return infraetcd.EnvironmentComposeProjection{}, corruptRecord()
+		return projectionrecord.EnvironmentComposeProjection{}, corruptRecord()
 	}
 	return projection, nil
 }

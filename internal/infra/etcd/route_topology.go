@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -46,7 +47,7 @@ func findRouteAtRevision(
 				"/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
-				return etcdstore.Versioned[routerecord.Record]{}, corruptEnvironmentComposeProjection()
+				return etcdstore.Versioned[routerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
 				ctx,
@@ -65,7 +66,7 @@ func findRouteAtRevision(
 					continue
 				}
 				if matched != nil {
-					return etcdstore.Versioned[routerecord.Record]{}, corruptEnvironmentComposeProjection()
+					return etcdstore.Versioned[routerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
 				joined, joinErr := routeRecordFromDesiredProjection(ctx, store, projection, desired)
 				if joinErr != nil {
@@ -115,7 +116,7 @@ func listRoutesFromDesiredHead(
 	if !found {
 		return etcdstore.Page[routerecord.Record]{Items: []etcdstore.Versioned[routerecord.Record]{}, Revision: projection.ReadRevision}, nil
 	}
-	desired := append([]EnvironmentRouteProjection(nil), projection.Record.DesiredRoutes...)
+	desired := append([]projectionrecord.EnvironmentRouteProjection(nil), projection.Record.DesiredRoutes...)
 	sort.Slice(desired, func(left, right int) bool { return desired[left].Desired.ID < desired[right].Desired.ID })
 	start := sort.Search(len(desired), func(index int) bool { return desired[index].Desired.ID > lastID })
 	end := min(start+limit, len(desired))
@@ -143,12 +144,12 @@ func listRoutesFromDesiredHead(
 func routeAtProjection(
 	ctx context.Context,
 	store hierarchyStore,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	projectionRevision int64,
 	readRevision int64,
 	routeID string,
 ) (routerecord.Record, error) {
-	versioned := etcdstore.Versioned[EnvironmentComposeProjection]{
+	versioned := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: projection, Revision: projectionRevision, ReadRevision: readRevision,
 	}
 	for _, desired := range projection.DesiredRoutes {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -52,7 +53,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID),
-		environmentBlueprintHeadKey(record.ID), environmentComposeProjectionKey(record.ID),
+		environmentBlueprintHeadKey(record.ID), projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID),
 		releaseGroupCollectionEpochKey(record.ID),
 	}})
 	if err != nil {
@@ -91,7 +92,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		{Key: indexes.Values[0].Key, ModRevision: indexes.Values[0].ModRevision},
 		{Key: indexes.Values[1].Key, ModRevision: indexes.Values[1].ModRevision},
 		{Key: environmentBlueprintHeadKey(record.ID), ModRevision: keyValueRevision(indexes.Values[2])},
-		{Key: environmentComposeProjectionKey(record.ID), ModRevision: keyValueRevision(indexes.Values[3])},
+		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID), ModRevision: keyValueRevision(indexes.Values[3])},
 		{Key: releaseGroupCollectionEpochKey(record.ID), ModRevision: keyValueRevision(indexes.Values[4])},
 	}
 	conditions = append(
@@ -101,7 +102,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	conditions = append(conditions, etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: environmentBlueprintHeadKey(record.ID)},
-		{Type: etcdstore.MutationDelete, Key: environmentComposeProjectionKey(record.ID)},
+		{Type: etcdstore.MutationDelete, Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID)},
 		{Type: etcdstore.MutationDelete, Key: releaseGroupCollectionEpochKey(record.ID)},
 		{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)},
 		{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)},

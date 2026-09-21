@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -27,7 +28,7 @@ func desiredRevisionTaskEnvironment(task TaskRecord) (string, bool, error) {
 }
 
 func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
-	ctx context.Context, claim EnvironmentBlueprintStageClaim, candidate EnvironmentComposeProjection,
+	ctx context.Context, claim EnvironmentBlueprintStageClaim, candidate projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord, removed preparedDesiredScriptRemoval, revision int64,
 ) (entryDesiredRemovalPublication, error) {
 	if task.Type != TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil {
@@ -47,7 +48,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 	if !found || current.Revision != claim.BaselineHeadRevision {
 		return entryDesiredRemovalPublication{}, errs.New(errs.KindStateConflict, "Entry removal desired head changed")
 	}
-	expected, changed, err := RemoveEnvironmentEntry(current.Record, task.Target)
+	expected, changed, err := projectionrecord.RemoveEnvironmentEntry(current.Record, task.Target)
 	if err != nil || !changed {
 		return entryDesiredRemovalPublication{}, errs.New(errs.KindEntryNotFound, "Entry removal target is absent")
 	}
@@ -59,7 +60,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 			"Entry removal changed unrelated desired decisions",
 		)
 	}
-	keys := []string{environmentComposeProjectionKey(claim.EnvironmentID),
+	keys := []string{projectionrecord.EnvironmentComposeProjectionStorageKey(claim.EnvironmentID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), task.Target), entryRemovalIntentKey(task.ID),
 		componentTaskActiveEnvironmentKey(claim.EnvironmentID), taskMaterializationWriterKey(claim.EnvironmentID),
 		environmentBlueprintDescriptorKeyByID(claim.DescriptorID)}
@@ -73,7 +74,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 			"Entry removal publication read is incomplete",
 		)
 	}
-	var applied *etcdstore.Versioned[EnvironmentComposeProjection]
+	var applied *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	conditions := make([]etcdstore.Condition, len(keys)-1)
 	for index, key := range keys[:len(conditions)] {
 		conditions[index] = etcdstore.Condition{Key: key}
@@ -85,14 +86,14 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 		}
 	}
 	if value := read.Values[0]; value != nil {
-		projection, err := decodeEnvironmentComposeProjection(value.Value)
+		projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(value.Value)
 		if err != nil || projection.EnvironmentID != claim.EnvironmentID {
-			return entryDesiredRemovalPublication{}, corruptEnvironmentComposeProjection()
+			return entryDesiredRemovalPublication{}, projectionrecord.CorruptEnvironmentComposeProjection()
 		}
 		conditions[0].ModRevision = value.ModRevision
 		for _, entry := range projection.Entries {
 			if entry.Entry.ID == task.Target {
-				applied = &etcdstore.Versioned[EnvironmentComposeProjection]{
+				applied = &etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 					Record:       projection,
 					Revision:     value.ModRevision,
 					ReadRevision: revision,

@@ -5,6 +5,7 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -76,7 +77,7 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	ctx context.Context,
 	environmentID string,
 	reference materializationrecord.ComponentFileValueReference,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]byte, error) {
 	if projection.EnvironmentID != environmentID || projection.RevisionID != reference.RevisionID {
 		return nil, taskmaterialization.CorruptSource()

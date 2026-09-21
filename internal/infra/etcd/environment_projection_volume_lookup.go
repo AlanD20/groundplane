@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -16,12 +17,12 @@ import (
 func (repository *HierarchyRepository) FindEnvironmentVolume(
 	ctx context.Context,
 	volumeID string,
-) (etcdstore.Versioned[EnvironmentComposeProjection], EnvironmentVolumeIdentity, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], projectionrecord.EnvironmentVolumeIdentity, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindVolume, volumeID); err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
 	}
 	const headsPrefix = "/v1/records/environment-blueprints/"
 	start := ""
@@ -30,10 +31,10 @@ func (repository *HierarchyRepository) FindEnvironmentVolume(
 			Prefix: headsPrefix, StartExclusive: start, Limit: 128,
 		})
 		if err != nil {
-			return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
 		}
 		if page == nil {
-			return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
+			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
 				errs.KindInternal, "Environment desired-head scan is empty",
 			)
 		}
@@ -44,18 +45,18 @@ func (repository *HierarchyRepository) FindEnvironmentVolume(
 			}
 			environmentID := strings.TrimSuffix(strings.TrimPrefix(entry.Key, headsPrefix), "/current")
 			if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
-				return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
+				return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			revisionID, err := idempotencyrecord.DecodeTaskReference(entry.Value)
 			if err != nil {
-				return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
+				return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			projection, found, err := repository.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 			if err != nil {
-				return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+				return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
 			}
 			if !found {
-				return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
+				return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			for _, volume := range projection.Record.Volumes {
 				if volume.ID == volumeID {
@@ -68,12 +69,12 @@ func (repository *HierarchyRepository) FindEnvironmentVolume(
 			break
 		}
 		if len(page.Values) == 0 {
-			return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
+			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
 				errs.KindInternal, "Environment desired-head pagination did not advance",
 			)
 		}
 	}
-	return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
+	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
 		errs.KindVolumeNotFound, "volume was not found",
 	)
 }

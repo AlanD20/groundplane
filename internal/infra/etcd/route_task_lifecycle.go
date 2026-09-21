@@ -2,6 +2,7 @@ package etcd
 
 import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ type routeTaskChange struct {
 }
 
 func routeMutationSelectedProjection(
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 	intent RouteMutationIntent,
 ) bool {

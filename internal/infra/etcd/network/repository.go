@@ -8,6 +8,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -226,7 +227,7 @@ func (repository *Repository) BeginRouteMutationWithTask(
 func (repository *Repository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 }
 
@@ -240,7 +241,7 @@ func (repository *Repository) GetEnvironmentZoneRemovalAuthorities(
 func (repository *Repository) GetEnvironmentAppliedComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
 }
 
@@ -250,7 +251,7 @@ func (repository *Repository) BeginRouteDeletionWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	route etcdstore.Versioned[routerecord.Record],
-	projection *etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent etcd.RouteRemovalIntent,
 	task etcd.TaskRecord,

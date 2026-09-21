@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -38,35 +39,35 @@ type AttachTaskOwnedNetworkSnapshot struct {
 // needed to reproduce an Attach plan after restart. Retries retain PlanID and
 // therefore consume the exact same input without reading mutable topology.
 type AttachTaskRenderInput struct {
-	PlanID                   string                                  `json:"plan_id"`
-	AttachID                 string                                  `json:"attach_id"`
-	AttachName               string                                  `json:"attach_name"`
-	TenantID                 string                                  `json:"tenant_id"`
-	TenantSlug               string                                  `json:"tenant_slug"`
-	ProjectID                string                                  `json:"project_id"`
-	ProjectSlug              string                                  `json:"project_slug"`
-	EnvironmentID            string                                  `json:"environment_id"`
-	EnvironmentName          string                                  `json:"environment_name"`
-	AuthorizedVolumeDir      string                                  `json:"authorized_volume_dir"`
-	BackingServiceID         string                                  `json:"backing_service_id"`
-	BackingProjectID         string                                  `json:"backing_project_id"`
-	AdapterKey               string                                  `json:"adapter_key"`
-	Authentication           core.BackingAuthentication              `json:"authentication,omitempty"`
-	HookConfiguration        *backinghook.Configuration              `json:"hook_configuration,omitempty"`
-	DesiredRevisionID        string                                  `json:"desired_revision_id"`
-	ArtifactID               string                                  `json:"artifact_id"`
-	RenderGeneration         uint64                                  `json:"render_generation"`
-	EnvironmentEpochRevision int64                                   `json:"environment_epoch_revision"`
-	RuntimeProjection        EnvironmentComposeProjection            `json:"runtime_projection"`
-	RuntimePreparation       *serviceruntimerecord.AttachPreparation `json:"runtime_preparation,omitempty"`
-	RunningServiceIDs        []string                                `json:"running_service_ids,omitempty"`
-	Services                 []AttachTaskServiceSnapshot             `json:"services"`
-	Networks                 []AttachTaskOwnedNetworkSnapshot        `json:"networks,omitempty"`
-	Volumes                  []EnvironmentVolumeIdentity             `json:"volumes,omitempty"`
-	VolumeMounts             []EnvironmentServiceVolumeMount         `json:"volume_mounts,omitempty"`
-	NetworkJoins             []AttachTaskNetworkJoin                 `json:"network_joins"`
-	ConsumerServiceIDs       []string                                `json:"consumer_service_ids"`
-	GrantAttachIDs           []string                                `json:"grant_attach_ids,omitempty"`
+	PlanID                   string                                           `json:"plan_id"`
+	AttachID                 string                                           `json:"attach_id"`
+	AttachName               string                                           `json:"attach_name"`
+	TenantID                 string                                           `json:"tenant_id"`
+	TenantSlug               string                                           `json:"tenant_slug"`
+	ProjectID                string                                           `json:"project_id"`
+	ProjectSlug              string                                           `json:"project_slug"`
+	EnvironmentID            string                                           `json:"environment_id"`
+	EnvironmentName          string                                           `json:"environment_name"`
+	AuthorizedVolumeDir      string                                           `json:"authorized_volume_dir"`
+	BackingServiceID         string                                           `json:"backing_service_id"`
+	BackingProjectID         string                                           `json:"backing_project_id"`
+	AdapterKey               string                                           `json:"adapter_key"`
+	Authentication           core.BackingAuthentication                       `json:"authentication,omitempty"`
+	HookConfiguration        *backinghook.Configuration                       `json:"hook_configuration,omitempty"`
+	DesiredRevisionID        string                                           `json:"desired_revision_id"`
+	ArtifactID               string                                           `json:"artifact_id"`
+	RenderGeneration         uint64                                           `json:"render_generation"`
+	EnvironmentEpochRevision int64                                            `json:"environment_epoch_revision"`
+	RuntimeProjection        projectionrecord.EnvironmentComposeProjection    `json:"runtime_projection"`
+	RuntimePreparation       *serviceruntimerecord.AttachPreparation          `json:"runtime_preparation,omitempty"`
+	RunningServiceIDs        []string                                         `json:"running_service_ids,omitempty"`
+	Services                 []AttachTaskServiceSnapshot                      `json:"services"`
+	Networks                 []AttachTaskOwnedNetworkSnapshot                 `json:"networks,omitempty"`
+	Volumes                  []projectionrecord.EnvironmentVolumeIdentity     `json:"volumes,omitempty"`
+	VolumeMounts             []projectionrecord.EnvironmentServiceVolumeMount `json:"volume_mounts,omitempty"`
+	NetworkJoins             []AttachTaskNetworkJoin                          `json:"network_joins"`
+	ConsumerServiceIDs       []string                                         `json:"consumer_service_ids"`
+	GrantAttachIDs           []string                                         `json:"grant_attach_ids,omitempty"`
 	core.ServiceDependencyPlans
 }
 
@@ -164,7 +165,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	if err := validateAttachTaskServiceSnapshots(input.Services); err != nil {
 		return err
 	}
-	if validateEnvironmentProjection(input.RuntimeProjection, environmentArtifactCapturedRuntime) != nil ||
+	if projectionrecord.ValidateEnvironmentProjection(input.RuntimeProjection, projectionrecord.EnvironmentArtifactCapturedRuntime) != nil ||
 		input.RuntimeProjection.EnvironmentID != input.EnvironmentID ||
 		input.RuntimeProjection.RevisionID != input.DesiredRevisionID ||
 		input.RuntimeProjection.RenderGeneration != input.RenderGeneration {
@@ -205,7 +206,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	if err := validateAttachTaskOwnedNetworkSnapshots(input.Networks); err != nil {
 		return err
 	}
-	if err := validateEnvironmentVolumeIdentities(input.Volumes); err != nil {
+	if err := projectionrecord.ValidateEnvironmentVolumeIdentities(input.Volumes); err != nil {
 		return err
 	}
 	if err := validateAttachTaskVolumeMounts(input); err != nil {
@@ -316,7 +317,7 @@ func attachTaskServiceSnapshots(values []servicerecord.EnvironmentServiceProject
 	return snapshots
 }
 
-func attachTaskOwnedNetworkSnapshots(values []EnvironmentZoneProjection) []AttachTaskOwnedNetworkSnapshot {
+func attachTaskOwnedNetworkSnapshots(values []projectionrecord.EnvironmentZoneProjection) []AttachTaskOwnedNetworkSnapshot {
 	snapshots := make([]AttachTaskOwnedNetworkSnapshot, len(values))
 	for index, value := range values {
 		snapshots[index] = AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}

@@ -5,6 +5,7 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"math"
@@ -291,7 +292,7 @@ func attachPlanServiceSnapshots(values []servicerecord.EnvironmentServiceProject
 	return snapshots
 }
 
-func attachPlanOwnedNetworkSnapshots(values []etcd.EnvironmentZoneProjection) []etcd.AttachTaskOwnedNetworkSnapshot {
+func attachPlanOwnedNetworkSnapshots(values []projectionrecord.EnvironmentZoneProjection) []etcd.AttachTaskOwnedNetworkSnapshot {
 	snapshots := make([]etcd.AttachTaskOwnedNetworkSnapshot, len(values))
 	for index, value := range values {
 		snapshots[index] = etcd.AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}

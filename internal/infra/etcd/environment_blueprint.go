@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -353,7 +354,7 @@ func (repository *HierarchyRepository) getEnvironmentBlueprintProjectionAtRevisi
 	ctx context.Context,
 	environmentID string,
 	readRevision int64,
-) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.getEnvironmentComposeProjectionAtRevision(ctx, environmentID, readRevision)
 }
 
@@ -365,7 +366,7 @@ type preparedEnvironmentBlueprintZonePool struct {
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintZonePoolAtRevision(
 	ctx context.Context,
 	environment hierarchyrecord.EnvironmentRecord,
-	desired []EnvironmentZoneProjection,
+	desired []projectionrecord.EnvironmentZoneProjection,
 	readRevision int64,
 ) (preparedEnvironmentBlueprintZonePool, error) {
 	current, err := repository.getEnvironmentBlueprintZoneRegistryAtRevision(

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,7 +20,7 @@ func (repository *HierarchyRepository) prepareDesiredScriptRemoval(
 	ctx context.Context,
 	environmentID string,
 	expectedHeadRevision, readRevision int64,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 ) (preparedDesiredScriptRemoval, error) {
 	previous, hasPrevious, err := repository.getEnvironmentBlueprintProjectionAtRevision(

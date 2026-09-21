@@ -14,6 +14,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -68,7 +69,7 @@ type PrepareInput struct {
 	Tenant           etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	Project          etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	Environment      etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	Projection       etcd.EnvironmentComposeProjection
+	Projection       projectionrecord.EnvironmentComposeProjection
 	ServiceChanges   []etcd.EnvironmentBlueprintServiceChange
 	Memberships      NormalizedServiceMemberships
 	Scripts          []scriptrecord.Record

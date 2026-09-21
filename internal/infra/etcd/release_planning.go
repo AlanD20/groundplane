@@ -5,6 +5,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -23,7 +24,7 @@ type ReleasePlanningScope struct {
 	Environment              etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	Project                  etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	Tenant                   etcdstore.Versioned[hierarchyrecord.TenantRecord]
-	Compose                  etcdstore.Versioned[EnvironmentComposeProjection]
+	Compose                  etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	EnvironmentEpochRevision int64
 	EnvironmentEpochValue    []byte
 	ReadRevision             int64
@@ -38,7 +39,7 @@ type ReleasePlanningService struct {
 func (scope ReleasePlanningScope) Clone() ReleasePlanningScope {
 	clone := scope
 	clone.EnvironmentEpochValue = slices.Clone(scope.EnvironmentEpochValue)
-	clone.Compose.Record = cloneEnvironmentComposeProjection(scope.Compose.Record)
+	clone.Compose.Record = projectionrecord.CloneEnvironmentComposeProjection(scope.Compose.Record)
 	return clone
 }
 

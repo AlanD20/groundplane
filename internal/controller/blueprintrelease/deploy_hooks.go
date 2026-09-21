@@ -9,6 +9,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -42,7 +43,7 @@ func (service *Service) prepareDeployHooks(
 		candidateByService[change.Record.Desired.ID] = change
 	}
 	scriptsByService := deployScriptsByService(input.Scripts)
-	projectionValue, err := etcd.EncodeEnvironmentComposeProjectionStorage(input.Projection)
+	projectionValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(input.Projection)
 	if err != nil {
 		return preparedHooks{}, err
 	}

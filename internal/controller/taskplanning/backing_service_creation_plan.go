@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -80,7 +81,7 @@ func (resolver *TaskPlanResolver) appendBackingServiceCreationFinalSteps(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	creation backingServiceCreationPlan,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	artifactID string,
 	steps []*agentpb.ExecutionStep,
 	stepIndex int,
@@ -186,7 +187,7 @@ func (resolver *TaskPlanResolver) appendBackingServiceCreationAfterStart(
 }
 
 func backingServiceCreationHookConfiguration(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	serviceID string,
 ) (*backinghook.Configuration, error) {
 	for _, service := range projection.DesiredServices {

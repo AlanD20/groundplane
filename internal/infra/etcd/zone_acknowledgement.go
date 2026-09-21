@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -24,7 +25,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		zonePoolRegistryKey(environmentID), componentAddressRegistryKey(task.Target),
 		zoneRemovalIntentKey(operationID), environmentBlueprintHeadKey(environmentID),
-		environmentComposeProjectionKey(environmentID), componentTaskActiveEnvironmentKey(environmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), componentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
@@ -50,7 +51,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	if err != nil || headID != intent.DesiredProjection.RevisionID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal desired head changed")
 	}
-	applied, err := decodeEnvironmentComposeProjection(state.Values[5].Value)
+	applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[5].Value)
 	if err != nil || !sameServiceRemovalProjection(applied, intent.AppliedProjection) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal applied projection changed")
 	}
@@ -117,7 +118,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		clear(publication.publishedDescriptor)
 		return nil, nil, err
 	}
-	projectionValue, err := encodeEnvironmentComposeProjection(intent.CandidateProjection)
+	projectionValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(intent.CandidateProjection)
 	if err != nil {
 		clear(publication.publishedDescriptor)
 		clear(headValue)
@@ -174,7 +175,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	keys := []string{
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		zonePoolRegistryKey(environmentID), zoneRemovalIntentKey(operationID),
-		environmentBlueprintHeadKey(environmentID), environmentComposeProjectionKey(environmentID),
+		environmentBlueprintHeadKey(environmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
@@ -185,7 +186,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 		state.Values[3] == nil || state.Values[4] == nil || state.Values[5] != nil {
 		return errs.New(errs.KindStateConflict, "Zone removal terminal state does not match its Task")
 	}
-	applied, err := decodeEnvironmentComposeProjection(state.Values[4].Value)
+	applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[4].Value)
 	if err != nil {
 		return err
 	}
@@ -232,7 +233,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 }
 
 func projectedZoneRemovalTarget(intent ZoneRemovalIntent, readRevision int64) (zonerecord.Record, error) {
-	projection := etcdstore.Versioned[EnvironmentComposeProjection]{
+	projection := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: readRevision,
 	}
 	var matched *zonerecord.Record
@@ -256,7 +257,7 @@ func projectedZoneRemovalTarget(intent ZoneRemovalIntent, readRevision int64) (z
 	return *matched, nil
 }
 
-func projectionContainsZone(projection EnvironmentComposeProjection, zoneID string) bool {
+func projectionContainsZone(projection projectionrecord.EnvironmentComposeProjection, zoneID string) bool {
 	for _, desired := range projection.DesiredZones {
 		if desired.Desired.ID == zoneID {
 			return true

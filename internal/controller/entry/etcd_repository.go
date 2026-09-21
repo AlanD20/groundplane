@@ -7,6 +7,7 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -51,7 +52,7 @@ type etcdRemovalState struct {
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	project     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	tenant      *etcdstore.Versioned[hierarchyrecord.TenantRecord]
-	projection  *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+	projection  *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 }
 
 type etcdRemovalEvidence struct {
@@ -264,10 +265,10 @@ func (repository *EtcdRepository) loadRemovalState(
 }
 
 func appliedEntryProjection(
-	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	found bool,
 	entryID string,
-) *etcdstore.Versioned[etcd.EnvironmentComposeProjection] {
+) *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection] {
 	if !found {
 		return nil
 	}

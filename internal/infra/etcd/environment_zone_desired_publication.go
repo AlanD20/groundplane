@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -25,7 +26,7 @@ type EnvironmentZoneDesiredPublication struct {
 	ExpectedHeadRevision int64
 	Claim                EnvironmentBlueprintStageClaim
 	Revision             EnvironmentDesiredRevisionIdentity
-	Projection           EnvironmentComposeProjection
+	Projection           projectionrecord.EnvironmentComposeProjection
 	Zone                 zonerecord.Record
 	Marker               idempotencyrecord.IdempotencyMarker
 }
@@ -213,7 +214,7 @@ func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPubli
 }
 
 func validateDirectZoneProjection(
-	previous EnvironmentComposeProjection,
+	previous projectionrecord.EnvironmentComposeProjection,
 	hasPrevious bool,
 	input EnvironmentZoneDesiredPublication,
 ) error {
@@ -227,7 +228,7 @@ func validateDirectZoneProjection(
 		return errs.New(errs.KindValidationFailed, "direct Zone candidate does not add exactly one Zone")
 	}
 
-	stripped := cloneEnvironmentComposeProjection(input.Projection)
+	stripped := projectionrecord.CloneEnvironmentComposeProjection(input.Projection)
 	zoneFound := false
 	stripped.DesiredZones = stripped.DesiredZones[:0]
 	for _, projected := range input.Projection.DesiredZones {
@@ -257,7 +258,7 @@ func validateDirectZoneProjection(
 	return nil
 }
 
-func sameDirectZoneFinalProjection(left EnvironmentComposeProjection, right EnvironmentComposeProjection) bool {
+func sameDirectZoneFinalProjection(left projectionrecord.EnvironmentComposeProjection, right projectionrecord.EnvironmentComposeProjection) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.RevisionID == right.RevisionID &&
 		left.RenderGeneration == right.RenderGeneration &&
 		sameServiceRemovalBytes(left.ComposeArtifact, right.ComposeArtifact) &&

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"crypto/sha256"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -43,12 +44,12 @@ func buildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 			return EnvironmentBlueprintStreams{}, err
 		}
 	}
-	projection, err := encodeEnvironmentComposeProjection(request.Projection)
+	projection, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(request.Projection)
 	if err != nil {
 		clear(audit)
 		return EnvironmentBlueprintStreams{}, err
 	}
-	if len(projection) > EnvironmentBlueprintProjectionMaxBytes {
+	if len(projection) > projectionrecord.EnvironmentBlueprintProjectionMaxBytes {
 		clear(audit)
 		clear(projection)
 		return EnvironmentBlueprintStreams{}, errs.New(

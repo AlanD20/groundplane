@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -35,10 +36,10 @@ type BackupVolumeRemovalImpact struct {
 
 type backupVolumeProjectionEvidence struct {
 	Environment      etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	Projection       etcdstore.Versioned[EnvironmentComposeProjection]
+	Projection       etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	ProjectionRoot   int64
 	DependencyDigest string
-	Volume           EnvironmentVolumeIdentity
+	Volume           projectionrecord.EnvironmentVolumeIdentity
 }
 
 func (repository *HierarchyRepository) ResolveEnvironmentVolumeAtRevision(
@@ -47,15 +48,15 @@ func (repository *HierarchyRepository) ResolveEnvironmentVolumeAtRevision(
 	volumeID string,
 	revisionID string,
 	fixedRevision int64,
-) (etcdstore.Versioned[EnvironmentComposeProjection], EnvironmentVolumeIdentity, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], projectionrecord.EnvironmentVolumeIdentity, error) {
 	evidence, err := loadBackupVolumeProjectionEvidence(
 		ctx, repository.store, environmentID, volumeID, fixedRevision,
 	)
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, err
 	}
 	if evidence.Projection.Record.RevisionID != revisionID {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
 			errs.KindStateConflict, "Volume desired revision changed",
 		)
 	}
@@ -330,7 +331,7 @@ func loadBackupVolumeProjectionEvidence(
 	if err != nil || dependencyDigest != seal.DependencyDigest {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
-	identity := EnvironmentVolumeIdentity{}
+	identity := projectionrecord.EnvironmentVolumeIdentity{}
 	for _, candidate := range projection.Record.Volumes {
 		if candidate.ID == volumeID {
 			identity = candidate

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -45,8 +46,8 @@ func routeObservationAtRevision(
 func routeRecordFromDesiredProjection(
 	ctx context.Context,
 	store hierarchyStore,
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
-	desired EnvironmentRouteProjection,
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	desired projectionrecord.EnvironmentRouteProjection,
 ) (etcdstore.Versioned[routerecord.Record], error) {
 	if desired.EnvironmentID != projection.Record.EnvironmentID {
 		return etcdstore.Versioned[routerecord.Record]{}, recordcodec.CorruptRecord()

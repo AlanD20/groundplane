@@ -2,6 +2,7 @@ package blueprintrelease
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -28,7 +29,7 @@ func (service *Service) Preflight(
 	groups map[string]core.ReleaseGroupSpec,
 ) (WorkloadPreparation, error) {
 	candidates, err := selectCandidates(
-		etcd.EnvironmentComposeProjection{},
+		projectionrecord.EnvironmentComposeProjection{},
 		changes,
 		groups,
 		memberships,

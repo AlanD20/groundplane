@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
@@ -20,7 +21,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	ctx context.Context,
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	expectedHeadRevision int64,
@@ -249,35 +250,35 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 	ctx context.Context,
 	environmentID string,
 	revision int64,
-) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	headResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintHeadKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if headResult == nil || len(headResult.Values) != 1 {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	if headResult.Values[0] == nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: headResult.ReadRevision}, false, nil
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: headResult.ReadRevision}, false, nil
 	}
 	revisionID, err := idempotencyrecord.DecodeTaskReference(headResult.Values[0].Value)
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	rootResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintRootKey(environmentID, revisionID)}, Revision: headResult.ReadRevision,
 	})
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if rootResult == nil || len(rootResult.Values) != 1 || rootResult.Values[0] == nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(rootResult.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	keys := make([]string, int(seal.ProjectionChunks))
 	for index := range keys {
@@ -289,14 +290,14 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 		ctx, seal, "projection", keys, headResult.ReadRevision,
 	)
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	defer clear(stream)
-	projection, err := decodeEnvironmentComposeProjection(stream)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(stream)
 	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
-	return etcdstore.Versioned[EnvironmentComposeProjection]{
+	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: projection, Revision: headResult.Values[0].ModRevision, ReadRevision: readRevision,
 	}, true, nil
 }

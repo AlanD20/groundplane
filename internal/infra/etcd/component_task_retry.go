@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -84,7 +85,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-	var blueprintProjection EnvironmentComposeProjection
+	var blueprintProjection projectionrecord.EnvironmentComposeProjection
 	if blueprintRetry {
 		hierarchy := &HierarchyRepository{store: repository.store}
 		desiredProjection, found, projectionErr := hierarchy.GetEnvironmentComposeProjectionRevision(
@@ -106,7 +107,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	keys = append(
 		keys,
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		environmentComposeProjectionKey(intent.EnvironmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		environmentBlueprintHeadKey(intent.EnvironmentID),
 		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
@@ -146,7 +147,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			)
 		}
 		if state.Values[1] != nil {
-			applied, decodeErr := decodeEnvironmentComposeProjection(state.Values[1].Value)
+			applied, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[1].Value)
 			if decodeErr != nil || applied.EnvironmentID != intent.EnvironmentID ||
 				applied.RevisionID == desiredRevisionID ||
 				applied.RenderGeneration >= uint64(source.RenderGeneration) {
@@ -157,7 +158,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			}
 		}
 	} else {
-		projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[1].Value)
+		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[1].Value)
 		if decodeErr != nil {
 			return componentTaskChange{}, decodeErr
 		}
@@ -178,7 +179,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			{Key: componentTaskIntentKey(retry.ID)},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 			{
-				Key:         environmentComposeProjectionKey(intent.EnvironmentID),
+				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 				ModRevision: keyValueRevision(state.Values[1]),
 			},
 			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
@@ -374,7 +375,7 @@ func componentTaskRetryIsBlueprint(source TaskRecord) (bool, error) {
 
 func componentRetryProjectionMatches(
 	intent ComponentTaskIntent,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) bool {
 	for _, candidate := range intent.Candidates {
 		matched := false

@@ -1,4 +1,4 @@
-package etcd
+package environmentprojection
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -13,7 +13,7 @@ func ApplyEnvironmentRoute(
 	current EnvironmentComposeProjection,
 	route routerecord.Record,
 ) (EnvironmentComposeProjection, error) {
-	if err := validateEnvironmentComposeProjection(current); err != nil {
+	if err := ValidateEnvironmentComposeProjection(current); err != nil {
 		return EnvironmentComposeProjection{}, err
 	}
 	if err := routerecord.ValidateRecord(route); err != nil || route.EnvironmentID != current.EnvironmentID {
@@ -22,7 +22,7 @@ func ApplyEnvironmentRoute(
 			"applied Environment Route is invalid",
 		)
 	}
-	next := cloneEnvironmentComposeProjection(current)
+	next := CloneEnvironmentComposeProjection(current)
 	desired := EnvironmentRouteProjection{
 		EnvironmentID: route.EnvironmentID, Desired: route.Desired,
 		DesiredGeneration: route.DesiredGeneration,
@@ -55,7 +55,7 @@ func RemoveEnvironmentEntry(
 	current EnvironmentComposeProjection,
 	entryID string,
 ) (EnvironmentComposeProjection, bool, error) {
-	if err := validateEnvironmentComposeProjection(current); err != nil {
+	if err := ValidateEnvironmentComposeProjection(current); err != nil {
 		return EnvironmentComposeProjection{}, false, err
 	}
 	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil {
@@ -72,9 +72,9 @@ func RemoveEnvironmentEntry(
 		}
 	}
 	if index < 0 {
-		return cloneEnvironmentComposeProjection(current), false, nil
+		return CloneEnvironmentComposeProjection(current), false, nil
 	}
-	next := cloneEnvironmentComposeProjection(current)
+	next := CloneEnvironmentComposeProjection(current)
 	next.Entries = append(next.Entries[:index], next.Entries[index+1:]...)
 	next.RenderGeneration++
 	if err := validateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
@@ -87,7 +87,7 @@ func RemoveEnvironmentEntry(
 // treating omission as deletion. Service, Zone, and Route removals publish
 // their candidate head only from their resource-specific successful terminal
 // transaction, so a pending Remove-shaped publication is not an exception.
-func preserveEnvironmentNonEntryDesiredResources(
+func PreserveEnvironmentNonEntryDesiredResources(
 	previous EnvironmentComposeProjection,
 	hasPrevious bool,
 	next EnvironmentComposeProjection,

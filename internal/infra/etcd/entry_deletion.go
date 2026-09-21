@@ -4,6 +4,7 @@ import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -18,7 +19,7 @@ import (
 func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	ctx context.Context, environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	entry etcdstore.Versioned[entryrecord.Record],
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
@@ -105,7 +106,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if projection != nil {
 		domainKeys = append(
 			domainKeys,
-			environmentComposeProjectionKey(environment.Record.ID),
+			projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 			componentTaskActiveEnvironmentKey(environment.Record.ID),
 		)
 	}
@@ -151,7 +152,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	}
 	if projection != nil {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: projection.Revision},
+			etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: projection.Revision},
 			etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 		)
 	}
@@ -221,7 +222,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 }
 
 func validateEntryDeletionProjection(
-	projection *etcdstore.Versioned[EnvironmentComposeProjection], intent EntryRemovalIntent,
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], intent EntryRemovalIntent,
 ) error {
 	if intent.CurrentProjection == nil {
 		if projection != nil {
@@ -238,7 +239,7 @@ func validateEntryDeletionProjection(
 }
 
 func classifyEntryDeletionStartConflict(
-	entry etcdstore.Versioned[entryrecord.Record], projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	entry etcdstore.Versioned[entryrecord.Record], projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	ownerRevision int64, operationID string,
 	fence environmentMutationFenceEvidence,
 ) idempotencyPlanClassifier {

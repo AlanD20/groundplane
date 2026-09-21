@@ -9,6 +9,7 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -410,10 +411,10 @@ func (service *CreationService) createBackingServiceFromStage(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	volumeSlugs := map[string]string(nil)
-	volumeMounts := []etcd.EnvironmentServiceVolumeMount(nil)
+	volumeMounts := []projectionrecord.EnvironmentServiceVolumeMount(nil)
 	if volume != nil {
 		volumeSlugs = map[string]string{volume.Key: volume.Slug}
-		volumeMounts = []etcd.EnvironmentServiceVolumeMount{
+		volumeMounts = []projectionrecord.EnvironmentServiceVolumeMount{
 			{ServiceID: serviceID, VolumeID: volumeID, Target: spec.MountPath},
 		}
 	}

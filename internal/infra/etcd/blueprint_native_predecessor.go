@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"sort"
@@ -349,7 +350,7 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 		conditions = append(
 			conditions,
 			etcdstore.Condition{Key: releaseProjectionKey(captured.ServiceID), ModRevision: captured.ProjectionRevision},
-			etcdstore.Condition{Key: environmentComposeProjectionKey(evidence.EnvironmentID), ModRevision: applied.Revision},
+			etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(evidence.EnvironmentID), ModRevision: applied.Revision},
 		)
 		if captured.Serving != nil {
 			conditions = append(conditions, etcdstore.Condition{

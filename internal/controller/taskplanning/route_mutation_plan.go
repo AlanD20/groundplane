@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
@@ -37,7 +38,7 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 	if intent.CurrentProjection == nil {
 		return prepareNativeRouteMutation(task, intent)
 	}
-	candidate, err := etcd.ApplyEnvironmentRoute(*intent.CurrentProjection, intent.Route)
+	candidate, err := projectionrecord.ApplyEnvironmentRoute(*intent.CurrentProjection, intent.Route)
 	if err != nil {
 		return etcd.RouteMutationTaskPreparation{}, err
 	}

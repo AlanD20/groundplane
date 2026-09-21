@@ -3,6 +3,7 @@ package etcd
 import (
 	"cmp"
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
@@ -77,7 +78,7 @@ func prepareRuntimeConfigurationTask(
 	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runtimeConfigurationHeadKey(environmentID),
-			environmentComposeProjectionKey(environmentID),
+			projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
 		},
 		Revision: revision,
 	})

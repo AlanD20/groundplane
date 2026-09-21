@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
@@ -17,7 +18,7 @@ import (
 )
 
 type retainedRuntime struct {
-	applied   etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+	applied   etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	services  map[string]etcdstore.Versioned[servicerecord.ServiceRecord]
 	snapshots map[string]etcd.BlueprintRetainedRuntimeSource
 	artifacts []*agentpb.ComposeArtifact

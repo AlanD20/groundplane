@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"reflect"
@@ -58,7 +59,7 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	publication.conditions = append(publication.conditions, etcdstore.Condition{
 		Key: componentTaskIntentKey(task.ID),
 	})
-	appliedProjectionCondition := etcdstore.Condition{Key: environmentComposeProjectionKey(environment.Record.ID)}
+	appliedProjectionCondition := etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID)}
 	if preparation.appliedProjectionPresent {
 		appliedProjectionCondition.ModRevision = preparation.appliedProjectionRevision
 	}

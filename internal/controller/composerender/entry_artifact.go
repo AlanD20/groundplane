@@ -6,7 +6,8 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -30,14 +31,14 @@ type EnvironmentEntryArtifactMutation struct {
 }
 
 func ProjectEnvironmentEntryMutation(
-	current etcd.EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	mutation EnvironmentEntryArtifactMutation,
-) (etcd.EnvironmentComposeProjection, []EnvironmentEntryMaterialization, error) {
+) (projectionrecord.EnvironmentComposeProjection, []EnvironmentEntryMaterialization, error) {
 	if ids.Validate(ids.KindEnvironment, current.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, mutation.RevisionID) != nil ||
 		ids.Validate(ids.KindConfig, mutation.ArtifactID) != nil ||
 		ids.Validate(ids.KindPlan, mutation.PlanID) != nil || mutation.RenderGeneration == 0 {
-		return etcd.EnvironmentComposeProjection{}, nil, errs.New(
+		return projectionrecord.EnvironmentComposeProjection{}, nil, errs.New(
 			errs.KindInternal, "Environment Entry mutation projection input is invalid",
 		)
 	}
@@ -45,32 +46,32 @@ func ProjectEnvironmentEntryMutation(
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(current.ComposeArtifact, artifact); err != nil ||
 		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
 		artifact.GetOwnerId() != current.EnvironmentID {
-		return etcd.EnvironmentComposeProjection{}, nil, errs.New(
+		return projectionrecord.EnvironmentComposeProjection{}, nil, errs.New(
 			errs.KindInternal, "Environment Entry baseline artifact is corrupt",
 		)
 	}
 	materializations, err := projectEnvironmentEntryMaterializations(current, mutation.Entries)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, nil, err
+		return projectionrecord.EnvironmentComposeProjection{}, nil, err
 	}
 	mutated, err := MutateEnvironmentEntryArtifact(artifact, current, mutation)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, nil, err
+		return projectionrecord.EnvironmentComposeProjection{}, nil, err
 	}
 	artifactValue, err := (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, nil, errs.Wrap(errs.KindInternal, err)
+		return projectionrecord.EnvironmentComposeProjection{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
 	candidate := current
 	candidate.RevisionID = mutation.RevisionID
 	candidate.RenderGeneration = mutation.RenderGeneration
 	candidate.ComposeArtifact = artifactValue
 	candidate.NormalizedCompose = append([]byte(nil), current.NormalizedCompose...)
-	candidate.DesiredZones = append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...)
+	candidate.DesiredZones = append([]projectionrecord.EnvironmentZoneProjection(nil), current.DesiredZones...)
 	candidate.DesiredServices = append([]servicerecord.EnvironmentServiceProjection(nil), current.DesiredServices...)
-	candidate.DesiredRoutes = append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...)
-	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
-	candidate.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)
+	candidate.DesiredRoutes = append([]projectionrecord.EnvironmentRouteProjection(nil), current.DesiredRoutes...)
+	candidate.Volumes = append([]projectionrecord.EnvironmentVolumeIdentity(nil), current.Volumes...)
+	candidate.VolumeMounts = append([]projectionrecord.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)
 	candidate.Components = append([]componentrecord.Record(nil), current.Components...)
 	candidate.Entries = append([]entryrecord.Record(nil), mutation.Entries...)
 	sort.Slice(candidate.Entries, func(left, right int) bool {
@@ -81,7 +82,7 @@ func ProjectEnvironmentEntryMutation(
 }
 
 func projectEnvironmentEntryMaterializations(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	entries []entryrecord.Record,
 ) ([]EnvironmentEntryMaterialization, error) {
 	identities, err := ComposeIdentitySnapshotFromProjection(projection)
@@ -104,7 +105,7 @@ func projectEnvironmentEntryMaterializations(
 	return result.Materializations, nil
 }
 
-func artifactVolumeDirectory(projection etcd.EnvironmentComposeProjection) string {
+func artifactVolumeDirectory(projection projectionrecord.EnvironmentComposeProjection) string {
 	artifact := &agentpb.ComposeArtifact{}
 	if proto.Unmarshal(projection.ComposeArtifact, artifact) != nil {
 		return ""
@@ -114,7 +115,7 @@ func artifactVolumeDirectory(projection etcd.EnvironmentComposeProjection) strin
 
 func MutateEnvironmentEntryArtifact(
 	current *agentpb.ComposeArtifact,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	mutation EnvironmentEntryArtifactMutation,
 ) (*agentpb.ComposeArtifact, error) {
 	owned := proto.Clone(current).(*agentpb.ComposeArtifact)

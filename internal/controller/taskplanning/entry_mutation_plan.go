@@ -8,6 +8,7 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"slices"
@@ -29,7 +30,7 @@ const EntryMutationBaselineRevisionParam = "entry_baseline_revision_id"
 // reconstruction. Only Entry create/edit/bulk-upsert use this path; removal has
 // its own terminal-publication and no-restart contract.
 func (runtime EntryMutationRuntime) PrepareTask(
-	volumeRoot string, task etcd.TaskRecord, candidate etcd.EnvironmentComposeProjection, applyStepID string,
+	volumeRoot string, task etcd.TaskRecord, candidate projectionrecord.EnvironmentComposeProjection, applyStepID string,
 ) (etcd.TaskRecord, error) {
 	baseline := runtime.Projection
 	if runtime.EpochRevision <= 0 {
@@ -158,7 +159,7 @@ func (resolver *TaskPlanResolver) resolveEntryMutationPlan(
 }
 
 func buildEntryMutationPlan(
-	volumeRoot string, task etcd.TaskRecord, baseline, candidate etcd.EnvironmentComposeProjection,
+	volumeRoot string, task etcd.TaskRecord, baseline, candidate projectionrecord.EnvironmentComposeProjection,
 ) (*agentpb.ExecutionPlan, error) {
 	if task.Type != etcd.TaskUpdate || task.Executor != etcd.TaskExecutorAgent || task.RenderGeneration <= 0 ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 6 ||
@@ -238,7 +239,7 @@ func buildEntryMutationPlan(
 		}})
 }
 
-func entryMutationArtifact(projection etcd.EnvironmentComposeProjection) (*agentpb.ComposeArtifact, error) {
+func entryMutationArtifact(projection projectionrecord.EnvironmentComposeProjection) (*agentpb.ComposeArtifact, error) {
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil ||
 		artifact.GetOwnerKind() != agentpb.ComposeOwnerKind_COMPOSE_OWNER_KIND_ENVIRONMENT ||
@@ -249,7 +250,7 @@ func entryMutationArtifact(projection etcd.EnvironmentComposeProjection) (*agent
 }
 
 func entryMutationConsumerIDs(
-	baseline, candidate etcd.EnvironmentComposeProjection, artifact *agentpb.ComposeArtifact,
+	baseline, candidate projectionrecord.EnvironmentComposeProjection, artifact *agentpb.ComposeArtifact,
 	runningServiceIDs []string,
 ) ([]string, error) {
 	running := make(map[string]bool, len(runningServiceIDs))

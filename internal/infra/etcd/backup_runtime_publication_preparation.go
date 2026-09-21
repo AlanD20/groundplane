@@ -5,6 +5,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -238,7 +239,7 @@ func backupRunExternalConditions(
 			allowed[environmentBlueprintHeadKey(source.Snapshot.Postgres.BackingEnvironmentID)] = struct{}{}
 		}
 		if source.Snapshot.Volume != nil {
-			allowed[environmentComposeProjectionKey(source.Snapshot.Volume.EnvironmentID)] = struct{}{}
+			allowed[projectionrecord.EnvironmentComposeProjectionStorageKey(source.Snapshot.Volume.EnvironmentID)] = struct{}{}
 			for _, service := range source.Snapshot.Volume.Services {
 				allowed[servicerecord.ServiceRuntimeKey(service.ServiceID)] = struct{}{}
 			}

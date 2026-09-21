@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -18,7 +19,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 			string(deletionrecord.DeletionTargetEntry),
 			intent.EntryID,
 		), componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		environmentComposeProjectionKey(
+		projectionrecord.EnvironmentComposeProjectionStorageKey(
 			intent.EnvironmentID,
 		), environmentBlueprintDescriptorKeyByID(desired.DescriptorID),
 		environmentBlueprintRootKey(
@@ -57,9 +58,9 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal retry applied state changed")
 	}
 	if read.Values[3] != nil {
-		applied, err := decodeEnvironmentComposeProjection(read.Values[3].Value)
+		applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[3].Value)
 		if err != nil || applied.EnvironmentID != intent.EnvironmentID {
-			return routeTaskChange{}, corruptEnvironmentComposeProjection()
+			return routeTaskChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 		}
 		if intent.CurrentProjection != nil && !sameEntryRemovalProjection(applied, *intent.CurrentProjection) {
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal retry applied state changed")

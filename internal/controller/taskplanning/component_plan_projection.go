@@ -6,7 +6,8 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -19,7 +20,7 @@ func projectPinnedEnvironmentComponents(
 	project *composetypes.Project,
 	serviceExtensions map[string]core.ServiceExtensionSpec,
 	identity pinnedEnvironmentIdentity,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	_ []core.RouteSpec,
 	componentSpecs map[string]core.ComponentSpec,
 	entries []core.EnvEntry,

@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,7 +19,7 @@ type preparedBlueprintBackupPolicyPublication struct {
 
 func prepareBlueprintBackupPolicyPublication(
 	task TaskRecord,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	attaches BlueprintAttachTaskPreparation,
 	prepared BlueprintBackupPolicyPreparation,
 ) (preparedBlueprintBackupPolicyPublication, error) {
@@ -241,7 +242,7 @@ func prepareBlueprintBackupPolicyPublication(
 	return publication, nil
 }
 
-func equalEnvironmentBlueprintBackupPolicy(left, right *EnvironmentBlueprintBackupPolicy) bool {
+func equalEnvironmentBlueprintBackupPolicy(left, right *projectionrecord.EnvironmentBlueprintBackupPolicy) bool {
 	if left == nil || right == nil {
 		return left == right
 	}

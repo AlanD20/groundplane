@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/networkname"
@@ -19,7 +20,7 @@ import (
 // release projection; neither is rediscovered from current mutable resources.
 func loadPinnedEnvironmentProject(
 	ctx context.Context,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	volumeDir string,
 	releases map[string]composerender.ComposeReleaseIdentity,
 ) (*composetypes.Project, error) {
@@ -47,7 +48,7 @@ func loadPinnedEnvironmentProject(
 	return entries.Project, nil
 }
 
-func sealedReleaseAttachJoins(projection etcd.EnvironmentComposeProjection) ([]etcd.AttachTaskNetworkJoin, error) {
+func sealedReleaseAttachJoins(projection projectionrecord.EnvironmentComposeProjection) ([]etcd.AttachTaskNetworkJoin, error) {
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil ||
 		artifact.OwnerId != projection.EnvironmentID ||

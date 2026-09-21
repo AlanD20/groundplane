@@ -2,27 +2,28 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func validateEnvironmentComposeProjectionAdvance(
-	previous EnvironmentComposeProjection,
+	previous projectionrecord.EnvironmentComposeProjection,
 	hasPrevious bool,
-	next EnvironmentComposeProjection,
+	next projectionrecord.EnvironmentComposeProjection,
 ) error {
-	if err := validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
+	if err := projectionrecord.ValidateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
 		previous, hasPrevious, next, "",
 	); err != nil {
 		return err
 	}
-	return preserveEnvironmentNonEntryDesiredResources(previous, hasPrevious, next)
+	return projectionrecord.PreserveEnvironmentNonEntryDesiredResources(previous, hasPrevious, next)
 }
 
 func validateEnvironmentComposeProjectionPublicationAdvance(
-	previous EnvironmentComposeProjection,
+	previous projectionrecord.EnvironmentComposeProjection,
 	hasPrevious bool,
-	next EnvironmentComposeProjection,
+	next projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 ) error {
 	removedVolumeID := ""
@@ -32,10 +33,10 @@ func validateEnvironmentComposeProjectionPublicationAdvance(
 			return errs.New(errs.KindValidationFailed, "Volume removal Task target is invalid")
 		}
 	}
-	if err := validateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
+	if err := projectionrecord.ValidateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
 		previous, hasPrevious, next, removedVolumeID,
 	); err != nil {
 		return err
 	}
-	return preserveEnvironmentNonEntryDesiredResources(previous, hasPrevious, next)
+	return projectionrecord.PreserveEnvironmentNonEntryDesiredResources(previous, hasPrevious, next)
 }

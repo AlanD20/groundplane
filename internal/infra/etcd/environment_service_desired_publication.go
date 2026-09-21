@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -20,7 +21,7 @@ type EnvironmentServiceDesiredPublication struct {
 	ExpectedHeadRevision int64
 	Claim                EnvironmentBlueprintStageClaim
 	Revision             EnvironmentDesiredRevisionIdentity
-	Projection           EnvironmentComposeProjection
+	Projection           projectionrecord.EnvironmentComposeProjection
 	Change               EnvironmentBlueprintServiceChange
 	References           ServiceMutationReferences
 	Marker               idempotencyrecord.IdempotencyMarker
@@ -317,7 +318,7 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 	ctx context.Context,
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	marker idempotencyrecord.IdempotencyMarker,
 	expectedHeadRevision int64,
 ) (environmentBlueprintPublicationEvidence, error) {

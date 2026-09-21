@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 )
@@ -13,7 +14,7 @@ import (
 // Both preflight and durable preparation select from the same authored groups;
 // callers never construct a parallel set of group member identities.
 func selectCandidates(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	changes []etcd.EnvironmentBlueprintServiceChange,
 	groups map[string]core.ReleaseGroupSpec,
 	memberships NormalizedServiceMemberships,

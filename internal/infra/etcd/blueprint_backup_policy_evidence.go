@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -107,17 +108,17 @@ func (repository *BackupPolicyRepository) prepareRetainedBlueprintBackupPolicy(
 	if err != nil {
 		return err
 	}
-	state.desired = &EnvironmentBlueprintBackupPolicy{
+	state.desired = &projectionrecord.EnvironmentBlueprintBackupPolicy{
 		Enabled: current.Enabled, Frequency: current.Frequency, Keep: current.Keep,
 		Encryption: current.Encryption, ConnectorID: current.ConnectorID,
-		Sources: make([]EnvironmentBlueprintBackupPolicySource, len(state.sources)),
+		Sources: make([]projectionrecord.EnvironmentBlueprintBackupPolicySource, len(state.sources)),
 	}
 	for index, source := range state.sources {
-		state.desired.Sources[index] = EnvironmentBlueprintBackupPolicySource{
+		state.desired.Sources[index] = projectionrecord.EnvironmentBlueprintBackupPolicySource{
 			ID: source.record.ID, Kind: source.record.Kind, TargetID: source.record.TargetID,
 		}
 	}
-	if err := validateEnvironmentBlueprintBackupPolicy(state.environmentID, state.desired); err != nil {
+	if err := projectionrecord.ValidateEnvironmentBlueprintBackupPolicy(state.environmentID, state.desired); err != nil {
 		return err
 	}
 	if current.ConnectorID != "" {

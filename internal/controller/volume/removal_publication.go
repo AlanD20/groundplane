@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -13,7 +14,7 @@ import (
 )
 
 func (service *MutationService) prepareRemoval(
-	ctx context.Context, source etcdstore.Versioned[etcd.EnvironmentComposeProjection], request volumeMutationRequest,
+	ctx context.Context, source etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], request volumeMutationRequest,
 	task *etcd.TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (removal.InitialPublication, error) {
 	impact, err := hex.DecodeString(request.impactToken)

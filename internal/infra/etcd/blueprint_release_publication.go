@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -157,7 +158,7 @@ func (publication BlueprintReleasePublication) validate(environmentID string, ta
 		if publication.environmentID != environmentID || publication.operationID != task.OperationID ||
 			len(
 				publication.retained.conditions,
-			) < 2 || publication.retained.conditions[0] != (etcdstore.Condition{Key: environmentComposeProjectionKey(environmentID), ModRevision: publication.retained.sourceRevision}) ||
+			) < 2 || publication.retained.conditions[0] != (etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), ModRevision: publication.retained.sourceRevision}) ||
 			publication.retained.sourceRevision < 0 || publication.retained.sourceReadRevision <= 0 || publication.retained.sourceReadRevision < publication.retained.sourceRevision {
 			return errs.New(errs.KindValidationFailed, "Blueprint retained runtime publication does not match its Task")
 		}

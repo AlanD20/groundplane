@@ -5,6 +5,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -35,7 +36,7 @@ type BackingServiceCreation struct {
 	EntryValues  []EntryValueGeneration
 	Claim        EnvironmentBlueprintStageClaim
 	Revision     EnvironmentDesiredRevisionIdentity
-	Projection   EnvironmentComposeProjection
+	Projection   projectionrecord.EnvironmentComposeProjection
 	Task         TaskRecord
 	HookInputs   *BackingHookEncryptedInputs
 	Marker       idempotencyrecord.IdempotencyMarker

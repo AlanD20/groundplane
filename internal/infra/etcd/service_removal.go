@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -18,14 +19,14 @@ import (
 func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	ctx context.Context,
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) error {
 	if err := validateServiceVersion(current); err != nil {
 		return err
 	}
 	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
 		projection.Record.EnvironmentID != current.Record.EnvironmentID ||
-		validateEnvironmentComposeProjection(projection.Record) != nil {
+		projectionrecord.ValidateEnvironmentComposeProjection(projection.Record) != nil {
 		return errs.New(errs.KindValidationFailed, "Service removal projection is invalid")
 	}
 	if current.Record.BackingNetworkID != "" || current.Record.Desired.Adapter != "" {
@@ -99,7 +100,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,
 	intent ServiceRemovalIntent,
 	task TaskRecord,
@@ -165,7 +166,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentBlueprintHeadKey(environment.Record.ID),
-		environmentComposeProjectionKey(environment.Record.ID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 		serviceLifecycleActiveKey(current.Record.Desired.ID),
 		componentTaskActiveEnvironmentKey(environment.Record.ID),
 	}, Revision: mutationContext.readRevision})
@@ -225,7 +226,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		servicerecord.ServiceRuntimeCondition(current),
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID)},
 		{Key: serviceRemovalIntentKey(task.ID)},
-		{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
+		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 		{

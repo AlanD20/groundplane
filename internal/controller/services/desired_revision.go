@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -146,7 +147,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 
 func (service *serviceMutationService) claimServiceDesiredRevision(
 	ctx context.Context,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	candidateRevisionID string,
 	expectedHeadRevision int64,
 	locator idempotencyrecord.IdempotencyLocator,
@@ -194,17 +195,17 @@ func buildServiceDesiredProjection(
 	tenantID string,
 	projectID string,
 	environment hierarchyrecord.EnvironmentRecord,
-	current etcd.EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	hasCurrent bool,
 	record servicerecord.ServiceRecord,
 	references etcd.ServiceMutationReferences,
 	create bool,
 	revisionID string,
 	generation uint64,
-) (etcd.EnvironmentComposeProjection, error) {
+) (projectionrecord.EnvironmentComposeProjection, error) {
 	if hasCurrent {
 		if err := rejectComponentGeneratedServiceTarget(current, record.Desired.ID); err != nil {
-			return etcd.EnvironmentComposeProjection{}, err
+			return projectionrecord.EnvironmentComposeProjection{}, err
 		}
 	}
 	candidate := controllerrevision.CloneProjection(current)
@@ -227,7 +228,7 @@ func buildServiceDesiredProjection(
 			}
 		}
 		if !replaced {
-			return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Service desired record is absent")
+			return projectionrecord.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Service desired record is absent")
 		}
 	}
 	sort.Slice(candidate.DesiredServices, func(left, right int) bool {
@@ -242,7 +243,7 @@ func buildServiceDesiredProjection(
 	}
 	if hasCurrent {
 		if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
-			return etcd.EnvironmentComposeProjection{}, errs.New(
+			return projectionrecord.EnvironmentComposeProjection{}, errs.New(
 				errs.KindInternal,
 				"Service baseline artifact is corrupt",
 			)
@@ -260,13 +261,13 @@ func buildServiceDesiredProjection(
 		RenderGeneration: generation,
 	})
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	normalizedArtifact := proto.Clone(artifact).(*agentpb.ComposeArtifact)
 	if hasCurrent {
 		normalizedArtifact, err = composerender.NormalizedEnvironmentArtifact(current)
 		if err != nil {
-			return etcd.EnvironmentComposeProjection{}, err
+			return projectionrecord.EnvironmentComposeProjection{}, err
 		}
 	}
 	normalizedArtifact, err = composerender.MutateEnvironmentServiceArtifact(
@@ -280,14 +281,14 @@ func buildServiceDesiredProjection(
 		},
 	)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
 	candidate.ServiceExtensions = controllerrevision.CloneServiceExtensions(current.ServiceExtensions)
 	setDirectServiceExtension(candidate.ServiceExtensions, record.Desired)
 	candidate.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
+		return projectionrecord.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return candidate, nil
 }
@@ -306,13 +307,13 @@ func serviceArtifactZones(references etcd.ServiceMutationReferences) []composere
 func buildServiceRemovalProjection(
 	tenantID string,
 	projectID string,
-	current etcd.EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	record servicerecord.ServiceRecord,
 	revisionID string,
 	generation uint64,
-) (etcd.EnvironmentComposeProjection, error) {
+) (projectionrecord.EnvironmentComposeProjection, error) {
 	if err := rejectComponentGeneratedServiceTarget(current, record.Desired.ID); err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	candidate := controllerrevision.CloneProjection(current)
 	candidate.RevisionID = revisionID
@@ -324,7 +325,7 @@ func buildServiceRemovalProjection(
 		}
 	}
 	if len(candidate.DesiredServices) != len(current.DesiredServices)-1 {
-		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Service desired record is absent")
+		return projectionrecord.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Service desired record is absent")
 	}
 	candidate.VolumeMounts = candidate.VolumeMounts[:0]
 	for _, mount := range current.VolumeMounts {
@@ -335,7 +336,7 @@ func buildServiceRemovalProjection(
 	candidate.ServiceDependencyPlans = current.ServiceDependencyPlans.Clone().WithoutService(record.Desired.Name)
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
-		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Service baseline artifact is corrupt")
+		return projectionrecord.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Service baseline artifact is corrupt")
 	}
 	mutated, err := composerender.MutateEnvironmentServiceArtifact(artifact, composerender.ServiceArtifactMutation{
 		Action: composerender.ServiceArtifactRemove, Desired: record.Desired,
@@ -344,11 +345,11 @@ func buildServiceRemovalProjection(
 		RenderGeneration: generation,
 	})
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	normalizedArtifact, err := composerender.NormalizedEnvironmentArtifact(current)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	normalizedArtifact, err = composerender.MutateEnvironmentServiceArtifact(
 		normalizedArtifact,
@@ -360,7 +361,7 @@ func buildServiceRemovalProjection(
 		},
 	)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, err
+		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
 	candidate.ServiceExtensions = controllerrevision.CloneServiceExtensions(current.ServiceExtensions)
@@ -370,12 +371,12 @@ func buildServiceRemovalProjection(
 	}
 	candidate.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)
 	if err != nil {
-		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
+		return projectionrecord.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
 	return candidate, nil
 }
 
-func rejectComponentGeneratedServiceTarget(projection etcd.EnvironmentComposeProjection, serviceID string) error {
+func rejectComponentGeneratedServiceTarget(projection projectionrecord.EnvironmentComposeProjection, serviceID string) error {
 	for _, component := range projection.Components {
 		for _, generatedServiceID := range component.Runtime.GeneratedServices {
 			if generatedServiceID == serviceID {

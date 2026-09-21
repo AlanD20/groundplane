@@ -2,7 +2,8 @@ package scriptdefinition
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -12,7 +13,7 @@ import (
 // Authoring projects Blueprint-owned Scripts using their immutable authored keys.
 func Authoring(
 	records []etcdstore.Versioned[scriptrecord.Record],
-	volumes []etcd.EnvironmentVolumeIdentity,
+	volumes []projectionrecord.EnvironmentVolumeIdentity,
 	entries []entryrecord.Record,
 ) (map[string]core.ScriptSpec, error) {
 	result := make(map[string]core.ScriptSpec)

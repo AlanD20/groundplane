@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -23,7 +24,7 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 	start := ""
 	for {
 		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: environmentComposeProjectionPrefix, StartExclusive: start,
+			Prefix: projectionrecord.EnvironmentComposeProjectionPrefix, StartExclusive: start,
 			Limit: etcdstore.MaximumPageLimit, Revision: revision,
 		})
 		if err != nil {
@@ -33,21 +34,21 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 			return nil, errs.New(errs.KindInternal, "Route scan did not preserve its fixed revision")
 		}
 		for _, value := range page.Values {
-			if !strings.HasPrefix(value.Key, environmentComposeProjectionPrefix) {
+			if !strings.HasPrefix(value.Key, projectionrecord.EnvironmentComposeProjectionPrefix) {
 				clearRangeKeyValues(page.Values)
 				return nil, errs.New(errs.KindInternal, "Applied Environment projection scan contains an invalid key")
 			}
-			environmentID := strings.TrimPrefix(value.Key, environmentComposeProjectionPrefix)
+			environmentID := strings.TrimPrefix(value.Key, projectionrecord.EnvironmentComposeProjectionPrefix)
 			if strings.Contains(environmentID, "/") || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 				clearRangeKeyValues(page.Values)
 				return nil, recordcodec.CorruptRecord()
 			}
-			projection, decodeErr := decodeEnvironmentComposeProjection(value.Value)
+			projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(value.Value)
 			if decodeErr != nil || projection.EnvironmentID != environmentID {
 				clearRangeKeyValues(page.Values)
-				return nil, corruptEnvironmentComposeProjection()
+				return nil, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
-			versioned := etcdstore.Versioned[EnvironmentComposeProjection]{
+			versioned := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 				Record: projection, Revision: value.ModRevision, ReadRevision: page.ReadRevision,
 			}
 			for _, desired := range projection.DesiredRoutes {

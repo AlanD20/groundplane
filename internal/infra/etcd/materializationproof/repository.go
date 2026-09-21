@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 
@@ -117,7 +118,7 @@ func publicationKeys(proof coreproof.Proof) []string {
 		proofKey(environmentID, proof.RenderGeneration()),
 		environmentDeletionFenceKey(environmentID),
 		proofGenerationDeletionFenceKey(environmentID, proof.RenderGeneration()),
-		base.EnvironmentComposeProjectionStorageKey(environmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
 		base.TaskStorageKey(proof.ProducingTaskID()),
 	}
 }
@@ -162,7 +163,7 @@ func publicationConditions(
 		values[3].ModRevision <= 0 || values[4].ModRevision <= 0 {
 		return nil, authorityConflict()
 	}
-	projection, err := base.DecodeEnvironmentComposeProjectionStorage(values[3].Value)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(values[3].Value)
 	if err != nil {
 		return nil, corruptProof()
 	}
@@ -184,7 +185,7 @@ func publicationConditions(
 
 func validateSemanticAuthority(
 	proof coreproof.Proof,
-	projection base.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	task base.TaskRecord,
 ) error {
 	record := proof.Record()

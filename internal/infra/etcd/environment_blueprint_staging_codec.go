@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"math"
 	"time"
@@ -266,15 +267,15 @@ func chunkCount32(length int) uint32 {
 	return uint32((length + EnvironmentBlueprintChunkBytes - 1) / EnvironmentBlueprintChunkBytes)
 }
 
-func EnvironmentBlueprintDependencyDigest(projection EnvironmentComposeProjection) ([sha256.Size]byte, error) {
+func EnvironmentBlueprintDependencyDigest(projection projectionrecord.EnvironmentComposeProjection) ([sha256.Size]byte, error) {
 	digest, _, err := EnvironmentBlueprintProjectionEvidence(projection)
 	return digest, err
 }
 
 func EnvironmentBlueprintProjectionEvidence(
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) ([sha256.Size]byte, uint64, error) {
-	value, err := encodeEnvironmentComposeProjection(projection)
+	value, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
 	if err != nil {
 		return [sha256.Size]byte{}, 0, err
 	}
@@ -575,7 +576,7 @@ func decodeEnvironmentBlueprintSeal(value []byte) (EnvironmentBlueprintSeal, err
 func validateEnvironmentBlueprintSeal(value EnvironmentBlueprintSeal) error {
 	if value.BaselineHeadRevision < 0 || value.RenderGeneration == 0 || value.ProjectionSchema == 0 ||
 		value.AuditBytes == 0 || value.AuditBytes > environmentBlueprintMaximumAuditBytes ||
-		value.ProjectionBytes == 0 || value.ProjectionBytes > EnvironmentBlueprintProjectionMaxBytes ||
+		value.ProjectionBytes == 0 || value.ProjectionBytes > projectionrecord.EnvironmentBlueprintProjectionMaxBytes ||
 		value.AuditChunks != chunkCount32(int(value.AuditBytes)) ||
 		value.ProjectionChunks != chunkCount32(int(value.ProjectionBytes)) ||
 		value.AuditChunks > environmentBlueprintMaximumAuditChunks ||

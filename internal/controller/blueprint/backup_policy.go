@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -41,18 +42,18 @@ type environmentBlueprintBackupPolicySnapshot struct {
 	found          bool
 }
 
-func (snapshot environmentBlueprintBackupPolicySnapshot) projection() *etcd.EnvironmentBlueprintBackupPolicy {
+func (snapshot environmentBlueprintBackupPolicySnapshot) projection() *projectionrecord.EnvironmentBlueprintBackupPolicy {
 	if !snapshot.found {
 		return nil
 	}
-	result := &etcd.EnvironmentBlueprintBackupPolicy{
+	result := &projectionrecord.EnvironmentBlueprintBackupPolicy{
 		Enabled: snapshot.policy.Enabled, Frequency: snapshot.policy.Frequency,
 		Keep: snapshot.policy.Keep, Encryption: snapshot.policy.Encryption,
 		ConnectorID: snapshot.policy.ConnectorID,
-		Sources:     make([]etcd.EnvironmentBlueprintBackupPolicySource, len(snapshot.sources)),
+		Sources:     make([]projectionrecord.EnvironmentBlueprintBackupPolicySource, len(snapshot.sources)),
 	}
 	for index, source := range snapshot.sources {
-		result.Sources[index] = etcd.EnvironmentBlueprintBackupPolicySource{
+		result.Sources[index] = projectionrecord.EnvironmentBlueprintBackupPolicySource{
 			ID: source.ID, Kind: source.Kind, TargetID: source.TargetID,
 		}
 	}
@@ -94,11 +95,11 @@ func (service *Service) prepareEnvironmentBlueprintBackup(
 	taskID string,
 	readRevision int64,
 	authored *core.BackupSpec,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	attaches preparedBlueprintAttaches,
 	allocateNamed func(ids.Kind, string) string,
 	createdAt time.Time,
-) (*etcd.EnvironmentBlueprintBackupPolicy, etcd.BlueprintBackupPolicyPreparation, error) {
+) (*projectionrecord.EnvironmentBlueprintBackupPolicy, etcd.BlueprintBackupPolicyPreparation, error) {
 	if service.backups == nil {
 		return nil, etcd.BlueprintBackupPolicyPreparation{}, errs.New(
 			errs.KindInternal, "Environment Blueprint Backup repository is not configured",
@@ -174,7 +175,7 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 	environmentID string,
 	readRevision int64,
 	authored *core.BackupSpec,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 ) error {
 	if authored == nil {
@@ -204,7 +205,7 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 func resolveEnvironmentBlueprintBackupTarget(
 	environmentID string,
 	source core.BackupSourceSpec,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 ) (string, error) {
 	switch source.Kind {

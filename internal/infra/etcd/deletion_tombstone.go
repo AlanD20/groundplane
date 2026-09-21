@@ -4,6 +4,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -120,7 +121,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			hierarchyrecord.EnvironmentNameKey(environment.Record.ProjectID, environment.Record.Name),
 			hierarchyrecord.EnvironmentOwnerKey(environment.Record.ProjectID, environment.Record.ID),
 			environmentBlueprintHeadKey(environment.Record.ID),
-			environmentComposeProjectionKey(environment.Record.ID),
+			projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID),
@@ -268,7 +269,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			ModRevision: expectedBlueprintRevision,
 		},
 		{
-			Key:         environmentComposeProjectionKey(environment.Record.ID),
+			Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 			ModRevision: expectedBlueprintRevision,
 		},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},

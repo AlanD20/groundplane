@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -29,7 +30,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	task etcd.TaskRecord,
 ) (etcd.TaskRecord, etcd.ServiceLifecycleRenderInput, *etcd.BackingHookEncryptedInputs, error) {
 	releaseAuthority, err := controllerlifecycle.CaptureRelease(

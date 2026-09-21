@@ -2,6 +2,7 @@ package volume
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -18,23 +19,23 @@ type ReadRepository interface {
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetEnvironmentComposeProjectionRevision(
 		context.Context,
 		string,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	FindEnvironmentVolume(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], projectionrecord.EnvironmentVolumeIdentity, error)
 	ResolveEnvironmentVolumeAtRevision(
 		context.Context,
 		string,
 		string,
 		string,
 		int64,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], projectionrecord.EnvironmentVolumeIdentity, error)
 	ResolveVolumeRemovalImpactAtRevision(
 		context.Context,
 		string,
@@ -52,7 +53,7 @@ type MutationRepository interface {
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
-		etcd.EnvironmentComposeProjection,
+		projectionrecord.EnvironmentComposeProjection,
 		etcd.VolumeRemovalBackupPolicyPreparation,
 		removal.InitialPublication,
 		etcd.TaskRecord,
@@ -79,7 +80,7 @@ type MutationRepository interface {
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
-		etcd.EnvironmentComposeProjection,
+		projectionrecord.EnvironmentComposeProjection,
 		[]etcd.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentBlueprintServiceChange,
 		[]etcd.EnvironmentBlueprintRouteChange,
@@ -95,7 +96,7 @@ func desiredState(
 	environmentID string,
 	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
 	hasHead bool,
-	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	hasProjection bool,
 ) (int64, uint64, error) {
 	if hasHead != hasProjection {

@@ -1,4 +1,4 @@
-package etcd
+package environmentprojection
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"

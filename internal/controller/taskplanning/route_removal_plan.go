@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
@@ -307,7 +308,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 
 func (resolver *TaskPlanResolver) routeProviderFile(
 	pin etcd.RouteProviderPin,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]byte, error) {
 	plan, _, _, _, err := resolver.renderPinnedRouteProvider(pin, projection)
 	if err != nil {

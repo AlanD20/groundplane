@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -126,9 +127,9 @@ func currentEnvironmentProjectionAtRevision(
 	store hierarchyStore,
 	environmentID string,
 	revision int64,
-) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	hierarchy := &HierarchyRepository{store: store}
 	return hierarchy.getEnvironmentComposeProjectionAtRevision(ctx, environmentID, revision)
@@ -167,7 +168,7 @@ func findServiceAtRevision(
 				"/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
-				return etcdstore.Versioned[servicerecord.ServiceRecord]{}, corruptEnvironmentComposeProjection()
+				return etcdstore.Versioned[servicerecord.ServiceRecord]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
 				ctx,
@@ -189,7 +190,7 @@ func findServiceAtRevision(
 					continue
 				}
 				if matched != nil {
-					return etcdstore.Versioned[servicerecord.ServiceRecord]{}, corruptEnvironmentComposeProjection()
+					return etcdstore.Versioned[servicerecord.ServiceRecord]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
 				joined, joinErr := servicerecord.ReadJoined(ctx, store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, serviceID,
 					environmentBlueprintHeadKey(environmentID))
@@ -215,7 +216,7 @@ func findServiceAtRevision(
 	return *matched, nil
 }
 
-func ordinaryEnvironmentServices(projection EnvironmentComposeProjection) []servicerecord.EnvironmentServiceProjection {
+func ordinaryEnvironmentServices(projection projectionrecord.EnvironmentComposeProjection) []servicerecord.EnvironmentServiceProjection {
 	result := make([]servicerecord.EnvironmentServiceProjection, 0, len(projection.DesiredServices))
 	for _, service := range projection.DesiredServices {
 		if componentGeneratedService(projection.Components, service.Desired.ID) {

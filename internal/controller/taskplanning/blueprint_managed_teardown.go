@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -26,7 +27,7 @@ type BlueprintManagedComponentTeardown struct {
 func (resolver *TaskPlanResolver) BlueprintManagedComponentTeardown(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	candidate *agentpb.ComposeArtifact,
 	prerequisite string,
 	releaseForward bool,
@@ -128,8 +129,8 @@ func (resolver *TaskPlanResolver) BlueprintManagedComponentTeardown(
 }
 
 func decodeManagedComponentSourceArtifact(
-	projection etcd.EnvironmentComposeProjection,
-	source etcd.ManagedComponentRuntimeSource,
+	projection projectionrecord.EnvironmentComposeProjection,
+	source projectionrecord.ManagedComponentRuntimeSource,
 ) (*agentpb.ComposeArtifact, error) {
 	if projection.RevisionID != source.RevisionID {
 		return nil, errs.New(errs.KindStateConflict, "managed Component source revision identity changed")
@@ -149,7 +150,7 @@ func decodeManagedComponentSourceArtifact(
 
 func validateManagedComponentSourceArtifact(
 	artifact *agentpb.ComposeArtifact,
-	source etcd.ManagedComponentRuntimeSource,
+	source projectionrecord.ManagedComponentRuntimeSource,
 ) error {
 	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	wantDigest, digestErr := hex.DecodeString(source.ArtifactSHA256)
@@ -163,7 +164,7 @@ func validateManagedComponentSourceArtifact(
 
 func validateManagedComponentServiceIdentity(
 	artifact *agentpb.ComposeArtifact,
-	source etcd.ManagedComponentRuntimeSource,
+	source projectionrecord.ManagedComponentRuntimeSource,
 ) error {
 	matched := 0
 	for _, service := range artifact.GetServices() {

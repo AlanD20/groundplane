@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"sort"
@@ -83,7 +84,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	publicationID := task.Params[TaskReleasePublicationParam]
 	keys := []string{
 		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
-		environmentComposeProjectionKey(task.Owner.EnvironmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -153,7 +154,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 		if read.Values[2] == nil {
 			return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
 		}
-		projection, decodeErr := decodeEnvironmentComposeProjection(read.Values[2].Value)
+		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[2].Value)
 		if decodeErr != nil || projection.EnvironmentID != task.Owner.EnvironmentID ||
 			len(projection.ComposeArtifact) == 0 {
 			return ReleaseRestorationAuthority{}, "", nil, corruptReleaseRecord()
@@ -200,7 +201,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	keys := []string{
 		releasePublicationKey(publicationID),
 		releaseManifestStagingKey(publicationID),
-		environmentComposeProjectionKey(task.Owner.EnvironmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -228,7 +229,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	}
 	var composeArtifact []byte
 	if observed.Present {
-		projection, decodeErr := decodeEnvironmentComposeProjection(read.Values[2].Value)
+		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[2].Value)
 		if decodeErr != nil || projection.RevisionID != observed.RevisionID ||
 			projection.RenderGeneration != observed.RenderGeneration {
 			return ReleaseRestorationAuthority{}, "", nil, errs.New(

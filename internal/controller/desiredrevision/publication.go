@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -41,7 +42,7 @@ type PublicationRepository interface {
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
-		etcd.EnvironmentComposeProjection,
+		projectionrecord.EnvironmentComposeProjection,
 		[]etcd.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentBlueprintServiceChange,
 		[]etcd.EnvironmentBlueprintRouteChange,
@@ -78,7 +79,7 @@ type Repository interface {
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
-		etcd.EnvironmentComposeProjection,
+		projectionrecord.EnvironmentComposeProjection,
 		[]etcd.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentBlueprintServiceChange,
 		[]etcd.EnvironmentBlueprintRouteChange,
@@ -208,13 +209,13 @@ type stagedPublicationState struct {
 	locator    idempotencyrecord.IdempotencyLocator
 	claim      etcd.EnvironmentBlueprintStageClaim
 	seal       etcd.EnvironmentBlueprintSeal
-	projection etcd.EnvironmentComposeProjection
+	projection projectionrecord.EnvironmentComposeProjection
 }
 
 type StageInput struct {
 	Claim      etcd.EnvironmentBlueprintStageClaim
 	Blueprint  etcd.EnvironmentBlueprintRevision
-	Projection etcd.EnvironmentComposeProjection
+	Projection projectionrecord.EnvironmentComposeProjection
 }
 
 // TaskID returns the sole Task identity bound into this publication.
@@ -239,7 +240,7 @@ func Stage(
 			"Environment desired revision staging is not configured",
 		)
 	}
-	projectionBytes, err := etcd.EncodeEnvironmentComposeProjectionStorage(input.Projection)
+	projectionBytes, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(input.Projection)
 	if err != nil {
 		return StagedPublication{}, err
 	}
@@ -267,7 +268,7 @@ func Stage(
 			"Environment desired revision seal does not match its candidate",
 		)
 	}
-	projection, err := etcd.DecodeEnvironmentComposeProjectionStorage(projectionBytes)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(projectionBytes)
 	if err != nil {
 		return StagedPublication{}, err
 	}
@@ -278,11 +279,11 @@ func Stage(
 
 func (publication StagedPublication) consume(environmentID, taskID string, locator idempotencyrecord.IdempotencyLocator) (
 	etcd.EnvironmentBlueprintStageClaim,
-	etcd.EnvironmentComposeProjection,
+	projectionrecord.EnvironmentComposeProjection,
 	error,
 ) {
 	if publication.state == nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, etcd.EnvironmentComposeProjection{}, errs.New(
+		return etcd.EnvironmentBlueprintStageClaim{}, projectionrecord.EnvironmentComposeProjection{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment desired staged publication is invalid",
 		)
@@ -290,7 +291,7 @@ func (publication StagedPublication) consume(environmentID, taskID string, locat
 	publication.state.mu.Lock()
 	defer publication.state.mu.Unlock()
 	if publication.state.consumed {
-		return etcd.EnvironmentBlueprintStageClaim{}, etcd.EnvironmentComposeProjection{}, errs.New(
+		return etcd.EnvironmentBlueprintStageClaim{}, projectionrecord.EnvironmentComposeProjection{}, errs.New(
 			errs.KindStateConflict,
 			"Environment desired staged publication was already consumed",
 		)
@@ -303,26 +304,26 @@ func (publication StagedPublication) consume(environmentID, taskID string, locat
 		claim.EnvironmentID != publication.state.seal.EnvironmentID ||
 		publication.state.projection.EnvironmentID != publication.state.seal.EnvironmentID ||
 		publication.state.projection.RevisionID != publication.state.seal.RevisionID {
-		return claim, etcd.EnvironmentComposeProjection{}, errs.New(
+		return claim, projectionrecord.EnvironmentComposeProjection{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment desired staged publication identity is invalid",
 		)
 	}
-	encoded, err := etcd.EncodeEnvironmentComposeProjectionStorage(publication.state.projection)
+	encoded, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(publication.state.projection)
 	if err != nil {
-		return claim, etcd.EnvironmentComposeProjection{}, err
+		return claim, projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	defer clear(encoded)
 	if uint64(len(encoded)) != publication.state.seal.ProjectionBytes ||
 		sha256.Sum256(encoded) != publication.state.seal.ProjectionSHA256 {
-		return claim, etcd.EnvironmentComposeProjection{}, errs.New(
+		return claim, projectionrecord.EnvironmentComposeProjection{}, errs.New(
 			errs.KindInternal,
 			"Environment desired staged projection changed after sealing",
 		)
 	}
-	projection, err := etcd.DecodeEnvironmentComposeProjectionStorage(encoded)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(encoded)
 	if err != nil {
-		return claim, etcd.EnvironmentComposeProjection{}, err
+		return claim, projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	return claim, projection, nil
 }
@@ -377,7 +378,7 @@ func Abandon(
 	return abandonKnownFailure(ctx, repository, claim, cause)
 }
 
-func PreflightProjection(projection etcd.EnvironmentComposeProjection) (ProjectionEvidence, error) {
+func PreflightProjection(projection projectionrecord.EnvironmentComposeProjection) (ProjectionEvidence, error) {
 	digest, normalizedBytes, err := etcd.EnvironmentBlueprintProjectionEvidence(projection)
 	if err != nil {
 		return ProjectionEvidence{}, err
@@ -388,7 +389,7 @@ func PreflightProjection(projection etcd.EnvironmentComposeProjection) (Projecti
 func PreflightAndClaim(
 	ctx context.Context,
 	repository ClaimRepository,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	input ClaimInput,
 ) (etcd.EnvironmentBlueprintStageClaim, ProjectionEvidence, error) {
 	evidence, err := PreflightProjection(projection)

@@ -3,6 +3,7 @@ package taskplanning
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
@@ -20,11 +21,11 @@ import (
 func ProjectEnvironmentAttachNetworks(
 	project *composetypes.Project,
 	environmentID string,
-	zones []etcd.EnvironmentZoneProjection,
+	zones []projectionrecord.EnvironmentZoneProjection,
 	services []servicerecord.EnvironmentServiceProjection,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 ) ([]composeidentity.Resource, error) {
-	projection := etcd.EnvironmentComposeProjection{
+	projection := projectionrecord.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, DesiredZones: zones, DesiredServices: services,
 	}
 	joins, err := ResolveAttachNetworkJoins(environmentID, projection, attaches, "")
@@ -38,7 +39,7 @@ func ProjectEnvironmentAttachNetworks(
 // Entry and Attach mutations use the same filtering and ownership checks.
 func ResolveAttachNetworkJoins(
 	environmentID string,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 	excludedAttachID string,
 ) ([]etcd.AttachTaskNetworkJoin, error) {

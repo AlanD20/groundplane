@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -33,7 +34,7 @@ type ScriptExecutionSources struct {
 	Release           ServingRelease
 	RenderInput       etcdstore.Versioned[ReleaseRenderInput]
 	DesiredHead       etcdstore.Versioned[EnvironmentBlueprintHead]
-	DesiredProjection etcdstore.Versioned[EnvironmentComposeProjection]
+	DesiredProjection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	Networks          []etcdstore.Versioned[zonerecord.Record]
 	AttachSources     ScriptAttachSources
 }
@@ -50,7 +51,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	intendedAttaches []etcdstore.Versioned[attachrecord.Record],
 	revision int64,
 ) (ScriptExecutionSources, error) {
@@ -185,7 +186,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 			},
 			ReadRevision: revision,
 		},
-		DesiredProjection: etcdstore.Versioned[EnvironmentComposeProjection]{
+		DesiredProjection: etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 			Record:       projection,
 			ReadRevision: revision,
 		},
@@ -397,7 +398,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 // changing the pinned authored inputs. Hooks consume normalized Compose and typed
 // sources, not that artifact. Its bytes remain validated and bound by the Release
 // render digest above; neither this comparison nor hook loading rewrites them.
-func sameReleaseHookAuthoredInputs(root, captured EnvironmentComposeProjection) bool {
+func sameReleaseHookAuthoredInputs(root, captured projectionrecord.EnvironmentComposeProjection) bool {
 	captured.ComposeArtifact = root.ComposeArtifact
 	return sameServiceRemovalProjection(root, captured)
 }
@@ -408,15 +409,15 @@ func loadScriptExecutionDesiredProjection(
 	environmentID string,
 	pinnedRevisionID string,
 	revision int64,
-) (etcdstore.Versioned[EnvironmentBlueprintHead], etcdstore.Versioned[EnvironmentComposeProjection], error) {
+) (etcdstore.Versioned[EnvironmentBlueprintHead], etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], error) {
 	headValue, err := scriptExecutionValueAt(ctx, store, environmentBlueprintHeadKey(environmentID), revision)
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[EnvironmentComposeProjection]{}, err
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, err
 	}
 	headRevisionID, err := idempotencyrecord.DecodeTaskReference(headValue.Value)
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[EnvironmentComposeProjection]{},
-			corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{},
+			projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	selectedRevisionID := pinnedRevisionID
 	if selectedRevisionID == "" {
@@ -426,12 +427,12 @@ func loadScriptExecutionDesiredProjection(
 		ctx, store, environmentBlueprintRootKey(environmentID, selectedRevisionID), revision,
 	)
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[EnvironmentComposeProjection]{}, err
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, err
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(rootValue.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != selectedRevisionID {
-		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[EnvironmentComposeProjection]{},
-			corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{},
+			projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	keys := make([]string, int(seal.ProjectionChunks))
 	for index := range keys {
@@ -443,25 +444,25 @@ func loadScriptExecutionDesiredProjection(
 		ctx, seal, "projection", keys, revision,
 	)
 	if err != nil {
-		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[EnvironmentComposeProjection]{}, err
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, err
 	}
 	defer clear(stream)
-	projection, err := decodeEnvironmentComposeProjection(stream)
+	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(stream)
 	if err != nil || readRevision != revision || projection.EnvironmentID != environmentID ||
 		projection.RevisionID != selectedRevisionID {
-		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[EnvironmentComposeProjection]{},
-			corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{},
+			projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	return etcdstore.Versioned[EnvironmentBlueprintHead]{
 		Record:   EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: headRevisionID},
 		Revision: headValue.ModRevision, ReadRevision: revision,
-	}, etcdstore.Versioned[EnvironmentComposeProjection]{
+	}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: projection, Revision: rootValue.ModRevision, ReadRevision: revision,
 	}, nil
 }
 
 func resolveScriptExecutionNetworks(
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) ([]etcdstore.Versioned[zonerecord.Record], error) {
 	networks := make([]etcdstore.Versioned[zonerecord.Record], len(projection.Record.DesiredZones))
 	for index, desired := range projection.Record.DesiredZones {

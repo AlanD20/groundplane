@@ -5,6 +5,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -22,29 +23,29 @@ const serviceRemovalIntentPrefix = "/v1/records/service-removal-intents/"
 // ServiceRemovalIntent owns one sealed desired candidate while the active
 // Service and desired head remain public until Agent cleanup succeeds.
 type ServiceRemovalIntent struct {
-	TaskID                    string                         `json:"task_id"`
-	EnvironmentID             string                         `json:"environment_id"`
-	ServiceID                 string                         `json:"service_id"`
-	ServiceName               string                         `json:"service_name"`
-	ServiceRevision           int64                          `json:"service_revision"`
-	RuntimeRevision           int64                          `json:"runtime_revision"`
-	CurrentProjectionRevision int64                          `json:"current_projection_revision"`
-	ExpectedHeadRevision      int64                          `json:"expected_head_revision"`
-	Claim                     EnvironmentBlueprintStageClaim `json:"claim"`
-	CurrentProjection         EnvironmentComposeProjection   `json:"current_projection"`
-	CandidateProjection       EnvironmentComposeProjection   `json:"candidate_projection"`
-	Status                    TaskStatus                     `json:"status"`
-	CreatedAt                 time.Time                      `json:"created_at"`
-	TerminalAt                *time.Time                     `json:"terminal_at,omitempty"`
+	TaskID                    string                                        `json:"task_id"`
+	EnvironmentID             string                                        `json:"environment_id"`
+	ServiceID                 string                                        `json:"service_id"`
+	ServiceName               string                                        `json:"service_name"`
+	ServiceRevision           int64                                         `json:"service_revision"`
+	RuntimeRevision           int64                                         `json:"runtime_revision"`
+	CurrentProjectionRevision int64                                         `json:"current_projection_revision"`
+	ExpectedHeadRevision      int64                                         `json:"expected_head_revision"`
+	Claim                     EnvironmentBlueprintStageClaim                `json:"claim"`
+	CurrentProjection         projectionrecord.EnvironmentComposeProjection `json:"current_projection"`
+	CandidateProjection       projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
+	Status                    TaskStatus                                    `json:"status"`
+	CreatedAt                 time.Time                                     `json:"created_at"`
+	TerminalAt                *time.Time                                    `json:"terminal_at,omitempty"`
 }
 
 func NewServiceRemovalIntent(
 	taskID string,
 	service etcdstore.Versioned[servicerecord.ServiceRecord],
-	projection etcdstore.Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
-	candidate EnvironmentComposeProjection,
+	candidate projectionrecord.EnvironmentComposeProjection,
 	createdAt time.Time,
 ) (ServiceRemovalIntent, error) {
 	intent := ServiceRemovalIntent{
@@ -53,8 +54,8 @@ func NewServiceRemovalIntent(
 		ServiceRevision: service.Revision, RuntimeRevision: servicerecord.ServiceRuntimeRevision(service),
 		CurrentProjectionRevision: projection.Revision,
 		ExpectedHeadRevision:      expectedHeadRevision, Claim: claim,
-		CurrentProjection:   cloneEnvironmentComposeProjection(projection.Record),
-		CandidateProjection: cloneEnvironmentComposeProjection(candidate),
+		CurrentProjection:   projectionrecord.CloneEnvironmentComposeProjection(projection.Record),
+		CandidateProjection: projectionrecord.CloneEnvironmentComposeProjection(candidate),
 		Status:              TaskStatusPending, CreatedAt: createdAt,
 	}
 	if err := validateServiceRemovalIntent(intent); err != nil {
@@ -139,8 +140,8 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		intent.CandidateProjection.RevisionID != intent.Claim.RevisionID ||
 		intent.CurrentProjection.RenderGeneration+1 != intent.CandidateProjection.RenderGeneration ||
 		intent.CandidateProjection.RenderGeneration != intent.Claim.RenderGeneration ||
-		validateEnvironmentComposeProjection(intent.CurrentProjection) != nil ||
-		validateEnvironmentComposeProjection(intent.CandidateProjection) != nil ||
+		projectionrecord.ValidateEnvironmentComposeProjection(intent.CurrentProjection) != nil ||
+		projectionrecord.ValidateEnvironmentComposeProjection(intent.CandidateProjection) != nil ||
 		recordcodec.ValidateTimestamp("Service removal created_at", intent.CreatedAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Service removal intent identity is invalid")
 	}
@@ -152,7 +153,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		recordcodec.ValidateTimestamp("Service removal terminal_at", *intent.TerminalAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Service removal terminal state is invalid")
 	}
-	expected := cloneEnvironmentComposeProjection(intent.CurrentProjection)
+	expected := projectionrecord.CloneEnvironmentComposeProjection(intent.CurrentProjection)
 	expected.RevisionID = intent.CandidateProjection.RevisionID
 	expected.RenderGeneration = intent.CandidateProjection.RenderGeneration
 	expected.ComposeArtifact = append([]byte(nil), intent.CandidateProjection.ComposeArtifact...)
@@ -180,7 +181,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 	return nil
 }
 
-func sameServiceRemovalProjection(left, right EnvironmentComposeProjection) bool {
+func sameServiceRemovalProjection(left, right projectionrecord.EnvironmentComposeProjection) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.RevisionID == right.RevisionID &&
 		left.RenderGeneration == right.RenderGeneration && sameServiceRemovalBytes(left.ComposeArtifact, right.ComposeArtifact) &&
 		sameServiceRemovalBytes(left.NormalizedCompose, right.NormalizedCompose) &&
@@ -196,7 +197,7 @@ func sameServiceRemovalProjection(left, right EnvironmentComposeProjection) bool
 		sameServiceRemovalDependencyPlans(left.ServiceDependencyPlans, right.ServiceDependencyPlans)
 }
 
-func sameServiceRemovalDesiredZones(left, right []EnvironmentZoneProjection) bool {
+func sameServiceRemovalDesiredZones(left, right []projectionrecord.EnvironmentZoneProjection) bool {
 	if (left == nil) != (right == nil) || len(left) != len(right) {
 		return false
 	}
@@ -222,7 +223,7 @@ func sameServiceRemovalDesiredServices(left, right []servicerecord.EnvironmentSe
 	return true
 }
 
-func sameServiceRemovalDesiredRoutes(left, right []EnvironmentRouteProjection) bool {
+func sameServiceRemovalDesiredRoutes(left, right []projectionrecord.EnvironmentRouteProjection) bool {
 	if (left == nil) != (right == nil) || len(left) != len(right) {
 		return false
 	}
@@ -492,8 +493,8 @@ func decodeServiceRemovalIntent(value []byte) (ServiceRemovalIntent, error) {
 
 func cloneServiceRemovalIntent(intent ServiceRemovalIntent) ServiceRemovalIntent {
 	intent.Claim.Intent.Ciphertext = append([]byte(nil), intent.Claim.Intent.Ciphertext...)
-	intent.CurrentProjection = cloneEnvironmentComposeProjection(intent.CurrentProjection)
-	intent.CandidateProjection = cloneEnvironmentComposeProjection(intent.CandidateProjection)
+	intent.CurrentProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.CurrentProjection)
+	intent.CandidateProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.CandidateProjection)
 	intent.TerminalAt = cloneTimePointer(intent.TerminalAt)
 	return intent
 }

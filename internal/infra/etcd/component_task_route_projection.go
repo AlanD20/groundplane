@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -171,7 +172,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 	}
 	change := componentTaskRouteObservationChange{}
 	for _, candidate := range projection.Routes {
-		var desired *EnvironmentRouteProjection
+		var desired *projectionrecord.EnvironmentRouteProjection
 		for index := range desiredProjection.Record.DesiredRoutes {
 			if desiredProjection.Record.DesiredRoutes[index].Desired.ID == candidate.Desired.ID {
 				desired = &desiredProjection.Record.DesiredRoutes[index]

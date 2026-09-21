@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -27,21 +28,21 @@ const (
 // create/edit Task. Route and target data are copied here so restart/retry
 // never rebases rendering on mutable desired state.
 type RouteMutationIntent struct {
-	TaskID                    string                                   `json:"task_id"`
-	OperationID               string                                   `json:"operation_id"`
-	EnvironmentID             string                                   `json:"environment_id"`
-	RouteID                   string                                   `json:"route_id"`
-	Kind                      RouteMutationKind                        `json:"kind"`
-	RouteRevision             int64                                    `json:"route_revision,omitempty"`
-	Route                     routerecord.Record                       `json:"route"`
-	Previous                  *etcdstore.Versioned[routerecord.Record] `json:"previous,omitempty"`
-	CurrentProjectionRevision int64                                    `json:"current_projection_revision,omitempty"`
-	CurrentProjection         *EnvironmentComposeProjection            `json:"current_projection,omitempty"`
-	CandidateProjection       *EnvironmentComposeProjection            `json:"candidate_projection,omitempty"`
-	Provider                  *RouteProviderPin                        `json:"provider,omitempty"`
-	Status                    TaskStatus                               `json:"status"`
-	CreatedAt                 time.Time                                `json:"created_at"`
-	TerminalAt                *time.Time                               `json:"terminal_at,omitempty"`
+	TaskID                    string                                         `json:"task_id"`
+	OperationID               string                                         `json:"operation_id"`
+	EnvironmentID             string                                         `json:"environment_id"`
+	RouteID                   string                                         `json:"route_id"`
+	Kind                      RouteMutationKind                              `json:"kind"`
+	RouteRevision             int64                                          `json:"route_revision,omitempty"`
+	Route                     routerecord.Record                             `json:"route"`
+	Previous                  *etcdstore.Versioned[routerecord.Record]       `json:"previous,omitempty"`
+	CurrentProjectionRevision int64                                          `json:"current_projection_revision,omitempty"`
+	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
+	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
+	Provider                  *RouteProviderPin                              `json:"provider,omitempty"`
+	Status                    TaskStatus                                     `json:"status"`
+	CreatedAt                 time.Time                                      `json:"created_at"`
+	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
 }
 
 type RouteProviderPin struct {
@@ -77,7 +78,7 @@ func NewRouteMutationIntent(
 	environmentID string,
 	route routerecord.Record,
 	previous *etcdstore.Versioned[routerecord.Record],
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	createdAt time.Time,
 ) (RouteMutationIntent, error) {
 	intent := RouteMutationIntent{
@@ -94,7 +95,7 @@ func NewRouteMutationIntent(
 		intent.Previous = &prior
 	}
 	if projection != nil {
-		current := cloneEnvironmentComposeProjection(projection.Record)
+		current := projectionrecord.CloneEnvironmentComposeProjection(projection.Record)
 		intent.CurrentProjectionRevision = projection.Revision
 		intent.CurrentProjection = &current
 	}
@@ -240,8 +241,8 @@ func validateRouteMutationIntent(intent RouteMutationIntent) error {
 		return nil
 	}
 	if intent.CurrentProjectionRevision <= 0 || intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
-		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID || validateEnvironmentComposeProjection(*intent.CurrentProjection) != nil ||
-		validateEnvironmentComposeProjection(
+		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID || projectionrecord.ValidateEnvironmentComposeProjection(*intent.CurrentProjection) != nil ||
+		projectionrecord.ValidateEnvironmentComposeProjection(
 			*intent.CandidateProjection,
 		) != nil || intent.CandidateProjection.RenderGeneration <= intent.CurrentProjection.RenderGeneration ||
 		validateRouteProviderPin(intent.Provider) != nil {
@@ -286,11 +287,11 @@ func cloneRouteMutationIntent(source RouteMutationIntent) RouteMutationIntent {
 		clone.Previous = &previous
 	}
 	if source.CurrentProjection != nil {
-		value := cloneEnvironmentComposeProjection(*source.CurrentProjection)
+		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CurrentProjection)
 		clone.CurrentProjection = &value
 	}
 	if source.CandidateProjection != nil {
-		value := cloneEnvironmentComposeProjection(*source.CandidateProjection)
+		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CandidateProjection)
 		clone.CandidateProjection = &value
 	}
 	if source.Provider != nil {

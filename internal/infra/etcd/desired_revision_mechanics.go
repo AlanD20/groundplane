@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
@@ -54,8 +55,8 @@ func EncodeDesiredRevisionLocator(descriptorID string, digest [sha256.Size]byte)
 	return encodeEnvironmentBlueprintStageLocator(descriptorID, digest)
 }
 
-func DecodeDesiredRevisionProjection(value []byte) (EnvironmentComposeProjection, error) {
-	return decodeEnvironmentComposeProjection(value)
+func DecodeDesiredRevisionProjection(value []byte) (projectionrecord.EnvironmentComposeProjection, error) {
+	return projectionrecord.DecodeEnvironmentComposeProjectionStorage(value)
 }
 
 func DesiredRevisionChunkKey(environmentID, revisionID string, family uint8, index uint32) string {

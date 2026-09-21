@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
 	"time"
@@ -30,7 +31,7 @@ type blueprintBackupPolicyPreparationState struct {
 	environmentID       string
 	taskID              string
 	createdAt           time.Time
-	desired             *EnvironmentBlueprintBackupPolicy
+	desired             *projectionrecord.EnvironmentBlueprintBackupPolicy
 	candidate           backupPolicyReplacementCandidate
 	sources             []blueprintBackupPolicySourceEvidence
 	connectorNameIndex  *etcdstore.KeyValue
@@ -44,13 +45,13 @@ type BlueprintBackupPolicyPreparation struct {
 }
 
 func (prepared BlueprintBackupPolicyPreparation) IsZero() bool { return prepared.state == nil }
-func (prepared BlueprintBackupPolicyPreparation) Projection() *EnvironmentBlueprintBackupPolicy {
+func (prepared BlueprintBackupPolicyPreparation) Projection() *projectionrecord.EnvironmentBlueprintBackupPolicy {
 	if prepared.state == nil {
 		return nil
 	}
 	prepared.state.mu.Lock()
 	defer prepared.state.mu.Unlock()
-	return CloneEnvironmentBlueprintBackupPolicy(prepared.state.desired)
+	return projectionrecord.CloneEnvironmentBlueprintBackupPolicy(prepared.state.desired)
 }
 func (prepared BlueprintBackupPolicyPreparation) RequiresInitialKey() bool {
 	if prepared.state == nil {
@@ -177,10 +178,10 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 		return BlueprintBackupPolicyPreparation{}, err
 	}
 	sourceIDs := make([]string, len(state.sources))
-	desiredSources := make([]EnvironmentBlueprintBackupPolicySource, len(state.sources))
+	desiredSources := make([]projectionrecord.EnvironmentBlueprintBackupPolicySource, len(state.sources))
 	for index, source := range state.sources {
 		sourceIDs[index] = source.record.ID
-		desiredSources[index] = EnvironmentBlueprintBackupPolicySource{
+		desiredSources[index] = projectionrecord.EnvironmentBlueprintBackupPolicySource{
 			ID: source.record.ID, Kind: source.record.Kind, TargetID: source.record.TargetID,
 		}
 	}
@@ -189,11 +190,11 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 		Keep: input.Keep, Encryption: input.Encryption, ConnectorID: connectorID,
 		SourceIDs: sourceIDs, UpdatedAt: input.CreatedAt,
 	}
-	state.desired = &EnvironmentBlueprintBackupPolicy{
+	state.desired = &projectionrecord.EnvironmentBlueprintBackupPolicy{
 		Enabled: input.Enabled, Frequency: input.Frequency, Keep: input.Keep,
 		Encryption: input.Encryption, ConnectorID: connectorID, Sources: desiredSources,
 	}
-	if err := validateEnvironmentBlueprintBackupPolicy(input.EnvironmentID, state.desired); err != nil {
+	if err := projectionrecord.ValidateEnvironmentBlueprintBackupPolicy(input.EnvironmentID, state.desired); err != nil {
 		clearBlueprintBackupPolicyPreparationState(state)
 		return BlueprintBackupPolicyPreparation{}, err
 	}

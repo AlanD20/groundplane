@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -29,7 +30,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	replacement servicerecord.ServiceRecord,
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	renderInput *ServiceLifecycleRenderInput,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -46,7 +47,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	replacement servicerecord.ServiceRecord,
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	renderInput *ServiceLifecycleRenderInput,
 	hookInputs *BackingHookEncryptedInputs,
 	task TaskRecord,
@@ -277,7 +278,7 @@ func validateBoundServiceConditions(
 }
 
 func serviceLifecycleProjectionFenceKey(environmentID string) string {
-	return environmentComposeProjectionKey(environmentID)
+	return projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID)
 }
 
 func validateServiceLifecycleHierarchy(
@@ -336,7 +337,7 @@ func validateServiceLifecycleReplacement(current servicerecord.ServiceRecord, re
 }
 
 func validateServiceLifecycleProjection(
-	projection *etcdstore.Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	input *ServiceLifecycleRenderInput,
 	task TaskRecord,
 ) error {

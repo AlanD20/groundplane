@@ -4,17 +4,18 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 )
 
 func entryDesiredServiceIdentities(
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]composeidentity.Resource, error) {
 	result := make([]composeidentity.Resource, len(projection.DesiredServices))
 	seenIDs := make(map[string]string, len(projection.DesiredServices))
@@ -39,7 +40,7 @@ func entryDesiredServiceIdentities(
 }
 
 func entryDesiredCandidateRecord(
-	current etcd.EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	request entryDesiredMutationRequest,
 	revisionID string,
 ) (*entryrecord.Record, *entryrecord.Record, error) {

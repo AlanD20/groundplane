@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -17,7 +18,7 @@ type serviceLifecycleRepository interface {
 	GetEnvironmentAppliedComposeProjection(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
 	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[etcd.ReleaseRenderInput], error)
 	BeginServiceLifecycleWithTaskHookInputs(
@@ -27,7 +28,7 @@ type serviceLifecycleRepository interface {
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[servicerecord.ServiceRecord],
 		servicerecord.ServiceRecord,
-		*etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+		*etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 		*etcd.ServiceLifecycleRenderInput,
 		*etcd.BackingHookEncryptedInputs,
 		etcd.TaskRecord,
@@ -45,14 +46,14 @@ func (repository *durableServiceMutationRepository) GetTenant(
 func (repository *durableServiceMutationRepository) GetEnvironmentAppliedComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
 }
 
 func (repository *durableServiceMutationRepository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 }
 
@@ -80,7 +81,7 @@ func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTas
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	replacement servicerecord.ServiceRecord,
-	projection *etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	renderInput *etcd.ServiceLifecycleRenderInput,
 	hookInputs *etcd.BackingHookEncryptedInputs,
 	task etcd.TaskRecord,

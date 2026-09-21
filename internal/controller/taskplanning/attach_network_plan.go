@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"maps"
 	"sort"
 	"strings"
@@ -22,14 +23,14 @@ import (
 
 type environmentComposeTransform func(
 	*composetypes.Project,
-	etcd.EnvironmentComposeProjection,
+	projectionrecord.EnvironmentComposeProjection,
 ) ([]composeidentity.Resource, error)
 
 // ProjectAttachNetworks replaces the reserved Attach overlay on an owned
 // Compose project with the supplied complete network-membership union.
 func ProjectAttachNetworks(
 	project *composetypes.Project,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	joins []etcd.AttachTaskNetworkJoin,
 ) ([]composeidentity.Resource, error) {
 	if project == nil || ids.Validate(ids.KindEnvironment, projection.EnvironmentID) != nil {
@@ -107,7 +108,7 @@ func ProjectAttachNetworks(
 func MutateAttachNetworkArtifact(
 	ctx context.Context,
 	current *agentpb.ComposeArtifact,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	joins []etcd.AttachTaskNetworkJoin,
 	artifactID string,
 ) (*agentpb.ComposeArtifact, error) {
@@ -150,7 +151,7 @@ func MutateAttachNetworkArtifact(
 
 func projectAttachRuntimeNetworks(
 	project *composetypes.Project,
-	projection etcd.EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	artifact *agentpb.ComposeArtifact,
 	joins []etcd.AttachTaskNetworkJoin,
 ) error {

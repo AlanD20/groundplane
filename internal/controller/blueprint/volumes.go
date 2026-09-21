@@ -3,8 +3,8 @@ package blueprint
 import (
 	"github.com/AlanD20/groundplane/internal/common/slug"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"path"
@@ -22,7 +22,7 @@ func managedEnvironmentVolumeIDs(current []composeidentity.Resource) []string {
 
 func environmentBlueprintVolumeSlugs(
 	project *composetypes.Project,
-	previous etcd.EnvironmentComposeProjection,
+	previous projectionrecord.EnvironmentComposeProjection,
 	hasPrevious bool,
 ) (map[string]string, error) {
 	if project == nil {
@@ -64,7 +64,7 @@ func environmentBlueprintVolumeSlugs(
 func environmentBlueprintVolumeMounts(
 	project *composetypes.Project,
 	identities composeidentity.Snapshot,
-) ([]etcd.EnvironmentServiceVolumeMount, error) {
+) ([]projectionrecord.EnvironmentServiceVolumeMount, error) {
 	if project == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Compose project is missing")
 	}
@@ -76,7 +76,7 @@ func environmentBlueprintVolumeMounts(
 	for _, volume := range identities.Volumes {
 		volumes[volume.Name] = volume.ID
 	}
-	mounts := make([]etcd.EnvironmentServiceVolumeMount, 0)
+	mounts := make([]projectionrecord.EnvironmentServiceVolumeMount, 0)
 	for serviceName, service := range project.Services {
 		serviceID, exists := services[serviceName]
 		if !exists {
@@ -104,7 +104,7 @@ func environmentBlueprintVolumeMounts(
 				return nil, errs.New(errs.KindValidationFailed, "Blueprint Service repeats a Volume mount target")
 			}
 			seenTargets[mount.Target] = struct{}{}
-			mounts = append(mounts, etcd.EnvironmentServiceVolumeMount{
+			mounts = append(mounts, projectionrecord.EnvironmentServiceVolumeMount{
 				ServiceID: serviceID, VolumeID: volumeID, Target: mount.Target, ReadOnly: mount.ReadOnly,
 			})
 		}

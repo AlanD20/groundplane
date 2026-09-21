@@ -4,6 +4,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -249,7 +250,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			hierarchyrecord.EnvironmentKey(task.Target),
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			environmentBlueprintHeadKey(task.Target),
-			environmentComposeProjectionKey(task.Target),
+			projectionrecord.EnvironmentComposeProjectionStorageKey(task.Target),
 			environmentPoolRegistryKey,
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
@@ -345,7 +346,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			ModRevision: tombstoneValue.ModRevision,
 		},
 		{Key: environmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
-		{Key: environmentComposeProjectionKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
+		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
 		{Key: releaseGroupCollectionEpochKey(environment.ID), ModRevision: keyValueRevision(stored.Values[7])},
@@ -362,7 +363,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				return nil, nil, errs.New(errs.KindInternal, "environment deletion desired projection is incomplete")
 			}
 			revisionID, decodeErr := idempotencyrecord.DecodeTaskReference(stored.Values[2].Value)
-			projection, projectionErr := decodeEnvironmentComposeProjection(stored.Values[3].Value)
+			projection, projectionErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(stored.Values[3].Value)
 			if decodeErr != nil || projectionErr != nil || projection.EnvironmentID != environment.ID ||
 				projection.RevisionID != revisionID {
 				return nil, nil, errs.New(errs.KindInternal, "environment deletion desired projection is corrupt")
@@ -447,7 +448,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentBlueprintHeadKey(environment.ID)},
 				etcdstore.Mutation{
 					Type: etcdstore.MutationDelete,
-					Key:  environmentComposeProjectionKey(environment.ID),
+					Key:  projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID),
 				},
 			)
 		}
@@ -535,7 +536,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			hierarchyrecord.EnvironmentKey(task.Target),
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			environmentBlueprintHeadKey(task.Target),
-			environmentComposeProjectionKey(task.Target),
+			projectionrecord.EnvironmentComposeProjectionStorageKey(task.Target),
 			environmentPoolRegistryKey,
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),

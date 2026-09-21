@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -25,7 +26,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	zoneChanges []EnvironmentBlueprintZoneChange,
 	serviceChanges []EnvironmentBlueprintServiceChange,
 	routeChanges []EnvironmentBlueprintRouteChange,
@@ -62,7 +63,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	zoneChanges []EnvironmentBlueprintZoneChange,
 	serviceChanges []EnvironmentBlueprintServiceChange,
 	routeChanges []EnvironmentBlueprintRouteChange,
@@ -100,7 +101,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
-	projection EnvironmentComposeProjection,
+	projection projectionrecord.EnvironmentComposeProjection,
 	zoneChanges []EnvironmentBlueprintZoneChange,
 	serviceChanges []EnvironmentBlueprintServiceChange,
 	routeChanges []EnvironmentBlueprintRouteChange,

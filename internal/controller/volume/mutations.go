@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"math"
@@ -315,7 +316,7 @@ func (service *MutationService) mutateOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if request.action == volumeMutationActionRemove {
-		identity := etcd.EnvironmentVolumeIdentity{}
+		identity := projectionrecord.EnvironmentVolumeIdentity{}
 		for _, candidate := range current.Record.Volumes {
 			if candidate.ID == request.volumeID {
 				identity = candidate

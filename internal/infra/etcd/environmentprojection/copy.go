@@ -1,4 +1,4 @@
-package etcd
+package environmentprojection
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
@@ -7,7 +7,7 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
-func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) EnvironmentComposeProjection {
+func CloneEnvironmentComposeProjection(source EnvironmentComposeProjection) EnvironmentComposeProjection {
 	clone := source
 	clone.ServiceDependencyPlans = source.ServiceDependencyPlans.Clone()
 	clone.BlueprintRequirements = source.BlueprintRequirements.Clone()

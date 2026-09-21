@@ -3,7 +3,8 @@ package operations
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -22,7 +23,7 @@ type entryBulkCandidate struct {
 }
 
 func buildEntryBulkCandidate(
-	current etcd.EnvironmentComposeProjection,
+	current projectionrecord.EnvironmentComposeProjection,
 	input entryBulkUpsertInput,
 	revisionID string,
 ) (entryBulkCandidate, error) {

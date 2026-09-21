@@ -2,14 +2,15 @@ package scriptdefinition
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func authoringExecution(
-	script scriptrecord.Record, volumes []etcd.EnvironmentVolumeIdentity, entries []entryrecord.Record,
+	script scriptrecord.Record, volumes []projectionrecord.EnvironmentVolumeIdentity, entries []entryrecord.Record,
 ) (*core.ScriptExecutionSpec, error) {
 	execution := script.Desired.Execution
 	if execution == nil {

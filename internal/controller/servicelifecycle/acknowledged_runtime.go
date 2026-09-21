@@ -2,6 +2,7 @@ package servicelifecycle
 
 import (
 	"context"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -36,7 +37,7 @@ type AcknowledgedRuntimeCapture struct {
 func CaptureAcknowledgedRuntime(
 	ctx context.Context,
 	reader AcknowledgedRuntimeReader,
-	applied etcdstore.Versioned[etcd.EnvironmentComposeProjection],
+	applied etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	environmentID string,
 	serviceID string,
 	currentArtifactID string,
