@@ -1,7 +1,6 @@
-package etcd
+package connectors
 
 import (
-	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -12,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func connectorSecretReferences(record connectorrecord.Record) []string {
+func connectorSecretReferences(record Record) []string {
 	unique := make(map[string]struct{}, len(record.Connector.Credentials))
 	for _, credential := range record.Connector.Credentials {
 		if credential.Kind == core.ConnectorCredentialSecretRef {

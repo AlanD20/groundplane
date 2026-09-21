@@ -37,7 +37,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	if err := validateConnectorHierarchy(ctx, environment, project, current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateConnectorVersion(current); err != nil {
+	if err := connectorrecord.ValidateConnectorVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	connector := current.Record.Connector

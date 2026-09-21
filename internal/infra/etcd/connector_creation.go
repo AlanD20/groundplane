@@ -26,7 +26,7 @@ func (repository *ConnectorRepository) CreateConnector(
 			"Connector encrypted credentials do not match the Connector",
 		)
 	}
-	secretFence, err := repository.loadConnectorSecretReferenceFence(ctx, project.Record.ID, record)
+	secretFence, err := repository.LoadSecretReferenceFence(ctx, project.Record.ID, record)
 	if err != nil {
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
 	}
@@ -63,7 +63,7 @@ func (repository *ConnectorRepository) CreateConnector(
 	}
 	defer clear(epochMutation.Value)
 	conditions := append(connectorrecord.ConnectorCreateConditions(record), fence.TransactionConditions()...)
-	conditions = append(conditions, secretFence.conditions...)
+	conditions = append(conditions, secretFence.Conditions()...)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: connectorrecord.RecordKey(record.Connector.ID), Value: primaryValue},
 		{
@@ -89,7 +89,7 @@ func (repository *ConnectorRepository) CreateConnector(
 	if !result.Succeeded {
 		defer etcdstore.ClearValues(result.FailureReads)
 		return etcdstore.Versioned[connectorrecord.Record]{}, classifyConnectorCreateConflict(
-			result.FailureReads, fence, len(secretFence.conditions),
+			result.FailureReads, fence, secretFence.ConditionCount(),
 		)
 	}
 	return etcdstore.Versioned[connectorrecord.Record]{
@@ -133,7 +133,7 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 		found {
 		return existing, err
 	}
-	secretFence, err := repository.loadConnectorSecretReferenceFence(ctx, project.Record.ID, record)
+	secretFence, err := repository.LoadSecretReferenceFence(ctx, project.Record.ID, record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -190,12 +190,12 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	mutations = append(mutations, epochMutation)
 	defer etcdstore.ClearMutationValues(mutations)
 	conditions := append(connectorrecord.ConnectorCreateConditions(record), fence.TransactionConditions()...)
-	conditions = append(conditions, secretFence.conditions...)
+	conditions = append(conditions, secretFence.Conditions()...)
 	plan, err := NewIdempotencyMutationPlan(
 		conditions,
 		mutations,
 		func(_ int64, values []*etcdstore.KeyValue) error {
-			return classifyConnectorCreateConflict(values, fence, len(secretFence.conditions))
+			return classifyConnectorCreateConflict(values, fence, secretFence.ConditionCount())
 		},
 	)
 	if err != nil {

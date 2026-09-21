@@ -1,9 +1,8 @@
-package etcd
+package connectors
 
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
-	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -14,16 +13,24 @@ type connectorSecretReferenceFence struct {
 	conditions []etcdstore.Condition
 }
 
+func (fence connectorSecretReferenceFence) Conditions() []etcdstore.Condition {
+	return append([]etcdstore.Condition(nil), fence.conditions...)
+}
+
+func (fence connectorSecretReferenceFence) ConditionCount() int {
+	return len(fence.conditions)
+}
+
 type connectorSecretCandidate struct {
 	reference     string
 	projectIndex  *etcdstore.KeyValue
 	platformIndex *etcdstore.KeyValue
 }
 
-func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
+func (repository *Reader) LoadSecretReferenceFence(
 	ctx context.Context,
 	projectID string,
-	record connectorrecord.Record,
+	record Record,
 ) (connectorSecretReferenceFence, error) {
 	references := connectorSecretReferences(record)
 	if len(references) == 0 {

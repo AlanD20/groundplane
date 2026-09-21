@@ -113,16 +113,6 @@ func validateConnectorHierarchy(
 	return nil
 }
 
-func validateConnectorVersion(current etcdstore.Versioned[connectorrecord.Record]) error {
-	if err := connectorrecord.ValidateRecord(current.Record); err != nil {
-		return err
-	}
-	if current.Revision <= 0 || current.ReadRevision < current.Revision {
-		return errs.New(errs.KindValidationFailed, "Connector revision is invalid")
-	}
-	return nil
-}
-
 func classifyConnectorCreateConflict(
 	reads []*etcdstore.KeyValue,
 	fence environmentfence.Evidence,
