@@ -51,7 +51,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	}
 
 	keys := []string{
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 	}
@@ -98,7 +98,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		conditions: []etcdstore.Condition{
 			{Key: environmentchanges.RouteRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{
-				Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
+				Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
 				ModRevision: state.Values[0].ModRevision,
 			},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
@@ -106,7 +106,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: environmentchanges.RouteRemovalIntentKey(task.ID), Value: intentBytes},
-			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID)},
+			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID)},
 		},
 		values: [][]byte{intentBytes},
 	}

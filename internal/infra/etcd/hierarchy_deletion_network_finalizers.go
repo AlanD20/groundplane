@@ -88,7 +88,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 	poolKey, addressesKey := networkreservations.ZonePoolRegistryKey(evidence.EnvironmentID), networkreservations.ComponentAddressRegistryKey(action.TargetID)
 	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		poolKey, addressesKey,
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID),
 		componentTaskActiveEnvironmentKey(evidence.EnvironmentID),
 	}})
 	if err != nil {
@@ -129,7 +129,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		conditions: []etcdstore.Condition{
 			{Key: poolKey, ModRevision: values.Values[0].ModRevision},
 			{Key: addressesKey, ModRevision: keyValueRevision(values.Values[1])},
-			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID)},
+			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID)},
 			{Key: componentTaskActiveEnvironmentKey(evidence.EnvironmentID)},
 		},
 		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: addressesKey}},

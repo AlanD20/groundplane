@@ -50,7 +50,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			connectorrecord.RecordKey(source.Target),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), source.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), source.Target),
 			connectorrecord.RemovalIntentKey(retry.ID),
 		},
 		Revision: revision,
@@ -82,7 +82,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorrecord.CredentialValueKey(connector.ID),
 			hierarchyrecord.EnvironmentKey(connector.EnvironmentID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), connector.EnvironmentID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), connector.EnvironmentID),
 		},
 		Revision: revision,
 	})
@@ -126,7 +126,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			hierarchyrecord.ProjectKey(environment.ProjectID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 		},
 		Revision: revision,
 	})
@@ -150,7 +150,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: connectorrecord.RecordKey(connector.ID), ModRevision: stored.Values[0].ModRevision},
-			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
+			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
 			{Key: connectorrecord.RemovalIntentKey(retry.ID)},
 			{
 				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
@@ -162,15 +162,15 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			},
 			{Key: connectorrecord.CredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 			{Key: hierarchyrecord.EnvironmentKey(environment.ID), ModRevision: dependencies.Values[3].ModRevision},
-			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID)},
+			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID)},
 			{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
-			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},
+			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},
 		},
 	}
 	change.conditions = append(change.conditions, referenceConditions...)
 	if project.TenantID != "" {
 		tenantFence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys:     []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)},
+			Keys:     []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)},
 			Revision: revision,
 		})
 		if err != nil {
@@ -183,7 +183,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			return connectorTaskChange{}, errs.New(errs.KindResourceInUse, "tenant is being deleted")
 		}
 		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
+			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
 		})
 	}
 	tombstone := deletionrecord.DeletionTombstoneRecord{
@@ -210,7 +210,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	change.mutations = append(change.mutations,
 		etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
+			Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 			Value: tombstoneValue,
 		},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: connectorrecord.RemovalIntentKey(retry.ID), Value: intentValue},
@@ -231,7 +231,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			connectorrecord.RecordKey(task.Target),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
 			connectorrecord.RemovalIntentKey(task.ID),
 		},
 		Revision: revision,
@@ -316,7 +316,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		conditions: []etcdstore.Condition{
 			{Key: connectorrecord.RecordKey(task.Target), ModRevision: stored.Values[0].ModRevision},
 			{
-				Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
+				Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
 				ModRevision: stored.Values[1].ModRevision,
 			},
 			{Key: connectorrecord.RemovalIntentKey(task.ID), ModRevision: stored.Values[2].ModRevision},
@@ -331,7 +331,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 			{Key: connectorrecord.CredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target)},
+			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target)},
 			{Type: etcdstore.MutationDelete, Key: connectorrecord.RemovalIntentKey(task.ID)},
 		},
 	}
@@ -364,7 +364,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 		connectorEnvironmentKey(environmentID, task.Target),
 		connectorNameKey(environmentID, name),
 		connectorrecord.CredentialValueKey(task.Target),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
 		connectorrecord.RemovalIntentKey(task.ID),
 	}
 	markerKey := ""

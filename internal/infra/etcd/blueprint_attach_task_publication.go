@@ -2,6 +2,7 @@ package etcd
 
 import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -71,7 +72,7 @@ func prepareBlueprintAttachTaskPublication(
 		publication.values = append(publication.values, value)
 		publication.conditions = append(publication.conditions,
 			etcdstore.Condition{Key: attachrecord.AttachKey(retained.Record.ID), ModRevision: retained.Revision},
-			etcdstore.Condition{Key: deletionTombstoneKey("attach", retained.Record.ID)},
+			etcdstore.Condition{Key: deletions.TombstoneKey("attach", retained.Record.ID)},
 		)
 		publication.mutations = append(publication.mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(retained.Record.ID), Value: value,
@@ -105,7 +106,7 @@ func prepareBlueprintAttachTaskPublication(
 			etcdstore.Condition{Key: attachrecord.AttachServiceKey(record.ServiceID, record.ID)},
 			etcdstore.Condition{Key: attachrecord.AttachBackingServiceKey(record.BackingServiceID, record.ID)},
 			etcdstore.Condition{Key: attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID)},
-			etcdstore.Condition{Key: deletionTombstoneKey("attach", record.ID)},
+			etcdstore.Condition{Key: deletions.TombstoneKey("attach", record.ID)},
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(record.BackingProjectID), ModRevision: input.BackingProject.Revision},
 			etcdstore.Condition{Key: hierarchyrecord.EnvironmentKey(record.BackingEnvironmentID), ModRevision: input.BackingEnvironment.Revision},
 			servicerecord.ServiceDesiredCondition(input.BackingService),

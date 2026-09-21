@@ -109,9 +109,9 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		{Key: connectorIndex, ModRevision: current.Revision},
 		{Key: environmentIndex, ModRevision: current.Revision},
 	}
-	conditions = append(conditions, evidence.fence.transactionConditions()...)
+	conditions = append(conditions, evidence.fence.TransactionConditions()...)
 	conditions = append(conditions, assignmentConditions...)
-	epoch, err := evidence.fence.epochRewriteMutation()
+	epoch, err := evidence.fence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}

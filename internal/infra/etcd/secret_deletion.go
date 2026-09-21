@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -129,7 +130,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 			ModRevision: dependencies.Values[1].ModRevision,
 		},
 		{Key: secretrecord.ValueKey(secretID), ModRevision: dependencies.Values[2].ModRevision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID)},
 	}
 	if owner.Project != nil {
 		conditions = append(
@@ -139,12 +140,12 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 				ModRevision: owner.Project.Revision,
 			},
 			etcdstore.Condition{
-				Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), owner.Project.Record.ID),
+				Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), owner.Project.Record.ID),
 			},
 		)
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(conditions, etcdstore.Condition{
-				Key: deletionTombstoneKey(
+				Key: deletionrecord.TombstoneKey(
 					string(deletionrecord.DeletionTargetTenant),
 					owner.Project.Record.TenantID,
 				),
@@ -165,7 +166,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID),
+			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID),
 			Value: tombstoneValue,
 		},
 	}
@@ -255,7 +256,7 @@ func classifySecretDeletionStartConflict(
 			return errs.New(errs.KindSecretNotFound, "Secret was not found")
 		}
 		if values[4].ModRevision != current.Revision {
-			return stateConflict("secret", current.Record.Secret.ID)
+			return recordcodec.StateConflict("secret", current.Record.Secret.ID)
 		}
 		for _, index := range []int{5, 6} {
 			if values[index] == nil || string(values[index].Value) != current.Record.Secret.ID {
@@ -274,7 +275,7 @@ func classifySecretDeletionStartConflict(
 				return errs.New(errs.KindProjectNotFound, "project was not found")
 			}
 			if values[position].ModRevision != owner.Project.Revision {
-				return stateConflict("project", owner.Project.Record.ID)
+				return recordcodec.StateConflict("project", owner.Project.Record.ID)
 			}
 			position++
 			for ; position < referencePosition; position++ {

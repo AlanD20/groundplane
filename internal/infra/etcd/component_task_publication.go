@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"reflect"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -215,7 +216,7 @@ func (publication preparedComponentTaskPublication) classify(values []*etcdstore
 			return errs.New(errs.KindComponentNotFound, "Component was not found")
 		}
 		if value.ModRevision != candidate.CurrentRevision {
-			return stateConflict("component", candidate.Current.Desired.ID)
+			return recordcodec.StateConflict("component", candidate.Current.Desired.ID)
 		}
 	}
 	offset += len(publication.preparation.Intent.Candidates)
@@ -223,12 +224,12 @@ func (publication preparedComponentTaskPublication) classify(values []*etcdstore
 		value := values[offset+index]
 		if address.Current.Revision == 0 {
 			if value != nil {
-				return stateConflict("Component address registry", address.Zone.Record.Desired.ID)
+				return recordcodec.StateConflict("Component address registry", address.Zone.Record.Desired.ID)
 			}
 			continue
 		}
 		if value == nil || value.ModRevision != address.Current.Revision {
-			return stateConflict("Component address registry", address.Zone.Record.Desired.ID)
+			return recordcodec.StateConflict("Component address registry", address.Zone.Record.Desired.ID)
 		}
 	}
 	offset += len(publication.preparation.addresses)
@@ -237,7 +238,7 @@ func (publication preparedComponentTaskPublication) classify(values []*etcdstore
 			return errs.New(errs.KindSecretNotFound, "Component Secret was not found")
 		}
 		if values[offset].ModRevision != reference.revision {
-			return stateConflict("secret", reference.secretID)
+			return recordcodec.StateConflict("secret", reference.secretID)
 		}
 		if values[offset+1] != nil {
 			return errs.New(errs.KindResourceInUse, "Component Secret deletion is in progress")

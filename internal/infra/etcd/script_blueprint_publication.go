@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -232,7 +233,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 		lookupKeys = append(lookupKeys,
 			scriptrecord.ScriptLocatorKey(record.Desired.ID),
 			scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
-			deletionTombstoneKey("script", record.Desired.ID),
+			deletions.TombstoneKey("script", record.Desired.ID),
 		)
 	}
 	lookups, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: lookupKeys, Revision: active.ReadRevision})
@@ -246,7 +247,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 
 	conditions := []etcdstore.Condition{
 		{Key: scriptrecord.ScriptSetActiveKey(active.Record.EnvironmentID), ModRevision: active.Revision},
-		{Key: deletionTombstoneKey("environment", active.Record.EnvironmentID)},
+		{Key: deletions.TombstoneKey("environment", active.Record.EnvironmentID)},
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(records)*5)
 	for index, record := range records {
@@ -286,7 +287,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 		slugKey := scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug)
 		conditions = append(conditions,
 			locatorCondition, environmentLocatorCondition,
-			etcdstore.Condition{Key: deletionTombstoneKey("script", record.Desired.ID)},
+			etcdstore.Condition{Key: deletions.TombstoneKey("script", record.Desired.ID)},
 			etcdstore.Condition{Key: primaryKey}, etcdstore.Condition{Key: bodyKey}, etcdstore.Condition{Key: ownerKey}, etcdstore.Condition{Key: slugKey},
 		)
 		primary, encodeErr := scriptrecord.EncodeRecord(record)

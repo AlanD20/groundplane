@@ -3,6 +3,7 @@ package etcd
 import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -46,7 +47,7 @@ func classifyScriptWriteConflict(
 			return errs.New(errs.KindScriptNotFound, "Script was not found")
 		}
 		if values[0].ModRevision != expectedScriptRevision {
-			return stateConflict("script", record.Desired.ID)
+			return recordcodec.StateConflict("script", record.Desired.ID)
 		}
 		for _, index := range []int{1, 2} {
 			if values[index] == nil || string(values[index].Value) != record.Desired.ID {
@@ -58,19 +59,19 @@ func classifyScriptWriteConflict(
 		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
 	}
 	if values[3].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
+		return recordcodec.StateConflict("environment", environment.Record.ID)
 	}
 	if values[4] == nil {
 		return errs.New(errs.KindProjectNotFound, "Project was not found")
 	}
 	if values[4].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
+		return recordcodec.StateConflict("project", project.Record.ID)
 	}
 	if values[5] == nil {
 		return errs.New(errs.KindServiceNotFound, "Script target Service was not found")
 	}
 	if values[5].ModRevision != target.Revision {
-		return stateConflict("service", target.Record.Desired.ID)
+		return recordcodec.StateConflict("service", target.Record.Desired.ID)
 	}
 	for _, index := range []int{6, 7, 8, 9} {
 		if values[index] != nil {
@@ -103,7 +104,7 @@ func classifyScriptWriteConflict(
 	if extras.bodyGeneration && values[extraIndex] != nil {
 		return errs.New(errs.KindStateConflict, "Script body generation is already in use")
 	}
-	return stateConflict("script", record.Desired.ID)
+	return recordcodec.StateConflict("script", record.Desired.ID)
 }
 
 type scriptWriteConflictExtras struct {

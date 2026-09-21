@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -86,7 +87,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		keys = append(keys, networkreservations.ComponentAddressRegistryKey(zoneID))
 	}
 	for _, zoneID := range zones {
-		keys = append(keys, deletionTombstoneKey("zone", zoneID))
+		keys = append(keys, deletions.TombstoneKey("zone", zoneID))
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -166,7 +167,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		zoneRecords[zoneID] = zone
 		registries[zoneID] = registry
 		registryValues[zoneID] = registryValue
-		change.conditions = append(change.conditions, etcdstore.Condition{Key: deletionTombstoneKey("zone", zoneID)})
+		change.conditions = append(change.conditions, etcdstore.Condition{Key: deletions.TombstoneKey("zone", zoneID)})
 		registryCondition := etcdstore.Condition{Key: networkreservations.ComponentAddressRegistryKey(zoneID)}
 		if registryValue != nil {
 			registryCondition.ModRevision = registryValue.ModRevision

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -64,7 +65,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 
-	fence, err := loadOrdinaryEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOrdinary(
 		ctx,
 		repository.store,
 		current.Record.ID,
@@ -73,13 +74,13 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	fenceConditions := fence.transactionConditions()
+	fenceConditions := fence.TransactionConditions()
 	foundCurrentRevision := false
 	for _, condition := range fenceConditions {
 		if condition.Key == hierarchyrecord.EnvironmentKey(current.Record.ID) {
 			foundCurrentRevision = true
 			if condition.ModRevision != current.Revision {
-				return IdempotencyTransactionResult{}, stateConflict("environment", current.Record.ID)
+				return IdempotencyTransactionResult{}, recordcodec.StateConflict("environment", current.Record.ID)
 			}
 			break
 		}
@@ -187,7 +188,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(globalValue)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -211,21 +212,21 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 				"Environment pool compare evidence is incomplete",
 			)
 		}
-		if err := fence.classifyCAS(values[:fenceCount]); err != nil {
+		if err := fence.ClassifyConflict(values[:fenceCount]); err != nil {
 			return err
 		}
 		if values[fenceCount] == nil ||
 			values[fenceCount].ModRevision != registries.Values[0].ModRevision {
-			return stateConflict("environment pool registry", current.Record.ID)
+			return recordcodec.StateConflict("environment pool registry", current.Record.ID)
 		}
 		if values[fenceCount+1] == nil {
 			if zoneRevision != 0 {
-				return stateConflict("Zone pool registry", current.Record.ID)
+				return recordcodec.StateConflict("Zone pool registry", current.Record.ID)
 			}
 		} else if values[fenceCount+1].ModRevision != zoneRevision {
-			return stateConflict("Zone pool registry", current.Record.ID)
+			return recordcodec.StateConflict("Zone pool registry", current.Record.ID)
 		}
-		return stateConflict("environment", current.Record.ID)
+		return recordcodec.StateConflict("environment", current.Record.ID)
 	}
 	plan, err := NewIdempotencyMutationPlan(conditions, mutations, classify)
 	if err != nil {

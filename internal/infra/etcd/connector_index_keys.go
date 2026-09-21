@@ -28,7 +28,7 @@ func connectorCreateConditions(
 		{Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
 		{Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
 		{Key: connectorrecord.CredentialValueKey(connector.ID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
 	}
 	return conditions
 }

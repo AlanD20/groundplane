@@ -272,7 +272,7 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 		return "", nil, nil, nil, connectorrecord.CorruptRecord()
 	}
 	tombstone, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID)}, Revision: revision,
+		Keys: []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID)}, Revision: revision,
 	})
 	if err != nil {
 		return "", nil, nil, nil, err

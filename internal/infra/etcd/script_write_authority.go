@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -52,10 +53,10 @@ func scriptWriteConditions(
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		servicerecord.ServiceDesiredCondition(target),
-		{Key: deletionTombstoneKey("script", record.Desired.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
+		{Key: deletions.TombstoneKey("script", record.Desired.ID)},
+		{Key: deletions.TombstoneKey("environment", environment.Record.ID)},
+		{Key: deletions.TombstoneKey("project", project.Record.ID)},
+		{Key: deletions.TombstoneKey("service", target.Record.Desired.ID)},
 		{Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), ModRevision: active.Revision},
 	}
 	if current == nil {
@@ -65,7 +66,7 @@ func scriptWriteConditions(
 		)
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)})
 	}
 	return conditions
 }

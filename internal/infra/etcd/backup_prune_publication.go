@@ -5,6 +5,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -121,7 +122,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		clear(lockValue)
 		return backupPruneTransactionPlan{}, err
 	}
-	fence, err := loadOrdinaryEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOrdinary(
 		ctx,
 		repository.store,
 		dispatch.EnvironmentID,
@@ -147,7 +148,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 			Value: append([]byte(nil), assignedValues[index]...),
 		})
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations = append(mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: dispatchKey, Value: dispatchValue},
 		etcdstore.Mutation{
@@ -156,7 +157,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 			Value: lockValue,
 		},
 	)
-	epoch, err := fence.epochRewriteMutation()
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
 		return backupPruneTransactionPlan{}, err

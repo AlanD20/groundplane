@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -110,10 +111,10 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	conditions := []etcdstore.Condition{
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("route", record.Desired.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
+		{Key: deletions.TombstoneKey("route", record.Desired.ID)},
+		{Key: deletions.TombstoneKey("environment", environment.Record.ID)},
+		{Key: deletions.TombstoneKey("project", project.Record.ID)},
+		{Key: deletions.TombstoneKey("service", target.Record.Desired.ID)},
 		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 	}
 	var mutations []etcdstore.Mutation

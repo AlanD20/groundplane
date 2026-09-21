@@ -18,7 +18,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 ) (routeTaskChange, error) {
 	desired := intent.Desired
 	keys := []string{blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-		deletionTombstoneKey(
+		deletionrecord.TombstoneKey(
 			string(deletionrecord.DeletionTargetEntry),
 			intent.EntryID,
 		), componentTaskActiveEnvironmentKey(intent.EnvironmentID),

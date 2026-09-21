@@ -2,8 +2,10 @@ package etcd
 
 import (
 	"context"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,7 +20,7 @@ func (repository *HierarchyRepository) RenameTenant(
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if current.Revision != expectedRevision {
-		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, stateConflict("tenant", id)
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, recordcodec.StateConflict("tenant", id)
 	}
 	replacement := current.Record
 	replacement.Slug = slug
@@ -34,7 +36,7 @@ func (repository *HierarchyRepository) RenameTenant(
 		hierarchyrecord.TenantSlugKey(current.Record.Slug),
 		hierarchyrecord.TenantSlugKey(slug),
 		nil,
-		deletionTombstoneKey("tenant", id),
+		deletions.TombstoneKey("tenant", id),
 		"tenant",
 		id,
 		errs.KindTenantNotFound,
@@ -55,7 +57,7 @@ func (repository *HierarchyRepository) RenameTenantProject(
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if current.Revision != expectedRevision {
-		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, stateConflict("project", id)
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, recordcodec.StateConflict("project", id)
 	}
 	if current.Record.Kind != hierarchyrecord.ProjectKindTenant {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, errs.New(errs.KindProjectNotFound, "project was not found")
@@ -74,7 +76,7 @@ func (repository *HierarchyRepository) RenameTenantProject(
 		hierarchyrecord.ProjectSlugKey(current.Record),
 		hierarchyrecord.ProjectSlugKey(replacement),
 		[]string{hierarchyrecord.ProjectOwnerKey(current.Record)},
-		deletionTombstoneKey("project", id),
+		deletions.TombstoneKey("project", id),
 		"project",
 		id,
 		errs.KindProjectNotFound,

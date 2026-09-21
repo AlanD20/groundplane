@@ -5,6 +5,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -31,7 +32,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			hierarchyrecord.EnvironmentKey(task.Target),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			blueprints.EnvironmentBlueprintHeadKey(task.Target),
 			projectionrecord.EnvironmentComposeProjectionStorageKey(task.Target),
 			networkreservations.EnvironmentPoolRegistryKey,
@@ -84,12 +85,12 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	if _, err := decodeOwnedEnvironmentDeletionLock(stored.Values[6], task); err != nil {
 		return nil, nil, err
 	}
-	ownedFence, err := loadOwnedEnvironmentMutationFence(
+	ownedFence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
 		environment.ID,
 		readRevision,
-		environmentMutationFenceOwner{
+		environmentfence.Owner{
 			Kind: backupruntime.BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
 		},
 	)
@@ -125,7 +126,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		{Key: hierarchyrecord.EnvironmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
 		{
-			Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
+			Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
 			ModRevision: tombstoneValue.ModRevision,
 		},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
@@ -134,7 +135,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
 		{Key: releaseGroupCollectionEpochKey(environment.ID), ModRevision: keyValueRevision(stored.Values[7])},
 	}
-	conditions, err = appendEnvironmentMutationFenceConditions(conditions, ownedFence)
+	conditions, err = environmentfence.AppendConditions(conditions, ownedFence)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -156,7 +157,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			}
 			for _, zone := range projection.DesiredZones {
 				projectedKeys = append(projectedKeys,
-					deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Desired.ID))
+					deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Desired.ID))
 			}
 		}
 		if err := requireEnvironmentDeletionLiveAuthorityEmpty(
@@ -172,7 +173,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		mutations = append(mutations,
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
+				Key:  deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
 			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID)},
 		)
@@ -258,7 +259,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID), Value: epochValue,
 		})
 	}
-	if err := validateEnvironmentMutationTransactionBudget(conditions, mutations); err != nil {
+	if err := environmentfence.ValidateTransactionBudget(conditions, mutations); err != nil {
 		clearMutationValues(mutations)
 		return nil, nil, err
 	}

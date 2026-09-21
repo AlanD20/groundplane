@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -58,7 +59,7 @@ func (repository *ComponentRepository) createPlatformComponent(
 		{
 			Key: platformComponentKindKey(record.Desired.Kind),
 		},
-		{Key: deletionTombstoneKey("component", record.Desired.ID)},
+		{Key: deletions.TombstoneKey("component", record.Desired.ID)},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(record.Desired.ID), Value: value},
@@ -175,7 +176,7 @@ func (repository *ComponentRepository) replacePlatform(
 		{Key: componentrecord.RecordKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
-		{Key: deletionTombstoneKey("component", current.Record.Desired.ID)},
+		{Key: deletions.TombstoneKey("component", current.Record.Desired.ID)},
 	}, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(replacement.Desired.ID), Value: value},
 		componentrecord.WriteFenceMutation(replacement.Desired.ID),
@@ -184,7 +185,7 @@ func (repository *ComponentRepository) replacePlatform(
 		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return etcdstore.Versioned[componentrecord.Record]{}, stateConflict("platform component", current.Record.Desired.ID)
+		return etcdstore.Versioned[componentrecord.Record]{}, recordcodec.StateConflict("platform component", current.Record.Desired.ID)
 	}
 	return etcdstore.Versioned[componentrecord.Record]{
 		Record:       replacement,
@@ -302,14 +303,14 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 	}
 	if component.Record.Desired.Owner != core.ComponentOwnerPlatform || component.Record.Desired.OwnerID != "" ||
 		component.Revision != expectedComponentRevision {
-		return etcdstore.Versioned[ComponentObservationRecord]{}, stateConflict("platform component", record.ComponentID)
+		return etcdstore.Versioned[ComponentObservationRecord]{}, recordcodec.StateConflict("platform component", record.ComponentID)
 	}
 	current, err := repository.store.Get(ctx, componentObservationKey(record.ComponentID))
 	if err != nil {
 		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	if current == nil || revisionChanged(current.Entry, expectedObservationRevision) {
-		return etcdstore.Versioned[ComponentObservationRecord]{}, stateConflict(
+		return etcdstore.Versioned[ComponentObservationRecord]{}, recordcodec.StateConflict(
 			"platform component observation",
 			record.ComponentID,
 		)
@@ -324,7 +325,7 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 		[]etcdstore.Condition{
 			{Key: componentrecord.RecordKey(record.ComponentID), ModRevision: expectedComponentRevision},
 			{Key: componentObservationKey(record.ComponentID), ModRevision: expectedObservationRevision},
-			{Key: deletionTombstoneKey("component", record.ComponentID)},
+			{Key: deletions.TombstoneKey("component", record.ComponentID)},
 		},
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: componentObservationKey(record.ComponentID), Value: value}},
 	)
@@ -332,7 +333,7 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	if !result.Succeeded {
-		return etcdstore.Versioned[ComponentObservationRecord]{}, stateConflict(
+		return etcdstore.Versioned[ComponentObservationRecord]{}, recordcodec.StateConflict(
 			"platform component observation",
 			record.ComponentID,
 		)

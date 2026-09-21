@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -35,7 +36,7 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	}
 	tombstoneResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 		},
@@ -76,12 +77,12 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 			"environment deletion tombstone does not match its Task",
 		)
 	}
-	ownedFence, err := loadOwnedEnvironmentMutationFence(
+	ownedFence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
 		task.Target,
 		page.ReadRevision,
-		environmentMutationFenceOwner{
+		environmentfence.Owner{
 			Kind: backupruntime.BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
 		},
 	)
@@ -115,25 +116,25 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: value.Key})
 	}
 	conditions = append(conditions, etcdstore.Condition{
-		Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
+		Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 		ModRevision: tombstoneValue.ModRevision,
 	})
 	mutations = append(mutations, etcdstore.Mutation{
 		Type:  etcdstore.MutationPut,
-		Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
+		Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 		Value: encodedTombstone,
 	})
-	conditions, err = appendEnvironmentMutationFenceConditions(conditions, ownedFence)
+	conditions, err = environmentfence.AppendConditions(conditions, ownedFence)
 	if err != nil {
 		return false, err
 	}
-	epochMutation, err := ownedFence.epochRewriteMutation()
+	epochMutation, err := ownedFence.EpochRewriteMutation()
 	if err != nil {
 		return false, err
 	}
 	defer clear(epochMutation.Value)
 	mutations = append(mutations, epochMutation)
-	if err := validateEnvironmentMutationTransactionBudget(conditions, mutations); err != nil {
+	if err := environmentfence.ValidateTransactionBudget(conditions, mutations); err != nil {
 		return false, err
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)

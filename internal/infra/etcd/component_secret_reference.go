@@ -67,7 +67,7 @@ func prepareComponentTaskSecretReferences(
 		keys = append(
 			keys,
 			secretrecord.RecordKey(reference.secretID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), reference.secretID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), reference.secretID),
 		)
 	}
 	stored, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -107,7 +107,7 @@ func prepareComponentTaskSecretReferences(
 		conditions = append(
 			conditions,
 			etcdstore.Condition{Key: secretrecord.RecordKey(references[index].secretID), ModRevision: recordValue.ModRevision},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), references[index].secretID)},
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), references[index].secretID)},
 			etcdstore.Condition{Key: candidateKey},
 		)
 		mutations = append(mutations, etcdstore.Mutation{

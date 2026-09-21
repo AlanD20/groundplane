@@ -50,19 +50,19 @@ func (repository *ConnectorRepository) CreateConnector(
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorrecord.CredentialValueKey(connector.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 		},
 	)
 	if err != nil {
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
 	}
 	etcdstore.ClearValues(evidence.Values)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
 	}
 	defer clear(epochMutation.Value)
-	conditions := append(connectorCreateConditions(record), fence.transactionConditions()...)
+	conditions := append(connectorCreateConditions(record), fence.TransactionConditions()...)
 	conditions = append(conditions, secretFence.conditions...)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: connectorrecord.RecordKey(record.Connector.ID), Value: primaryValue},
@@ -174,7 +174,7 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorrecord.CredentialValueKey(connector.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 		},
 	)
 	if err != nil {
@@ -182,14 +182,14 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	etcdstore.ClearValues(evidence.Values)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		clearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
 	mutations = append(mutations, epochMutation)
 	defer clearMutationValues(mutations)
-	conditions := append(connectorCreateConditions(record), fence.transactionConditions()...)
+	conditions := append(connectorCreateConditions(record), fence.TransactionConditions()...)
 	conditions = append(conditions, secretFence.conditions...)
 	plan, err := NewIdempotencyMutationPlan(
 		conditions,

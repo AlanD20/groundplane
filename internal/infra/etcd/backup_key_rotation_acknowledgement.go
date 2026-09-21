@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -117,12 +118,12 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 			"backup key rotation acknowledgement authority changed",
 		)
 	}
-	fence, err := loadOwnedEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
 		task.Target,
 		readRevision,
-		environmentMutationFenceOwner{
+		environmentfence.Owner{
 			Kind: backupruntime.BackupOperationRotation, OperationID: task.OperationID, TaskID: task.ID,
 		},
 	)
@@ -134,7 +135,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		{Key: backuppolicy.BackupKeyKey(task.Target), ModRevision: read.Values[1].ModRevision},
 		{Key: backuppolicy.BackupKeyValueKey(task.Target), ModRevision: read.Values[2].ModRevision},
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := make([]etcdstore.Mutation, 0, 5)
 	if status == taskjournal.TaskStatusCompleted {
 		nextRecord := backuppolicy.BackupKeyRecord{
@@ -180,7 +181,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(task.Target)},
 	)
-	epoch, err := fence.epochRewriteMutation()
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		clearMutationValues(mutations)
 		return backupKeyRotationTaskChange{}, err

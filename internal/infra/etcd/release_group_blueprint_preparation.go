@@ -104,7 +104,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			Keys: []string{
 				releaseGroupOwnerKey(environmentID, id),
 				releaseGroupNameKey(environmentID, versioned.Group.Name),
-				deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id),
+				deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id),
 			},
 			Revision: readRevision,
 		})
@@ -126,7 +126,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 				Key:         releaseGroupNameKey(environmentID, versioned.Group.Name),
 				ModRevision: indexes.Values[1].ModRevision,
 			},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id)},
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id)},
 		)
 		next, retained := desiredByID[id]
 		if retained {
@@ -164,7 +164,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			releaseGroupRecordKey(id),
 			releaseGroupOwnerKey(environmentID, id),
 			releaseGroupNameKey(environmentID, group.Name),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), id),
 		}
 		absent, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys:     keys,

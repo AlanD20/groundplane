@@ -42,7 +42,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runnerKey(task.Target), runnerLifecycleKey(task.Target),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 			runnerRuntimeOwnershipKey(task.Target), runnerReadinessProofKey(task.ID),
 		},
 		Revision: revision,
@@ -94,7 +94,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	conditions := []etcdstore.Condition{
 		{Key: runnerKey(task.Target), ModRevision: result.Values[0].ModRevision},
 		{Key: runnerLifecycleKey(task.Target), ModRevision: result.Values[1].ModRevision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
 		{Key: runnerReadinessProofKey(task.ID), ModRevision: keyValueRevision(proofValue)},
 		{
 			Key:         runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
@@ -133,7 +133,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 			runnerRemovalIntentKey(task.Target),
 			runnerObservationKey(task.Target),
 			runnerRuntimeOwnershipKey(task.Target),
@@ -172,7 +172,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			{Key: runnerKey(task.Target), ModRevision: base.Values[0].ModRevision},
 			{Key: runnerLifecycleKey(task.Target), ModRevision: base.Values[1].ModRevision},
 			{
-				Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
+				Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 				ModRevision: base.Values[2].ModRevision,
 			},
 			{Key: runnerRemovalIntentKey(task.Target), ModRevision: base.Values[3].ModRevision},
@@ -191,7 +191,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
+			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
 			{Type: etcdstore.MutationDelete, Key: runnerRemovalIntentKey(task.Target)},
 		},
 	}

@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -132,7 +133,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	}
 	defer clear(reference)
 
-	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), route.Record.Desired.ID)
+	tombstoneKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), route.Record.Desired.ID)
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID)},
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
@@ -142,13 +143,13 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: environmentchanges.RouteRemovalIntentKey(task.ID)},
 		{Key: tombstoneKey},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
-		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
+		{Key: deletionrecord.TombstoneKey("service", target.Record.Desired.ID)},
 	}
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
+			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
 	conditions = append(conditions, etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)})
@@ -273,14 +274,14 @@ func classifyRouteDeletionStartConflict(
 			return errs.New(errs.KindRouteNotFound, "route was not found")
 		}
 		if values[4].ModRevision != route.Revision {
-			return stateConflict("route", route.Record.Desired.ID)
+			return recordcodec.StateConflict("route", route.Record.Desired.ID)
 		}
 		for index := 5; index <= 6; index++ {
 			if values[index] == nil || string(values[index].Value) != route.Record.Desired.ID {
 				return errs.New(errs.KindInternal, "Route deletion index changed or is corrupt")
 			}
 			if values[index].ModRevision != indexes[index-5].ModRevision {
-				return stateConflict("route", route.Record.Desired.ID)
+				return recordcodec.StateConflict("route", route.Record.Desired.ID)
 			}
 		}
 		if values[7] != nil || values[8] != nil {
@@ -290,19 +291,19 @@ func classifyRouteDeletionStartConflict(
 			return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 		}
 		if values[9].ModRevision != environment.Revision {
-			return stateConflict("environment", environment.Record.ID)
+			return recordcodec.StateConflict("environment", environment.Record.ID)
 		}
 		if values[10] == nil {
 			return errs.New(errs.KindProjectNotFound, "project was not found")
 		}
 		if values[10].ModRevision != project.Revision {
-			return stateConflict("project", project.Record.ID)
+			return recordcodec.StateConflict("project", project.Record.ID)
 		}
 		if values[11] == nil {
 			return errs.New(errs.KindServiceNotFound, "target Service was not found")
 		}
 		if values[11].ModRevision != target.Revision {
-			return stateConflict("service", target.Record.Desired.ID)
+			return recordcodec.StateConflict("service", target.Record.Desired.ID)
 		}
 		position := 12
 		hierarchyFenceCount := 3
@@ -317,7 +318,7 @@ func classifyRouteDeletionStartConflict(
 		position += hierarchyFenceCount
 		if projection != nil {
 			if values[position] == nil || values[position].ModRevision != projection.Revision {
-				return stateConflict("Environment projection", environment.Record.ID)
+				return recordcodec.StateConflict("Environment projection", environment.Record.ID)
 			}
 			position++
 			if values[position] != nil {

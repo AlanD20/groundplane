@@ -92,7 +92,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		ids.Validate(ids.KindEnvironment, task.Target) == nil {
 		environmentDeletionFenceStart = len(companionKeys)
 		environmentDeletionFenceKeys = []string{
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 			environmentDeletionIntentKey(task.OperationID),
 		}

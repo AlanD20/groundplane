@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -246,9 +247,9 @@ func (ledger *ReleaseLedger) Publish(
 	defer clear(operationValue)
 	conditions := []etcdstore.Condition{
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(evidence.EnvironmentID), ModRevision: evidence.EnvironmentEpochRevision},
-		{Key: deletionTombstoneKey("environment", evidence.EnvironmentID)},
-		{Key: deletionTombstoneKey("project", evidence.ProjectID)},
-		{Key: deletionTombstoneKey("tenant", evidence.TenantID)},
+		{Key: deletions.TombstoneKey("environment", evidence.EnvironmentID)},
+		{Key: deletions.TombstoneKey("project", evidence.ProjectID)},
+		{Key: deletions.TombstoneKey("tenant", evidence.TenantID)},
 		{Key: desiredKey, ModRevision: evidence.DesiredRevision},
 		{Key: releases.ReleaseFenceSetKey(evidence.EnvironmentID), ModRevision: evidence.FenceRevision},
 		{Key: markerKey},

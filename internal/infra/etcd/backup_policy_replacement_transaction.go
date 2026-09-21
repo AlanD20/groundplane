@@ -94,7 +94,7 @@ func prepareBackupPolicyReplacement(
 		plan.compare(
 			backupPolicyCompareHierarchyTombstone,
 			fence.id,
-			deletionTombstoneKey(string(fence.kind), fence.id),
+			deletionrecord.TombstoneKey(string(fence.kind), fence.id),
 			0,
 		)
 	}
@@ -134,7 +134,7 @@ func prepareBackupPolicyReplacement(
 			plan.compare(
 				backupPolicyCompareTargetTombstone,
 				source.Attach.Record.ID,
-				deletionTombstoneKey("attach", source.Attach.Record.ID),
+				deletionrecord.TombstoneKey("attach", source.Attach.Record.ID),
 				0,
 			)
 		case "volume":
@@ -172,7 +172,7 @@ func prepareBackupPolicyReplacement(
 		plan.compare(
 			backupPolicyCompareConnectorTombstone,
 			connectorID,
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
 			0,
 		)
 	}

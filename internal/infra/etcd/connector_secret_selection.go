@@ -66,7 +66,7 @@ func selectConnectorCredentialSecret(
 	}
 	conditions := []etcdstore.Condition{{Key: values[0].Key, ModRevision: values[0].ModRevision}}
 	if values[1] != nil {
-		if values[1].Key != deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), record.Secret.ID) {
+		if values[1].Key != deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), record.Secret.ID) {
 			return false, nil, 0, errs.New(
 				errs.KindInternal,
 				"Connector credential Secret tombstone evidence is corrupt",
@@ -79,7 +79,7 @@ func selectConnectorCredentialSecret(
 		return false, conditions, 3, nil
 	}
 	conditions = append(conditions, etcdstore.Condition{
-		Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), record.Secret.ID),
+		Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), record.Secret.ID),
 	})
 	value, err := secretrecord.DecodeEncryptedValue(values[2].Value)
 	if err != nil {

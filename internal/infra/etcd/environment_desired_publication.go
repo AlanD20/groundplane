@@ -208,7 +208,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		environmentPool,
 		environment,
 		desiredNetworkPool,
-		fence.readAtRevision(),
+		fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -216,7 +216,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	defer clearPreparedEnvironmentBlueprintPoolChange(poolChange)
 	effectiveEnvironment := poolChange.environment
 	scriptRemoval, err := repository.prepareDesiredScriptRemoval(
-		ctx, environment.Record.ID, expectedHeadRevision, fence.readAtRevision(), projection, task,
+		ctx, environment.Record.ID, expectedHeadRevision, fence.ReadRevision(), projection, task,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -227,14 +227,14 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		projection,
 		task,
 		scriptRemoval,
-		fence.readAtRevision(),
+		fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clearBackupRuntimeMutations(entryPublication.mutations)
 	zonePool, err := repository.prepareEnvironmentBlueprintZonePoolAtRevision(
-		ctx, effectiveEnvironment.Record, projection.DesiredZones, fence.readAtRevision(),
+		ctx, effectiveEnvironment.Record, projection.DesiredZones, fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -298,7 +298,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	// Only Apply or an explicit file writer acknowledges configuration. Sharing
 	// desired publication does not grant a metadata/Volume Task file authority.
 	if publishDomain || len(task.Materializations) != 0 {
-		task, err = prepareRuntimeConfigurationTask(ctx, repository.store, task, fence.readAtRevision())
+		task, err = prepareRuntimeConfigurationTask(ctx, repository.store, task, fence.ReadRevision())
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
@@ -328,7 +328,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -343,7 +343,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			)
 		}
 		volumeRuntimePublication, err = repository.prepareVolumeRemovalDesiredPublication(
-			ctx, *volumeInitial, claim, projection, task, marker, scriptRemoval.volumeID, fence.readAtRevision(),
+			ctx, *volumeInitial, claim, projection, task, marker, scriptRemoval.volumeID, fence.ReadRevision(),
 		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
@@ -411,7 +411,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	baseCount := len(conditions)
 	baseClassifier := func(_ int64, values []*etcdstore.KeyValue) error {
-		if len(values) != baseCount+len(fence.conditions) {
+		if len(values) != baseCount+fence.ConditionCount() {
 			return errs.New(errs.KindInternal, "Environment desired publication compare evidence is incomplete")
 		}
 		if removalLockConditionIndex >= 0 && values[removalLockConditionIndex] != nil {
@@ -448,20 +448,20 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		if (zonePool.currentRevision == 0 && zoneRegistry != nil) ||
 			(zonePool.currentRevision > 0 &&
 				(zoneRegistry == nil || zoneRegistry.ModRevision != zonePool.currentRevision)) {
-			return stateConflict("Zone pool registry", environment.Record.ID)
+			return recordcodec.StateConflict("Zone pool registry", environment.Record.ID)
 		}
 		if poolRegistryConditionIndex >= 0 {
 			registry := values[poolRegistryConditionIndex]
 			if registry == nil || registry.ModRevision != poolChange.registryRevision {
-				return stateConflict("environment pool registry", environment.Record.ID)
+				return recordcodec.StateConflict("environment pool registry", environment.Record.ID)
 			}
 		}
-		if conflict := fence.classifyCAS(values[baseCount:]); conflict != nil {
+		if conflict := fence.ClassifyConflict(values[baseCount:]); conflict != nil {
 			return conflict
 		}
 		return nil
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations = append(mutations, epochMutation)
 	classified := scriptRemoval.classifyConflict(len(conditions), baseClassifier)
 	conditions = append(conditions, scriptRemoval.conditions...)
@@ -566,7 +566,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return errs.New(errs.KindStateConflict, "Environment desired publication raced")
 	}
 	taskTenant, err := loadConnectorTaskInitiationTenantAtRevision(
-		ctx, repository.store, project, fence.readAtRevision(),
+		ctx, repository.store, project, fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

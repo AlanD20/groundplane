@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -70,7 +71,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		current.KeyEra != currentValue.KeyEra {
 		return PreparedBackupKeyRotation{}, corruptBackupKey()
 	}
-	fence, err := loadOrdinaryEnvironmentMutationFence(ctx, repository.store, input.EnvironmentID, anchor.ReadRevision)
+	fence, err := environmentfence.LoadOrdinary(ctx, repository.store, input.EnvironmentID, anchor.ReadRevision)
 	if err != nil {
 		return PreparedBackupKeyRotation{}, err
 	}
@@ -123,13 +124,13 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		{Key: backuppolicy.BackupKeyKey(input.EnvironmentID), ModRevision: anchor.Values[1].ModRevision},
 		{Key: backuppolicy.BackupKeyValueKey(input.EnvironmentID), ModRevision: anchor.Values[2].ModRevision},
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: backupruntime.BackupKeyRotationKey(input.TaskID), Value: rotationValue},
 		{Type: etcdstore.MutationPut, Key: indexKey, Value: []byte(input.TaskID)},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID), Value: lockValue},
 	}
-	epoch, err := fence.epochRewriteMutation()
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
 		clear(record.NextEncryptedIdentity)

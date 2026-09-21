@@ -207,7 +207,7 @@ func (repository *SecretRepository) ListSecrets(
 	}
 	keys := make([]string, len(page.Items))
 	for index, item := range page.Items {
-		keys[index] = deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), item.Record.Secret.ID)
+		keys[index] = deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), item.Record.Secret.ID)
 	}
 	tombstones, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: page.Revision})
 	if err != nil {
@@ -285,7 +285,7 @@ func (repository *SecretRepository) resolveSecretAtRevision(
 		stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
 				secretrecord.RecordKey(id),
-				deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), id),
+				deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), id),
 			},
 			Revision: indexes.ReadRevision,
 		})
@@ -452,13 +452,13 @@ func secretCreateConditions(owner SecretOwner, record secretrecord.Record) []etc
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
 		)
 	}
-	conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("secret", record.Secret.ID)})
+	conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("secret", record.Secret.ID)})
 	if owner.Project != nil {
-		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("project", owner.Project.Record.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("project", owner.Project.Record.ID)})
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(
 				conditions,
-				etcdstore.Condition{Key: deletionTombstoneKey("tenant", owner.Project.Record.TenantID)},
+				etcdstore.Condition{Key: deletionrecord.TombstoneKey("tenant", owner.Project.Record.TenantID)},
 			)
 		}
 	}
@@ -483,14 +483,14 @@ func secretDeleteConditions(
 	}
 	conditions = append(
 		conditions,
-		etcdstore.Condition{Key: deletionTombstoneKey("secret", current.Record.Secret.ID)},
+		etcdstore.Condition{Key: deletionrecord.TombstoneKey("secret", current.Record.Secret.ID)},
 	)
 	if owner.Project != nil {
-		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("project", owner.Project.Record.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("project", owner.Project.Record.ID)})
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(
 				conditions,
-				etcdstore.Condition{Key: deletionTombstoneKey("tenant", owner.Project.Record.TenantID)},
+				etcdstore.Condition{Key: deletionrecord.TombstoneKey("tenant", owner.Project.Record.TenantID)},
 			)
 		}
 	}
@@ -524,7 +524,7 @@ func classifySecretCreateConflict(
 			return errs.New(errs.KindProjectNotFound, "Secret project was not found")
 		}
 		if values[position].ModRevision != owner.Project.Revision {
-			return stateConflict("project", owner.Project.Record.ID)
+			return recordcodec.StateConflict("project", owner.Project.Record.ID)
 		}
 		position++
 	}
@@ -537,7 +537,7 @@ func classifySecretCreateConflict(
 			return errs.New(errs.KindResourceInUse, "Secret owner deletion is in progress")
 		}
 	}
-	return stateConflict("secret", record.Secret.ID)
+	return recordcodec.StateConflict("secret", record.Secret.ID)
 }
 
 func secretScopeKey(scope core.SecretScope, projectID string) (string, string) {

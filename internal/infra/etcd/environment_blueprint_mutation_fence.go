@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -58,15 +59,15 @@ func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
 	ctx context.Context,
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-) (environmentMutationFenceEvidence, error) {
+) (environmentfence.Evidence, error) {
 	keys := []string{hierarchyrecord.EnvironmentKey(environment.Record.ID), hierarchyrecord.ProjectKey(project.Record.ID)}
 	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
-		return environmentMutationFenceEvidence{}, err
+		return environmentfence.Evidence{}, err
 	}
 	if anchor == nil || anchor.ReadRevision <= 0 || len(anchor.Values) != len(keys) ||
 		anchor.Values[0] == nil || anchor.Values[1] == nil {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return environmentfence.Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"Environment Blueprint hierarchy is unavailable",
 		)
@@ -74,12 +75,12 @@ func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
 	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0].ModRevision != environment.Revision ||
 		anchor.Values[1].ModRevision != project.Revision {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return environmentfence.Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"Environment Blueprint hierarchy changed",
 		)
 	}
-	return loadOrdinaryEnvironmentMutationFence(
+	return environmentfence.LoadOrdinary(
 		ctx, repository.store, environment.Record.ID, anchor.ReadRevision,
 	)
 }

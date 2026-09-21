@@ -103,7 +103,7 @@ func cleanupTaskEnvironmentDeletionScriptLocators(
 	environmentID string,
 	taskID string,
 ) error {
-	key := deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID)
+	key := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID)
 	read, err := store.Get(ctx, key)
 	if err != nil {
 		return err

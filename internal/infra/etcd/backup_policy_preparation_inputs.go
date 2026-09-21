@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -41,7 +42,7 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		primaryKey,
 		ownerKey,
-		deletionTombstoneKey(string(selection.Kind), selection.TargetID),
+		deletions.TombstoneKey(string(selection.Kind), selection.TargetID),
 	}})
 	if err != nil {
 		return err

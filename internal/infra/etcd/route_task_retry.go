@@ -90,7 +90,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 		conditions: []etcdstore.Condition{
 			{Key: environmentchanges.RouteRemovalIntentKey(source.ID), ModRevision: intentValue.ModRevision},
 			{Key: environmentchanges.RouteRemovalIntentKey(retry.ID)},
-			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID)},
+			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID)},
 		},
 	}
 	for index, key := range keys {
@@ -117,7 +117,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	change.values = append(change.values, tombstoneValue, intentBytes)
 	change.mutations = append(change.mutations,
 		etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
+			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
 			Value: tombstoneValue,
 		},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.RouteRemovalIntentKey(retry.ID), Value: intentBytes},
@@ -213,8 +213,8 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	baseKeys := []string{
 		hierarchyrecord.EnvironmentKey(route.EnvironmentID),
 		servicerecord.ServiceDesiredCondition(service).Key,
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), route.EnvironmentID),
-		deletionTombstoneKey("service", route.Desired.TargetServiceID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), route.EnvironmentID),
+		deletionrecord.TombstoneKey("service", route.Desired.TargetServiceID),
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: revision})
 	if err != nil {
@@ -233,7 +233,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	}
 	extraKeys := []string{
 		hierarchyrecord.ProjectKey(environment.ProjectID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 	}
 	projectRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: extraKeys, Revision: revision})
 	if err != nil {
@@ -250,7 +250,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	keys := append(baseKeys, extraKeys...)
 	values := append(base.Values, projectRead.Values...)
 	if project.TenantID != "" {
-		hierarchyrecord.TenantKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)
+		hierarchyrecord.TenantKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)
 		tenantRead, readErr := repository.store.GetMany(
 			ctx,
 			etcdstore.GetManyRequest{Keys: []string{hierarchyrecord.TenantKey}, Revision: revision},

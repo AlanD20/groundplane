@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -85,7 +86,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 			"backup key changed before rotation retry",
 		)
 	}
-	fence, err := loadOrdinaryEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOrdinary(
 		ctx,
 		repository.store,
 		source.Record.Owner.EnvironmentID,
@@ -138,7 +139,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		{Key: backuppolicy.BackupKeyKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[4].ModRevision},
 		{Key: backuppolicy.BackupKeyValueKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[5].ModRevision},
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(retry.ID), Value: taskValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
@@ -153,7 +154,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		{Type: etcdstore.MutationPut, Key: newIndex, Value: []byte(retry.ID)},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Record.Owner.EnvironmentID), Value: lockValue},
 	}
-	epoch, err := fence.epochRewriteMutation()
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		clearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err

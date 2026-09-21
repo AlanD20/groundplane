@@ -113,7 +113,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 				connectorrecord.RecordKey(policy.ConnectorID),
 				connectorEnvironmentKey(environmentID, policy.ConnectorID),
 				backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID),
-				deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), policy.ConnectorID),
+				deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), policy.ConnectorID),
 			)
 		} else if policy.ConnectorID != "" {
 			keys = append(keys, backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID))

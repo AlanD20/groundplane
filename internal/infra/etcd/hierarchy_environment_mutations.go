@@ -2,9 +2,11 @@ package etcd
 
 import (
 	"context"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -71,10 +73,10 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	secondaryKeys := []string{
 		hierarchyrecord.EnvironmentNameKey(current.Record.ProjectID, current.Record.Name),
 		hierarchyrecord.EnvironmentOwnerKey(current.Record.ProjectID, current.Record.ID),
-		deletionTombstoneKey("environment", current.Record.ID),
-		deletionTombstoneKey("project", current.Record.ProjectID),
+		deletions.TombstoneKey("environment", current.Record.ID),
+		deletions.TombstoneKey("project", current.Record.ProjectID),
 		hierarchyrecord.TenantKey(project.TenantID),
-		deletionTombstoneKey("tenant", project.TenantID),
+		deletions.TombstoneKey("tenant", project.TenantID),
 	}
 	if renaming {
 		secondaryKeys = append(secondaryKeys, hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name))
@@ -135,11 +137,11 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 			Key:         hierarchyrecord.EnvironmentOwnerKey(current.Record.ProjectID, current.Record.ID),
 			ModRevision: secondary.Values[1].ModRevision,
 		},
-		{Key: deletionTombstoneKey("environment", current.Record.ID)},
-		{Key: deletionTombstoneKey("project", current.Record.ProjectID)},
+		{Key: deletions.TombstoneKey("environment", current.Record.ID)},
+		{Key: deletions.TombstoneKey("project", current.Record.ProjectID)},
 		{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectAuthority.Values[0].ModRevision},
 		{Key: hierarchyrecord.TenantKey(tenant.ID), ModRevision: secondary.Values[4].ModRevision},
-		{Key: deletionTombstoneKey("tenant", tenant.ID)},
+		{Key: deletions.TombstoneKey("tenant", tenant.ID)},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(current.Record.ID), Value: value}}
 	if renaming {
@@ -210,7 +212,7 @@ func classifyEnvironmentMutationConflict(
 			return errs.New(errs.KindStateConflict, "environment owning authority changed concurrently")
 		}
 		if values[0].ModRevision != current.Revision {
-			return stateConflict("environment", current.Record.ID)
+			return recordcodec.StateConflict("environment", current.Record.ID)
 		}
 		if values[1] == nil || string(values[1].Value) != current.Record.ID {
 			return errs.New(errs.KindInternal, "Environment name index is missing or mismatched")
@@ -218,6 +220,6 @@ func classifyEnvironmentMutationConflict(
 		if values[2] == nil || string(values[2].Value) != current.Record.ID {
 			return errs.New(errs.KindInternal, "Environment owner index is missing or mismatched")
 		}
-		return stateConflict("environment", current.Record.ID)
+		return recordcodec.StateConflict("environment", current.Record.ID)
 	}
 }

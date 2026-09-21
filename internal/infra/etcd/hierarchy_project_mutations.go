@@ -2,9 +2,11 @@ package etcd
 
 import (
 	"context"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -51,8 +53,8 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	secondaryKeys := []string{
 		hierarchyrecord.ProjectSlugKey(current.Record),
 		hierarchyrecord.ProjectOwnerKey(current.Record),
-		deletionTombstoneKey("project", current.Record.ID),
-		deletionTombstoneKey("tenant", current.Record.TenantID),
+		deletions.TombstoneKey("project", current.Record.ID),
+		deletions.TombstoneKey("tenant", current.Record.TenantID),
 	}
 	if renaming {
 		secondaryKeys = append(secondaryKeys, hierarchyrecord.ProjectSlugKey(replacement))
@@ -94,8 +96,8 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 		{Key: hierarchyrecord.ProjectKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: hierarchyrecord.ProjectSlugKey(current.Record), ModRevision: secondary.Values[0].ModRevision},
 		{Key: hierarchyrecord.ProjectOwnerKey(current.Record), ModRevision: secondary.Values[1].ModRevision},
-		{Key: deletionTombstoneKey("project", current.Record.ID)},
-		{Key: deletionTombstoneKey("tenant", current.Record.TenantID)},
+		{Key: deletions.TombstoneKey("project", current.Record.ID)},
+		{Key: deletions.TombstoneKey("tenant", current.Record.TenantID)},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(current.Record.ID), Value: value}}
 	if renaming {
@@ -146,7 +148,7 @@ func classifyProjectMutationConflict(
 			return errs.Newf(errs.KindSlugConflict, "project slug %q already exists", replacement.Slug)
 		}
 		if values[0].ModRevision != current.Revision {
-			return stateConflict("project", current.Record.ID)
+			return recordcodec.StateConflict("project", current.Record.ID)
 		}
 		if values[1] == nil || string(values[1].Value) != current.Record.ID {
 			return errs.New(errs.KindInternal, "Project slug index is missing or mismatched")
@@ -154,6 +156,6 @@ func classifyProjectMutationConflict(
 		if values[2] == nil || string(values[2].Value) != current.Record.ID {
 			return errs.New(errs.KindInternal, "Project owner index is missing or mismatched")
 		}
-		return stateConflict("project", current.Record.ID)
+		return recordcodec.StateConflict("project", current.Record.ID)
 	}
 }

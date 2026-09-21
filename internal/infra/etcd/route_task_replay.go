@@ -47,7 +47,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
 			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		},
 		Revision: revision,

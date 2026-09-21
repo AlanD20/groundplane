@@ -1,13 +1,13 @@
-package etcd
+package environmentfence
 
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func appendEnvironmentMutationFenceConditions(
+func AppendConditions(
 	conditions []etcdstore.Condition,
-	fence environmentMutationFenceEvidence,
+	fence Evidence,
 ) ([]etcdstore.Condition, error) {
 	indexes := make(map[string]int, len(conditions))
 	for index, condition := range conditions {
@@ -19,7 +19,7 @@ func appendEnvironmentMutationFenceConditions(
 		}
 		indexes[condition.Key] = index
 	}
-	for _, required := range fence.transactionConditions() {
+	for _, required := range fence.TransactionConditions() {
 		if index, found := indexes[required.Key]; found {
 			if conditions[index].ModRevision != required.ModRevision {
 				return nil, errs.New(
@@ -35,7 +35,7 @@ func appendEnvironmentMutationFenceConditions(
 	return conditions, nil
 }
 
-func validateEnvironmentMutationTransactionBudget(
+func ValidateTransactionBudget(
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) error {

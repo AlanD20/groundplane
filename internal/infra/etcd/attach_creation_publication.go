@@ -152,14 +152,14 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Key: hierarchyrecord.ProjectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
 		{Key: hierarchyrecord.EnvironmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
 		{Key: hierarchyrecord.ProjectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
-		{Key: deletionTombstoneKey("attach", record.ID)},
-		{Key: deletionTombstoneKey("environment", record.EnvironmentID)},
-		{Key: deletionTombstoneKey("project", scope.Project.Record.ID)},
-		{Key: deletionTombstoneKey("tenant", scope.Project.Record.TenantID)},
-		{Key: deletionTombstoneKey("environment", record.BackingEnvironmentID)},
-		{Key: deletionTombstoneKey("project", record.BackingProjectID)},
-		{Key: deletionTombstoneKey("service", record.BackingServiceID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), record.BackingNetworkID)},
+		{Key: deletionrecord.TombstoneKey("attach", record.ID)},
+		{Key: deletionrecord.TombstoneKey("environment", record.EnvironmentID)},
+		{Key: deletionrecord.TombstoneKey("project", scope.Project.Record.ID)},
+		{Key: deletionrecord.TombstoneKey("tenant", scope.Project.Record.TenantID)},
+		{Key: deletionrecord.TombstoneKey("environment", record.BackingEnvironmentID)},
+		{Key: deletionrecord.TombstoneKey("project", record.BackingProjectID)},
+		{Key: deletionrecord.TombstoneKey("service", record.BackingServiceID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), record.BackingNetworkID)},
 		{Key: attachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
@@ -187,7 +187,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		serviceID := service.Record.Desired.ID
 		conditions = append(conditions,
 			etcdstore.Condition{Key: attachrecord.AttachServiceKey(serviceID, record.ID)},
-			etcdstore.Condition{Key: deletionTombstoneKey("service", serviceID)},
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey("service", serviceID)},
 		)
 		mutations = append(mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationPut, Key: attachrecord.AttachServiceKey(serviceID, record.ID), Value: []byte(record.ID),
@@ -209,7 +209,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		conditions = append(conditions,
 			etcdstore.Condition{Key: attachrecord.AttachKey(grantID), ModRevision: grant.Revision},
 			etcdstore.Condition{Key: attachrecord.AttachGrantedByKey(grantID, record.ID)},
-			etcdstore.Condition{Key: deletionTombstoneKey("attach", grantID)},
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey("attach", grantID)},
 		)
 		mutations = append(mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachGrantedByKey(grantID, record.ID), Value: []byte(record.ID)},
@@ -227,7 +227,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		conditions = append(conditions,
 			etcdstore.Condition{Key: attachrecord.AttachKey(owner.Record.ID), ModRevision: owner.Revision},
 			etcdstore.Condition{Key: attachrecord.AttachCredentialByKey(owner.Record.ID, record.ID)},
-			etcdstore.Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey("attach", owner.Record.ID)},
 		)
 		mutations = append(
 			mutations,

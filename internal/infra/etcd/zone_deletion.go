@@ -163,7 +163,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	}
 	defer clear(intentValue)
 
-	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID)
+	tombstoneKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID)
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID)},
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
@@ -174,8 +174,8 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: tombstoneKey},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: environmentchanges.ZoneRemovalIntentKey(intent.OperationID)},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: intent.DesiredHeadRevision},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
@@ -189,7 +189,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	}
 	if ordinary {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
+			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
 	mutations := []etcdstore.Mutation{
@@ -288,7 +288,7 @@ func classifyZoneDeletionStartConflict(
 			}
 		}
 		if values[4] == nil || values[4].ModRevision != pool.Revision {
-			return stateConflict("Zone pool registry", environment.Record.ID)
+			return recordcodec.StateConflict("Zone pool registry", environment.Record.ID)
 		}
 		if keyValueRevision(values[5]) != addresses.Revision {
 			return errs.New(errs.KindResourceInUse, "Zone Component address reservations changed")
@@ -297,10 +297,10 @@ func classifyZoneDeletionStartConflict(
 			return errs.New(errs.KindResourceInUse, "Zone deletion is already in progress")
 		}
 		if values[7] == nil || values[7].ModRevision != environment.Revision {
-			return stateConflict("environment", environment.Record.ID)
+			return recordcodec.StateConflict("environment", environment.Record.ID)
 		}
 		if values[8] == nil || values[8].ModRevision != project.Revision {
-			return stateConflict("project", project.Record.ID)
+			return recordcodec.StateConflict("project", project.Record.ID)
 		}
 		for _, index := range []int{9, 10} {
 			if values[index] != nil {
@@ -478,7 +478,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{
-			Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID),
+			Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID),
 			ModRevision: tombstone.Revision,
 		},
 		{Key: taskjournal.TaskStorageKey(parentTaskID), ModRevision: parentResult.Values[0].ModRevision},
@@ -491,8 +491,8 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: parentResult.Values[2].ModRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: parentResult.Values[3].ModRevision},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: parentResult.Values[4].ModRevision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), intent.EnvironmentID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), zone.Record.Desired.OwnerID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), intent.EnvironmentID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), zone.Record.Desired.OwnerID)},
 		{
 			Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -507,7 +507,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID),
+			Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: environmentchanges.ZoneRemovalIntentKey(intent.OperationID), Value: intentValue},

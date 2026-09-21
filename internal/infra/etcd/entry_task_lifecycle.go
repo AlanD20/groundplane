@@ -87,7 +87,7 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			entryrecord.RecordKey(intent.EntryID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 		},
 		Revision: revision,
 	})
@@ -116,7 +116,7 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 			{Key: environmentchanges.EntryRemovalIntentKey(source.ID), ModRevision: intentValue.ModRevision},
 			{Key: environmentchanges.EntryRemovalIntentKey(retry.ID)},
 			{Key: entryrecord.RecordKey(intent.EntryID), ModRevision: primary.Values[0].ModRevision},
-			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID)},
+			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID)},
 		},
 	}
 	for index, key := range keys {
@@ -144,7 +144,7 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	change.values = append(change.values, tombstoneValue, intentBytes)
 	change.mutations = append(change.mutations,
 		etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
+			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 			Value: tombstoneValue,
 		},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(retry.ID), Value: intentBytes},
@@ -162,7 +162,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	baseKeys := []string{
 		entryOwnerKey(entry.EnvironmentID, entry.Entry.ID),
 		hierarchyrecord.EnvironmentKey(entry.EnvironmentID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), entry.EnvironmentID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), entry.EnvironmentID),
 	}
 	base, err := getManyBatchedAtRevision(ctx, repository.store, baseKeys, revision)
 	if err != nil {
@@ -178,7 +178,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	}
 	extraKeys := []string{
 		hierarchyrecord.ProjectKey(environment.ProjectID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 	}
 	projectRead, err := getManyBatchedAtRevision(ctx, repository.store, extraKeys, revision)
 	if err != nil {
@@ -194,7 +194,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	keys := append(baseKeys, extraKeys...)
 	values := append(base.Values, projectRead.Values...)
 	if project.TenantID != "" {
-		hierarchyrecord.TenantKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)
+		hierarchyrecord.TenantKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)
 		tenantRead, readErr := getManyBatchedAtRevision(ctx, repository.store, []string{hierarchyrecord.TenantKey}, revision)
 		if readErr != nil {
 			return nil, nil, readErr
@@ -281,7 +281,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			entryrecord.RecordKey(intent.EntryID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 		},
 		Revision: revision,
 	})
@@ -342,14 +342,14 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 			{Key: environmentchanges.EntryRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{Key: entryrecord.RecordKey(intent.EntryID), ModRevision: state.Values[0].ModRevision},
 			{
-				Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
+				Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 				ModRevision: state.Values[1].ModRevision,
 			},
 			{Key: companionKeys[0], ModRevision: companions.Values[0].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(task.ID), Value: intentBytes},
-			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID)},
+			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID)},
 		},
 		values: [][]byte{intentBytes},
 	}
@@ -435,7 +435,7 @@ func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			entryrecord.RecordKey(intent.EntryID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		},
 		Revision: revision,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -25,7 +26,7 @@ func (repository *AttachRepository) ReplaceLifecycle(
 	}
 	conditions := []etcdstore.Condition{
 		{Key: attachrecord.AttachKey(current.Record.ID), ModRevision: current.Revision},
-		{Key: deletionTombstoneKey("attach", current.Record.ID)},
+		{Key: deletions.TombstoneKey("attach", current.Record.ID)},
 	}
 	if replacement.Operation == attachrecord.AttachOperationDetach && replacement.Status != core.AttachFailed {
 		revision := current.ReadRevision

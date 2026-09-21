@@ -48,7 +48,7 @@ func (repository *EntryRepository) ReplaceEntry(
 			entryrecord.RecordKey(current.Record.Entry.ID),
 			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
 			generationKey,
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
 		},
 		1,
 		current.Record.Entry.ID,
@@ -57,14 +57,14 @@ func (repository *EntryRepository) ReplaceEntry(
 		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	defer clear(epochMutation.Value)
 	conditions := append(
 		entryWriteConditions(current.Record, generationKey, current.Revision, ownerRevision),
-		fence.transactionConditions()...,
+		fence.TransactionConditions()...,
 	)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: entryrecord.RecordKey(current.Record.Entry.ID), Value: primaryValue},
@@ -138,7 +138,7 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 			entryrecord.RecordKey(current.Record.Entry.ID),
 			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
 			generationKey,
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
 		},
 		1,
 		current.Record.Entry.ID,
@@ -146,7 +146,7 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -154,7 +154,7 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	plan, err := NewIdempotencyMutationPlan(
 		append(
 			entryWriteConditions(current.Record, generationKey, current.Revision, ownerRevision),
-			fence.transactionConditions()...,
+			fence.TransactionConditions()...,
 		),
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: entryrecord.RecordKey(current.Record.Entry.ID), Value: primaryValue},

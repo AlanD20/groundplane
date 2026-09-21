@@ -328,7 +328,7 @@ func validateCompletedRouteHeadReplay(
 		descriptorKey,
 		blueprints.EnvironmentBlueprintRootKey(environmentID, candidateRevisionID),
 		blueprints.EnvironmentBlueprintHeadKey(environmentID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), task.Target),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), task.Target),
 		componentTaskActiveEnvironmentKey(environmentID),
 		routerecord.ObservationKey(task.Target),
 	}

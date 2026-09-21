@@ -3,6 +3,7 @@ package etcd
 import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -10,6 +11,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -39,19 +41,19 @@ func backingServiceCreationConditions(
 		{Key: hierarchyrecord.ProjectSlugKey(creation.Project)},
 		{Key: hierarchyrecord.ProjectOwnerKey(creation.Project)},
 		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), creation.Project.ID)},
-		{Key: deletionTombstoneKey("project", creation.Project.ID)},
+		{Key: deletions.TombstoneKey("project", creation.Project.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentNameKey(creation.Project.ID, creation.Environment.Name)},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(creation.Project.ID, creation.Environment.ID)},
-		{Key: deletionTombstoneKey("environment", creation.Environment.ID)},
+		{Key: deletions.TombstoneKey("environment", creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID)},
 		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
 		{Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID)},
 		{Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
-		{Key: deletionTombstoneKey("zone", creation.Zone.Desired.ID)},
+		{Key: deletions.TombstoneKey("zone", creation.Zone.Desired.ID)},
 		{Key: networkreservations.ZonePoolRegistryKey(creation.Environment.ID)},
 		{Key: servicerecord.ServiceRuntimeKey(creation.Service.Desired.ID)},
-		{Key: deletionTombstoneKey("service", creation.Service.Desired.ID)},
+		{Key: deletions.TombstoneKey("service", creation.Service.Desired.ID)},
 	}
 	for _, component := range creation.Components {
 		conditions = append(conditions,
@@ -77,7 +79,7 @@ func backingServiceCreationConditions(
 			etcdstore.Condition{Key: secretOwnerKey(secret.Secret)},
 			etcdstore.Condition{Key: secretScopedKey(secret.Secret)},
 			etcdstore.Condition{Key: secretrecord.ValueKey(secret.Secret.ID)},
-			etcdstore.Condition{Key: deletionTombstoneKey("secret", secret.Secret.ID)},
+			etcdstore.Condition{Key: deletions.TombstoneKey("secret", secret.Secret.ID)},
 		)
 	}
 	return conditions
@@ -158,7 +160,7 @@ func classifyBackingServiceCreation(
 		if (creation.PoolRegistry.Revision == 0 && poolRegistry != nil) ||
 			(creation.PoolRegistry.Revision > 0 &&
 				(poolRegistry == nil || poolRegistry.ModRevision != creation.PoolRegistry.Revision)) {
-			return stateConflict("environment pool registry", "global")
+			return recordcodec.StateConflict("environment pool registry", "global")
 		}
 		for _, index := range []int{
 			blueprintHeadCondition, projectCondition, projectOwnerCondition,

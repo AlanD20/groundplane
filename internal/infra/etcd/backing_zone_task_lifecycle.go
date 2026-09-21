@@ -48,7 +48,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry changed its pinned Task")
 	}
 	keys := []string{
-		environmentchanges.ZoneRemovalIntentKey(operationID), deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
+		environmentchanges.ZoneRemovalIntentKey(operationID), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
 		blueprints.EnvironmentBlueprintHeadKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		componentTaskActiveEnvironmentKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),

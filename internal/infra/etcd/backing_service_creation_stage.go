@@ -67,7 +67,7 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	if existing == nil || existing.Entry == nil {
-		return etcdstore.Versioned[BackingServiceCreationStage]{}, stateConflict(
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, recordcodec.StateConflict(
 			"backing-service creation stage",
 			candidate.TaskID,
 		)

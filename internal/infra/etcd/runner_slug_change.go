@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -50,7 +51,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	}
 	secondaryKeys := []string{
 		runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID),
 	}
 	renaming := current.Record.Desired.Slug != slug
 	if renaming {
@@ -84,7 +85,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 			Key:         runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
 			ModRevision: secondary.Values[0].ModRevision,
 		},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID)},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerKey(runnerID), Value: value}}
 	if renaming {
@@ -115,7 +116,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 		if renaming && values[4] != nil {
 			return errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
 		}
-		return stateConflict("runner", runnerID)
+		return recordcodec.StateConflict("runner", runnerID)
 	})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err

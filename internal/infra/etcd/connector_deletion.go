@@ -6,9 +6,11 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
@@ -65,7 +67,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 		connectorNameKey(connector.EnvironmentID, connector.Name),
 		connectorrecord.CredentialValueKey(connector.ID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 		connectorrecord.RemovalIntentKey(task.ID),
 		backuppolicy.BackupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID),
 	}
@@ -105,7 +107,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	}
 	clear(credentials.Ciphertext)
 	referenceConditions, err := requireConnectorReferencePrefixesEmpty(
-		ctx, repository.store, connector.ID, connector.EnvironmentID, fence.readAtRevision(),
+		ctx, repository.store, connector.ID, connector.EnvironmentID, fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -141,7 +143,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	defer clear(reference)
 
 	evidence := newConnectorDeletionEvidence(current, fixed, task, fence, referenceConditions)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -157,7 +159,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
+			Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: connectorrecord.RemovalIntentKey(task.ID), Value: intentValue},
@@ -167,7 +169,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		ctx,
 		repository.store,
 		project,
-		fence.readAtRevision(),
+		fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -332,14 +334,14 @@ type connectorDeletionEvidence struct {
 	fenceStart       int
 	current          etcdstore.Versioned[connectorrecord.Record]
 	operationID      string
-	fence            environmentMutationFenceEvidence
+	fence            environmentfence.Evidence
 }
 
 func newConnectorDeletionEvidence(
 	current etcdstore.Versioned[connectorrecord.Record],
 	dependencies *etcdstore.GetManyResult,
 	task TaskRecord,
-	fence environmentMutationFenceEvidence,
+	fence environmentfence.Evidence,
 	referenceConditions []etcdstore.Condition,
 ) connectorDeletionEvidence {
 	connector := current.Record.Connector
@@ -365,14 +367,14 @@ func newConnectorDeletionEvidence(
 				Key:         connectorrecord.CredentialValueKey(connector.ID),
 				ModRevision: dependencies.Values[7].ModRevision,
 			},
-			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
+			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID)},
 			{Key: connectorrecord.RemovalIntentKey(task.ID)},
 			{Key: backuppolicy.BackupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
 		},
 	}
 	evidence.conditions = append(evidence.conditions, referenceConditions...)
 	evidence.fenceStart = len(evidence.conditions)
-	evidence.conditions = append(evidence.conditions, fence.transactionConditions()...)
+	evidence.conditions = append(evidence.conditions, fence.TransactionConditions()...)
 	return evidence
 }
 
@@ -406,7 +408,7 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 			return errs.New(errs.KindConnectorNotFound, "connector was not found")
 		}
 		if values[evidence.primary].ModRevision != evidence.current.Revision {
-			return stateConflict("connector", connector.ID)
+			return recordcodec.StateConflict("connector", connector.ID)
 		}
 		if values[evidence.environmentIndex] == nil ||
 			string(values[evidence.environmentIndex].Value) != connector.ID ||
@@ -452,7 +454,7 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 				return classifyConnectorReference(index, *value, connector.ID, connector.EnvironmentID)
 			}
 		}
-		if conflict := evidence.fence.classifyCAS(values[evidence.fenceStart:]); conflict != nil {
+		if conflict := evidence.fence.ClassifyConflict(values[evidence.fenceStart:]); conflict != nil {
 			return conflict
 		}
 		return errs.New(errs.KindStateConflict, "connector deletion state changed")

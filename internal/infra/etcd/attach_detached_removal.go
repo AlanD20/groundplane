@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -112,7 +113,7 @@ func prepareAttachRemoval(
 
 	conditions := []etcdstore.Condition{
 		{Key: attachrecord.AttachKey(current.Record.ID), ModRevision: current.Revision},
-		{Key: deletionTombstoneKey("attach", current.Record.ID)},
+		{Key: deletions.TombstoneKey("attach", current.Record.ID)},
 		exclusionCondition,
 		{Key: attachrecord.AttachGrantedByPrefix(current.Record.ID), Prefix: true},
 		{Key: attachrecord.AttachCredentialByPrefix(current.Record.ID), Prefix: true},

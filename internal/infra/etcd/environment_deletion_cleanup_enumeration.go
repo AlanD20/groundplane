@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -29,7 +30,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		)
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 		taskjournal.TaskStorageKey(task.ID),
 	}})
 	if err != nil {
@@ -70,10 +71,10 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 			"environment deletion cleanup tombstone ownership changed",
 		)
 	}
-	owner := environmentMutationFenceOwner{
+	owner := environmentfence.Owner{
 		Kind: backupruntime.BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
 	}
-	fence, err := loadOwnedEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOwned(
 		ctx, repository.store, task.Target, state.ReadRevision, owner,
 	)
 	if err != nil {
@@ -100,12 +101,12 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	defer clear(intentValue)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	defer clear(epochMutation.Value)
-	conditions := fence.transactionConditions()
+	conditions := fence.TransactionConditions()
 	conditions = append(conditions,
 		etcdstore.Condition{
 			Key: environmentDeletionIntentKey(task.OperationID), ModRevision: intent.Revision,

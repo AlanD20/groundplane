@@ -5,10 +5,12 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -94,7 +96,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	}
 	defer clear(reference)
 
-	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), entry.Record.Entry.ID)
+	tombstoneKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), entry.Record.Entry.ID)
 	domainKeys := []string{
 		taskjournal.TaskStorageKey(task.ID),
 		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
@@ -124,7 +126,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	configuration, err := prepareConfigurationTaskPublication(
-		ctx, repository.store, task, fence.readAtRevision(),
+		ctx, repository.store, task, fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -137,7 +139,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -158,12 +160,12 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 			etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 		)
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	scriptConditions, err := prepareEntryScriptAbsence(
 		ctx,
 		repository.store,
 		entry.Record.Entry.ID,
-		fence.readAtRevision(),
+		fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -188,7 +190,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		ctx,
 		repository.store,
 		project,
-		fence.readAtRevision(),
+		fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -243,14 +245,14 @@ func validateEntryDeletionProjection(
 func classifyEntryDeletionStartConflict(
 	entry etcdstore.Versioned[entryrecord.Record], projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	ownerRevision int64, operationID string,
-	fence environmentMutationFenceEvidence,
+	fence environmentfence.Evidence,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
 		domainCount := 8
 		if projection != nil {
 			domainCount += 2
 		}
-		expected := domainCount + len(fence.conditions)
+		expected := domainCount + fence.ConditionCount()
 		if len(values) != expected {
 			return errs.New(errs.KindInternal, "entry deletion compare evidence is incomplete")
 		}
@@ -275,13 +277,13 @@ func classifyEntryDeletionStartConflict(
 			return errs.New(errs.KindEntryNotFound, "entry was not found")
 		}
 		if values[4].ModRevision != entry.Revision {
-			return stateConflict("entry", entry.Record.Entry.ID)
+			return recordcodec.StateConflict("entry", entry.Record.Entry.ID)
 		}
 		if values[5] == nil || string(values[5].Value) != entry.Record.Entry.ID {
 			return errs.New(errs.KindInternal, "entry owner index changed or is corrupt")
 		}
 		if values[5].ModRevision != ownerRevision {
-			return stateConflict("entry", entry.Record.Entry.ID)
+			return recordcodec.StateConflict("entry", entry.Record.Entry.ID)
 		}
 		if values[6] != nil || values[7] != nil {
 			return errs.New(errs.KindResourceInUse, "entry deletion is already in progress")
@@ -289,7 +291,7 @@ func classifyEntryDeletionStartConflict(
 		position := 8
 		if projection != nil {
 			if values[position] == nil || values[position].ModRevision != projection.Revision {
-				return stateConflict("environment projection", entry.Record.EnvironmentID)
+				return recordcodec.StateConflict("environment projection", entry.Record.EnvironmentID)
 			}
 			position++
 			if values[position] != nil {
@@ -297,7 +299,7 @@ func classifyEntryDeletionStartConflict(
 			}
 			position++
 		}
-		if conflict := fence.classifyCAS(values[domainCount:]); conflict != nil {
+		if conflict := fence.ClassifyConflict(values[domainCount:]); conflict != nil {
 			return conflict
 		}
 		return errs.New(errs.KindStateConflict, "entry deletion state changed")

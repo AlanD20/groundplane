@@ -190,7 +190,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 		defer clear(value)
 		mutations = append(mutations, etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), prepared.groupID),
+			Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), prepared.groupID),
 			Value: value,
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -39,10 +40,10 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 		)
 	}
 	retentionKey := taskjournal.TaskRetentionIndexKey(source.ID, *source.RetainUntil)
-	owner := environmentMutationFenceOwner{
+	owner := environmentfence.Owner{
 		Kind: backupruntime.BackupOperationDeletion, OperationID: source.OperationID, TaskID: source.ID,
 	}
-	fence, err := loadOwnedEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
 		source.Target,
@@ -54,7 +55,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), source.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), source.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(source.Target),
 			retentionKey,
 		},
@@ -133,7 +134,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 		clear(intentValue)
 		return environmentTaskChange{}, err
 	}
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		clear(tombstoneValue)
 		clear(lockValue)
@@ -141,7 +142,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 		clear(retentionValue)
 		return environmentTaskChange{}, err
 	}
-	conditions := fence.transactionConditions()
+	conditions := fence.TransactionConditions()
 	conditions = append(conditions,
 		etcdstore.Condition{
 			Key: environmentDeletionIntentKey(source.OperationID), ModRevision: intent.Revision,
@@ -154,7 +155,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 		mutations: []etcdstore.Mutation{
 			{
 				Type:  etcdstore.MutationPut,
-				Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), source.Target),
+				Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), source.Target),
 				Value: tombstoneValue,
 			},
 			{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Target), Value: lockValue},

@@ -161,10 +161,10 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 		{Key: backupruntime.BackupRunKey(current.Record.TaskID), ModRevision: current.Revision},
 	}
 	conditions = append(conditions, extraConditions...)
-	conditions = append(conditions, evidence.fence.transactionConditions()...)
+	conditions = append(conditions, evidence.fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: backupruntime.BackupRunKey(next.TaskID), Value: value}}
 	mutations = append(mutations, extraMutations...)
-	epoch, err := evidence.fence.epochRewriteMutation()
+	epoch, err := evidence.fence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
@@ -196,8 +196,8 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 			)
 		}
 		fenceStart := 1 + len(extraConditions)
-		fenceEnd := fenceStart + len(evidence.fence.conditions)
-		if err := evidence.fence.classifyCAS(result.FailureReads[fenceStart:fenceEnd]); err != nil {
+		fenceEnd := fenceStart + evidence.fence.ConditionCount()
+		if err := evidence.fence.ClassifyConflict(result.FailureReads[fenceStart:fenceEnd]); err != nil {
 			return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 		}
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(

@@ -4,6 +4,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -47,12 +48,12 @@ func (repository *BackupRuntimeRepository) loadOwnedEvidence(
 	run backupruntime.BackupRunRecord,
 	revision int64,
 ) (backupRuntimeOwnedEvidence, error) {
-	fence, err := loadOwnedEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
 		run.EnvironmentID,
 		revision,
-		environmentMutationFenceOwner{
+		environmentfence.Owner{
 			Kind: backupruntime.BackupOperationBackup, OperationID: run.OperationID, TaskID: run.TaskID,
 		},
 	)

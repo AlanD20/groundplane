@@ -1,4 +1,4 @@
-package etcd
+package environmentfence
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ type environmentMutationFenceStore interface {
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
-type environmentMutationFenceOwner struct {
+type Owner struct {
 	Kind        backupruntime.BackupOperationKind
 	OperationID string
 	TaskID      string
@@ -42,34 +43,33 @@ type environmentMutationFenceCondition struct {
 	kind        environmentMutationFenceConditionKind
 }
 
-// environmentMutationFenceEvidence is deliberately persistence-private. It
-// carries immutable compare metadata, not decoded aggregate records or raw
-// encoded values.
-type environmentMutationFenceEvidence struct {
+// Evidence carries immutable compare metadata captured by LoadOrdinary or
+// LoadOwned. Its private state cannot be replaced by transaction callers.
+type Evidence struct {
 	environmentID string
 	readRevision  int64
-	owner         *environmentMutationFenceOwner
+	owner         *Owner
 	conditions    []environmentMutationFenceCondition
 }
 
-func loadOrdinaryEnvironmentMutationFence(
+func LoadOrdinary(
 	ctx context.Context,
 	store environmentMutationFenceStore,
 	environmentID string,
 	readRevision int64,
-) (environmentMutationFenceEvidence, error) {
+) (Evidence, error) {
 	return loadEnvironmentMutationFence(ctx, store, environmentID, readRevision, nil)
 }
 
-func loadOwnedEnvironmentMutationFence(
+func LoadOwned(
 	ctx context.Context,
 	store environmentMutationFenceStore,
 	environmentID string,
 	readRevision int64,
-	owner environmentMutationFenceOwner,
-) (environmentMutationFenceEvidence, error) {
+	owner Owner,
+) (Evidence, error) {
 	if err := validateEnvironmentMutationFenceOwner(owner); err != nil {
-		return environmentMutationFenceEvidence{}, err
+		return Evidence{}, err
 	}
 	return loadEnvironmentMutationFence(ctx, store, environmentID, readRevision, &owner)
 }
@@ -79,25 +79,25 @@ func loadEnvironmentMutationFence(
 	store environmentMutationFenceStore,
 	environmentID string,
 	readRevision int64,
-	owner *environmentMutationFenceOwner,
-) (environmentMutationFenceEvidence, error) {
+	owner *Owner,
+) (Evidence, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return environmentMutationFenceEvidence{}, err
+		return Evidence{}, err
 	}
 	if store == nil {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"environment mutation fence store is required",
 		)
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindValidationFailed,
 			"environment id is invalid",
 		)
 	}
 	if readRevision <= 0 {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindValidationFailed,
 			"environment mutation fence revision must be positive",
 		)
@@ -107,22 +107,22 @@ func loadEnvironmentMutationFence(
 		hierarchyrecord.EnvironmentKey(environmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
 	}
 	base, err := readEnvironmentMutationFenceKeys(ctx, store, baseKeys, readRevision)
 	if err != nil {
-		return environmentMutationFenceEvidence{}, err
+		return Evidence{}, err
 	}
 	defer etcdstore.ClearValues(base.Values)
 	if base.Values[0] == nil {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindEnvironmentNotFound,
 			"environment was not found",
 		)
 	}
 	environment, err := hierarchyrecord.DecodeEnvironment(base.Values[0].Value)
 	if err != nil || environment.ID != environmentID {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"environment mutation fence environment is corrupt",
 		)
@@ -135,47 +135,47 @@ func loadEnvironmentMutationFence(
 			base.Values[0].ModRevision,
 			*owner,
 		); err != nil {
-			return environmentMutationFenceEvidence{}, err
+			return Evidence{}, err
 		}
 	} else if base.Values[3] != nil {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindResourceInUse,
 			"environment hierarchy deletion is in progress",
 		)
 	}
 	epoch, err := decodeEnvironmentMutationFenceEpoch(base.Values[1], environmentID)
 	if err != nil {
-		return environmentMutationFenceEvidence{}, err
+		return Evidence{}, err
 	}
 	lockRevision, err := validateEnvironmentMutationFenceLock(base.Values[2], environmentID, owner)
 	if err != nil {
-		return environmentMutationFenceEvidence{}, err
+		return Evidence{}, err
 	}
 
 	projectKeys := []string{
 		hierarchyrecord.ProjectKey(environment.ProjectID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 	}
 	projectRead, err := readEnvironmentMutationFenceKeys(ctx, store, projectKeys, readRevision)
 	if err != nil {
-		return environmentMutationFenceEvidence{}, err
+		return Evidence{}, err
 	}
 	defer etcdstore.ClearValues(projectRead.Values)
 	if projectRead.Values[0] == nil {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindProjectNotFound,
 			"project was not found",
 		)
 	}
 	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"environment mutation fence project is corrupt",
 		)
 	}
 	if projectRead.Values[1] != nil {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindResourceInUse,
 			"project hierarchy deletion is in progress",
 		)
@@ -198,7 +198,7 @@ func loadEnvironmentMutationFence(
 	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		tenantKeys := []string{
 			hierarchyrecord.TenantKey(project.TenantID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
 		}
 		tenantRead, readErr := readEnvironmentMutationFenceKeys(
 			ctx,
@@ -207,24 +207,24 @@ func loadEnvironmentMutationFence(
 			readRevision,
 		)
 		if readErr != nil {
-			return environmentMutationFenceEvidence{}, readErr
+			return Evidence{}, readErr
 		}
 		defer etcdstore.ClearValues(tenantRead.Values)
 		if tenantRead.Values[0] == nil {
-			return environmentMutationFenceEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindTenantNotFound,
 				"tenant was not found",
 			)
 		}
 		tenant, decodeErr := hierarchyrecord.DecodeTenant(tenantRead.Values[0].Value)
 		if decodeErr != nil || tenant.ID != project.TenantID {
-			return environmentMutationFenceEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindInternal,
 				"environment mutation fence tenant is corrupt",
 			)
 		}
 		if tenantRead.Values[1] != nil {
-			return environmentMutationFenceEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindResourceInUse,
 				"tenant hierarchy deletion is in progress",
 			)
@@ -234,7 +234,7 @@ func loadEnvironmentMutationFence(
 			modRevision: tenantRead.Values[0].ModRevision, kind: environmentMutationFenceTenant,
 		})
 	} else if project.Kind != hierarchyrecord.ProjectKindBacking || project.TenantID != "" {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"environment mutation fence project ownership is corrupt",
 		)
@@ -258,7 +258,7 @@ func loadEnvironmentMutationFence(
 	)
 	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		conditions = append(conditions, environmentMutationFenceCondition{
-			key:  deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
+			key:  deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
 			kind: environmentMutationFenceTenantTombstone,
 		})
 	}
@@ -273,13 +273,13 @@ func loadEnvironmentMutationFence(
 		},
 	)
 	if len(conditions)+1 > etcdstore.MaximumOperations {
-		return environmentMutationFenceEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"environment mutation fence exceeds transaction limit",
 		)
 	}
 
-	evidence := environmentMutationFenceEvidence{
+	evidence := Evidence{
 		environmentID: environmentID,
 		readRevision:  readRevision,
 		conditions:    conditions,
@@ -333,7 +333,7 @@ func decodeEnvironmentMutationFenceEpoch(value *etcdstore.KeyValue, environmentI
 func validateEnvironmentMutationFenceLock(
 	value *etcdstore.KeyValue,
 	environmentID string,
-	owner *environmentMutationFenceOwner,
+	owner *Owner,
 ) (int64, error) {
 	if value == nil {
 		if owner != nil {
@@ -368,7 +368,7 @@ func validateOwnedEnvironmentDeletionTombstone(
 	value *etcdstore.KeyValue,
 	environmentID string,
 	environmentRevision int64,
-	owner environmentMutationFenceOwner,
+	owner Owner,
 ) error {
 	if value == nil {
 		return errs.New(errs.KindStateConflict, "environment deletion tombstone is missing")
@@ -385,7 +385,7 @@ func validateOwnedEnvironmentDeletionTombstone(
 	return nil
 }
 
-func validateEnvironmentMutationFenceOwner(owner environmentMutationFenceOwner) error {
+func validateEnvironmentMutationFenceOwner(owner Owner) error {
 	switch owner.Kind {
 	case backupruntime.BackupOperationBackup,
 		backupruntime.BackupOperationRestore,
@@ -405,11 +405,28 @@ func validateEnvironmentMutationFenceOwner(owner environmentMutationFenceOwner) 
 	return nil
 }
 
-func (evidence environmentMutationFenceEvidence) readAtRevision() int64 {
+func (evidence Evidence) ReadRevision() int64 {
 	return evidence.readRevision
 }
 
-func (evidence environmentMutationFenceEvidence) transactionConditions() []etcdstore.Condition {
+func (evidence Evidence) EnvironmentID() string {
+	return evidence.environmentID
+}
+
+func (evidence Evidence) ConditionCount() int {
+	return len(evidence.conditions)
+}
+
+func (evidence Evidence) EpochRevision() (int64, bool) {
+	for _, condition := range evidence.conditions {
+		if condition.kind == environmentMutationFenceEpoch {
+			return condition.modRevision, true
+		}
+	}
+	return 0, false
+}
+
+func (evidence Evidence) TransactionConditions() []etcdstore.Condition {
 	conditions := make([]etcdstore.Condition, len(evidence.conditions))
 	for index, condition := range evidence.conditions {
 		conditions[index] = etcdstore.Condition{Key: condition.key, ModRevision: condition.modRevision}
@@ -417,7 +434,7 @@ func (evidence environmentMutationFenceEvidence) transactionConditions() []etcds
 	return conditions
 }
 
-func (evidence environmentMutationFenceEvidence) epochRewriteMutation() (etcdstore.Mutation, error) {
+func (evidence Evidence) EpochRewriteMutation() (etcdstore.Mutation, error) {
 	value, err := backupruntime.EncodeEnvironmentMutationEpochRecord(backupruntime.EnvironmentMutationEpochRecord{
 		EnvironmentID: evidence.environmentID,
 	})
@@ -429,7 +446,7 @@ func (evidence environmentMutationFenceEvidence) epochRewriteMutation() (etcdsto
 	}, nil
 }
 
-func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore.KeyValue) error {
+func (evidence Evidence) ClassifyConflict(values []*etcdstore.KeyValue) error {
 	if len(values) != len(evidence.conditions) {
 		return errs.New(
 			errs.KindInternal,
@@ -457,7 +474,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 				)
 			}
 			if value.ModRevision != condition.modRevision {
-				return stateConflict("environment", condition.stableID)
+				return recordcodec.StateConflict("environment", condition.stableID)
 			}
 		case environmentMutationFenceProject:
 			if value == nil {
@@ -468,7 +485,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 				return errs.New(errs.KindInternal, "environment mutation fence project is corrupt")
 			}
 			if value.ModRevision != condition.modRevision {
-				return stateConflict("project", condition.stableID)
+				return recordcodec.StateConflict("project", condition.stableID)
 			}
 		case environmentMutationFenceTenant:
 			if value == nil {
@@ -479,7 +496,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 				return errs.New(errs.KindInternal, "environment mutation fence tenant is corrupt")
 			}
 			if value.ModRevision != condition.modRevision {
-				return stateConflict("tenant", condition.stableID)
+				return recordcodec.StateConflict("tenant", condition.stableID)
 			}
 		case environmentMutationFenceEnvironmentTombstone,
 			environmentMutationFenceProjectTombstone,
@@ -506,7 +523,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 				return err
 			}
 			if value.ModRevision != condition.modRevision {
-				return stateConflict("environment deletion tombstone", condition.stableID)
+				return recordcodec.StateConflict("environment deletion tombstone", condition.stableID)
 			}
 		case environmentMutationFenceEpoch:
 			if _, err := decodeEnvironmentMutationFenceEpoch(
@@ -516,7 +533,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 				return err
 			}
 			if value.ModRevision != condition.modRevision {
-				return stateConflict("environment mutation epoch", condition.stableID)
+				return recordcodec.StateConflict("environment mutation epoch", condition.stableID)
 			}
 		case environmentMutationFenceLock:
 			if evidence.owner == nil {
@@ -533,10 +550,10 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 						return err
 					}
 				}
-				return stateConflict("environment operation lock", condition.stableID)
+				return recordcodec.StateConflict("environment operation lock", condition.stableID)
 			}
 			if value == nil {
-				return stateConflict("environment operation lock", condition.stableID)
+				return recordcodec.StateConflict("environment operation lock", condition.stableID)
 			}
 			if _, err := validateEnvironmentMutationFenceLock(
 				value,
@@ -546,7 +563,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 				return err
 			}
 			if value.ModRevision != condition.modRevision {
-				return stateConflict("environment operation lock", condition.stableID)
+				return recordcodec.StateConflict("environment operation lock", condition.stableID)
 			}
 		default:
 			return errs.New(errs.KindInternal, "environment mutation fence compare kind is invalid")

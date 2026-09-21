@@ -38,7 +38,7 @@ func (repository *RunnerRepository) PutRunnerObservation(
 	}
 	if observation == nil || len(observation.Values) != 1 ||
 		revisionChanged(observation.Values[0], expectedRevision) {
-		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, stateConflict("runner observation", record.RunnerID)
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, recordcodec.StateConflict("runner observation", record.RunnerID)
 	}
 	value, err := runnerrecord.EncodeRunnerObservation(record)
 	if err != nil {
@@ -50,13 +50,13 @@ func (repository *RunnerRepository) PutRunnerObservation(
 		{Key: runnerKey(record.RunnerID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(record.RunnerID), ModRevision: current.Record.LifecycleRevision},
 		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), record.RunnerID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), record.RunnerID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
 	if current.Record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		conditions = append(conditions,
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), current.Record.Desired.OwnerID)},
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
@@ -66,7 +66,7 @@ func (repository *RunnerRepository) PutRunnerObservation(
 		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	if !result.Succeeded {
-		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, stateConflict("runner observation", record.RunnerID)
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, recordcodec.StateConflict("runner observation", record.RunnerID)
 	}
 	return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,

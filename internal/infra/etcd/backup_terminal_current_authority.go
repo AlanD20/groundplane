@@ -24,7 +24,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		hierarchyrecord.EnvironmentKey(environmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
 		backupruntime.BackupRecoveryPointPruneDispatchKey(receipt.Task.TaskID),
 	}
 	runIndex, membershipIndex, exclusionsStart := -1, -1, -1

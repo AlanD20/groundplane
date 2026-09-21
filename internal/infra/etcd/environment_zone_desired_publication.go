@@ -57,7 +57,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		return IdempotencyTransactionResult{}, err
 	}
 	previous, found, err := repository.getEnvironmentBlueprintProjectionAtRevision(
-		ctx, input.Environment.Record.ID, fence.readAtRevision(),
+		ctx, input.Environment.Record.ID, fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -75,7 +75,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		return IdempotencyTransactionResult{}, err
 	}
 	registry, err := zones.getZonePoolRegistryAtRevision(
-		ctx, input.Environment.Record.ID, fence.readAtRevision(),
+		ctx, input.Environment.Record.ID, fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -102,7 +102,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(headReference)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -121,7 +121,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 	removalLockIndex := len(conditions)
 	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
 	fenceOffset := len(conditions)
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
@@ -149,7 +149,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 			(registry.Revision > 0 && (values[4] == nil || values[4].ModRevision != registry.Revision)) {
 			return errs.New(errs.KindStateConflict, "Zone pool registry changed")
 		}
-		if conflict := fence.classifyCAS(values[fenceOffset:]); conflict != nil {
+		if conflict := fence.ClassifyConflict(values[fenceOffset:]); conflict != nil {
 			return conflict
 		}
 		return errs.New(errs.KindStateConflict, "direct Zone desired publication raced")

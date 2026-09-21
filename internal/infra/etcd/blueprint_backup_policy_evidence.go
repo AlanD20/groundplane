@@ -195,7 +195,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 ) (*etcdstore.Versioned[connectorrecord.Record], *etcdstore.KeyValue, *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
 	keys := []string{
 		connectorrecord.RecordKey(connectorID), connectorEnvironmentKey(environmentID, connectorID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -294,7 +294,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 			} else {
 				attachRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 					attachrecord.AttachKey(selection.TargetID), attachrecord.AttachOwnerKey(input.EnvironmentID, selection.TargetID),
-					deletionTombstoneKey("attach", selection.TargetID),
+					deletionrecord.TombstoneKey("attach", selection.TargetID),
 				}, Revision: revision})
 				if readErr != nil {
 					return nil, readErr

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -76,12 +77,12 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 			return backupPruneTransactionPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 	}
-	fence, err := loadOwnedEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
 		dispatch.Record.EnvironmentID,
 		anchor.ReadRevision,
-		environmentMutationFenceOwner{
+		environmentfence.Owner{
 			Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.Record.OperationID,
 			TaskID: dispatch.Record.TaskID,
 		},
@@ -89,7 +90,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
-	conditions := make([]etcdstore.Condition, 0, len(keys)+len(fence.conditions))
+	conditions := make([]etcdstore.Condition, 0, len(keys)+fence.ConditionCount())
 	for index, key := range keys {
 		condition := etcdstore.Condition{Key: key}
 		if anchor.Values[index] != nil {
@@ -115,13 +116,13 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations = append(
 		mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(dispatch.Record.EnvironmentID)},
 	)
-	epoch, err := fence.epochRewriteMutation()
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
 		return backupPruneTransactionPlan{}, err

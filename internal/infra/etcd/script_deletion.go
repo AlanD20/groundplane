@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -137,18 +138,18 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			),
 			ModRevision: indexes.Values[1].ModRevision,
 		},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), scriptID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), scriptID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		servicerecord.ServiceDesiredCondition(target),
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
-		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
+		{Key: deletionrecord.TombstoneKey("service", target.Record.Desired.ID)},
 		{Key: scriptrecord.ScriptSetActiveKey(current.Record.EnvironmentID), ModRevision: active.Revision},
 	}
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
+			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
 	mutations := []etcdstore.Mutation{
@@ -157,7 +158,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), scriptID),
+			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), scriptID),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(current.Record.EnvironmentID), Value: activeValue},
@@ -227,7 +228,7 @@ func classifyScriptDeletionStartConflict(
 			if changed.ActiveReferences != 0 {
 				return errs.New(errs.KindResourceInUse, "active Script executions fence deletion")
 			}
-			return stateConflict("script", current.Record.Desired.ID)
+			return recordcodec.StateConflict("script", current.Record.Desired.ID)
 		}
 		for _, index := range []int{5, 6} {
 			if values[index] == nil || string(values[index].Value) != current.Record.Desired.ID {
@@ -241,19 +242,19 @@ func classifyScriptDeletionStartConflict(
 			return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
 		}
 		if values[8].ModRevision != environment.Revision {
-			return stateConflict("environment", environment.Record.ID)
+			return recordcodec.StateConflict("environment", environment.Record.ID)
 		}
 		if values[9] == nil {
 			return errs.New(errs.KindProjectNotFound, "Project was not found")
 		}
 		if values[9].ModRevision != project.Revision {
-			return stateConflict("project", project.Record.ID)
+			return recordcodec.StateConflict("project", project.Record.ID)
 		}
 		if values[10] == nil {
 			return errs.New(errs.KindServiceNotFound, "target Service was not found")
 		}
 		if values[10].ModRevision != target.Revision {
-			return stateConflict("service", target.Record.Desired.ID)
+			return recordcodec.StateConflict("service", target.Record.Desired.ID)
 		}
 		for index := 11; index <= 13; index++ {
 			if values[index] != nil {

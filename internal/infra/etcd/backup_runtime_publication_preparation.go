@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -150,7 +151,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 			)
 		}
 	}
-	fence, err := loadOrdinaryEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOrdinary(
 		ctx,
 		repository.store,
 		record.EnvironmentID,
@@ -170,7 +171,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 			return backupRunPublicationPlan{}, err
 		}
 	}
-	conditions := make([]etcdstore.Condition, 0, len(keys)+len(fence.conditions)+len(policyFence))
+	conditions := make([]etcdstore.Condition, 0, len(keys)+fence.ConditionCount()+len(policyFence))
 	for index, key := range keys {
 		if index == 1 {
 			continue
@@ -178,7 +179,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		conditions = append(conditions, etcdstore.Condition{Key: key})
 	}
 	conditions = append(conditions, backupRunExternalConditions(record, snapshotConditions)...)
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	conditions = append(conditions, policyFence...)
 	if retrySource != nil {
 		conditions = append(
@@ -195,7 +196,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(record.EnvironmentID), Value: lockValue,
 	})
 	mutations = append(mutations, snapshotMutations...)
-	epoch, err := fence.epochRewriteMutation()
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
 		return backupRunPublicationPlan{}, err

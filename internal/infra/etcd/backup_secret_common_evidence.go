@@ -31,7 +31,7 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 	projectKeyID = environment.ProjectID
 	dynamic.project = dynamic.add(hierarchyrecord.ProjectKey(projectKeyID))
 	dynamic.projectFence = dynamic.add(
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), projectKeyID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), projectKeyID),
 	)
 	if err := requireNoDeletionFence(
 		result.Values[dynamic.environmentFence], deletionrecord.DeletionTargetEnvironment, environmentID,

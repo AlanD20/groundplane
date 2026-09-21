@@ -28,7 +28,7 @@ func (repository *EntryRepository) DeleteEntry(
 		[]string{
 			entryrecord.RecordKey(current.Record.Entry.ID),
 			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID),
 		},
 		1,
 		current.Record.Entry.ID,
@@ -36,20 +36,20 @@ func (repository *EntryRepository) DeleteEntry(
 	if err != nil {
 		return 0, err
 	}
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return 0, err
 	}
 	defer clear(epochMutation.Value)
 	conditions := append(
 		entryDeleteConditions(current, ownerRevision),
-		fence.transactionConditions()...,
+		fence.TransactionConditions()...,
 	)
 	scriptConditions, err := prepareEntryScriptAbsence(
 		ctx,
 		repository.store,
 		current.Record.Entry.ID,
-		fence.readAtRevision(),
+		fence.ReadRevision(),
 	)
 	if err != nil {
 		return 0, err

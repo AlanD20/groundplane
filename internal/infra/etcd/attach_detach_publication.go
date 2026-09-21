@@ -6,6 +6,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -252,13 +253,13 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: hierarchyrecord.ProjectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
 		{Key: hierarchyrecord.EnvironmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
 		{Key: hierarchyrecord.ProjectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
-		{Key: deletionTombstoneKey("attach", current.Record.ID)},
-		{Key: deletionTombstoneKey("environment", current.Record.EnvironmentID)},
-		{Key: deletionTombstoneKey("project", scope.Project.Record.ID)},
-		{Key: deletionTombstoneKey("tenant", scope.Project.Record.TenantID)},
-		{Key: deletionTombstoneKey("environment", current.Record.BackingEnvironmentID)},
-		{Key: deletionTombstoneKey("project", current.Record.BackingProjectID)},
-		{Key: deletionTombstoneKey("service", current.Record.BackingServiceID)},
+		{Key: deletions.TombstoneKey("attach", current.Record.ID)},
+		{Key: deletions.TombstoneKey("environment", current.Record.EnvironmentID)},
+		{Key: deletions.TombstoneKey("project", scope.Project.Record.ID)},
+		{Key: deletions.TombstoneKey("tenant", scope.Project.Record.TenantID)},
+		{Key: deletions.TombstoneKey("environment", current.Record.BackingEnvironmentID)},
+		{Key: deletions.TombstoneKey("project", current.Record.BackingProjectID)},
+		{Key: deletions.TombstoneKey("service", current.Record.BackingServiceID)},
 		{Key: attachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
@@ -281,13 +282,13 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
 		conditions = append(conditions,
-			etcdstore.Condition{Key: deletionTombstoneKey("service", serviceID)},
+			etcdstore.Condition{Key: deletions.TombstoneKey("service", serviceID)},
 		)
 	}
 	for _, grant := range scope.Grants {
 		conditions = append(conditions,
 			etcdstore.Condition{Key: attachrecord.AttachKey(grant.Record.ID), ModRevision: grant.Revision},
-			etcdstore.Condition{Key: deletionTombstoneKey("attach", grant.Record.ID)},
+			etcdstore.Condition{Key: deletions.TombstoneKey("attach", grant.Record.ID)},
 		)
 	}
 	if !current.Record.OwnsCredential() {
@@ -295,7 +296,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		conditions = append(conditions,
 			etcdstore.Condition{Key: attachrecord.AttachKey(owner.Record.ID), ModRevision: owner.Revision},
 			*credentialReferenceCondition,
-			etcdstore.Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
+			etcdstore.Condition{Key: deletions.TombstoneKey("attach", owner.Record.ID)},
 		)
 	}
 	initiation := TaskInitiation{}

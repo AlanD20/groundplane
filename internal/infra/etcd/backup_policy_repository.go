@@ -195,9 +195,9 @@ func (repository *BackupPolicyRepository) createBackupSource(
 		{Key: backuppolicy.BackupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID)},
 		{
 			Key:         hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			ModRevision: evidence.mutationEpoch.Revision,
@@ -245,9 +245,9 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 			backuppolicy.BackupSourceIdentityKey(environment.Record.ID, kind, targetID),
 			hierarchyrecord.EnvironmentKey(environment.Record.ID),
 			hierarchyrecord.ProjectKey(project.Record.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 			hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
 		},
@@ -423,13 +423,13 @@ func classifyBackupSourceCreateConflict(
 		return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
 	if values[3].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
+		return recordcodec.StateConflict("environment", environment.Record.ID)
 	}
 	if values[4] == nil {
 		return errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	if values[4].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
+		return recordcodec.StateConflict("project", project.Record.ID)
 	}
 	for _, index := range []int{5, 6, 7} {
 		if values[index] != nil {
@@ -447,7 +447,7 @@ func classifyBackupSourceCreateConflict(
 		return errs.New(errs.KindInternal, "environment mutation epoch is corrupt")
 	}
 	if values[8].ModRevision != evidence.mutationEpoch.Revision {
-		return stateConflict("environment mutation epoch", environment.Record.ID)
+		return recordcodec.StateConflict("environment mutation epoch", environment.Record.ID)
 	}
 	return errs.New(errs.KindStateConflict, "backup source state changed")
 }

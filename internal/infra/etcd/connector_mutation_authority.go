@@ -3,8 +3,10 @@ package etcd
 import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -13,7 +15,7 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	domainKeys []string,
-) (environmentMutationFenceEvidence, *etcdstore.GetManyResult, error) {
+) (environmentfence.Evidence, *etcdstore.GetManyResult, error) {
 	keys := append([]string(nil), domainKeys...)
 	environmentIndex := len(keys)
 	keys = append(keys, hierarchyrecord.EnvironmentKey(environment.Record.ID))
@@ -21,10 +23,10 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 	keys = append(keys, hierarchyrecord.ProjectKey(project.Record.ID))
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
-		return environmentMutationFenceEvidence{}, nil, err
+		return environmentfence.Evidence{}, nil, err
 	}
 	if result == nil || result.ReadRevision <= 0 || len(result.Values) != len(keys) {
-		return environmentMutationFenceEvidence{}, nil, errs.New(
+		return environmentfence.Evidence{}, nil, errs.New(
 			errs.KindInternal,
 			"Connector mutation fixed-revision evidence is incomplete",
 		)
@@ -32,7 +34,7 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
 			etcdstore.ClearValues(result.Values)
-			return environmentMutationFenceEvidence{}, nil, errs.New(
+			return environmentfence.Evidence{}, nil, errs.New(
 				errs.KindInternal,
 				"Connector mutation fixed-revision evidence is corrupt",
 			)
@@ -40,33 +42,33 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 	}
 	if result.Values[environmentIndex] == nil {
 		etcdstore.ClearValues(result.Values)
-		return environmentMutationFenceEvidence{}, nil, errs.New(
+		return environmentfence.Evidence{}, nil, errs.New(
 			errs.KindEnvironmentNotFound,
 			"Connector Environment was not found",
 		)
 	}
 	if result.Values[environmentIndex].ModRevision != environment.Revision {
 		etcdstore.ClearValues(result.Values)
-		return environmentMutationFenceEvidence{}, nil, stateConflict(
+		return environmentfence.Evidence{}, nil, recordcodec.StateConflict(
 			"Connector Environment",
 			environment.Record.ID,
 		)
 	}
 	if result.Values[projectIndex] == nil {
 		etcdstore.ClearValues(result.Values)
-		return environmentMutationFenceEvidence{}, nil, errs.New(
+		return environmentfence.Evidence{}, nil, errs.New(
 			errs.KindProjectNotFound,
 			"Connector Project was not found",
 		)
 	}
 	if result.Values[projectIndex].ModRevision != project.Revision {
 		etcdstore.ClearValues(result.Values)
-		return environmentMutationFenceEvidence{}, nil, stateConflict(
+		return environmentfence.Evidence{}, nil, recordcodec.StateConflict(
 			"Connector Project",
 			project.Record.ID,
 		)
 	}
-	fence, err := loadOrdinaryEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOrdinary(
 		ctx,
 		repository.store,
 		environment.Record.ID,
@@ -74,7 +76,7 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 	)
 	if err != nil {
 		etcdstore.ClearValues(result.Values)
-		return environmentMutationFenceEvidence{}, nil, err
+		return environmentfence.Evidence{}, nil, err
 	}
 	return fence, result, nil
 }
@@ -123,10 +125,10 @@ func validateConnectorVersion(current etcdstore.Versioned[connectorrecord.Record
 
 func classifyConnectorCreateConflict(
 	reads []*etcdstore.KeyValue,
-	fence environmentMutationFenceEvidence,
+	fence environmentfence.Evidence,
 	secretConditionCount int,
 ) error {
-	want := 5 + len(fence.conditions) + secretConditionCount
+	want := 5 + fence.ConditionCount() + secretConditionCount
 	if len(reads) != want {
 		return errs.New(errs.KindInternal, "Connector create conflict read is incomplete")
 	}
@@ -139,7 +141,7 @@ func classifyConnectorCreateConflict(
 	if reads[4] != nil {
 		return errs.New(errs.KindResourceInUse, "Connector deletion is in progress")
 	}
-	if conflict := fence.classifyCAS(reads[5 : 5+len(fence.conditions)]); conflict != nil {
+	if conflict := fence.ClassifyConflict(reads[5 : 5+fence.ConditionCount()]); conflict != nil {
 		return conflict
 	}
 	if secretConditionCount > 0 {

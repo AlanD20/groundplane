@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -27,7 +28,7 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	if err != nil || !applies {
 		return nil, err
 	}
-	fence, err := loadOrdinaryEnvironmentMutationFence(ctx, repository.store, environmentID, readRevision)
+	fence, err := environmentfence.LoadOrdinary(ctx, repository.store, environmentID, readRevision)
 	if err != nil {
 		return nil, err
 	}

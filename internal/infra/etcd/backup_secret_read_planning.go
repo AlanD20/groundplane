@@ -106,11 +106,11 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 	}
 	dynamic.environment = dynamic.add(hierarchyrecord.EnvironmentKey(environmentID))
 	dynamic.environmentFence = dynamic.add(
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environmentID),
 	)
 	for connectorID := range connectorIDs {
 		dynamic.connectorFences[connectorID] = dynamic.add(
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
 		)
 		dynamic.credentials[connectorID] = dynamic.add(connectorrecord.CredentialValueKey(connectorID))
 	}

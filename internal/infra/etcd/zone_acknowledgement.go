@@ -26,7 +26,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		return nil, nil, err
 	}
 	keys := []string{
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		networkreservations.ZonePoolRegistryKey(environmentID), networkreservations.ComponentAddressRegistryKey(task.Target),
 		environmentchanges.ZoneRemovalIntentKey(operationID), blueprints.EnvironmentBlueprintHeadKey(environmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), componentTaskActiveEnvironmentKey(environmentID),
@@ -177,7 +177,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 		return err
 	}
 	keys := []string{
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		networkreservations.ZonePoolRegistryKey(environmentID), environmentchanges.ZoneRemovalIntentKey(operationID),
 		blueprints.EnvironmentBlueprintHeadKey(environmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),

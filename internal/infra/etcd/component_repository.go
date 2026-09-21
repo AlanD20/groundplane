@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -259,10 +260,10 @@ func componentWriteConditions(
 		kind,
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("component", record.Desired.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-		{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
+		{Key: deletions.TombstoneKey("component", record.Desired.ID)},
+		{Key: deletions.TombstoneKey("environment", environment.Record.ID)},
+		{Key: deletions.TombstoneKey("project", project.Record.ID)},
+		{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)},
 	}
 }
 
@@ -325,7 +326,7 @@ func classifyComponentWriteConflict(
 			return errs.New(errs.KindComponentNotFound, "Component was not found")
 		}
 		if values[0].ModRevision != expectedRevision {
-			return stateConflict("component", componentID)
+			return recordcodec.StateConflict("component", componentID)
 		}
 		for _, index := range []int{1, 2} {
 			if values[index] == nil || string(values[index].Value) != componentID {
@@ -337,18 +338,18 @@ func classifyComponentWriteConflict(
 		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
 	}
 	if values[3].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
+		return recordcodec.StateConflict("environment", environment.Record.ID)
 	}
 	if values[4] == nil {
 		return errs.New(errs.KindProjectNotFound, "Project was not found")
 	}
 	if values[4].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
+		return recordcodec.StateConflict("project", project.Record.ID)
 	}
 	for _, index := range []int{5, 6, 7, 8} {
 		if values[index] != nil {
 			return errs.New(errs.KindResourceInUse, "Component hierarchy deletion is in progress")
 		}
 	}
-	return stateConflict("component", componentID)
+	return recordcodec.StateConflict("component", componentID)
 }

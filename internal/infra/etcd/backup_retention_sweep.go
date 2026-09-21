@@ -347,8 +347,8 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		clearBackupRuntimeMutations(mutations)
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
-	conditions = append(conditions, evidence.fence.transactionConditions()...)
-	epoch, err := evidence.fence.epochRewriteMutation()
+	conditions = append(conditions, evidence.fence.TransactionConditions()...)
+	epoch, err := evidence.fence.EpochRewriteMutation()
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err

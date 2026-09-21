@@ -2,7 +2,9 @@ package etcd
 
 import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -11,9 +13,9 @@ func classifyEntryWriteConflict(
 	record entryrecord.Record,
 	expectedEntryRevision int64,
 	expectedOwnerRevision int64,
-	fence environmentMutationFenceEvidence,
+	fence environmentfence.Evidence,
 ) error {
-	expected := 4 + len(fence.conditions)
+	expected := 4 + fence.ConditionCount()
 	if len(values) != expected {
 		return errs.New(errs.KindInternal, "Entry write compare evidence is incomplete")
 	}
@@ -26,13 +28,13 @@ func classifyEntryWriteConflict(
 			return errs.New(errs.KindEntryNotFound, "Entry was not found")
 		}
 		if values[0].ModRevision != expectedEntryRevision {
-			return stateConflict("entry", record.Entry.ID)
+			return recordcodec.StateConflict("entry", record.Entry.ID)
 		}
 		if values[1] == nil || string(values[1].Value) != record.Entry.ID {
 			return errs.New(errs.KindInternal, "Entry owner index changed or is corrupt")
 		}
 		if values[1].ModRevision != expectedOwnerRevision {
-			return stateConflict("Entry", record.Entry.ID)
+			return recordcodec.StateConflict("Entry", record.Entry.ID)
 		}
 	}
 	if values[2] != nil {
@@ -41,19 +43,19 @@ func classifyEntryWriteConflict(
 	if values[3] != nil {
 		return errs.New(errs.KindResourceInUse, "Entry deletion is in progress")
 	}
-	if conflict := fence.classifyCAS(values[4:]); conflict != nil {
+	if conflict := fence.ClassifyConflict(values[4:]); conflict != nil {
 		return conflict
 	}
-	return stateConflict("entry", record.Entry.ID)
+	return recordcodec.StateConflict("entry", record.Entry.ID)
 }
 
 func classifyEntryDeleteConflict(
 	values []*etcdstore.KeyValue,
 	current etcdstore.Versioned[entryrecord.Record],
 	expectedOwnerRevision int64,
-	fence environmentMutationFenceEvidence,
+	fence environmentfence.Evidence,
 ) error {
-	expected := 3 + len(fence.conditions)
+	expected := 3 + fence.ConditionCount()
 	if len(values) != expected {
 		return errs.New(errs.KindInternal, "Entry delete compare evidence is incomplete")
 	}
@@ -61,21 +63,21 @@ func classifyEntryDeleteConflict(
 		return errs.New(errs.KindEntryNotFound, "Entry was not found")
 	}
 	if values[0].ModRevision != current.Revision {
-		return stateConflict("entry", current.Record.Entry.ID)
+		return recordcodec.StateConflict("entry", current.Record.Entry.ID)
 	}
 	if values[1] == nil || string(values[1].Value) != current.Record.Entry.ID {
 		return errs.New(errs.KindInternal, "Entry owner index changed or is corrupt")
 	}
 	if values[1].ModRevision != expectedOwnerRevision {
-		return stateConflict("Entry", current.Record.Entry.ID)
+		return recordcodec.StateConflict("Entry", current.Record.Entry.ID)
 	}
 	if values[2] != nil {
 		return errs.New(errs.KindResourceInUse, "Entry deletion is in progress")
 	}
-	if conflict := fence.classifyCAS(values[3:]); conflict != nil {
+	if conflict := fence.ClassifyConflict(values[3:]); conflict != nil {
 		return conflict
 	}
-	return stateConflict("entry", current.Record.Entry.ID)
+	return recordcodec.StateConflict("entry", current.Record.Entry.ID)
 }
 
 func entryOwnerCollectionPrefix(environmentID string) string {

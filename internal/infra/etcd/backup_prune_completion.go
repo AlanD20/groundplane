@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -111,12 +112,12 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
-	fence, err := loadOwnedEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
 		dispatch.Record.EnvironmentID,
 		anchor.ReadRevision,
-		environmentMutationFenceOwner{
+		environmentfence.Owner{
 			Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.Record.OperationID,
 			TaskID: dispatch.Record.TaskID,
 		},
@@ -131,12 +132,12 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 			etcdstore.Condition{Key: keys[index], ModRevision: anchor.Values[index].ModRevision},
 		)
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[1], Value: value}}
 	for _, key := range keys[2:] {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
-	epoch, err := fence.epochRewriteMutation()
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
@@ -221,12 +222,12 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 			return backupPruneTransactionPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 	}
-	fence, err := loadOwnedEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOwned(
 		ctx,
 		repository.store,
 		dispatch.Record.EnvironmentID,
 		anchor.ReadRevision,
-		environmentMutationFenceOwner{
+		environmentfence.Owner{
 			Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.Record.OperationID,
 			TaskID: dispatch.Record.TaskID,
 		},
@@ -244,11 +245,11 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 		}
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[start]})
 	}
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(dispatch.Record.EnvironmentID),
 	})
-	epoch, err := fence.epochRewriteMutation()
+	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}

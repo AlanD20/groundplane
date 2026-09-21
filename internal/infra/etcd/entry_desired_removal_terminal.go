@@ -19,7 +19,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 	ctx context.Context, task TaskRecord, intent environmentchanges.EntryRemovalIntent, intentRevision int64,
 	status taskjournal.TaskStatus, terminalAt time.Time, revision int64,
 ) (routeTaskChange, error) {
-	keys := []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
+	keys := []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
 	if task.Executor == taskjournal.TaskExecutorController {
 		keys = append(keys, taskjournal.TaskMaterializationWriterKey(intent.EnvironmentID))

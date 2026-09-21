@@ -2,9 +2,11 @@ package etcd
 
 import (
 	"context"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -39,7 +41,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 	}
 	secondaryKeys := []string{
 		hierarchyrecord.TenantSlugKey(current.Record.Slug),
-		deletionTombstoneKey("tenant", current.Record.ID),
+		deletions.TombstoneKey("tenant", current.Record.ID),
 	}
 	renaming := current.Record.Slug != replacement.Slug
 	if renaming {
@@ -69,7 +71,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 	conditions := []etcdstore.Condition{
 		{Key: hierarchyrecord.TenantKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: hierarchyrecord.TenantSlugKey(current.Record.Slug), ModRevision: secondary.Values[0].ModRevision},
-		{Key: deletionTombstoneKey("tenant", current.Record.ID)},
+		{Key: deletions.TombstoneKey("tenant", current.Record.ID)},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantKey(current.Record.ID), Value: value}}
 	if renaming {
@@ -118,11 +120,11 @@ func classifyTenantMutationConflict(
 			return errs.Newf(errs.KindSlugConflict, "Tenant slug %q already exists", replacement.Slug)
 		}
 		if values[0].ModRevision != current.Revision {
-			return stateConflict("tenant", current.Record.ID)
+			return recordcodec.StateConflict("tenant", current.Record.ID)
 		}
 		if values[1] == nil || string(values[1].Value) != current.Record.ID {
 			return errs.New(errs.KindInternal, "Tenant slug index is missing or mismatched")
 		}
-		return stateConflict("tenant", current.Record.ID)
+		return recordcodec.StateConflict("tenant", current.Record.ID)
 	}
 }

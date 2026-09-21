@@ -39,7 +39,7 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 		},
 		Revision: revision,
 	})
@@ -79,7 +79,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
 			runnerRemovalIntentKey(task.Target),
 			runnerObservationKey(task.Target),
 			runnerOwnerKey(evidence.ownerKind, evidence.ownerID, task.Target),

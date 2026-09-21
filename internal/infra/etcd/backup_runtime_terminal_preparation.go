@@ -253,12 +253,12 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(orphan.Point.ID)},
 		)
 	}
-	conditions = append(conditions, evidence.fence.transactionConditions()...)
+	conditions = append(conditions, evidence.fence.TransactionConditions()...)
 	conditions = append(conditions, checkpointPlan.conditions...)
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(current.Record.EnvironmentID),
 	})
-	epoch, err := evidence.fence.epochRewriteMutation()
+	epoch, err := evidence.fence.EpochRewriteMutation()
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
 		return backupRunPublicationPlan{}, err

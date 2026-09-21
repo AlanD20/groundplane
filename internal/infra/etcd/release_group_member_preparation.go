@@ -23,7 +23,7 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	projectResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.ProjectKey(environment.ProjectID),
 		hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 	}})
 	if err != nil {
 		return nil, err
@@ -46,14 +46,14 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	conditions := []etcdstore.Condition{
 		{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(project.ID, environment.ID), ModRevision: projectResult.Values[1].ModRevision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},
 	}
 	ownerIndex := hierarchyrecord.ProjectOwnerKey(project)
 	ownerKeys := []string{ownerIndex}
 	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		ownerKeys = append(ownerKeys,
 			hierarchyrecord.TenantKey(project.TenantID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
 		)
 	}
 	ownerResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: ownerKeys})
@@ -84,7 +84,7 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 		}
 		conditions = append(conditions,
 			etcdstore.Condition{Key: hierarchyrecord.TenantKey(project.TenantID), ModRevision: ownerResult.Values[1].ModRevision},
-			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)},
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)},
 		)
 	}
 	return conditions, nil
@@ -107,7 +107,7 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 	}
 	keys := make([]string, 0, len(group.ServiceIDs))
 	for _, serviceID := range group.ServiceIDs {
-		keys = append(keys, deletionTombstoneKey("service", serviceID))
+		keys = append(keys, deletionrecord.TombstoneKey("service", serviceID))
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
@@ -137,7 +137,7 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 		// Only deletion start has independent authority, so compare its exact
 		// selected member key and no unrelated Service deletion namespace.
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey("service", serviceID),
+			Key: deletionrecord.TombstoneKey("service", serviceID),
 		})
 	}
 	return conditions, nil

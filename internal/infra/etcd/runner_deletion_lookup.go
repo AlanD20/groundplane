@@ -17,7 +17,7 @@ func (repository *RunnerRepository) GetRunnerDeletionTombstone(
 	if err := deletionrecord.ValidateDeletionTarget(deletionrecord.DeletionTargetRunner, runnerID); err != nil {
 		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, err
 	}
-	result, err := repository.store.Get(ctx, deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID))
+	result, err := repository.store.Get(ctx, deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID))
 	if err != nil {
 		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, err
 	}

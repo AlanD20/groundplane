@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -67,7 +68,7 @@ func EntryRuntimeEpochRevision(task TaskRecord) (int64, error) {
 	return epoch, nil
 }
 
-func validateEntryRuntimePublication(task TaskRecord, fence environmentMutationFenceEvidence) error {
+func validateEntryRuntimePublication(task TaskRecord, fence environmentfence.Evidence) error {
 	entryMutation := task.Type == taskjournal.TaskUpdate && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry
 	if !entryMutation && task.Params[taskjournal.TaskEntryRuntimeEpochParam] == "" && task.EntryRuntime == nil {
 		return nil
@@ -76,11 +77,8 @@ func validateEntryRuntimePublication(task TaskRecord, fence environmentMutationF
 	if err != nil {
 		return err
 	}
-	for _, condition := range fence.conditions {
-		if condition.kind != environmentMutationFenceEpoch {
-			continue
-		}
-		if condition.modRevision != epoch {
+	if revision, found := fence.EpochRevision(); found {
+		if revision != epoch {
 			return errs.New(errs.KindStateConflict, "Entry serving runtime changed before publication")
 		}
 		return nil

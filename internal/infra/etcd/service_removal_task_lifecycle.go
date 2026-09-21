@@ -71,7 +71,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	}
 	keys := []string{
 		servicerecord.ServiceRuntimeKey(intent.ServiceID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
@@ -220,7 +220,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		return errs.New(errs.KindStateConflict, "Service removal intent does not match terminal Task")
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		servicerecord.ServiceRuntimeKey(intent.ServiceID), deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
+		servicerecord.ServiceRuntimeKey(intent.ServiceID), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}, Revision: revision})

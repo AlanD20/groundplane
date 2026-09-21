@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -375,26 +376,26 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	fence environmentMutationFenceEvidence,
+	fence environmentfence.Evidence,
 	readRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if task.Status != taskjournal.TaskStatusCompleted || task.Type != taskjournal.TaskAttach ||
 		ids.Validate(ids.KindAttach, task.Target) != nil ||
-		task.Params[taskjournal.TaskMutationEnvironmentParam] != fence.environmentID {
+		task.Params[taskjournal.TaskMutationEnvironmentParam] != fence.EnvironmentID() {
 		return nil, nil, nil
 	}
 	epochRevision := int64(0)
-	for _, condition := range fence.transactionConditions() {
-		if condition.Key == hierarchyrecord.EnvironmentMutationEpochKey(fence.environmentID) {
+	for _, condition := range fence.TransactionConditions() {
+		if condition.Key == hierarchyrecord.EnvironmentMutationEpochKey(fence.EnvironmentID()) {
 			epochRevision = condition.ModRevision
 			break
 		}
 	}
-	if epochRevision <= 0 || readRevision != fence.readAtRevision() {
+	if epochRevision <= 0 || readRevision != fence.ReadRevision() {
 		return nil, nil, errs.New(errs.KindInternal, "Blueprint prerequisite epoch fence is invalid")
 	}
 
-	headKey := blueprints.EnvironmentBlueprintHeadKey(fence.environmentID)
+	headKey := blueprints.EnvironmentBlueprintHeadKey(fence.EnvironmentID())
 	headRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{headKey}, Revision: readRevision,
 	})
@@ -427,7 +428,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	}
 	candidate, err := decodeTaskRecord(candidateRead.Values[0].Value)
 	if err != nil || candidate.Status != taskjournal.TaskStatusPending ||
-		candidate.Owner.EnvironmentID != fence.environmentID || candidate.Target != fence.environmentID ||
+		candidate.Owner.EnvironmentID != fence.EnvironmentID() || candidate.Target != fence.EnvironmentID() ||
 		candidate.Params[blueprints.EnvironmentDesiredRevisionParam] != candidateTaskID ||
 		!taskHasBlueprintCandidateAppliedAuthority(candidate) ||
 		releases.ValidatePublicationID(candidate.Params[releaserender.TaskReleasePublicationParam]) != nil {

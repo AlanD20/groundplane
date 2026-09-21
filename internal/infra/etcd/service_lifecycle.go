@@ -4,10 +4,12 @@ import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -155,16 +157,16 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
-		{Key: deletionTombstoneKey("service", current.Record.Desired.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
+		{Key: deletionrecord.TombstoneKey("service", current.Record.Desired.ID)},
 	}
 	if tenant != nil {
 		conditions = append(conditions[:9], append([]etcdstore.Condition{
 			{Key: hierarchyrecord.TenantKey(tenant.Record.ID), ModRevision: tenant.Revision},
 		}, conditions[9:]...)...)
 		conditions = append(conditions[:12], append([]etcdstore.Condition{
-			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), tenant.Record.ID)},
+			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), tenant.Record.ID)},
 		}, conditions[12:]...)...)
 	}
 	mutations := []etcdstore.Mutation{
@@ -243,7 +245,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clearMutationValues(mutations)
-	if err := validateEnvironmentMutationTransactionBudget(conditions, mutations); err != nil {
+	if err := environmentfence.ValidateTransactionBudget(conditions, mutations); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
@@ -274,10 +276,10 @@ func validateBoundServiceConditions(
 		return errs.New(errs.KindInternal, "Service compare binding is incomplete")
 	}
 	if binding.conditions[desiredIndex] != servicerecord.ServiceDesiredCondition(service) {
-		return stateConflict("service", service.Record.Desired.ID)
+		return recordcodec.StateConflict("service", service.Record.Desired.ID)
 	}
 	if binding.conditions[runtimeIndex] != servicerecord.ServiceRuntimeCondition(service) {
-		return stateConflict("service runtime", service.Record.Desired.ID)
+		return recordcodec.StateConflict("service runtime", service.Record.Desired.ID)
 	}
 	return nil
 }
@@ -445,10 +447,10 @@ func classifyServiceLifecycleStartConflict(
 			return errs.New(errs.KindServiceNotFound, "Service was not found")
 		}
 		if values[4].ModRevision != service.Revision {
-			return stateConflict("service", service.Record.Desired.ID)
+			return recordcodec.StateConflict("service", service.Record.Desired.ID)
 		}
 		if !conditionMatchesRead(servicerecord.ServiceRuntimeCondition(service), values[5]) {
-			return stateConflict("service runtime", service.Record.Desired.ID)
+			return recordcodec.StateConflict("service runtime", service.Record.Desired.ID)
 		}
 		if values[6] != nil {
 			return errs.New(errs.KindResourceInUse, "Service already has an active lifecycle Task")

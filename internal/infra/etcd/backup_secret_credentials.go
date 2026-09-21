@@ -86,7 +86,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 			id := string(candidate.Value)
 			dynamic.secretRecords[id] = dynamic.add(secretrecord.RecordKey(id))
 			dynamic.secretFences[id] = dynamic.add(
-				deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), id),
+				deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), id),
 			)
 			dynamic.secretValues[id] = dynamic.add(secretrecord.ValueKey(id))
 		}

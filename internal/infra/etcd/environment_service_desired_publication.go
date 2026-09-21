@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -73,11 +74,11 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := repository.validateDirectServiceHierarchy(ctx, input, fence.readAtRevision()); err != nil {
+	if err := repository.validateDirectServiceHierarchy(ctx, input, fence.ReadRevision()); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	previous, found, err := repository.getEnvironmentBlueprintProjectionAtRevision(
-		ctx, input.Environment.Record.ID, fence.readAtRevision(),
+		ctx, input.Environment.Record.ID, fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -108,7 +109,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(headReference)
-	epochMutation, err := fence.epochRewriteMutation()
+	epochMutation, err := fence.EpochRewriteMutation()
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -123,7 +124,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
-		{Key: deletionTombstoneKey("service", serviceID)},
+		{Key: deletions.TombstoneKey("service", serviceID)},
 	}
 	if input.Change.Current == nil {
 		conditions = append(conditions, etcdstore.Condition{Key: servicerecord.ServiceRuntimeKey(serviceID)})
@@ -133,7 +134,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	conditions = append(conditions, referenceConditions...)
 	referenceOffset := len(conditions) - len(referenceConditions)
 	fenceOffset := len(conditions)
-	conditions = append(conditions, fence.transactionConditions()...)
+	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
@@ -176,7 +177,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		if err := classifyServiceMutationReferenceConflict(values[referenceOffset:fenceOffset], input.References); err != nil {
 			return err
 		}
-		if conflict := fence.classifyCAS(values[fenceOffset:]); conflict != nil {
+		if conflict := fence.ClassifyConflict(values[fenceOffset:]); conflict != nil {
 			return conflict
 		}
 		return errs.New(errs.KindStateConflict, "direct Service desired publication raced")

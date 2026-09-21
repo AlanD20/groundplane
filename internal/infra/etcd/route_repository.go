@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -223,13 +224,13 @@ func routeWriteConditions(
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		servicerecord.ServiceDesiredCondition(target),
-		{Key: deletionTombstoneKey("route", record.Desired.ID)},
-		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
+		{Key: deletions.TombstoneKey("route", record.Desired.ID)},
+		{Key: deletions.TombstoneKey("environment", environment.Record.ID)},
+		{Key: deletions.TombstoneKey("project", project.Record.ID)},
+		{Key: deletions.TombstoneKey("service", target.Record.Desired.ID)},
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)})
 	}
 	return conditions
 }
@@ -302,7 +303,7 @@ func classifyRouteWriteConflict(
 			return errs.New(errs.KindRouteNotFound, "Route was not found")
 		}
 		if values[0].ModRevision != expectedRouteRevision {
-			return stateConflict("route", record.Desired.ID)
+			return recordcodec.StateConflict("route", record.Desired.ID)
 		}
 		for _, index := range []int{1, 2} {
 			if values[index] == nil || string(values[index].Value) != record.Desired.ID {
@@ -314,19 +315,19 @@ func classifyRouteWriteConflict(
 		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
 	}
 	if values[3].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
+		return recordcodec.StateConflict("environment", environment.Record.ID)
 	}
 	if values[4] == nil {
 		return errs.New(errs.KindProjectNotFound, "Project was not found")
 	}
 	if values[4].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
+		return recordcodec.StateConflict("project", project.Record.ID)
 	}
 	if values[5] == nil {
 		return errs.New(errs.KindServiceNotFound, "Route target Service was not found")
 	}
 	if values[5].ModRevision != target.Revision {
-		return stateConflict("service", target.Record.Desired.ID)
+		return recordcodec.StateConflict("service", target.Record.Desired.ID)
 	}
 	for _, index := range []int{6, 7, 8, 9} {
 		if values[index] != nil {
@@ -336,5 +337,5 @@ func classifyRouteWriteConflict(
 	if expected == 11 && values[10] != nil {
 		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
 	}
-	return stateConflict("route", record.Desired.ID)
+	return recordcodec.StateConflict("route", record.Desired.ID)
 }

@@ -8,6 +8,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -225,7 +226,7 @@ func classifyPlatformComponentTaskConflict(
 			return errs.New(errs.KindComponentNotFound, "platform Component was not found")
 		}
 		if values[0].ModRevision != current.Revision {
-			return stateConflict("platform component", current.Record.Desired.ID)
+			return recordcodec.StateConflict("platform component", current.Record.Desired.ID)
 		}
 		for index := 1; index < 3; index++ {
 			if values[index] == nil || values[index].ModRevision != indexes.Values[index-1].ModRevision ||

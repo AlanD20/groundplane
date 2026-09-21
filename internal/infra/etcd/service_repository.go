@@ -2,9 +2,12 @@ package etcd
 
 import (
 	"context"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -20,7 +23,7 @@ type ServiceRepository struct {
 type ordinaryEnvironmentMutationContext struct {
 	environmentID string
 	readRevision  int64
-	fence         environmentMutationFenceEvidence
+	fence         environmentfence.Evidence
 }
 
 type ordinaryEnvironmentMutationBinding struct {
@@ -47,7 +50,7 @@ func loadOrdinaryEnvironmentMutationContext(
 	if anchor == nil || anchor.ReadRevision <= 0 {
 		return nil, errs.New(errs.KindInternal, "environment mutation anchor read is invalid")
 	}
-	evidence, err := loadOrdinaryEnvironmentMutationFence(ctx, store, environmentID, anchor.ReadRevision)
+	evidence, err := environmentfence.LoadOrdinary(ctx, store, environmentID, anchor.ReadRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +77,7 @@ func (mutationContext *ordinaryEnvironmentMutationContext) revisionForKey(key st
 	if mutationContext == nil {
 		return 0, false
 	}
-	for _, condition := range mutationContext.fence.transactionConditions() {
+	for _, condition := range mutationContext.fence.TransactionConditions() {
 		if condition.Key == key && condition.ModRevision > 0 && !condition.Prefix {
 			return condition.ModRevision, true
 		}
@@ -144,7 +147,7 @@ func (mutationContext *ordinaryEnvironmentMutationContext) bind(
 	if err != nil {
 		return nil, err
 	}
-	if err := validateEnvironmentMutationTransactionBudget(binding.conditions, binding.mutations); err != nil {
+	if err := environmentfence.ValidateTransactionBudget(binding.conditions, binding.mutations); err != nil {
 		binding.clear()
 		return nil, err
 	}
@@ -163,7 +166,7 @@ func (mutationContext *ordinaryEnvironmentMutationContext) prepareBinding(
 	}
 	originalConditionCount := len(conditions)
 	conditions = append([]etcdstore.Condition(nil), conditions...)
-	fenceConditions := mutationContext.fence.transactionConditions()
+	fenceConditions := mutationContext.fence.TransactionConditions()
 	fenceIndexes := make([]int, len(fenceConditions))
 	conditionIndexes := make(map[string]int, len(conditions)+len(fenceConditions))
 	for index, condition := range conditions {
@@ -195,7 +198,7 @@ func (mutationContext *ordinaryEnvironmentMutationContext) prepareBinding(
 	}
 	mutations = filteredMutations
 	if advanceEpoch {
-		epochMutation, err := mutationContext.fence.epochRewriteMutation()
+		epochMutation, err := mutationContext.fence.EpochRewriteMutation()
 		if err != nil {
 			return nil, err
 		}
@@ -259,7 +262,7 @@ func (binding *ordinaryEnvironmentMutationBinding) classify(
 	for index, conditionIndex := range binding.fenceIndexes {
 		fenceReads[index] = reads[conditionIndex]
 	}
-	return binding.context.fence.classifyCAS(fenceReads)
+	return binding.context.fence.ClassifyConflict(fenceReads)
 }
 
 func (binding *ordinaryEnvironmentMutationBinding) preparedConflict(
@@ -352,7 +355,7 @@ func serviceMutationReferenceConditions(
 			return nil, errs.New(errs.KindValidationFailed, "Service Zone reference is not desired")
 		}
 		delete(wantZones, zone.Record.Desired.Name)
-		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("zone", zone.Record.Desired.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletions.TombstoneKey("zone", zone.Record.Desired.ID)})
 	}
 	wantDependencies := make(map[string]struct{}, len(record.Desired.DependsOn))
 	for name := range record.Desired.DependsOn {
@@ -372,7 +375,7 @@ func serviceMutationReferenceConditions(
 		delete(wantDependencies, dependency.Record.Desired.Name)
 		conditions = append(conditions,
 			servicerecord.ServiceDesiredCondition(dependency),
-			etcdstore.Condition{Key: deletionTombstoneKey("service", dependency.Record.Desired.ID)},
+			etcdstore.Condition{Key: deletions.TombstoneKey("service", dependency.Record.Desired.ID)},
 		)
 	}
 	if len(wantZones) != 0 || len(wantDependencies) != 0 {
@@ -477,7 +480,7 @@ func classifyServiceWriteConflict(
 			return errs.New(errs.KindServiceNotFound, "Service was not found")
 		}
 		if values[0].ModRevision != expectedServiceRevision {
-			return stateConflict("service", record.Desired.ID)
+			return recordcodec.StateConflict("service", record.Desired.ID)
 		}
 		for _, index := range []int{1, 2} {
 			if values[index] == nil || string(values[index].Value) != record.Desired.ID {
@@ -489,13 +492,13 @@ func classifyServiceWriteConflict(
 		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
 	}
 	if values[3].ModRevision != environment.Revision {
-		return stateConflict("environment", environment.Record.ID)
+		return recordcodec.StateConflict("environment", environment.Record.ID)
 	}
 	if values[4] == nil {
 		return errs.New(errs.KindProjectNotFound, "Project was not found")
 	}
 	if values[4].ModRevision != project.Revision {
-		return stateConflict("project", project.Record.ID)
+		return recordcodec.StateConflict("project", project.Record.ID)
 	}
 	for _, index := range []int{5, 6, 7} {
 		if values[index] != nil {
@@ -505,5 +508,5 @@ func classifyServiceWriteConflict(
 	if expected == 9 && values[8] != nil {
 		return errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
 	}
-	return stateConflict("service", record.Desired.ID)
+	return recordcodec.StateConflict("service", record.Desired.ID)
 }

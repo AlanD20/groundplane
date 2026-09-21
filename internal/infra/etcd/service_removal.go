@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -227,7 +228,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		servicerecord.ServiceDesiredCondition(current),
 		servicerecord.ServiceRuntimeCondition(current),
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID)},
 		{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
@@ -246,7 +247,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID),
+			Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: environmentchanges.ServiceRemovalIntentKey(task.ID), Value: intentValue},
@@ -260,10 +261,10 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 			return errs.New(errs.KindServiceNotFound, "Service was not found")
 		}
 		if values[4].ModRevision != current.Revision {
-			return stateConflict("service", current.Record.Desired.ID)
+			return recordcodec.StateConflict("service", current.Record.Desired.ID)
 		}
 		if !conditionMatchesRead(servicerecord.ServiceRuntimeCondition(current), values[5]) {
-			return stateConflict("service runtime", current.Record.Desired.ID)
+			return recordcodec.StateConflict("service runtime", current.Record.Desired.ID)
 		}
 		if values[6] != nil || values[7] != nil || values[9] != nil || values[10] != nil {
 			return errs.New(errs.KindResourceInUse, "Service removal or Environment mutation is already active")

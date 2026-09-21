@@ -225,12 +225,12 @@ func newRunnerCreateEvidence(
 	evidence.quota = add(etcdstore.Condition{Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
 	evidence.system = add(etcdstore.Condition{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.Revision})
 	evidence.tenant = add(etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})
-	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)})
-	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), desired.TenantID)})
+	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)})
+	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), desired.TenantID)})
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		evidence.project = add(etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.project.Revision})
 		evidence.projectDeletion = add(
-			etcdstore.Condition{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), desired.OwnerID)},
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), desired.OwnerID)},
 		)
 	}
 	evidence.host = add(allocation.host.condition)
@@ -266,16 +266,16 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 			return errs.New(errs.KindRunnerSlugConflict, "runner slug is already in use")
 		}
 		if revisionChanged(values[evidence.quota], evidence.allocation.quota.Revision) {
-			return stateConflict("runner tenant quota", evidence.desired.TenantID)
+			return recordcodec.StateConflict("runner tenant quota", evidence.desired.TenantID)
 		}
 		if revisionChanged(values[evidence.system], evidence.allocation.system.Revision) {
-			return stateConflict("system pool registry", "global")
+			return recordcodec.StateConflict("system pool registry", "global")
 		}
 		if values[evidence.tenant] == nil {
 			return errs.New(errs.KindTenantNotFound, "tenant was not found")
 		}
 		if values[evidence.tenant].ModRevision != evidence.parents.tenant.Revision {
-			return stateConflict("tenant", evidence.desired.TenantID)
+			return recordcodec.StateConflict("tenant", evidence.desired.TenantID)
 		}
 		if values[evidence.runnerDeletion] != nil || values[evidence.tenantDeletion] != nil {
 			return errs.New(errs.KindResourceInUse, "runner hierarchy deletion is in progress")
@@ -285,15 +285,15 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 				return errs.New(errs.KindProjectNotFound, "project was not found")
 			}
 			if values[evidence.project].ModRevision != evidence.parents.project.Revision {
-				return stateConflict("project", evidence.desired.OwnerID)
+				return recordcodec.StateConflict("project", evidence.desired.OwnerID)
 			}
 			if values[evidence.projectDeletion] != nil {
 				return errs.New(errs.KindResourceInUse, "runner hierarchy deletion is in progress")
 			}
 		}
 		if values[evidence.host] != nil {
-			return stateConflict("runner host slot", evidence.desired.ID)
+			return recordcodec.StateConflict("runner host slot", evidence.desired.ID)
 		}
-		return stateConflict("runner", evidence.desired.ID)
+		return recordcodec.StateConflict("runner", evidence.desired.ID)
 	}
 }

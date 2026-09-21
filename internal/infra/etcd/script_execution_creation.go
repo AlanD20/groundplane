@@ -180,7 +180,7 @@ func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []etcds
 	}
 	for _, network := range sources.Networks {
 		conditions = append(conditions, etcdstore.Condition{
-			Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), network.Record.Desired.ID),
+			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), network.Record.Desired.ID),
 		})
 	}
 	conditions = append(conditions, scriptAttachSourceConditions(sources.AttachSources)...)

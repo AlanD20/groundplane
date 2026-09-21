@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -24,7 +25,7 @@ func (repository *HierarchyRepository) GetDeletionTombstone(
 	if err := deletionrecord.ValidateDeletionTarget(targetKind, targetID); err != nil {
 		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, err
 	}
-	result, err := repository.store.Get(ctx, deletionTombstoneKey(string(targetKind), targetID))
+	result, err := repository.store.Get(ctx, deletionrecord.TombstoneKey(string(targetKind), targetID))
 	if err != nil {
 		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{}, false, err
 	}
@@ -126,9 +127,9 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		},
 		Revision: readRevision,
 	})
@@ -145,10 +146,10 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		)
 	}
 	if evidence.Values[0].ModRevision != environment.Revision {
-		return IdempotencyTransactionResult{}, stateConflict("environment", environment.Record.ID)
+		return IdempotencyTransactionResult{}, recordcodec.StateConflict("environment", environment.Record.ID)
 	}
 	if evidence.Values[1].ModRevision != project.Revision {
-		return IdempotencyTransactionResult{}, stateConflict("project", project.Record.ID)
+		return IdempotencyTransactionResult{}, recordcodec.StateConflict("project", project.Record.ID)
 	}
 	storedTenant, err := hierarchyrecord.DecodeTenant(evidence.Values[2].Value)
 	if err != nil || storedTenant.ID != project.Record.TenantID {
@@ -250,7 +251,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	}
 	defer clear(reference)
 
-	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)
+	tombstoneKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID)},
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
@@ -275,8 +276,8 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			ModRevision: expectedBlueprintRevision,
 		},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID)},
 		{
 			Key:         hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			ModRevision: evidence.Values[7].ModRevision,
@@ -427,7 +428,7 @@ func classifyEnvironmentDeletionStartConflict(
 			return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 		}
 		if values[4].ModRevision != environment.Revision {
-			return stateConflict("environment", environment.Record.ID)
+			return recordcodec.StateConflict("environment", environment.Record.ID)
 		}
 		for _, index := range []int{5, 6} {
 			if values[index] == nil || string(values[index].Value) != environment.Record.ID {
@@ -448,7 +449,7 @@ func classifyEnvironmentDeletionStartConflict(
 			return errs.New(errs.KindProjectNotFound, "project was not found")
 		}
 		if values[10].ModRevision != project.Revision {
-			return stateConflict("project", project.Record.ID)
+			return recordcodec.StateConflict("project", project.Record.ID)
 		}
 		if values[11] != nil {
 			return errs.New(errs.KindResourceInUse, "project deletion is in progress")

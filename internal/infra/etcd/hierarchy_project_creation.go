@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -41,7 +42,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	tombstoneKey := deletionTombstoneKey("tenant", record.TenantID)
+	tombstoneKey := deletions.TombstoneKey("tenant", record.TenantID)
 	ownerState, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{tombstoneKey}, Revision: owner.ReadRevision,
 	})
@@ -116,7 +117,7 @@ func classifyProjectCreateConflict(record hierarchyrecord.ProjectRecord, ownerRe
 			return errs.New(errs.KindInternal, "generated Project coordination identity collided with durable state")
 		}
 		if values[3].ModRevision != ownerRevision {
-			return stateConflict("tenant", record.TenantID)
+			return recordcodec.StateConflict("tenant", record.TenantID)
 		}
 		return errs.New(errs.KindInternal, "Project creation compare failure was not classified")
 	}

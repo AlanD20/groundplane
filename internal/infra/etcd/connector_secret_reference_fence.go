@@ -68,7 +68,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 			secretID := string(selected.Value)
 			candidateKeys = append(candidateKeys,
 				secretrecord.RecordKey(secretID),
-				deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID),
+				deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID),
 				secretrecord.ValueKey(secretID),
 			)
 		}

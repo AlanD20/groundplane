@@ -28,9 +28,9 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID),
 		backuppolicy.BackupKeyKey(input.EnvironmentID),
 		backuppolicy.BackupKeyValueKey(input.EnvironmentID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), input.EnvironmentID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), projectID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetTenant), tenantID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), input.EnvironmentID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), projectID),
+		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), tenantID),
 		coordinationrecord.Key(input.EnvironmentID),
 	}})
 	if err != nil {

@@ -4,8 +4,10 @@ import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,7 +18,7 @@ func (repository *EntryRepository) loadEntryMutationFence(
 	domainKeys []string,
 	ownerIndex int,
 	entryID string,
-) (environmentMutationFenceEvidence, int64, error) {
+) (environmentfence.Evidence, int64, error) {
 	keys := append([]string(nil), domainKeys...)
 	environmentIndex := len(keys)
 	keys = append(keys, hierarchyrecord.EnvironmentKey(environment.Record.ID))
@@ -26,10 +28,10 @@ func (repository *EntryRepository) loadEntryMutationFence(
 		Keys: keys,
 	})
 	if err != nil {
-		return environmentMutationFenceEvidence{}, 0, err
+		return environmentfence.Evidence{}, 0, err
 	}
 	if result == nil || result.ReadRevision <= 0 || len(result.Values) != len(keys) {
-		return environmentMutationFenceEvidence{}, 0, errs.New(
+		return environmentfence.Evidence{}, 0, errs.New(
 			errs.KindInternal,
 			"Entry mutation fixed-revision evidence is incomplete",
 		)
@@ -37,46 +39,46 @@ func (repository *EntryRepository) loadEntryMutationFence(
 	defer etcdstore.ClearValues(result.Values)
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
-			return environmentMutationFenceEvidence{}, 0, errs.New(
+			return environmentfence.Evidence{}, 0, errs.New(
 				errs.KindInternal,
 				"Entry mutation fixed-revision evidence is corrupt",
 			)
 		}
 	}
 	if result.Values[environmentIndex] == nil {
-		return environmentMutationFenceEvidence{}, 0, errs.New(
+		return environmentfence.Evidence{}, 0, errs.New(
 			errs.KindEnvironmentNotFound,
 			"Environment was not found",
 		)
 	}
 	if result.Values[environmentIndex].ModRevision != environment.Revision {
-		return environmentMutationFenceEvidence{}, 0, stateConflict("Environment", environment.Record.ID)
+		return environmentfence.Evidence{}, 0, recordcodec.StateConflict("Environment", environment.Record.ID)
 	}
 	if result.Values[projectIndex] == nil {
-		return environmentMutationFenceEvidence{}, 0, errs.New(errs.KindProjectNotFound, "Project was not found")
+		return environmentfence.Evidence{}, 0, errs.New(errs.KindProjectNotFound, "Project was not found")
 	}
 	if result.Values[projectIndex].ModRevision != project.Revision {
-		return environmentMutationFenceEvidence{}, 0, stateConflict("Project", project.Record.ID)
+		return environmentfence.Evidence{}, 0, recordcodec.StateConflict("Project", project.Record.ID)
 	}
 	ownerRevision := int64(0)
 	if ownerIndex >= 0 {
 		if ownerIndex >= len(domainKeys) || result.Values[ownerIndex] == nil ||
 			string(result.Values[ownerIndex].Value) != entryID {
-			return environmentMutationFenceEvidence{}, 0, errs.New(
+			return environmentfence.Evidence{}, 0, errs.New(
 				errs.KindInternal,
 				"Entry owner index is missing or corrupt",
 			)
 		}
 		ownerRevision = result.Values[ownerIndex].ModRevision
 	}
-	fence, err := loadOrdinaryEnvironmentMutationFence(
+	fence, err := environmentfence.LoadOrdinary(
 		ctx,
 		repository.store,
 		environment.Record.ID,
 		result.ReadRevision,
 	)
 	if err != nil {
-		return environmentMutationFenceEvidence{}, 0, err
+		return environmentfence.Evidence{}, 0, err
 	}
 	return fence, ownerRevision, nil
 }
@@ -91,7 +93,7 @@ func entryWriteConditions(
 		{Key: entryrecord.RecordKey(record.Entry.ID), ModRevision: entryRevision},
 		{Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID), ModRevision: ownerRevision},
 		{Key: generationKey},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), record.Entry.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), record.Entry.ID)},
 	}
 	return conditions
 }
@@ -103,7 +105,7 @@ func entryDeleteConditions(
 	conditions := []etcdstore.Condition{
 		{Key: entryrecord.RecordKey(current.Record.Entry.ID), ModRevision: current.Revision},
 		{Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID), ModRevision: ownerRevision},
-		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID)},
+		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), current.Record.Entry.ID)},
 	}
 	return conditions
 }

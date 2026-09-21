@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,7 +17,7 @@ type BackupRuntimeRepository struct {
 }
 
 type backupRuntimeOwnedEvidence struct {
-	fence environmentMutationFenceEvidence
+	fence environmentfence.Evidence
 }
 
 func NewBackupRuntimeRepository(store etcdstore.Store) (*BackupRuntimeRepository, error) {

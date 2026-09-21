@@ -4,6 +4,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -149,9 +150,9 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: deletionTombstoneKey("environment", record.ID)},
-		{Key: deletionTombstoneKey("project", project.Record.ID)},
-		{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
+		{Key: deletions.TombstoneKey("environment", record.ID)},
+		{Key: deletions.TombstoneKey("project", project.Record.ID)},
+		{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)},
 		{Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID)},
 		{Key: coordinationKey},
@@ -295,7 +296,7 @@ func classifyEnvironmentCreateConflict(
 			return errs.New(errs.KindProjectNotFound, "project was not found")
 		}
 		if values[7].ModRevision != project.Revision {
-			return stateConflict("project", project.Record.ID)
+			return recordcodec.StateConflict("project", project.Record.ID)
 		}
 		if values[8] != nil {
 			return errs.New(errs.KindResourceInUse, "Environment deletion is in progress")
@@ -308,7 +309,7 @@ func classifyEnvironmentCreateConflict(
 		}
 		if (poolRegistry.Revision == 0 && values[11] != nil) ||
 			(poolRegistry.Revision > 0 && (values[11] == nil || values[11].ModRevision != poolRegistry.Revision)) {
-			return stateConflict("environment pool registry", "global")
+			return recordcodec.StateConflict("environment pool registry", "global")
 		}
 		if values[12] != nil {
 			return errs.New(errs.KindInternal, "environment creation collided with mutation epoch state")
@@ -325,6 +326,6 @@ func classifyEnvironmentCreateConflict(
 				return errs.New(errs.KindInternal, "Environment creation collided with Component singleton state")
 			}
 		}
-		return stateConflict("environment", "creation")
+		return recordcodec.StateConflict("environment", "creation")
 	}
 }

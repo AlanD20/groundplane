@@ -131,7 +131,7 @@ func prepareBlueprintBackupPolicyPublication(
 			} else {
 				compare(backupPolicyCompareAttach, source.record.TargetID, attachrecord.AttachKey(source.record.TargetID), source.attach.Revision)
 				compare(backupPolicyCompareTargetOwnerIndex, source.record.TargetID, attachrecord.AttachOwnerKey(state.environmentID, source.record.TargetID), source.attachOwner.ModRevision)
-				compare(backupPolicyCompareTargetTombstone, source.record.TargetID, deletionTombstoneKey("attach", source.record.TargetID), 0)
+				compare(backupPolicyCompareTargetTombstone, source.record.TargetID, deletionrecord.TombstoneKey("attach", source.record.TargetID), 0)
 			}
 		}
 	}
@@ -165,7 +165,7 @@ func prepareBlueprintBackupPolicyPublication(
 		compare(
 			backupPolicyCompareConnectorTombstone,
 			state.retainedConnectorID,
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), state.retainedConnectorID),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), state.retainedConnectorID),
 			tombstoneRevision,
 		)
 	} else if state.candidate.Connector != nil {
@@ -173,7 +173,7 @@ func prepareBlueprintBackupPolicyPublication(
 		compare(backupPolicyCompareConnector, connectorID, state.connectorNameIndex.Key, state.connectorNameIndex.ModRevision)
 		compare(backupPolicyCompareConnector, connectorID, connectorrecord.RecordKey(connectorID), state.candidate.Connector.Revision)
 		compare(backupPolicyCompareConnectorOwnerIndex, connectorID, state.candidate.ConnectorOwnerIndex.Key, state.candidate.ConnectorOwnerIndex.ModRevision)
-		compare(backupPolicyCompareConnectorTombstone, connectorID, deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID), 0)
+		compare(backupPolicyCompareConnectorTombstone, connectorID, deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID), 0)
 	}
 	for _, reference := range state.candidate.ConnectorReferences {
 		revision := int64(0)

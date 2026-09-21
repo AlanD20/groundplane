@@ -5,6 +5,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -126,8 +127,8 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		hierarchyrecord.EnvironmentKey(environmentID), hierarchyrecord.ProjectKey(project.ID), hierarchyrecord.TenantKey(project.TenantID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID), releases.ReleaseFenceSetKey(environmentID),
-		deletionTombstoneKey("environment", environmentID), deletionTombstoneKey("project", project.ID),
-		deletionTombstoneKey("tenant", project.TenantID),
+		deletions.TombstoneKey("environment", environmentID), deletions.TombstoneKey("project", project.ID),
+		deletions.TombstoneKey("tenant", project.TenantID),
 	}
 	loaded, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: initial.ReadRevision})
 	if err != nil {
@@ -202,7 +203,7 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 			return nil, errs.New(errs.KindValidationFailed, "release planning service is duplicated")
 		}
 		seen[serviceID] = struct{}{}
-		keys = append(keys, deletionTombstoneKey("service", serviceID), releases.ReleaseProjectionKey(serviceID))
+		keys = append(keys, deletions.TombstoneKey("service", serviceID), releases.ReleaseProjectionKey(serviceID))
 	}
 	loaded, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
 	if err != nil {

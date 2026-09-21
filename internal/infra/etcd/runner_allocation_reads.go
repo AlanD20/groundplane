@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -94,7 +95,7 @@ func (repository *RunnerRepository) getRunnerAllocationState(
 		}
 		owners[record.RunnerID] = struct{}{}
 		if record.RunnerID == runnerID {
-			return runnerAllocationState{}, stateConflict("runner", runnerID)
+			return runnerAllocationState{}, recordcodec.StateConflict("runner", runnerID)
 		}
 	}
 	selected := firstFree

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -126,7 +127,7 @@ func diagnoseRename(
 		return errs.New(errs.KindSlugConflict, "slug is already in use")
 	}
 	if current.Values[0].ModRevision != expectedRevision {
-		return stateConflict(kind, id)
+		return recordcodec.StateConflict(kind, id)
 	}
 	if current.Values[1] == nil || string(current.Values[1].Value) != id {
 		return errs.New(errs.KindInternal, "slug index is missing or mismatched")
@@ -137,9 +138,5 @@ func diagnoseRename(
 			return errs.New(errs.KindInternal, "owner index is missing or mismatched")
 		}
 	}
-	return stateConflict(kind, id)
-}
-
-func stateConflict(kind string, id string) error {
-	return errs.Newf(errs.KindStateConflict, "%s %s changed", kind, id)
+	return recordcodec.StateConflict(kind, id)
 }

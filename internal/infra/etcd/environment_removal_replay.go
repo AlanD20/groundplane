@@ -22,7 +22,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			hierarchyrecord.EnvironmentKey(task.Target),
-			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
 			blueprints.EnvironmentBlueprintHeadKey(task.Target),
 			projectionrecord.EnvironmentComposeProjectionStorageKey(task.Target),
 			networkreservations.EnvironmentPoolRegistryKey,
