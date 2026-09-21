@@ -12,6 +12,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -32,7 +33,7 @@ type preparedHooks struct {
 func (service *Service) prepareDeployHooks(
 	ctx context.Context,
 	input PrepareInput,
-	manifest etcd.VersionedReleaseManifest,
+	manifest releases.VersionedReleaseManifest,
 	task etcd.TaskRecord,
 	members []releaserender.ReleaseTaskRenderMember,
 ) (preparedHooks, error) {

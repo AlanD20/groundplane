@@ -8,11 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type releaseStagedWrite struct {
-	key   string
-	value []byte
-}
-
 func validateReleaseOperationHead(value releases.ReleaseOperationHead, manifest releases.ReleaseStagedManifest, task TaskRecord) error {
 	if value.OperationID != manifest.OperationID || value.PublicationID != manifest.PublicationID ||
 		ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil || value.State != domain.StatePending ||

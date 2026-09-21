@@ -215,7 +215,7 @@ func validateNativeRestorationDescriptor(
 
 type BlueprintReleasePublicationEvidence struct {
 	NativePredecessors         []BlueprintNativePredecessorCapture
-	Manifest                   VersionedReleaseManifest
+	Manifest                   releases.VersionedReleaseManifest
 	EnvironmentID              string
 	Task                       TaskRecord
 	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor

@@ -24,7 +24,7 @@ import (
 // by the final owning transaction.
 func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 	ctx context.Context,
-	manifest VersionedReleaseManifest,
+	manifest releases.VersionedReleaseManifest,
 	hooks []ReleaseHookExecutionPublication,
 ) ([]scriptsourceevidence.ScriptSourcePreparationMember, error) {
 	if ctx == nil || ledger == nil || manifest.ReadRevision <= 0 {
