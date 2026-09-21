@@ -32,7 +32,7 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	if source.Components != nil {
 		clone.Components = make([]componentrecord.Record, len(source.Components))
 		for index, component := range source.Components {
-			clone.Components[index] = cloneComponentTaskRecord(component)
+			clone.Components[index] = componentrecord.CloneRecord(component)
 		}
 	}
 	clone.ManagedComponentRuntimeSources = append(

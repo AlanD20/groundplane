@@ -244,17 +244,10 @@ func cloneComponentTaskCandidates(source []ComponentTaskCandidate) []ComponentTa
 	for index, candidate := range source {
 		clone[index] = ComponentTaskCandidate{
 			CurrentRevision: candidate.CurrentRevision,
-			Current:         cloneComponentTaskRecord(candidate.Current),
-			Candidate:       cloneComponentTaskRecord(candidate.Candidate),
+			Current:         componentrecord.CloneRecord(candidate.Current),
+			Candidate:       componentrecord.CloneRecord(candidate.Candidate),
 		}
 	}
-	return clone
-}
-
-func cloneComponentTaskRecord(record componentrecord.Record) componentrecord.Record {
-	clone := record
-	clone.Desired.Config = core.CloneComponentConfig(record.Desired.Config)
-	clone.Runtime.GeneratedServices = append([]string(nil), record.Runtime.GeneratedServices...)
 	return clone
 }
 
