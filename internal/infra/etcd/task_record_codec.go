@@ -94,7 +94,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
 		Steps: taskjournal.CloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
 		ComponentActionStepIDs:          append([]string(nil), record.ComponentActionStepIDs...),
-		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources),
+		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources),
 		Materializations:                materializationrecord.Clone(record.Materializations),
 		EntryRuntime:                    taskjournal.CloneEntryTaskRuntime(record.EntryRuntime),
 		Configuration:                   taskconfiguration.CloneTaskConfiguration(record.Configuration),
@@ -144,7 +144,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
 		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
 		ComponentActionStepIDs:          append([]string(nil), data.ComponentActionStepIDs...),
-		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(data.ManagedComponentTeardownSources),
+		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(data.ManagedComponentTeardownSources),
 		Materializations:                data.Materializations,
 		EntryRuntime:                    data.EntryRuntime,
 		Configuration:                   data.Configuration,
@@ -161,7 +161,7 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned := record
 	cloned.EventCheckpoints = append([]taskjournal.TaskEventCheckpoint(nil), record.EventCheckpoints...)
 	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
-	cloned.ManagedComponentTeardownSources = cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
+	cloned.ManagedComponentTeardownSources = projectionrecord.CloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
 	cloned.Params = cloneStringMap(record.Params)
 	cloned.Steps = taskjournal.CloneTaskSteps(record.Steps)
 	cloned.Materializations = materializationrecord.Clone(record.Materializations)

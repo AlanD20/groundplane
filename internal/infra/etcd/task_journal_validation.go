@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	environmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -111,7 +112,7 @@ func ValidateTaskRecord(record TaskRecord) error {
 	if err := executionplan.ValidateComponentActionStepIDs(record.ComponentActionStepIDs); err != nil {
 		return err
 	}
-	if err := ValidateManagedComponentTeardownSources(record.ManagedComponentTeardownSources); err != nil {
+	if err := environmentprojection.ValidateManagedComponentTeardownSources(record.ManagedComponentTeardownSources); err != nil {
 		return err
 	}
 	for _, id := range record.ComponentActionStepIDs {

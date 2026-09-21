@@ -43,7 +43,7 @@ func (resolver *TaskPlanResolver) BlueprintManagedComponentTeardown(
 			"Blueprint managed Component teardown input is invalid",
 		)
 	}
-	if err := etcd.ValidateManagedComponentTeardownSources(task.ManagedComponentTeardownSources); err != nil {
+	if err := projectionrecord.ValidateManagedComponentTeardownSources(task.ManagedComponentTeardownSources); err != nil {
 		return BlueprintManagedComponentTeardown{}, err
 	}
 	result := BlueprintManagedComponentTeardown{Artifacts: []*agentpb.ComposeArtifact{candidate}}

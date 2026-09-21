@@ -189,7 +189,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
-	managedRuntimeSources, err := selectManagedComponentRuntimeSources(desired.Record, selected.Record, found)
+	managedRuntimeSources, err := projectionrecord.SelectManagedComponentRuntimeSources(desired.Record, selected.Record, found)
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
