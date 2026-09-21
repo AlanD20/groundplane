@@ -35,7 +35,7 @@ func (repository *Executor) AppendActions(
 	for index, action := range actions {
 		expected := start + int64(index)
 		if action.ParentOperationID != current.Tombstone.OperationID || action.Ordinal != expected {
-			ClearByteSlices(encoded)
+			etcdstore.ClearByteSlices(encoded)
 			return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
 				errs.KindValidationFailed,
 				"hierarchy deletion plan is not contiguous",
@@ -43,16 +43,16 @@ func (repository *Executor) AppendActions(
 		}
 		encoded[index], err = hierarchydeletion.EncodeHierarchyDeletionAction(action)
 		if err != nil {
-			ClearByteSlices(encoded)
+			etcdstore.ClearByteSlices(encoded)
 			return hierarchydeletion.HierarchyDeletionOperation{}, err
 		}
 		keys[index], err = hierarchydeletion.HierarchyDeletionActionKey(action.ParentOperationID, action.Ordinal)
 		if err != nil {
-			ClearByteSlices(encoded)
+			etcdstore.ClearByteSlices(encoded)
 			return hierarchydeletion.HierarchyDeletionOperation{}, err
 		}
 	}
-	defer ClearByteSlices(encoded)
+	defer etcdstore.ClearByteSlices(encoded)
 	if current.PlanCursor > start {
 		if current.PlanCursor < start+int64(len(actions)) {
 			return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
@@ -170,28 +170,28 @@ func (repository *Executor) sealPlan(
 	for ordinal := int64(0); ordinal < current.PlanCursor; ordinal++ {
 		key, keyErr := hierarchydeletion.HierarchyDeletionActionKey(current.Tombstone.OperationID, ordinal)
 		if keyErr != nil {
-			ClearByteSlices(values)
+			etcdstore.ClearByteSlices(values)
 			return hierarchydeletion.HierarchyDeletionOperation{}, keyErr
 		}
 		stored, getErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{key}, Revision: current.TombstoneRevision,
 		})
 		if getErr != nil {
-			ClearByteSlices(values)
+			etcdstore.ClearByteSlices(values)
 			return hierarchydeletion.HierarchyDeletionOperation{}, getErr
 		}
 		if stored == nil || len(stored.Values) != 1 || stored.Values[0] == nil {
-			ClearByteSlices(values)
+			etcdstore.ClearByteSlices(values)
 			return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		action, decodeErr := hierarchydeletion.DecodeHierarchyDeletionAction(stored.Values[0].Value)
 		if decodeErr != nil || action.Ordinal != ordinal || action.ParentOperationID != current.Tombstone.OperationID {
-			ClearByteSlices(values)
+			etcdstore.ClearByteSlices(values)
 			return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		values = append(values, append([]byte(nil), stored.Values[0].Value...))
 	}
-	defer ClearByteSlices(values)
+	defer etcdstore.ClearByteSlices(values)
 	digest := hierarchydeletion.HierarchyDeletionPlanDigest(values)
 	count := current.PlanCursor
 	nextTombstone := current.Tombstone
@@ -238,12 +238,6 @@ func (repository *Executor) sealPlan(
 	current.FenceRevision = transaction.Revision
 	current.PlanCursor = count
 	return current, nil
-}
-
-func ClearByteSlices(values [][]byte) {
-	for _, value := range values {
-		clear(value)
-	}
 }
 
 func equalBytes(left []byte, right []byte) bool {

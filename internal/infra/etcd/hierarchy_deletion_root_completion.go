@@ -48,7 +48,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	action, err := hierarchydeletion.DecodeHierarchyDeletionAction(actionRead.Values[0].Value)
 	if err != nil || action.Ordinal != rootOrdinal || action.ParentOperationID != operation.Tombstone.OperationID ||
 		action.TargetID != operation.Tombstone.TargetID || action.ProcedureKind != hierarchydeletion.HierarchyDeletionProcedureController ||
-		action.ControllerProcedure == nil || !hierarchyDeletionRootFinalizerMatches(operation.Tombstone.TargetKind, action.ActionKind) {
+		action.ControllerProcedure == nil || !hierarchydeletionexecution.HierarchyDeletionRootFinalizerMatches(operation.Tombstone.TargetKind, action.ActionKind) {
 		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if err := repository.validateHierarchyDeletionRootProjection(ctx, operation); err != nil {

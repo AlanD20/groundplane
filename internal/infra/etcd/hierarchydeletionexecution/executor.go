@@ -9,6 +9,7 @@ import (
 type executionStore interface {
 	Get(context.Context, string) (*keyvalue.GetResult, error)
 	GetMany(context.Context, keyvalue.GetManyRequest) (*keyvalue.GetManyResult, error)
+	Range(context.Context, keyvalue.RangeRequest) (*keyvalue.RangeResult, error)
 	Transact(context.Context, []keyvalue.Condition, []keyvalue.Mutation) (keyvalue.TransactionResult, error)
 }
 
