@@ -33,7 +33,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	if err != nil {
 		return nil, err
 	}
-	projection, found, err := currentEnvironmentProjectionAtRevision(
+	projection, found, err := blueprints.ReadCurrentProjection(
 		ctx, repository.store, environmentID, operation.Tombstone.SnapshotRevision,
 	)
 	if err != nil {

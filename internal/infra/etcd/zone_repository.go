@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -58,7 +59,7 @@ func (repository *ZoneRepository) ListZones(
 	if err != nil {
 		return etcdstore.Page[zonerecord.Record]{}, err
 	}
-	projection, found, err := currentEnvironmentProjectionAtRevision(
+	projection, found, err := blueprints.ReadCurrentProjection(
 		ctx, repository.store, environmentID, revision,
 	)
 	if err != nil {
@@ -130,7 +131,7 @@ func findZoneAtRevision(
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return etcdstore.Versioned[zonerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
-			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+			projection, found, projectionErr := blueprints.ReadCurrentProjection(
 				ctx, store, environmentID, fixedRevision,
 			)
 			if projectionErr != nil {

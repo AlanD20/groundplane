@@ -444,9 +444,7 @@ func loadScriptExecutionDesiredProjection(
 			environmentID, selectedRevisionID, blueprints.EnvironmentBlueprintChunkProjection, uint32(index),
 		)
 	}
-	stream, readRevision, err := (&HierarchyRepository{store: store}).readEnvironmentBlueprintStreamAtRevision(
-		ctx, seal, "projection", keys, revision,
-	)
+	stream, readRevision, err := blueprints.ReadStreamAtRevision(ctx, store, seal, "projection", keys, revision)
 	if err != nil {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, err
 	}

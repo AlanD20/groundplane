@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -116,7 +117,7 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	if err != nil {
 		return ReleasePlanningScope{}, err
 	}
-	compose, found, err := hierarchy.getEnvironmentComposeProjectionAtRevision(ctx, environmentID, initial.ReadRevision)
+	compose, found, err := blueprints.ReadProjectionAtRevision(ctx, hierarchy.store, environmentID, initial.ReadRevision)
 	if err != nil {
 		return ReleasePlanningScope{}, err
 	}

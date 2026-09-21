@@ -313,9 +313,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			uint32(index),
 		)
 	}
-	hierarchy := &HierarchyRepository{store: repository.store}
-	projectionValue, projectionRevision, err := hierarchy.readEnvironmentBlueprintStreamAtRevision(
-		ctx,
+	projectionValue, projectionRevision, err := blueprints.ReadStreamAtRevision(ctx, repository.store,
 		seal,
 		"projection",
 		chunkKeys,

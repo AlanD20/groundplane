@@ -2,21 +2,21 @@ package handlers
 
 import (
 	"context"
+	backingservices "github.com/AlanD20/groundplane/internal/infra/etcd/backingservices"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"net/http"
 	"strconv"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type BackingServiceReader interface {
-	GetBackingService(context.Context, string) (etcdstore.Versioned[etcd.BackingServiceRecord], error)
-	ListBackingServices(context.Context, etcdstore.PageRequest) (etcdstore.Page[etcd.BackingServiceRecord], error)
+	GetBackingService(context.Context, string) (etcdstore.Versioned[backingservices.Record], error)
+	ListBackingServices(context.Context, etcdstore.PageRequest) (etcdstore.Page[backingservices.Record], error)
 }
 
 type BackingServiceMutator interface {
@@ -227,7 +227,7 @@ func backingServiceListRequest(limit int, cursor string) (etcdstore.PageRequest,
 	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
-func backingServiceResponse(record etcd.BackingServiceRecord) apiTypes.BackingService {
+func backingServiceResponse(record backingservices.Record) apiTypes.BackingService {
 	return apiTypes.BackingService{
 		Authentication: string(record.Authentication),
 		ProjectID:      record.ProjectID, EnvironmentID: record.EnvironmentID, ServiceID: record.ServiceID,

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -50,7 +51,7 @@ func findRouteAtRevision(
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return etcdstore.Versioned[routerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
-			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+			projection, found, projectionErr := blueprints.ReadCurrentProjection(
 				ctx,
 				store,
 				environmentID,
@@ -110,7 +111,7 @@ func listRoutesFromDesiredHead(
 	if err != nil {
 		return etcdstore.Page[routerecord.Record]{}, err
 	}
-	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, store, environmentID, revision)
+	projection, found, err := blueprints.ReadCurrentProjection(ctx, store, environmentID, revision)
 	if err != nil {
 		return etcdstore.Page[routerecord.Record]{}, err
 	}

@@ -353,7 +353,7 @@ func validateCompletedRouteHeadReplay(
 	if err != nil {
 		return err
 	}
-	selected, found, err := currentEnvironmentProjectionAtRevision(ctx, store, environmentID, revision)
+	selected, found, err := blueprints.ReadCurrentProjection(ctx, store, environmentID, revision)
 	if err != nil || !found {
 		return errs.New(errs.KindStateConflict, "Route removal completed replay projection is unavailable")
 	}

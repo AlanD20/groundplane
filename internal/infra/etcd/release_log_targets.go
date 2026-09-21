@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"sort"
 
@@ -46,7 +47,7 @@ func (ledger *ReleaseLedger) ResolveEnvironmentLogTargets(
 
 	revision := environmentRead.ReadRevision
 	targets := make([]EnvironmentLogTarget, 0)
-	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, ledger.store, environmentID, revision)
+	projection, found, err := blueprints.ReadCurrentProjection(ctx, ledger.store, environmentID, revision)
 	if err != nil {
 		return nil, err
 	}

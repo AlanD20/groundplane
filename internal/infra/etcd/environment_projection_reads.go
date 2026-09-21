@@ -73,7 +73,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
-	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "projection")
+	stream, readRevision, err := blueprints.ReadStream(ctx, repository.store, seal, "projection")
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
@@ -119,7 +119,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
-	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "projection")
+	stream, readRevision, err := blueprints.ReadStream(ctx, repository.store, seal, "projection")
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}

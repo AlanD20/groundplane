@@ -184,7 +184,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 			selectedZones[zone.Record.Desired.ID] = zone
 		}
 	}
-	desired, _, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, environmentID, fixedRevision)
+	desired, _, err := blueprints.ReadCurrentProjection(ctx, repository.store, environmentID, fixedRevision)
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}

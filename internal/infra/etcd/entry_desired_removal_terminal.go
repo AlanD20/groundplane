@@ -124,14 +124,12 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal staged revision changed")
 	}
-	hierarchy := &HierarchyRepository{store: repository.store}
 	chunkKeys := make([]string, seal.ProjectionChunks)
 	for index := range chunkKeys {
 		chunkKeys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(intent.EnvironmentID, desired.RevisionID,
 			blueprints.EnvironmentBlueprintChunkProjection, uint32(index))
 	}
-	projectionValue, _, err := hierarchy.readEnvironmentBlueprintStreamAtRevision(
-		ctx,
+	projectionValue, _, err := blueprints.ReadStreamAtRevision(ctx, repository.store,
 		seal,
 		"projection",
 		chunkKeys,

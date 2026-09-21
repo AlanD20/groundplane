@@ -79,7 +79,7 @@ func (repository *ServiceRepository) scanServiceRemovalRecords(
 	revision int64,
 	current servicerecord.ServiceRecord,
 ) error {
-	projection, found, err := currentEnvironmentProjectionAtRevision(
+	projection, found, err := blueprints.ReadCurrentProjection(
 		ctx, repository.store, current.EnvironmentID, revision,
 	)
 	if err != nil {

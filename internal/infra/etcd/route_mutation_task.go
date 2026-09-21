@@ -69,7 +69,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	publicationCandidate := intent.CandidateProjection
 	publicationRevision := intent.CurrentProjectionRevision
 	if publicationCurrent == nil && publicationCandidate == nil {
-		selected, found, readErr := currentEnvironmentProjectionAtRevision(
+		selected, found, readErr := blueprints.ReadCurrentProjection(
 			ctx, repository.store, intent.EnvironmentID, 0,
 		)
 		if readErr != nil || !found {

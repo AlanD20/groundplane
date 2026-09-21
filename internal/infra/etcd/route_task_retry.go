@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -170,7 +171,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] != nil {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry state changed")
 	}
-	current, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, intent.EnvironmentID, revision)
+	current, found, err := blueprints.ReadCurrentProjection(ctx, repository.store, intent.EnvironmentID, revision)
 	if err != nil || !found || !routeMutationSelectedProjection(current.Record, source, intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry desired state changed")
 	}

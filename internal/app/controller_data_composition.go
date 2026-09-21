@@ -7,6 +7,7 @@ import (
 	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
+	backingservices "github.com/AlanD20/groundplane/internal/infra/etcd/backingservices"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
@@ -152,7 +153,7 @@ func newControllerDataComposition(
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: bootstrap platform Components: %w", err)
 	}
-	backingServiceRecords, err := etcd.NewBackingServiceRepository(store)
+	backingServiceRecords, err := backingservices.NewRepository(store)
 	if err != nil {
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize backing-service repository: %w", err)

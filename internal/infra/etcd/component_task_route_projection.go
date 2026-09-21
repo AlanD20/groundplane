@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -103,7 +104,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 	revision int64,
 ) (componentTaskRouteObservationChange, error) {
 	projection := intent.RouteProjection
-	desiredProjection, found, err := currentEnvironmentProjectionAtRevision(
+	desiredProjection, found, err := blueprints.ReadCurrentProjection(
 		ctx, repository.store, intent.EnvironmentID, revision,
 	)
 	if err != nil {

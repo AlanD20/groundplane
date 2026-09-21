@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -69,7 +70,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 		return err
 	}
 	clearRouteHeadPublication(staging)
-	projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+	projection, found, projectionErr := blueprints.ReadCurrentProjection(
 		ctx, repository.store, intent.EnvironmentID, revision,
 	)
 	if projectionErr != nil || !found || intent.CurrentProjection == nil ||
@@ -110,7 +111,7 @@ func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay
 	if state == nil || len(state.Values) != len(stateKeys) || state.Values[0] != nil {
 		return true, errs.New(errs.KindStateConflict, "Route mutation replay state is incomplete")
 	}
-	projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+	projection, found, projectionErr := blueprints.ReadCurrentProjection(
 		ctx,
 		repository.store,
 		intent.EnvironmentID,

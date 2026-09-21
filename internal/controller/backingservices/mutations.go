@@ -2,9 +2,9 @@ package backingservices
 
 import (
 	"context"
+	backingservices "github.com/AlanD20/groundplane/internal/infra/etcd/backingservices"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -83,16 +83,16 @@ func (service *MutationService) DestroyBackingService(
 func (service *MutationService) resolve(
 	ctx context.Context,
 	projectID string,
-) (etcd.BackingServiceRecord, error) {
+) (backingservices.Record, error) {
 	if service == nil || service.backingServices == nil || service.lifecycle == nil {
-		return etcd.BackingServiceRecord{}, errs.New(
+		return backingservices.Record{}, errs.New(
 			errs.KindInternal,
 			"Backing-service mutation service is not configured",
 		)
 	}
 	stored, err := service.backingServices.GetBackingService(ctx, projectID)
 	if err != nil {
-		return etcd.BackingServiceRecord{}, err
+		return backingservices.Record{}, err
 	}
 	return stored.Record, nil
 }

@@ -71,7 +71,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	if seal.SourceKind == blueprints.EnvironmentBlueprintSourceMutation {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{ReadRevision: rootResult.ReadRevision}, false, nil
 	}
-	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "audit")
+	stream, readRevision, err := blueprints.ReadStream(ctx, repository.store, seal, "audit")
 	if err != nil {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{}, false, err
 	}

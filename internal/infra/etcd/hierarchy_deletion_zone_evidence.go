@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -93,7 +94,7 @@ func hierarchyDeletionZoneEvidenceAtRevision(
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return hierarchyDeletionZoneEvidence{}, nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
-			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+			projection, found, projectionErr := blueprints.ReadCurrentProjection(
 				ctx, store, environmentID, snapshotRevision,
 			)
 			if projectionErr != nil {

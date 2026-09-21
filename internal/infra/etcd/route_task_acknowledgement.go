@@ -74,7 +74,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	if err != nil || intent.CurrentProjection == nil || selectedRevisionID != intent.CurrentProjection.RevisionID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected projection changed")
 	}
-	projection, found, err := currentEnvironmentProjectionAtRevision(
+	projection, found, err := blueprints.ReadCurrentProjection(
 		ctx, repository.store, intent.EnvironmentID, revision,
 	)
 	if err != nil || !found || projection.Revision != intent.CurrentProjectionRevision ||
@@ -197,7 +197,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		string(state.Values[0].Value) != task.ID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation ownership changed")
 	}
-	desiredProjection, found, err := currentEnvironmentProjectionAtRevision(
+	desiredProjection, found, err := blueprints.ReadCurrentProjection(
 		ctx,
 		repository.store,
 		intent.EnvironmentID,

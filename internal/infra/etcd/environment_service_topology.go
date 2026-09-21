@@ -57,7 +57,7 @@ func (repository *ServiceRepository) GetServiceByName(
 	if name == "" {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindValidationFailed, "Service name is required")
 	}
-	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, environmentID, 0)
+	projection, found, err := blueprints.ReadCurrentProjection(ctx, repository.store, environmentID, 0)
 	if err != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
@@ -91,7 +91,7 @@ func (repository *ServiceRepository) ListServices(
 	if err != nil {
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 	}
-	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, environmentID, revision)
+	projection, found, err := blueprints.ReadCurrentProjection(ctx, repository.store, environmentID, revision)
 	if err != nil {
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 	}
@@ -122,19 +122,6 @@ func (repository *ServiceRepository) ListServices(
 		}
 	}
 	return etcdstore.Page[servicerecord.ServiceRecord]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
-}
-
-func currentEnvironmentProjectionAtRevision(
-	ctx context.Context,
-	store hierarchyStore,
-	environmentID string,
-	revision int64,
-) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
-	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
-	}
-	hierarchy := &HierarchyRepository{store: store}
-	return hierarchy.getEnvironmentComposeProjectionAtRevision(ctx, environmentID, revision)
 }
 
 func findServiceAtRevision(
@@ -172,7 +159,7 @@ func findServiceAtRevision(
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return etcdstore.Versioned[servicerecord.ServiceRecord]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
-			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
+			projection, found, projectionErr := blueprints.ReadCurrentProjection(
 				ctx,
 				store,
 				environmentID,

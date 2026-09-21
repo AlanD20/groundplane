@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -90,5 +91,5 @@ func (repository *HierarchyRepository) getEnvironmentBlueprintProjectionAtRevisi
 	environmentID string,
 	readRevision int64,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
-	return repository.getEnvironmentComposeProjectionAtRevision(ctx, environmentID, readRevision)
+	return blueprints.ReadProjectionAtRevision(ctx, repository.store, environmentID, readRevision)
 }
