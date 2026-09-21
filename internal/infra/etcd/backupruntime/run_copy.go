@@ -1,24 +1,22 @@
-package etcd
+package backupruntime
 
-import (
-	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
-)
+import ()
 
-func cloneBackupRunPublicationRecord(record backupruntime.BackupRunRecord) backupruntime.BackupRunRecord {
+func CloneBackupRunPublicationRecord(record BackupRunRecord) BackupRunRecord {
 	clone := record
 	if record.ScheduledAt != nil {
 		scheduledAt := *record.ScheduledAt
 		clone.ScheduledAt = &scheduledAt
 	}
-	clone.Sources = make([]backupruntime.BackupRunSourceAttemptRecord, len(record.Sources))
+	clone.Sources = make([]BackupRunSourceAttemptRecord, len(record.Sources))
 	for index, source := range record.Sources {
 		clone.Sources[index] = source
-		clone.Sources[index].Snapshot = cloneBackupRunSourceSnapshot(source.Snapshot)
+		clone.Sources[index].Snapshot = CloneBackupRunSourceSnapshot(source.Snapshot)
 	}
 	return clone
 }
 
-func cloneBackupRunSourceSnapshot(snapshot backupruntime.BackupRunSourceSnapshot) backupruntime.BackupRunSourceSnapshot {
+func CloneBackupRunSourceSnapshot(snapshot BackupRunSourceSnapshot) BackupRunSourceSnapshot {
 	clone := snapshot
 	if snapshot.Postgres != nil {
 		postgres := *snapshot.Postgres
@@ -26,7 +24,7 @@ func cloneBackupRunSourceSnapshot(snapshot backupruntime.BackupRunSourceSnapshot
 	}
 	if snapshot.Volume != nil {
 		volume := *snapshot.Volume
-		volume.Services = append([]backupruntime.BackupVolumeServiceSnapshot(nil), snapshot.Volume.Services...)
+		volume.Services = append([]BackupVolumeServiceSnapshot(nil), snapshot.Volume.Services...)
 		for index := range volume.Services {
 			volume.Services[index].MountPaths = append(
 				[]string(nil),

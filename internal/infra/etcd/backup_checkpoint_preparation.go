@@ -14,12 +14,12 @@ import (
 
 func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 	ctx context.Context,
-	input BackupCheckpointInput,
+	input backupruntime.BackupCheckpointInput,
 	revision int64,
 	binding backupCheckpointBinding,
 ) (backupCheckpointPlan, error) {
-	digest, err := backupCheckpointDigest(input.Payload)
-	if err != nil || validateBackupCheckpointInput(input) != nil ||
+	digest, err := backupruntime.BackupCheckpointDigest(input.Payload)
+	if err != nil || backupruntime.ValidateBackupCheckpointInput(input) != nil ||
 		validateBackupCheckpointBinding(binding) != nil || revision <= 0 {
 		return backupCheckpointPlan{}, errs.New(
 			errs.KindValidationFailed,
@@ -58,8 +58,8 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		)
 	}
 	claimKey := taskjournal.TaskExecutionClaimKey(task.Executor, input.AgentID, input.TaskID)
-	cursorKey := backupCheckpointCursorKey(input)
-	dedupKey := backupCheckpointDedupKey(input)
+	cursorKey := backupruntime.BackupCheckpointCursorKey(input)
+	dedupKey := backupruntime.BackupCheckpointDedupKey(input)
 	assignmentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			claimKey,
@@ -118,7 +118,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 	defer etcdstore.ClearValues(timeoutRead.Values)
 	nextSequence := uint64(1)
 	if assignmentRead.Values[2] != nil {
-		cursor, decodeErr := decodeBackupCheckpointCursorRecord(assignmentRead.Values[2].Value)
+		cursor, decodeErr := backupruntime.DecodeBackupCheckpointCursorRecord(assignmentRead.Values[2].Value)
 		if decodeErr != nil || cursor.TaskID != input.TaskID ||
 			cursor.AssignmentID != input.AssignmentID ||
 			cursor.StepID != input.StepID {
@@ -136,7 +136,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 				"backup checkpoint replay evidence changed",
 			)
 		}
-		dedup, decodeErr := decodeBackupCheckpointDedupRecord(assignmentRead.Values[3].Value)
+		dedup, decodeErr := backupruntime.DecodeBackupCheckpointDedupRecord(assignmentRead.Values[3].Value)
 		if decodeErr != nil || dedup.TaskID != input.TaskID ||
 			dedup.AssignmentID != input.AssignmentID ||
 			dedup.StepID != input.StepID ||
@@ -167,19 +167,19 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup checkpoint sequence changed",
 		)
 	}
-	cursor := backupCheckpointCursorRecord{
+	cursor := backupruntime.BackupCheckpointCursorRecord{
 		TaskID: input.TaskID, AssignmentID: input.AssignmentID, StepID: input.StepID,
 		NextSequence: input.Sequence + 1,
 	}
-	dedup := backupCheckpointDedupRecord{
+	dedup := backupruntime.BackupCheckpointDedupRecord{
 		TaskID: input.TaskID, AssignmentID: input.AssignmentID, StepID: input.StepID,
 		Sequence: input.Sequence, Kind: input.Payload.Kind, PayloadSHA256: digest,
 	}
-	cursorValue, err := encodeBackupCheckpointCursorRecord(cursor)
+	cursorValue, err := backupruntime.EncodeBackupCheckpointCursorRecord(cursor)
 	if err != nil {
 		return backupCheckpointPlan{}, err
 	}
-	dedupValue, err := encodeBackupCheckpointDedupRecord(dedup)
+	dedupValue, err := backupruntime.EncodeBackupCheckpointDedupRecord(dedup)
 	if err != nil {
 		clear(cursorValue)
 		return backupCheckpointPlan{}, err

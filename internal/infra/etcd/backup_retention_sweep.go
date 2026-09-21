@@ -152,7 +152,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	}
 	storedRun, runErr := backupruntime.DecodeBackupRunRecord(anchor.Values[0].Value)
 	storedSweep, sweepErr := backupruntime.DecodeBackupRetentionSweepRecord(anchor.Values[1].Value)
-	if runErr != nil || sweepErr != nil || !backupRunRecordsEqual(storedRun, run.Record) ||
+	if runErr != nil || sweepErr != nil || !backupruntime.BackupRunRecordsEqual(storedRun, run.Record) ||
 		storedSweep != current.Record || !backupRetentionSweepMatchesRun(storedRun, storedSweep) {
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}

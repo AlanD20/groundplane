@@ -1,29 +1,28 @@
-package etcd
+package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func encodeBackupCheckpointCursorRecord(record backupCheckpointCursorRecord) ([]byte, error) {
-	return backupruntime.EncodeBackupRuntimeRecord(
+func EncodeBackupCheckpointCursorRecord(record BackupCheckpointCursorRecord) ([]byte, error) {
+	return EncodeBackupRuntimeRecord(
 		"backup-checkpoint-cursor",
 		record,
 		validateBackupCheckpointCursorRecord,
 	)
 }
 
-func decodeBackupCheckpointCursorRecord(value []byte) (backupCheckpointCursorRecord, error) {
-	return backupruntime.DecodeBackupRuntimeRecord(
+func DecodeBackupCheckpointCursorRecord(value []byte) (BackupCheckpointCursorRecord, error) {
+	return DecodeBackupRuntimeRecord(
 		value,
 		"backup-checkpoint-cursor",
 		validateBackupCheckpointCursorRecord,
 	)
 }
 
-func validateBackupCheckpointCursorRecord(record backupCheckpointCursorRecord) error {
+func validateBackupCheckpointCursorRecord(record BackupCheckpointCursorRecord) error {
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindAssignment, record.AssignmentID) != nil ||
 		recordcodec.ValidateID(ids.KindStep, record.StepID) != nil || record.NextSequence < 2 {
@@ -32,23 +31,23 @@ func validateBackupCheckpointCursorRecord(record backupCheckpointCursorRecord) e
 	return nil
 }
 
-func encodeBackupCheckpointDedupRecord(record backupCheckpointDedupRecord) ([]byte, error) {
-	return backupruntime.EncodeBackupRuntimeRecord(
+func EncodeBackupCheckpointDedupRecord(record BackupCheckpointDedupRecord) ([]byte, error) {
+	return EncodeBackupRuntimeRecord(
 		"backup-checkpoint-dedup",
 		record,
 		validateBackupCheckpointDedupRecord,
 	)
 }
 
-func decodeBackupCheckpointDedupRecord(value []byte) (backupCheckpointDedupRecord, error) {
-	return backupruntime.DecodeBackupRuntimeRecord(
+func DecodeBackupCheckpointDedupRecord(value []byte) (BackupCheckpointDedupRecord, error) {
+	return DecodeBackupRuntimeRecord(
 		value,
 		"backup-checkpoint-dedup",
 		validateBackupCheckpointDedupRecord,
 	)
 }
 
-func validateBackupCheckpointDedupRecord(record backupCheckpointDedupRecord) error {
+func validateBackupCheckpointDedupRecord(record BackupCheckpointDedupRecord) error {
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindAssignment, record.AssignmentID) != nil ||
 		recordcodec.ValidateID(ids.KindStep, record.StepID) != nil || record.Sequence == 0 ||

@@ -10,7 +10,7 @@ import (
 
 func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	ctx context.Context,
-	authority BackupAssignmentInput,
+	authority backupruntime.BackupAssignmentInput,
 	currentRun etcdstore.Versioned[backupruntime.BackupRunRecord],
 	nextRun backupruntime.BackupRunRecord,
 	ordinal uint32,
@@ -18,12 +18,12 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	orphan *etcdstore.Versioned[backupruntime.BackupOrphanRecord],
 	sweep backupruntime.BackupRetentionSweepRecord,
 ) (etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord], etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
-	changedOrdinal, changed := changedBackupSourceOrdinal(currentRun.Record, nextRun)
+	changedOrdinal, changed := backupruntime.ChangedBackupSourceOrdinal(currentRun.Record, nextRun)
 	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
-		validateBackupRunTransition(
+		backupruntime.ValidateBackupRunTransition(
 			currentRun.Record,
 			nextRun,
-			backupRunTransitionPointCommit,
+			backupruntime.BackupRunTransitionPointCommit,
 		) != nil ||
 		!backupPointMatchesRunSource(point.BackupRecoveryPointSnapshot, nextRun, ordinal) ||
 		sweep.SourceID != point.SourceID || sweep.TriggerRecoveryPointID != point.ID ||

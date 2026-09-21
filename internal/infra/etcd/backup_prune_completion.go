@@ -11,7 +11,7 @@ import (
 
 func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedAbsent(
 	ctx context.Context,
-	checkpointInput BackupCheckpointInput,
+	checkpointInput backupruntime.BackupCheckpointInput,
 	dispatch etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord],
 	current etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 	next backupruntime.BackupRecoveryPointPruneRecord,
@@ -32,7 +32,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		)
 	}
 	if checkpointInput.TaskID != dispatch.Record.TaskID ||
-		checkpointInput.Payload.Kind != BackupCheckpointRemoteObjectAbsent ||
+		checkpointInput.Payload.Kind != backupruntime.BackupCheckpointRemoteObjectAbsent ||
 		checkpointInput.Payload.PointID != next.Point.ID {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindValidationFailed,

@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"encoding/hex"
@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func validateBackupCheckpointInput(input BackupCheckpointInput) error {
+func ValidateBackupCheckpointInput(input BackupCheckpointInput) error {
 	if recordcodec.ValidateID(ids.KindTask, input.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindAssignment, input.AssignmentID) != nil ||
 		recordcodec.ValidateID(ids.KindStep, input.StepID) != nil || input.Sequence == 0 {
@@ -28,7 +28,7 @@ func validateBackupCheckpointInput(input BackupCheckpointInput) error {
 	return nil
 }
 
-func backupCheckpointDigest(payload BackupCheckpointPayload) (string, error) {
+func BackupCheckpointDigest(payload BackupCheckpointPayload) (string, error) {
 	request := &agentpb.BackupCheckpointRequest{}
 	remaining := payload
 	remaining.Kind = 0

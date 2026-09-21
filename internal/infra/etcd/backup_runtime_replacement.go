@@ -15,8 +15,8 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	extraConditions []etcdstore.Condition,
 	extraMutations []etcdstore.Mutation,
 	validateExtra func([]*etcdstore.KeyValue) error,
-	authority *BackupAssignmentInput,
-	checkpoint *BackupCheckpointInput,
+	authority *backupruntime.BackupAssignmentInput,
+	checkpoint *backupruntime.BackupCheckpointInput,
 ) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
 	if current.Revision <= 0 || current.ReadRevision < current.Revision {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
@@ -51,8 +51,8 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	}
 	replay := false
 	if anchor.Values[0].ModRevision != current.Revision ||
-		!backupRunRecordsEqual(stored, current.Record) {
-		if backupRunRecordsEqual(stored, next) {
+		!backupruntime.BackupRunRecordsEqual(stored, current.Record) {
+		if backupruntime.BackupRunRecordsEqual(stored, next) {
 			replay = true
 		} else {
 			return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
@@ -101,7 +101,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 				"backup checkpoint task does not match its run",
 			)
 		}
-		ordinal, changed := changedBackupSourceOrdinal(current.Record, next)
+		ordinal, changed := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 		if !changed {
 			return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 				errs.KindValidationFailed,

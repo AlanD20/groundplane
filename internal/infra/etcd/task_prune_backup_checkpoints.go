@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -10,9 +11,9 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 	current etcdstore.Versioned[taskPruneIntent],
 	cursors bool,
 ) (etcdstore.Versioned[taskPruneIntent], error) {
-	prefix := backupCheckpointDedupTaskPrefix(current.Record.TaskID)
+	prefix := backupruntime.BackupCheckpointDedupTaskPrefix(current.Record.TaskID)
 	if cursors {
-		prefix = backupCheckpointCursorTaskPrefix(current.Record.TaskID)
+		prefix = backupruntime.BackupCheckpointCursorTaskPrefix(current.Record.TaskID)
 	}
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix,
@@ -70,18 +71,18 @@ func validateTaskBackupCheckpointPruneEntry(
 		return corruptTaskPruneIntent()
 	}
 	if cursor {
-		record, err := decodeBackupCheckpointCursorRecord(entry.Value)
+		record, err := backupruntime.DecodeBackupCheckpointCursorRecord(entry.Value)
 		if err != nil || record.TaskID != taskID ||
-			backupCheckpointCursorKey(BackupCheckpointInput{
+			backupruntime.BackupCheckpointCursorKey(backupruntime.BackupCheckpointInput{
 				TaskID: record.TaskID, AssignmentID: record.AssignmentID, StepID: record.StepID,
 			}) != entry.Key {
 			return corruptTaskPruneIntent()
 		}
 		return nil
 	}
-	record, err := decodeBackupCheckpointDedupRecord(entry.Value)
+	record, err := backupruntime.DecodeBackupCheckpointDedupRecord(entry.Value)
 	if err != nil || record.TaskID != taskID ||
-		backupCheckpointDedupKey(BackupCheckpointInput{
+		backupruntime.BackupCheckpointDedupKey(backupruntime.BackupCheckpointInput{
 			TaskID: record.TaskID, AssignmentID: record.AssignmentID,
 			StepID: record.StepID, Sequence: record.Sequence,
 		}) != entry.Key {

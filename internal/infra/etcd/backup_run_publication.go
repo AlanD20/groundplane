@@ -68,7 +68,7 @@ func (publication *PreparedBackupRunPublication) Record() backupruntime.BackupRu
 	}
 	publication.state.mu.Lock()
 	defer publication.state.mu.Unlock()
-	return cloneBackupRunPublicationRecord(publication.state.plan.record)
+	return backupruntime.CloneBackupRunPublicationRecord(publication.state.plan.record)
 }
 
 func (publication *PreparedBackupRunPublication) Publish(

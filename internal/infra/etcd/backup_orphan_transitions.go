@@ -9,7 +9,7 @@ import (
 
 func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	ctx context.Context,
-	authority BackupAssignmentInput,
+	authority backupruntime.BackupAssignmentInput,
 	run etcdstore.Versioned[backupruntime.BackupRunRecord],
 	current etcdstore.Versioned[backupruntime.BackupOrphanRecord],
 	next backupruntime.BackupOrphanRecord,
@@ -63,7 +63,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		)
 	}
 	storedRun, decodeErr := backupruntime.DecodeBackupRunRecord(anchor.Values[0].Value)
-	if decodeErr != nil || !backupRunRecordsEqual(storedRun, run.Record) {
+	if decodeErr != nil || !backupruntime.BackupRunRecordsEqual(storedRun, run.Record) {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if authority.TaskID != run.Record.TaskID {
@@ -141,28 +141,28 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 
 func (repository *BackupRuntimeRepository) prepareBackupOrphanAbsentTerminal(
 	ctx context.Context,
-	checkpoint BackupCheckpointInput,
+	checkpoint backupruntime.BackupCheckpointInput,
 	currentRun etcdstore.Versioned[backupruntime.BackupRunRecord],
 	nextRun backupruntime.BackupRunRecord,
 	ordinal uint32,
 	orphan etcdstore.Versioned[backupruntime.BackupOrphanRecord],
 ) (backupRunPublicationPlan, error) {
-	changedOrdinal, changed := changedBackupSourceOrdinal(currentRun.Record, nextRun)
+	changedOrdinal, changed := backupruntime.ChangedBackupSourceOrdinal(currentRun.Record, nextRun)
 	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
 		orphan.Revision <= 0 ||
 		orphan.Record.State != backupruntime.BackupOrphanDelete || orphan.Record.TaskID != currentRun.Record.TaskID ||
 		orphan.Record.Point.ID != currentRun.Record.Sources[ordinal].RecoveryPointID ||
-		validateBackupRunTransition(
+		backupruntime.ValidateBackupRunTransition(
 			currentRun.Record,
 			nextRun,
-			backupRunTransitionOrphanDelete,
+			backupruntime.BackupRunTransitionOrphanDelete,
 		) != nil {
 		return backupRunPublicationPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan deletion is invalid",
 		)
 	}
-	if checkpoint.Payload.Kind != BackupCheckpointRemoteObjectAbsent ||
+	if checkpoint.Payload.Kind != backupruntime.BackupCheckpointRemoteObjectAbsent ||
 		checkpoint.Payload.PointID != orphan.Record.Point.ID {
 		return backupRunPublicationPlan{}, errs.New(
 			errs.KindValidationFailed,
@@ -181,16 +181,16 @@ func (repository *BackupRuntimeRepository) advanceBackupRunAfterRetention(
 	ordinal uint32,
 	sweep etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord],
 ) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
-	changedOrdinal, changed := changedBackupSourceOrdinal(currentRun.Record, nextRun)
+	changedOrdinal, changed := backupruntime.ChangedBackupSourceOrdinal(currentRun.Record, nextRun)
 	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
 		sweep.Revision <= 0 || sweep.Record.State != backupruntime.BackupRetentionCompleted ||
 		!backupRetentionSweepMatchesRun(currentRun.Record, sweep.Record) ||
 		sweep.Record.SourceID != currentRun.Record.Sources[ordinal].SourceID ||
 		sweep.Record.TriggerRecoveryPointID != currentRun.Record.Sources[ordinal].RecoveryPointID ||
-		validateBackupRunTransition(
+		backupruntime.ValidateBackupRunTransition(
 			currentRun.Record,
 			nextRun,
-			backupRunTransitionRetentionComplete,
+			backupruntime.BackupRunTransitionRetentionComplete,
 		) != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,

@@ -175,6 +175,6 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		state: &preparedBackupRunState{repository: repository, plan: plan},
 	}
 	return PreparedManualBackupRun{
-		Run: cloneBackupRunPublicationRecord(run), Owner: owner, Publication: publication,
+		Run: backupruntime.CloneBackupRunPublicationRecord(run), Owner: owner, Publication: publication,
 	}, nil
 }

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
@@ -49,8 +50,8 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	defer etcdstore.ClearValues(ownerResult.Values)
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
-		{Key: backupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
-		{Key: backupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
+		{Key: backupruntime.BackupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
+		{Key: backupruntime.BackupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskjournal.TaskStorageKey(current.Record.TaskID)}}
 	for index, key := range ownerKeys {

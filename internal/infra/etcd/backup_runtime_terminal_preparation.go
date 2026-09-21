@@ -24,34 +24,34 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	current etcdstore.Versioned[backupruntime.BackupRunRecord],
 	next backupruntime.BackupRunRecord,
 	absentOrphan *etcdstore.Versioned[backupruntime.BackupOrphanRecord],
-	checkpoint *BackupCheckpointInput,
+	checkpoint *backupruntime.BackupCheckpointInput,
 ) (backupRunPublicationPlan, error) {
-	transitionMode := backupRunTransitionOrdinary
-	needsTerminalOrphan := backupRunNeedsTerminalOrphan(current.Record, next)
+	transitionMode := backupruntime.BackupRunTransitionOrdinary
+	needsTerminalOrphan := backupruntime.BackupRunNeedsTerminalOrphan(current.Record, next)
 	retainsTerminalOrphan := absentOrphan == nil &&
-		backupRunRetainsTerminalOrphan(current.Record, next)
+		backupruntime.BackupRunRetainsTerminalOrphan(current.Record, next)
 	if absentOrphan != nil {
-		transitionMode = backupRunTransitionOrphanDelete
+		transitionMode = backupruntime.BackupRunTransitionOrphanDelete
 	} else if needsTerminalOrphan {
-		transitionMode = backupRunTransitionOrphanCreate
+		transitionMode = backupruntime.BackupRunTransitionOrphanCreate
 	} else if retainsTerminalOrphan {
-		transitionMode = backupRunTransitionOrphanTerminal
+		transitionMode = backupruntime.BackupRunTransitionOrphanTerminal
 	}
-	if backupRunRequiresTerminalOrphan(current.Record) && !needsTerminalOrphan {
+	if backupruntime.BackupRunRequiresTerminalOrphan(current.Record) && !needsTerminalOrphan {
 		return backupRunPublicationPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"terminal backup must preserve upload intent as an orphan",
 		)
 	}
-	if current.Revision <= 0 || !terminalBackupRunState(next.State) ||
-		validateBackupRunTransition(current.Record, next, transitionMode) != nil {
+	if current.Revision <= 0 || !backupruntime.TerminalBackupRunState(next.State) ||
+		backupruntime.ValidateBackupRunTransition(current.Record, next, transitionMode) != nil {
 		return backupRunPublicationPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"terminal backup run transition is invalid",
 		)
 	}
 	if next.State == backupruntime.BackupRunCompleted &&
-		!backupRunReadyForSuccessfulTerminal(current.Record, next) {
+		!backupruntime.BackupRunReadyForSuccessfulTerminal(current.Record, next) {
 		return backupRunPublicationPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"successful backup terminal requires completed cleanup checkpoints",
@@ -72,7 +72,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	orphanOffset := len(keys)
 	var retainedOrphan backupruntime.BackupOrphanRecord
 	if retainsTerminalOrphan || absentOrphan != nil {
-		ordinal, _ := changedBackupSourceOrdinal(current.Record, next)
+		ordinal, _ := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 		pointID := current.Record.Sources[ordinal].RecoveryPointID
 		connectorIndex, keyErr := backupruntime.BackupOrphanConnectorIndexKey(current.Record.ConnectorID, pointID)
 		if keyErr != nil {
@@ -96,7 +96,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		return backupRunPublicationPlan{}, errs.New(errs.KindStateConflict, "backup run changed")
 	}
 	stored, err := backupruntime.DecodeBackupRunRecord(anchor.Values[0].Value)
-	if err != nil || !backupRunRecordsEqual(stored, current.Record) {
+	if err != nil || !backupruntime.BackupRunRecordsEqual(stored, current.Record) {
 		return backupRunPublicationPlan{}, errs.New(errs.KindStateConflict, "backup run changed")
 	}
 	for index, expected := range records {
@@ -124,7 +124,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 			)
 		}
 		retainedOrphan, err = backupruntime.DecodeBackupOrphanRecord(values[0].Value)
-		ordinal, _ := changedBackupSourceOrdinal(current.Record, next)
+		ordinal, _ := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 		expectedState := backupruntime.BackupOrphanInspect
 		if absentOrphan != nil {
 			expectedState = backupruntime.BackupOrphanDelete
@@ -154,7 +154,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 				"backup checkpoint task does not match its run",
 			)
 		}
-		ordinal, changed := changedBackupSourceOrdinal(current.Record, next)
+		ordinal, changed := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 		if !changed {
 			return backupRunPublicationPlan{}, errs.New(
 				errs.KindValidationFailed,
@@ -206,8 +206,8 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 			}
 		}
 	}
-	if transitionMode == backupRunTransitionOrphanCreate {
-		ordinal, changed := changedBackupSourceOrdinal(current.Record, next)
+	if transitionMode == backupruntime.BackupRunTransitionOrphanCreate {
+		ordinal, changed := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 		if !changed {
 			clearBackupRuntimeMutations(mutations)
 			return backupRunPublicationPlan{}, errs.New(
@@ -215,7 +215,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 				"terminal backup orphan transition is invalid",
 			)
 		}
-		orphan := backupOrphanRecordFromRun(next, ordinal)
+		orphan := backupruntime.BackupOrphanRecordFromRun(next, ordinal)
 		orphanValue, encodeErr := backupruntime.EncodeBackupOrphanRecord(orphan)
 		if encodeErr != nil {
 			clearBackupRuntimeMutations(mutations)
@@ -274,86 +274,4 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		return backupRunPublicationPlan{}, err
 	}
 	return backupRunPublicationPlan{conditions: conditions, mutations: mutations, record: next}, nil
-}
-
-func backupRunReadyForSuccessfulTerminal(current backupruntime.BackupRunRecord, next backupruntime.BackupRunRecord) bool {
-	if len(current.Sources) != len(next.Sources) {
-		return false
-	}
-	for index := range current.Sources {
-		if current.Sources[index].State != backupruntime.BackupSourceAttemptSucceeded ||
-			next.Sources[index].State != backupruntime.BackupSourceAttemptSucceeded ||
-			!backupRunSourceMutableEqual(current.Sources[index], next.Sources[index]) {
-			return false
-		}
-	}
-	return true
-}
-
-func backupRunNeedsTerminalOrphan(current backupruntime.BackupRunRecord, next backupruntime.BackupRunRecord) bool {
-	ordinal, changed := changedBackupSourceOrdinal(current, next)
-	if !changed {
-		return false
-	}
-	from := current.Sources[ordinal]
-	to := next.Sources[ordinal]
-	return from.State == backupruntime.BackupSourceAttemptStaged &&
-		(from.Phase == backupruntime.BackupSourcePhaseUpload ||
-			from.Phase == backupruntime.BackupSourcePhaseHeadVerification ||
-			from.Phase == backupruntime.BackupSourcePhasePointCommit) &&
-		to.State == backupruntime.BackupSourceAttemptOrphaned && to.Phase == from.Phase
-}
-
-func backupRunRetainsTerminalOrphan(current backupruntime.BackupRunRecord, next backupruntime.BackupRunRecord) bool {
-	ordinal, changed := changedBackupSourceOrdinal(current, next)
-	if !changed {
-		return false
-	}
-	from := current.Sources[ordinal]
-	to := next.Sources[ordinal]
-	return from.State == backupruntime.BackupSourceAttemptOrphaned && to.State == from.State &&
-		to.Phase == from.Phase && from.FailureCode == "" && to.FailureCode != ""
-}
-
-func backupRunRequiresTerminalOrphan(run backupruntime.BackupRunRecord) bool {
-	for index := range run.Sources {
-		source := run.Sources[index]
-		if source.State == backupruntime.BackupSourceAttemptStaged &&
-			(source.Phase == backupruntime.BackupSourcePhaseUpload ||
-				source.Phase == backupruntime.BackupSourcePhaseHeadVerification ||
-				source.Phase == backupruntime.BackupSourcePhasePointCommit) {
-			return true
-		}
-	}
-	return false
-}
-
-func backupOrphanRecordFromRun(run backupruntime.BackupRunRecord, ordinal uint32) backupruntime.BackupOrphanRecord {
-	source := run.Sources[ordinal]
-	return backupruntime.BackupOrphanRecord{
-		Point: backupruntime.BackupRecoveryPointSnapshot{
-			ID:              source.RecoveryPointID,
-			EnvironmentID:   run.EnvironmentID,
-			SourceID:        source.SourceID,
-			SourceKind:      source.Kind,
-			TargetID:        source.TargetID,
-			ConnectorID:     run.ConnectorID,
-			ConnectorPrefix: run.ConnectorPrefix,
-			ObjectKey:       source.ObjectKey,
-			SourceFormat:    source.Format,
-			Encryption:      run.Encryption,
-			KeyEra:          run.KeyEra,
-			Recipient:       run.Recipient,
-			SizeBytes:       source.SizeBytes,
-			SHA256:          source.SHA256,
-			CreatedAt:       source.RecoveryPointCreatedAt,
-		},
-		TaskID: run.TaskID,
-		Reconciliation: backupruntime.BackupOrphanReconciliationAuthority{
-			OperationID:    run.OperationID,
-			PolicyRevision: run.PolicyRevision,
-			RetentionKeep:  run.RetentionKeep,
-		},
-		State: backupruntime.BackupOrphanInspect, CreatedAt: run.UpdatedAt, UpdatedAt: run.UpdatedAt,
-	}
 }

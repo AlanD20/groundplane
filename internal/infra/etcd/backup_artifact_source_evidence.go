@@ -106,31 +106,3 @@ func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run b
 	}
 	return nil
 }
-
-func changedBackupSourceOrdinal(current backupruntime.BackupRunRecord, next backupruntime.BackupRunRecord) (uint32, bool) {
-	if len(current.Sources) != len(next.Sources) {
-		return 0, false
-	}
-	changed := -1
-	for index := range current.Sources {
-		if backupRunSourceMutableEqual(current.Sources[index], next.Sources[index]) {
-			continue
-		}
-		if changed >= 0 {
-			if terminalBackupRunState(next.State) && index > changed &&
-				current.Sources[index].State == backupruntime.BackupSourceAttemptPending &&
-				next.Sources[index].State == backupruntime.BackupSourceAttemptUnstarted &&
-				current.Sources[index].SizeBytes == next.Sources[index].SizeBytes &&
-				current.Sources[index].SHA256 == next.Sources[index].SHA256 &&
-				current.Sources[index].FailureCode == "" && next.Sources[index].FailureCode == "" {
-				continue
-			}
-			return 0, false
-		}
-		changed = index
-	}
-	if changed < 0 {
-		return 0, false
-	}
-	return uint32(changed), true
-}

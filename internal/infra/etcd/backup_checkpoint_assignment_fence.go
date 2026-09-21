@@ -14,7 +14,7 @@ import (
 
 func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 	ctx context.Context,
-	input BackupAssignmentInput,
+	input backupruntime.BackupAssignmentInput,
 	revision int64,
 ) ([]etcdstore.Condition, error) {
 	if recordcodec.ValidateID(ids.KindTask, input.TaskID) != nil ||
@@ -92,8 +92,8 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 	}, nil
 }
 
-func backupAssignmentFromCheckpoint(input BackupCheckpointInput) BackupAssignmentInput {
-	return BackupAssignmentInput{
+func backupAssignmentFromCheckpoint(input backupruntime.BackupCheckpointInput) backupruntime.BackupAssignmentInput {
+	return backupruntime.BackupAssignmentInput{
 		TaskID: input.TaskID, AssignmentID: input.AssignmentID, AgentID: input.AgentID,
 		AgentGeneration: input.AgentGeneration, StepID: input.StepID,
 	}

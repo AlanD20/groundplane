@@ -87,7 +87,7 @@ func (repository *BackupRuntimeRepository) PrepareBackupRunRetry(
 	}
 	return PreparedBackupRunRetry{
 		SourceTask: cloneTaskRecord(source.task.Record),
-		Run:        cloneBackupRunPublicationRecord(run),
+		Run:        backupruntime.CloneBackupRunPublicationRecord(run),
 		Owner:      source.task.Record.Owner,
 		Publication: &PreparedBackupRunPublication{state: &preparedBackupRunState{
 			repository: repository,
@@ -169,7 +169,7 @@ func newBackupRunRetryRecord(
 	taskID string,
 	createdAt time.Time,
 ) (backupruntime.BackupRunRecord, error) {
-	retry := cloneBackupRunPublicationRecord(source)
+	retry := backupruntime.CloneBackupRunPublicationRecord(source)
 	retry.TaskID = taskID
 	retry.RetryOfTaskID = source.TaskID
 	retry.State = backupruntime.BackupRunQueued
@@ -187,7 +187,7 @@ func newBackupRunRetryRecord(
 		}
 		attempt := sourceAttempt
 		attempt.Ordinal = uint32(len(retry.Sources))
-		attempt.Snapshot = cloneBackupRunSourceSnapshot(sourceAttempt.Snapshot)
+		attempt.Snapshot = backupruntime.CloneBackupRunSourceSnapshot(sourceAttempt.Snapshot)
 		attempt.RecoveryPointID = pointID
 		attempt.RecoveryPointCreatedAt = pointCreatedAt
 		attempt.ObjectKey = retry.ConnectorPrefix + retry.EnvironmentID + "/" +

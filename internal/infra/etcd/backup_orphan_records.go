@@ -92,15 +92,15 @@ func (repository *BackupRuntimeRepository) GetBackupOrphan(
 
 func (repository *BackupRuntimeRepository) CreateBackupOrphan(
 	ctx context.Context,
-	authority BackupAssignmentInput,
+	authority backupruntime.BackupAssignmentInput,
 	current etcdstore.Versioned[backupruntime.BackupRunRecord],
 	next backupruntime.BackupRunRecord,
 	ordinal uint32,
 	orphan backupruntime.BackupOrphanRecord,
 ) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
-	changedOrdinal, changed := changedBackupSourceOrdinal(current.Record, next)
+	changedOrdinal, changed := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 	if int(ordinal) >= len(current.Record.Sources) || !changed || changedOrdinal != ordinal ||
-		validateBackupRunTransition(current.Record, next, backupRunTransitionOrphanCreate) != nil ||
+		backupruntime.ValidateBackupRunTransition(current.Record, next, backupruntime.BackupRunTransitionOrphanCreate) != nil ||
 		!backupPointMatchesRunSource(orphan.Point, next, ordinal) || orphan.TaskID != next.TaskID ||
 		orphan.State != backupruntime.BackupOrphanInspect {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
