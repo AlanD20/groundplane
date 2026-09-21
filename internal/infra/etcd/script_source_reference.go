@@ -160,10 +160,9 @@ func newScriptSourceReferenceAuthority(store hierarchyStore) (*ScriptSourceRefer
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "Script source reference store is required")
 	}
-	adapter := &scriptSourceReferenceStore{store: store}
-	repository, err := ref.NewRepository(adapter, adapter)
+	repository, err := ref.NewEtcdRepository(store)
 	if err != nil {
-		return nil, mapScriptSourceReferenceError(err)
+		return nil, ref.ToApplicationError(err)
 	}
 	return &ScriptSourceReferenceAuthority{store: store, repository: repository}, nil
 }
@@ -186,7 +185,7 @@ func (authority *ScriptSourceReferenceAuthority) Prepare(
 	}
 	prepared, err := authority.repository.Prepare(ctx, operationID, converted)
 	if err != nil {
-		return PreparedSourceSet{}, mapScriptSourceReferenceError(err)
+		return PreparedSourceSet{}, ref.ToApplicationError(err)
 	}
 	return PreparedSourceSet{
 		prepared: prepared, descriptorRevision: prepared.DescriptorRevision(),
@@ -205,7 +204,7 @@ func (authority *ScriptSourceReferenceAuthority) Abandon(
 	if err != nil {
 		return err
 	}
-	return mapScriptSourceReferenceError(authority.repository.Abandon(ctx, operationID, converted))
+	return ref.ToApplicationError(authority.repository.Abandon(ctx, operationID, converted))
 }
 
 // RecoverPreparations must finish before the single Controller accepts new
@@ -214,7 +213,7 @@ func (authority *ScriptSourceReferenceAuthority) RecoverPreparations(ctx context
 	if authority == nil || authority.repository == nil {
 		return errs.New(errs.KindValidationFailed, "Script source recovery authority is missing")
 	}
-	return mapScriptSourceReferenceError(authority.repository.RecoverPreparations(ctx))
+	return ref.ToApplicationError(authority.repository.RecoverPreparations(ctx))
 }
 
 func (authority *ScriptSourceReferenceAuthority) FinalPublicationFragment(
@@ -223,11 +222,11 @@ func (authority *ScriptSourceReferenceAuthority) FinalPublicationFragment(
 ) (ScriptSourcePublicationFragment, error) {
 	fragment, err := authority.repository.FinalPublicationFragment(ctx, prepared.prepared)
 	if err != nil {
-		return ScriptSourcePublicationFragment{}, mapScriptSourceReferenceError(err)
+		return ScriptSourcePublicationFragment{}, ref.ToApplicationError(err)
 	}
 	result := ScriptSourcePublicationFragment{
-		conditions: convertScriptSourceConditions(fragment.Conditions),
-		mutations:  convertScriptSourceMutations(fragment.Mutations),
+		conditions: ref.EtcdConditions(fragment.Conditions),
+		mutations:  ref.EtcdMutations(fragment.Mutations),
 		staged:     make([]ScriptStagedSourceRequirement, len(fragment.StagedRequirements)),
 	}
 	for index, requirement := range fragment.StagedRequirements {
@@ -249,11 +248,11 @@ func (authority *ScriptSourceReferenceAuthority) PrepareNormalRelease(
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareNormalRelease(ctx, operationID, disposition)
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+		return ScriptSourceReleaseFragment{}, ref.ToApplicationError(err)
 	}
 	result := ScriptSourceReleaseFragment{
-		conditions: convertScriptSourceConditions(fragment.Conditions),
-		mutations:  convertScriptSourceMutations(fragment.Mutations),
+		conditions: ref.EtcdConditions(fragment.Conditions),
+		mutations:  ref.EtcdMutations(fragment.Mutations),
 	}
 	fragment.Clear()
 	return result, nil
@@ -264,12 +263,12 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryAvailable(
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryAvailable(ctx, operationID, rootRevision, expiresAt)
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+		return ScriptSourceReleaseFragment{}, ref.ToApplicationError(err)
 	}
 	defer fragment.Clear()
 	return ScriptSourceReleaseFragment{
-		conditions: convertScriptSourceConditions(fragment.Conditions),
-		mutations:  convertScriptSourceMutations(fragment.Mutations),
+		conditions: ref.EtcdConditions(fragment.Conditions),
+		mutations:  ref.EtcdMutations(fragment.Mutations),
 	}, nil
 }
 
@@ -279,7 +278,7 @@ func (authority *ScriptSourceReferenceAuthority) ReleaseNext(
 	guards []etcdstore.Condition,
 ) (bool, bool, error) {
 	processed, drained, err := authority.repository.ReleaseNext(ctx, operationID, scriptSourceReleaseGuards(guards))
-	return processed, drained, mapScriptSourceReferenceError(err)
+	return processed, drained, ref.ToApplicationError(err)
 }
 
 func (authority *ScriptSourceReferenceAuthority) ReleaseRetryExpiryNext(
@@ -290,7 +289,7 @@ func (authority *ScriptSourceReferenceAuthority) ReleaseRetryExpiryNext(
 		operationID,
 		scriptSourceReleaseGuards(guards),
 	)
-	return processed, drained, mapScriptSourceReferenceError(err)
+	return processed, drained, ref.ToApplicationError(err)
 }
 
 func scriptSourceReleaseGuards(guards []etcdstore.Condition) []ref.Condition {
@@ -308,12 +307,12 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryTransfer(
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryTransfer(ctx, operationID, rootRevision, at)
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+		return ScriptSourceReleaseFragment{}, ref.ToApplicationError(err)
 	}
 	defer fragment.Clear()
 	return ScriptSourceReleaseFragment{
-		conditions: convertScriptSourceConditions(fragment.Conditions),
-		mutations:  convertScriptSourceMutations(fragment.Mutations),
+		conditions: ref.EtcdConditions(fragment.Conditions),
+		mutations:  ref.EtcdMutations(fragment.Mutations),
 	}, nil
 }
 
@@ -322,12 +321,12 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryActivation(
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryActivation(ctx, operationID, rootRevision)
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+		return ScriptSourceReleaseFragment{}, ref.ToApplicationError(err)
 	}
 	defer fragment.Clear()
 	return ScriptSourceReleaseFragment{
-		conditions: convertScriptSourceConditions(fragment.Conditions),
-		mutations:  convertScriptSourceMutations(fragment.Mutations),
+		conditions: ref.EtcdConditions(fragment.Conditions),
+		mutations:  ref.EtcdMutations(fragment.Mutations),
 	}, nil
 }
 
@@ -336,12 +335,12 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiry(
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryExpiry(ctx, operationID, rootRevision, now)
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+		return ScriptSourceReleaseFragment{}, ref.ToApplicationError(err)
 	}
 	defer fragment.Clear()
 	return ScriptSourceReleaseFragment{
-		conditions: convertScriptSourceConditions(fragment.Conditions),
-		mutations:  convertScriptSourceMutations(fragment.Mutations),
+		conditions: ref.EtcdConditions(fragment.Conditions),
+		mutations:  ref.EtcdMutations(fragment.Mutations),
 	}, nil
 }
 
@@ -351,11 +350,11 @@ func (authority *ScriptSourceReferenceAuthority) PrepareReleaseFinalization(
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareReleaseFinalization(ctx, operationID)
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+		return ScriptSourceReleaseFragment{}, ref.ToApplicationError(err)
 	}
 	result := ScriptSourceReleaseFragment{
-		conditions: convertScriptSourceConditions(fragment.Conditions),
-		mutations:  convertScriptSourceMutations(fragment.Mutations),
+		conditions: ref.EtcdConditions(fragment.Conditions),
+		mutations:  ref.EtcdMutations(fragment.Mutations),
 	}
 	fragment.Clear()
 	return result, nil
@@ -366,12 +365,12 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiryFinalization(
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareRetryExpiryFinalization(ctx, operationID)
 	if err != nil {
-		return ScriptSourceReleaseFragment{}, mapScriptSourceReferenceError(err)
+		return ScriptSourceReleaseFragment{}, ref.ToApplicationError(err)
 	}
 	defer fragment.Clear()
 	return ScriptSourceReleaseFragment{
-		conditions: convertScriptSourceConditions(fragment.Conditions),
-		mutations:  convertScriptSourceMutations(fragment.Mutations),
+		conditions: ref.EtcdConditions(fragment.Conditions),
+		mutations:  ref.EtcdMutations(fragment.Mutations),
 	}, nil
 }
 
