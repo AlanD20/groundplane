@@ -1,4 +1,4 @@
-package etcd
+package blueprintplanning
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
+func (repository *BackupPolicyPlanner) loadBlueprintBackupBase(
 	ctx context.Context,
 	environmentID string,
 	revision int64,
@@ -94,7 +94,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 	return current, coordination, key, nil
 }
 
-func (repository *BackupPolicyRepository) prepareRetainedBlueprintBackupPolicy(
+func (repository *BackupPolicyPlanner) prepareRetainedBlueprintBackupPolicy(
 	ctx context.Context,
 	state *blueprintBackupPolicyPreparationState,
 	revision int64,
@@ -133,13 +133,13 @@ func (repository *BackupPolicyRepository) prepareRetainedBlueprintBackupPolicy(
 			return err
 		}
 	}
-	state.candidate.ConnectorReferences, err = repository.loadBackupPolicyConnectorReferences(
+	state.candidate.ConnectorReferences, err = repository.policy.LoadBackupPolicyConnectorReferences(
 		ctx, state.candidate, revision,
 	)
 	return err
 }
 
-func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
+func (repository *BackupPolicyPlanner) loadRetainedBlueprintBackupSources(
 	ctx context.Context,
 	policy backuppolicy.BackupPolicyRecord,
 	revision int64,
@@ -187,7 +187,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 	return result, nil
 }
 
-func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
+func (repository *BackupPolicyPlanner) loadRetainedBlueprintBackupConnector(
 	ctx context.Context,
 	environmentID string,
 	connectorID string,
@@ -234,7 +234,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 	}, backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(result.Values[1]), backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(name.Values[0]), tombstone, nil
 }
 
-func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
+func (repository *BackupPolicyPlanner) loadBlueprintBackupSources(
 	ctx context.Context,
 	input EnvironmentBlueprintBackupPolicyInput,
 	revision int64,

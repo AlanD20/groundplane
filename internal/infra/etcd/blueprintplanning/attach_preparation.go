@@ -1,4 +1,4 @@
-package etcd
+package blueprintplanning
 
 import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
@@ -86,7 +86,7 @@ func PrepareEnvironmentBlueprintAttachTask(
 		preparation.Intent.Candidates = append(preparation.Intent.Candidates, attachrecord.CloneAttachRecord(input.Record))
 	}
 	if err := validateBlueprintAttachTaskPreparation(preparation); err != nil {
-		clearBlueprintAttachTaskPreparation(&preparation)
+		ClearBlueprintAttachTaskPreparation(&preparation)
 		return BlueprintAttachTaskPreparation{}, err
 	}
 	return preparation, nil
@@ -218,7 +218,7 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 	return nil
 }
 
-func blueprintAttachTaskPreparationIsZero(preparation BlueprintAttachTaskPreparation) bool {
+func BlueprintAttachTaskPreparationIsZero(preparation BlueprintAttachTaskPreparation) bool {
 	return preparation.Intent.TaskID == "" && preparation.Intent.EnvironmentID == "" &&
 		preparation.Intent.Status == "" && !preparation.Intent.OwnsEnvironmentFence && len(preparation.Intent.Candidates) == 0 &&
 		preparation.Intent.CreatedAt.IsZero() && preparation.Intent.TerminalAt == nil && len(preparation.candidates) == 0
@@ -253,7 +253,9 @@ func cloneEnvironmentBlueprintAttachCandidateInputs(
 	return cloned
 }
 
-func clearBlueprintAttachTaskPreparation(preparation *BlueprintAttachTaskPreparation) {
+// ClearBlueprintAttachTaskPreparation releases every encrypted fact copy held
+// by application-side publication input after the atomic attempt returns.
+func ClearBlueprintAttachTaskPreparation(preparation *BlueprintAttachTaskPreparation) {
 	if preparation == nil {
 		return
 	}
@@ -265,13 +267,7 @@ func clearBlueprintAttachTaskPreparation(preparation *BlueprintAttachTaskPrepara
 	}
 }
 
-// ClearBlueprintAttachTaskPreparation releases every encrypted fact copy held
-// by application-side publication input after the atomic attempt returns.
-func ClearBlueprintAttachTaskPreparation(preparation *BlueprintAttachTaskPreparation) {
-	clearBlueprintAttachTaskPreparation(preparation)
-}
-
-func validateBlueprintAttachTaskOwner(task TaskRecord, intent attachrecord.BlueprintAttachTaskIntent) error {
+func ValidateBlueprintAttachTaskOwner(task TaskIdentity, intent attachrecord.BlueprintAttachTaskIntent) error {
 	if task.ID != intent.TaskID || task.Target != intent.EnvironmentID {
 		return errs.New(errs.KindStateConflict, "Blueprint Attach intent has the wrong Task owner")
 	}

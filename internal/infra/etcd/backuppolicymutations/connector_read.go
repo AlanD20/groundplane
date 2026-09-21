@@ -8,7 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *Repository) loadBackupPolicyConnectorEvidence(
+func (repository *Repository) LoadBackupPolicyConnectorEvidence(
 	ctx context.Context,
 	environmentID string,
 	connectorID string,
@@ -42,7 +42,7 @@ func (repository *Repository) loadBackupPolicyConnectorEvidence(
 	}, CloneBackupPolicyEvidenceKeyValue(result.Values[1]), nil
 }
 
-func (repository *Repository) loadBackupPolicyConnectorReferences(
+func (repository *Repository) LoadBackupPolicyConnectorReferences(
 	ctx context.Context,
 	candidate ReplacementCandidate,
 	revision int64,

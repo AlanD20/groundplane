@@ -5,24 +5,25 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
+	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type environmentBlueprintBackupRepository interface {
 	PrepareEnvironmentBlueprintBackupPolicy(
 		context.Context,
-		etcd.EnvironmentBlueprintBackupPolicyInput,
-	) (etcd.BlueprintBackupPolicyPreparation, error)
+		blueprintplanning.EnvironmentBlueprintBackupPolicyInput,
+	) (blueprintplanning.BlueprintBackupPolicyPreparation, error)
 	ValidateEnvironmentBlueprintBackupPolicy(
 		context.Context,
-		etcd.EnvironmentBlueprintBackupPolicyInput,
+		blueprintplanning.EnvironmentBlueprintBackupPolicyInput,
 	) error
 	GetEnvironmentBlueprintBackupPolicySnapshot(
 		context.Context,
@@ -63,14 +64,14 @@ func (snapshot environmentBlueprintBackupPolicySnapshot) projection() *projectio
 
 func (repository *durableRepository) PrepareEnvironmentBlueprintBackupPolicy(
 	ctx context.Context,
-	input etcd.EnvironmentBlueprintBackupPolicyInput,
-) (etcd.BlueprintBackupPolicyPreparation, error) {
+	input blueprintplanning.EnvironmentBlueprintBackupPolicyInput,
+) (blueprintplanning.BlueprintBackupPolicyPreparation, error) {
 	return repository.backups.PrepareEnvironmentBlueprintBackupPolicy(ctx, input)
 }
 
 func (repository *durableRepository) ValidateEnvironmentBlueprintBackupPolicy(
 	ctx context.Context,
-	input etcd.EnvironmentBlueprintBackupPolicyInput,
+	input blueprintplanning.EnvironmentBlueprintBackupPolicyInput,
 ) error {
 	return repository.backups.ValidateEnvironmentBlueprintBackupPolicy(ctx, input)
 }
@@ -100,37 +101,37 @@ func (service *Service) prepareEnvironmentBlueprintBackup(
 	attaches preparedBlueprintAttaches,
 	allocateNamed func(ids.Kind, string) string,
 	createdAt time.Time,
-) (*projectionrecord.EnvironmentBlueprintBackupPolicy, etcd.BlueprintBackupPolicyPreparation, error) {
+) (*projectionrecord.EnvironmentBlueprintBackupPolicy, blueprintplanning.BlueprintBackupPolicyPreparation, error) {
 	if service.backups == nil {
-		return nil, etcd.BlueprintBackupPolicyPreparation{}, errs.New(
+		return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, errs.New(
 			errs.KindInternal, "Environment Blueprint Backup repository is not configured",
 		)
 	}
 	if authored == nil {
 		snapshot, err := service.backups.GetEnvironmentBlueprintBackupPolicySnapshot(ctx, environmentID, readRevision)
 		if err != nil {
-			return nil, etcd.BlueprintBackupPolicyPreparation{}, err
+			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, err
 		}
 		prepared, err := service.backups.PrepareEnvironmentBlueprintBackupPolicy(
 			ctx,
-			etcd.EnvironmentBlueprintBackupPolicyInput{
+			blueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 				EnvironmentID: environmentID, TaskID: taskID, ReadRevision: readRevision,
 				Retain: true, Projection: projection, AttachPreparation: attaches.publication,
 				CreatedAt: createdAt,
 			},
 		)
 		if err != nil {
-			return nil, etcd.BlueprintBackupPolicyPreparation{}, err
+			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, err
 		}
 		return snapshot.projection(), prepared, nil
 	}
-	sources := make([]etcd.EnvironmentBlueprintBackupPolicySourceInput, len(authored.Sources))
+	sources := make([]blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput, len(authored.Sources))
 	for index, source := range authored.Sources {
 		targetID, err := resolveEnvironmentBlueprintBackupTarget(environmentID, source, projection, attaches.effective)
 		if err != nil {
-			return nil, etcd.BlueprintBackupPolicyPreparation{}, err
+			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, err
 		}
-		sources[index] = etcd.EnvironmentBlueprintBackupPolicySourceInput{
+		sources[index] = blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
 			CandidateID: allocateNamed(
 				ids.KindBackupSource,
 				"backup-source/"+string(source.Kind)+"/"+targetID,
@@ -140,7 +141,7 @@ func (service *Service) prepareEnvironmentBlueprintBackup(
 	}
 	prepared, err := service.backups.PrepareEnvironmentBlueprintBackupPolicy(
 		ctx,
-		etcd.EnvironmentBlueprintBackupPolicyInput{
+		blueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 			EnvironmentID: environmentID, TaskID: taskID, ReadRevision: readRevision,
 			Enabled: authored.Enabled, Frequency: authored.Frequency, Keep: authored.Keep,
 			Encryption: authored.Encryption, ConnectorName: authored.Connector, Sources: sources,
@@ -148,24 +149,24 @@ func (service *Service) prepareEnvironmentBlueprintBackup(
 		},
 	)
 	if err != nil {
-		return nil, etcd.BlueprintBackupPolicyPreparation{}, err
+		return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, err
 	}
 	if prepared.RequiresInitialKey() {
 		if service.backupKeys == nil {
 			prepared.Clear()
-			return nil, etcd.BlueprintBackupPolicyPreparation{}, errs.New(
+			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, errs.New(
 				errs.KindInternal, "Environment Blueprint Backup key factory is not configured",
 			)
 		}
 		material, createErr := service.backupKeys.Create(ctx)
 		if createErr != nil {
 			prepared.Clear()
-			return nil, etcd.BlueprintBackupPolicyPreparation{}, createErr
+			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, createErr
 		}
 		defer clear(material.Ciphertext)
 		if supplyErr := prepared.SupplyInitialKey(material); supplyErr != nil {
 			prepared.Clear()
-			return nil, etcd.BlueprintBackupPolicyPreparation{}, supplyErr
+			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, supplyErr
 		}
 	}
 	return prepared.Projection(), prepared, nil
@@ -185,17 +186,17 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 	if service.backups == nil {
 		return errs.New(errs.KindInternal, "Environment Blueprint Backup repository is not configured")
 	}
-	sources := make([]etcd.EnvironmentBlueprintBackupPolicySourceInput, len(authored.Sources))
+	sources := make([]blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput, len(authored.Sources))
 	for index, source := range authored.Sources {
 		targetID, err := resolveEnvironmentBlueprintBackupTarget(environmentID, source, projection, attaches)
 		if err != nil {
 			return err
 		}
-		sources[index] = etcd.EnvironmentBlueprintBackupPolicySourceInput{Kind: source.Kind, TargetID: targetID}
+		sources[index] = blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{Kind: source.Kind, TargetID: targetID}
 	}
 	return service.backups.ValidateEnvironmentBlueprintBackupPolicy(
 		ctx,
-		etcd.EnvironmentBlueprintBackupPolicyInput{
+		blueprintplanning.EnvironmentBlueprintBackupPolicyInput{
 			EnvironmentID: environmentID, ReadRevision: readRevision,
 			Enabled: authored.Enabled, Frequency: authored.Frequency, Keep: authored.Keep,
 			Encryption: authored.Encryption, ConnectorName: authored.Connector, Sources: sources,

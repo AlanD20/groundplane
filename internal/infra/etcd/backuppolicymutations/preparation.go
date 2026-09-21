@@ -156,7 +156,7 @@ func (repository *Repository) PrepareBackupPolicyReplacement(
 		}
 	}
 	if input.Enabled {
-		candidate.Connector, candidate.ConnectorOwnerIndex, err = repository.loadBackupPolicyConnectorEvidence(
+		candidate.Connector, candidate.ConnectorOwnerIndex, err = repository.LoadBackupPolicyConnectorEvidence(
 			ctx,
 			input.EnvironmentID,
 			input.ConnectorID,
@@ -166,7 +166,7 @@ func (repository *Repository) PrepareBackupPolicyReplacement(
 			return PreparedBackupPolicyReplacement{}, err
 		}
 	}
-	candidate.ConnectorReferences, err = repository.loadBackupPolicyConnectorReferences(
+	candidate.ConnectorReferences, err = repository.LoadBackupPolicyConnectorReferences(
 		ctx,
 		candidate,
 		candidate.MutationEpoch.ReadRevision,

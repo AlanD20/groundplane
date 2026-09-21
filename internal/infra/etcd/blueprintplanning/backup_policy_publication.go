@@ -1,4 +1,4 @@
-package etcd
+package blueprintplanning
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
@@ -13,48 +13,48 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type preparedBlueprintBackupPolicyPublication struct {
+type BackupPolicyPublication struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
 	evidence   []backuppolicymutations.BackupPolicyReplacementCompare
 }
 
-func prepareBlueprintBackupPolicyPublication(
-	task TaskRecord,
+func PrepareBlueprintBackupPolicyPublication(
+	task TaskIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
 	attaches BlueprintAttachTaskPreparation,
 	prepared BlueprintBackupPolicyPreparation,
-) (preparedBlueprintBackupPolicyPublication, error) {
+) (BackupPolicyPublication, error) {
 	if prepared.state == nil {
-		return preparedBlueprintBackupPolicyPublication{}, nil
+		return BackupPolicyPublication{}, nil
 	}
 	state := prepared.state
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	if state.consumed {
-		return preparedBlueprintBackupPolicyPublication{}, errs.New(
+		return BackupPolicyPublication{}, errs.New(
 			errs.KindStateConflict, "Blueprint Backup preparation was already consumed",
 		)
 	}
 	state.consumed = true
 	if task.ID != state.taskID || task.Target != state.environmentID ||
 		projection.EnvironmentID != state.environmentID || projection.RevisionID != state.taskID ||
-		!equalEnvironmentBlueprintBackupPolicy(projection.Backup, state.desired) ||
+		!EqualEnvironmentBlueprintBackupPolicy(projection.Backup, state.desired) ||
 		state.requiresInitialKey != (state.candidate.InitialKey != nil) {
-		return preparedBlueprintBackupPolicyPublication{}, errs.New(
+		return BackupPolicyPublication{}, errs.New(
 			errs.KindValidationFailed, "Blueprint Backup publication identity is invalid",
 		)
 	}
-	publication := preparedBlueprintBackupPolicyPublication{}
+	publication := BackupPolicyPublication{}
 	if !state.retain {
 		policyValue, err := backuppolicy.EncodeBackupPolicyRecord(state.candidate.Replacement)
 		if err != nil {
-			return preparedBlueprintBackupPolicyPublication{}, err
+			return BackupPolicyPublication{}, err
 		}
 		coordinationValue, err := coordinationrecord.Encode(state.candidate.NextCoordination)
 		if err != nil {
 			clear(policyValue)
-			return preparedBlueprintBackupPolicyPublication{}, err
+			return BackupPolicyPublication{}, err
 		}
 		publication.mutations = append(publication.mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupPolicyKey(state.environmentID), Value: policyValue},
@@ -101,8 +101,8 @@ func prepareBlueprintBackupPolicyPublication(
 		if source.primary == nil {
 			sourceValue, encodeErr := backuppolicy.EncodeBackupSourceRecord(source.record)
 			if encodeErr != nil {
-				clearPreparedBlueprintBackupPolicyPublication(publication)
-				return preparedBlueprintBackupPolicyPublication{}, encodeErr
+				ClearPreparedBlueprintBackupPolicyPublication(publication)
+				return BackupPolicyPublication{}, encodeErr
 			}
 			publication.mutations = append(
 				publication.mutations,
@@ -123,8 +123,8 @@ func prepareBlueprintBackupPolicyPublication(
 			if source.candidateAttach {
 				candidate := blueprintBackupAttachCandidate(attaches, source.record.TargetID)
 				if candidate == nil || !candidate.Record.OwnsCredential() {
-					clearPreparedBlueprintBackupPolicyPublication(publication)
-					return preparedBlueprintBackupPolicyPublication{}, errs.New(
+					ClearPreparedBlueprintBackupPolicyPublication(publication)
+					return BackupPolicyPublication{}, errs.New(
 						errs.KindValidationFailed,
 						"Blueprint Backup candidate Attach changed",
 					)
@@ -227,14 +227,14 @@ func prepareBlueprintBackupPolicyPublication(
 	if state.candidate.InitialKey != nil {
 		recordValue, encodeErr := backuppolicy.EncodeBackupKeyRecord(state.candidate.InitialKey.Record)
 		if encodeErr != nil {
-			clearPreparedBlueprintBackupPolicyPublication(publication)
-			return preparedBlueprintBackupPolicyPublication{}, encodeErr
+			ClearPreparedBlueprintBackupPolicyPublication(publication)
+			return BackupPolicyPublication{}, encodeErr
 		}
 		encryptedValue, encodeErr := backuppolicy.EncodeBackupKeyEncryptedValue(state.candidate.InitialKey.Encrypted)
 		if encodeErr != nil {
 			clear(recordValue)
-			clearPreparedBlueprintBackupPolicyPublication(publication)
-			return preparedBlueprintBackupPolicyPublication{}, encodeErr
+			ClearPreparedBlueprintBackupPolicyPublication(publication)
+			return BackupPolicyPublication{}, encodeErr
 		}
 		publication.mutations = append(publication.mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyKey(state.environmentID), Value: recordValue},
@@ -244,7 +244,7 @@ func prepareBlueprintBackupPolicyPublication(
 	return publication, nil
 }
 
-func equalEnvironmentBlueprintBackupPolicy(left, right *projectionrecord.EnvironmentBlueprintBackupPolicy) bool {
+func EqualEnvironmentBlueprintBackupPolicy(left, right *projectionrecord.EnvironmentBlueprintBackupPolicy) bool {
 	if left == nil || right == nil {
 		return left == right
 	}
@@ -260,14 +260,14 @@ func equalEnvironmentBlueprintBackupPolicy(left, right *projectionrecord.Environ
 	return true
 }
 
-func clearPreparedBlueprintBackupPolicyPublication(publication preparedBlueprintBackupPolicyPublication) {
+func ClearPreparedBlueprintBackupPolicyPublication(publication BackupPolicyPublication) {
 	etcdstore.ClearMutationValues(publication.mutations)
 }
 
-func classifyEnvironmentBlueprintBackupPolicyPublication(
-	base idempotencyPlanClassifier,
-	publication preparedBlueprintBackupPolicyPublication,
-) idempotencyPlanClassifier {
+func ClassifyEnvironmentBlueprintBackupPolicyPublication(
+	base func(int64, []*etcdstore.KeyValue) error,
+	publication BackupPolicyPublication,
+) func(int64, []*etcdstore.KeyValue) error {
 	count := len(publication.conditions)
 	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) < count {

@@ -11,6 +11,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -327,7 +328,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		ctx, project, environment, expectedHeadRevision, claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
 		candidate, nil, nil, nil, groupstore.ReleaseGroupBlueprintPreparedMutation{},
-		componentplanning.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
+		componentplanning.ComponentTaskPreparation{}, blueprintplanning.BlueprintAttachTaskPreparation{}, task, marker,
 	)
 	if publicationErr != nil {
 		if !isUnknownEntryCreationOutcome(publicationErr) {

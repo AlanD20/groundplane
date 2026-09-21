@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -192,7 +193,7 @@ func (prepared VolumeRemovalBackupPolicyPreparation) validateDesiredPublication(
 		task.Type != taskjournal.TaskRemove || task.Target != state.volumeID ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceVolume ||
 		marker.Locator.Method != "DELETE" || marker.Locator.Route != "/volumes/{id}" ||
-		!equalEnvironmentBlueprintBackupPolicy(prepared.Projection(), projection.Backup) {
+		!blueprintplanning.EqualEnvironmentBlueprintBackupPolicy(prepared.Projection(), projection.Backup) {
 		return errs.New(errs.KindValidationFailed, "Volume policy preparation does not match desired removal")
 	}
 	return nil

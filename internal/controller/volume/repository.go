@@ -3,6 +3,7 @@ package volume
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -90,7 +91,7 @@ type MutationRepository interface {
 		[]blueprints.EnvironmentBlueprintRouteChange,
 		groupstore.ReleaseGroupBlueprintPreparedMutation,
 		componentplanning.ComponentTaskPreparation,
-		etcd.BlueprintAttachTaskPreparation,
+		blueprintplanning.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)

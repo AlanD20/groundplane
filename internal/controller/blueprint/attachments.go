@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -40,7 +41,7 @@ type blueprintAttachProcedure struct {
 }
 
 type preparedBlueprintAttaches struct {
-	publication etcd.BlueprintAttachTaskPreparation
+	publication blueprintplanning.BlueprintAttachTaskPreparation
 	effective   []etcdstore.Versioned[attachrecord.Record]
 	procedures  []blueprintAttachProcedure
 	facts       *blueprintAttachFactOverlay
@@ -56,7 +57,7 @@ func (prepared *preparedBlueprintAttaches) clear() {
 	if prepared.facts != nil {
 		prepared.facts.clear()
 	}
-	etcd.ClearBlueprintAttachTaskPreparation(&prepared.publication)
+	blueprintplanning.ClearBlueprintAttachTaskPreparation(&prepared.publication)
 }
 
 func (service *Service) prepareBlueprintAttaches(
@@ -220,7 +221,7 @@ func (service *Service) prepareBlueprintAttaches(
 			Database:       identityName, Role: role, Password: password,
 		}
 	}
-	inputs := make([]etcd.EnvironmentBlueprintAttachCandidateInput, 0, newCount)
+	inputs := make([]blueprintplanning.EnvironmentBlueprintAttachCandidateInput, 0, newCount)
 	records := make(map[string]attachrecord.Record, newCount)
 	failed := true
 	defer func() {
@@ -308,7 +309,7 @@ func (service *Service) prepareBlueprintAttaches(
 			return preparedBlueprintAttaches{}, err
 		}
 		records[name] = record
-		inputs = append(inputs, etcd.EnvironmentBlueprintAttachCandidateInput{
+		inputs = append(inputs, blueprintplanning.EnvironmentBlueprintAttachCandidateInput{
 			Record: record, Facts: encrypted, BackingProject: item.backingProject,
 			BackingEnvironment: item.backingEnvironment, BackingService: item.backingService,
 			RetainedGrantTargets: retainedGrants,
@@ -361,14 +362,14 @@ func (service *Service) prepareBlueprintAttaches(
 			return preparedBlueprintAttaches{}, err
 		}
 		records[name] = record
-		inputs = append(inputs, etcd.EnvironmentBlueprintAttachCandidateInput{
+		inputs = append(inputs, blueprintplanning.EnvironmentBlueprintAttachCandidateInput{
 			Record: record, BackingProject: item.backingProject,
 			BackingEnvironment: item.backingEnvironment, BackingService: item.backingService,
 			RetainedCredentialOwner: retainedOwner,
 		})
 		prepared.facts.addAlias(name, item.spec.Credential.Attach)
 	}
-	publication, err := etcd.PrepareEnvironmentBlueprintAttachTask(
+	publication, err := blueprintplanning.PrepareEnvironmentBlueprintAttachTask(
 		taskID, environmentID, inputs, ownsEnvironmentFence, createdAt,
 	)
 	if err != nil {

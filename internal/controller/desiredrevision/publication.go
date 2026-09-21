@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -51,8 +52,8 @@ type PublicationRepository interface {
 		[]blueprints.EnvironmentBlueprintRouteChange,
 		groupstore.ReleaseGroupBlueprintPreparedMutation,
 		componentplanning.ComponentTaskPreparation,
-		etcd.BlueprintAttachTaskPreparation,
-		etcd.BlueprintBackupPolicyPreparation,
+		blueprintplanning.BlueprintAttachTaskPreparation,
+		blueprintplanning.BlueprintBackupPolicyPreparation,
 		etcd.BlueprintScriptPublication,
 		etcd.BlueprintReleasePublication,
 		etcd.BlueprintRequirementGate,
@@ -88,7 +89,7 @@ type Repository interface {
 		[]blueprints.EnvironmentBlueprintRouteChange,
 		groupstore.ReleaseGroupBlueprintPreparedMutation,
 		componentplanning.ComponentTaskPreparation,
-		etcd.BlueprintAttachTaskPreparation,
+		blueprintplanning.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -184,8 +185,8 @@ type PublishInput struct {
 	RouteChanges            []blueprints.EnvironmentBlueprintRouteChange
 	ReleaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation
 	ComponentPreparation    componentplanning.ComponentTaskPreparation
-	AttachPreparation       etcd.BlueprintAttachTaskPreparation
-	BackupPreparation       etcd.BlueprintBackupPolicyPreparation
+	AttachPreparation       blueprintplanning.BlueprintAttachTaskPreparation
+	BackupPreparation       blueprintplanning.BlueprintBackupPolicyPreparation
 	ScriptPublication       etcd.BlueprintScriptPublication
 	ReleasePublication      etcd.BlueprintReleasePublication
 	RequirementGate         etcd.BlueprintRequirementGate

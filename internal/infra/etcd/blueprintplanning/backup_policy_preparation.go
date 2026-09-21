@@ -1,4 +1,4 @@
-package etcd
+package blueprintplanning
 
 import (
 	"context"
@@ -102,7 +102,7 @@ func clearBlueprintBackupPolicyPreparationState(state *blueprintBackupPolicyPrep
 	}
 }
 
-func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolicy(
+func (repository *BackupPolicyPlanner) PrepareEnvironmentBlueprintBackupPolicy(
 	ctx context.Context,
 	input EnvironmentBlueprintBackupPolicyInput,
 ) (BlueprintBackupPolicyPreparation, error) {
@@ -129,7 +129,7 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 		)
 	}
 	if err := validateBlueprintAttachTaskPreparation(input.AttachPreparation); err != nil &&
-		!blueprintAttachTaskPreparationIsZero(input.AttachPreparation) {
+		!BlueprintAttachTaskPreparationIsZero(input.AttachPreparation) {
 		return BlueprintBackupPolicyPreparation{}, err
 	}
 	current, coordination, key, err := repository.loadBlueprintBackupBase(
@@ -203,7 +203,7 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 		clearBlueprintBackupPolicyPreparationState(state)
 		return BlueprintBackupPolicyPreparation{}, err
 	}
-	state.candidate.ConnectorReferences, err = repository.loadBackupPolicyConnectorReferences(
+	state.candidate.ConnectorReferences, err = repository.policy.LoadBackupPolicyConnectorReferences(
 		ctx, state.candidate, input.ReadRevision,
 	)
 	if err != nil {
@@ -214,7 +214,7 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 	return BlueprintBackupPolicyPreparation{state: state}, nil
 }
 
-func (repository *BackupPolicyRepository) ValidateEnvironmentBlueprintBackupPolicy(
+func (repository *BackupPolicyPlanner) ValidateEnvironmentBlueprintBackupPolicy(
 	ctx context.Context,
 	input EnvironmentBlueprintBackupPolicyInput,
 ) error {
@@ -240,7 +240,7 @@ func (repository *BackupPolicyRepository) ValidateEnvironmentBlueprintBackupPoli
 	})
 }
 
-func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
+func (repository *BackupPolicyPlanner) resolveBlueprintBackupConnector(
 	ctx context.Context,
 	environmentID string,
 	name string,
@@ -265,7 +265,7 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 	if ids.Validate(ids.KindConnector, connectorID) != nil {
 		return "", nil, nil, nil, connectorrecord.CorruptRecord()
 	}
-	connector, owner, err := repository.loadBackupPolicyConnectorEvidence(ctx, environmentID, connectorID, revision)
+	connector, owner, err := repository.policy.LoadBackupPolicyConnectorEvidence(ctx, environmentID, connectorID, revision)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}

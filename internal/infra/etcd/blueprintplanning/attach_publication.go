@@ -1,4 +1,4 @@
-package etcd
+package blueprintplanning
 
 import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
@@ -11,34 +11,34 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type preparedBlueprintAttachTaskPublication struct {
+type AttachPublication struct {
 	preparation BlueprintAttachTaskPreparation
 	conditions  []etcdstore.Condition
 	mutations   []etcdstore.Mutation
 	values      [][]byte
 }
 
-func prepareBlueprintAttachTaskPublication(
+func PrepareBlueprintAttachTaskPublication(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	projection projectionrecord.EnvironmentComposeProjection,
-	task TaskRecord,
+	task TaskIdentity,
 	preparation BlueprintAttachTaskPreparation,
-) (preparedBlueprintAttachTaskPublication, error) {
-	publication := preparedBlueprintAttachTaskPublication{
+) (AttachPublication, error) {
+	publication := AttachPublication{
 		preparation: BlueprintAttachTaskPreparation{
 			Intent:     preparation.Intent,
 			candidates: cloneEnvironmentBlueprintAttachCandidateInputs(preparation.candidates),
 		},
 	}
-	if blueprintAttachTaskPreparationIsZero(preparation) {
+	if BlueprintAttachTaskPreparationIsZero(preparation) {
 		return publication, nil
 	}
 	if err := validateBlueprintAttachTaskPreparation(preparation); err != nil {
-		return preparedBlueprintAttachTaskPublication{}, err
+		return AttachPublication{}, err
 	}
 	if task.ID != preparation.Intent.TaskID || task.Target != environment.Record.ID ||
 		preparation.Intent.EnvironmentID != environment.Record.ID {
-		return preparedBlueprintAttachTaskPublication{}, errs.New(
+		return AttachPublication{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Attach preparation is owned by another Task",
 		)
@@ -49,7 +49,7 @@ func prepareBlueprintAttachTaskPublication(
 	}
 	intentValue, err := attachrecord.EncodeBlueprintAttachTaskIntent(preparation.Intent)
 	if err != nil {
-		return preparedBlueprintAttachTaskPublication{}, err
+		return AttachPublication{}, err
 	}
 	publication.values = append(publication.values, intentValue)
 	publication.conditions = append(publication.conditions, etcdstore.Condition{Key: attachrecord.BlueprintAttachTaskIntentKey(task.ID)})
@@ -88,16 +88,16 @@ func prepareBlueprintAttachTaskPublication(
 	for _, input := range preparation.candidates {
 		record := input.Record
 		if _, exists := serviceIDs[record.ServiceID]; !exists {
-			clearPreparedBlueprintAttachTaskPublication(publication)
-			return preparedBlueprintAttachTaskPublication{}, errs.New(
+			ClearPreparedBlueprintAttachTaskPublication(publication)
+			return AttachPublication{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint Attach consumer Service is absent from the candidate projection",
 			)
 		}
 		recordValue, encodeErr := attachrecord.EncodeAttachRecord(record)
 		if encodeErr != nil {
-			clearPreparedBlueprintAttachTaskPublication(publication)
-			return preparedBlueprintAttachTaskPublication{}, encodeErr
+			ClearPreparedBlueprintAttachTaskPublication(publication)
+			return AttachPublication{}, encodeErr
 		}
 		publication.values = append(publication.values, recordValue)
 		publication.conditions = append(publication.conditions,
@@ -136,8 +136,8 @@ func prepareBlueprintAttachTaskPublication(
 		if input.Facts != nil {
 			factValue, factErr := attachrecord.EncodeAttachEncryptedFacts(*input.Facts)
 			if factErr != nil {
-				clearPreparedBlueprintAttachTaskPublication(publication)
-				return preparedBlueprintAttachTaskPublication{}, factErr
+				ClearPreparedBlueprintAttachTaskPublication(publication)
+				return AttachPublication{}, factErr
 			}
 			publication.values = append(publication.values, factValue)
 			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: attachrecord.AttachFactsKey(record.ID)})
@@ -148,8 +148,8 @@ func prepareBlueprintAttachTaskPublication(
 		if !record.OwnsCredential() {
 			if _, candidate := candidateIDs[record.CredentialAttachID]; !candidate {
 				if err := appendRetained(*input.RetainedCredentialOwner); err != nil {
-					clearPreparedBlueprintAttachTaskPublication(publication)
-					return preparedBlueprintAttachTaskPublication{}, err
+					ClearPreparedBlueprintAttachTaskPublication(publication)
+					return AttachPublication{}, err
 				}
 			}
 			publication.conditions = append(publication.conditions, etcdstore.Condition{
@@ -164,8 +164,8 @@ func prepareBlueprintAttachTaskPublication(
 				for _, retained := range input.RetainedGrantTargets {
 					if retained.Record.ID == grantID {
 						if err := appendRetained(retained); err != nil {
-							clearPreparedBlueprintAttachTaskPublication(publication)
-							return preparedBlueprintAttachTaskPublication{}, err
+							ClearPreparedBlueprintAttachTaskPublication(publication)
+							return AttachPublication{}, err
 						}
 						break
 					}
@@ -182,8 +182,8 @@ func prepareBlueprintAttachTaskPublication(
 		if len(record.GrantAttachIDs) != 0 {
 			dependentValue, dependentErr := attachrecord.EncodeAttachDependentGrantIndex(record.ID, record.GrantAttachIDs)
 			if dependentErr != nil {
-				clearPreparedBlueprintAttachTaskPublication(publication)
-				return preparedBlueprintAttachTaskPublication{}, dependentErr
+				ClearPreparedBlueprintAttachTaskPublication(publication)
+				return AttachPublication{}, dependentErr
 			}
 			publication.values = append(publication.values, dependentValue)
 			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: attachrecord.AttachDependentGrantKey(record.ID)})
@@ -194,8 +194,8 @@ func prepareBlueprintAttachTaskPublication(
 	}
 	conditions, err := uniqueBlueprintAttachPublicationConditions(publication.conditions)
 	if err != nil {
-		clearPreparedBlueprintAttachTaskPublication(publication)
-		return preparedBlueprintAttachTaskPublication{}, err
+		ClearPreparedBlueprintAttachTaskPublication(publication)
+		return AttachPublication{}, err
 	}
 	publication.conditions = conditions
 	return publication, nil
@@ -221,10 +221,10 @@ func uniqueBlueprintAttachPublicationConditions(conditions []etcdstore.Condition
 	return unique, nil
 }
 
-func classifyEnvironmentBlueprintAttachPublication(
-	base idempotencyPlanClassifier,
-	publication preparedBlueprintAttachTaskPublication,
-) idempotencyPlanClassifier {
+func ClassifyEnvironmentBlueprintAttachPublication(
+	base func(int64, []*etcdstore.KeyValue) error,
+	publication AttachPublication,
+) func(int64, []*etcdstore.KeyValue) error {
 	return func(revision int64, values []*etcdstore.KeyValue) error {
 		count := len(publication.conditions)
 		if len(values) < count {
@@ -250,9 +250,9 @@ func classifyEnvironmentBlueprintAttachPublication(
 	}
 }
 
-func clearPreparedBlueprintAttachTaskPublication(publication preparedBlueprintAttachTaskPublication) {
+func ClearPreparedBlueprintAttachTaskPublication(publication AttachPublication) {
 	for _, value := range publication.values {
 		clear(value)
 	}
-	clearBlueprintAttachTaskPreparation(&publication.preparation)
+	ClearBlueprintAttachTaskPreparation(&publication.preparation)
 }

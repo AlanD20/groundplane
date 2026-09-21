@@ -1,4 +1,4 @@
-package etcd
+package blueprintplanning
 
 import (
 	"context"
@@ -22,7 +22,7 @@ type EnvironmentBlueprintBackupPolicySnapshot struct {
 	Found          bool
 }
 
-func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySnapshot(
+func (repository *BackupPolicyPlanner) GetEnvironmentBlueprintBackupPolicySnapshot(
 	ctx context.Context,
 	environmentID string,
 	revision int64,

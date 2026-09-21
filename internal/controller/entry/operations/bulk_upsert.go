@@ -6,6 +6,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -300,7 +301,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		ctx, project, environment, headRevision, claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.environmentID, RevisionID: claim.RevisionID},
 		candidate, nil, nil, nil, groupstore.ReleaseGroupBlueprintPreparedMutation{},
-		componentplanning.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
+		componentplanning.ComponentTaskPreparation{}, blueprintplanning.BlueprintAttachTaskPreparation{}, task, marker,
 	)
 	if publicationErr != nil {
 		if !isUnknownEntryCreationOutcome(publicationErr) {

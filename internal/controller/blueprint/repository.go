@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -86,8 +87,8 @@ type environmentBlueprintRepository interface {
 		[]blueprints.EnvironmentBlueprintRouteChange,
 		groupstore.ReleaseGroupBlueprintPreparedMutation,
 		componentplanning.ComponentTaskPreparation,
-		etcd.BlueprintAttachTaskPreparation,
-		etcd.BlueprintBackupPolicyPreparation,
+		blueprintplanning.BlueprintAttachTaskPreparation,
+		blueprintplanning.BlueprintBackupPolicyPreparation,
 		etcd.BlueprintScriptPublication,
 		etcd.BlueprintReleasePublication,
 		etcd.BlueprintRequirementGate,
@@ -295,8 +296,8 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation componentplanning.ComponentTaskPreparation,
-	attachPreparation etcd.BlueprintAttachTaskPreparation,
-	backupPreparation etcd.BlueprintBackupPolicyPreparation,
+	attachPreparation blueprintplanning.BlueprintAttachTaskPreparation,
+	backupPreparation blueprintplanning.BlueprintBackupPolicyPreparation,
 	scriptPublication etcd.BlueprintScriptPublication,
 	releasePublication etcd.BlueprintReleasePublication,
 	requirementGate etcd.BlueprintRequirementGate,
