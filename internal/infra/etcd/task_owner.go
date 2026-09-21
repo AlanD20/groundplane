@@ -164,7 +164,7 @@ func validateTaskOwner(owner TaskOwner) error {
 	return nil
 }
 
-func newTaskInitiation(owner TaskOwner, actor TaskActor, fences ...Condition) (TaskInitiation, error) {
+func newTaskInitiation(owner TaskOwner, actor TaskActor, fences ...etcdstore.Condition) (TaskInitiation, error) {
 	if err := validateTaskOwner(owner); err != nil {
 		return TaskInitiation{}, err
 	}

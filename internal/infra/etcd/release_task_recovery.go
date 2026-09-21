@@ -23,7 +23,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	fence ReleaseFenceSet,
 	base *etcdstore.GetManyResult,
 	terminals *etcdstore.GetManyResult,
-	proofConditions ...Condition,
+	proofConditions ...etcdstore.Condition,
 ) (bool, error) {
 	if terminalStatus != taskjournal.TaskStatusCompleted || result.ReconciliationRequired {
 		return repository.returnReleaseToRecovery(ctx, task, head, base, terminalAt, proofConditions...)
@@ -206,7 +206,7 @@ func (repository *TaskRepository) returnReleaseToRecovery(
 	head ReleaseOperationHead,
 	base *etcdstore.GetManyResult,
 	terminalAt time.Time,
-	proofConditions ...Condition,
+	proofConditions ...etcdstore.Condition,
 ) (bool, error) {
 	head.State = domain.StateRecoveryRequired
 	head.UpdatedAt = terminalAt
@@ -241,7 +241,7 @@ func (repository *TaskRepository) closeRecoveredRelease(
 	fence ReleaseFenceSet,
 	base, terminals *etcdstore.GetManyResult,
 	terminalAt time.Time,
-	proofConditions ...Condition,
+	proofConditions ...etcdstore.Condition,
 ) (bool, error) {
 	if !head.RecoveryOutcome.Terminal() || fence.AttemptTaskID != task.ID {
 		return false, corruptReleaseRecord()

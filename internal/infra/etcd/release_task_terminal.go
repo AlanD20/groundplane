@@ -28,7 +28,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	agentID string,
 	terminalAt time.Time,
 	readRevision int64,
-	proofConditions ...Condition,
+	proofConditions ...etcdstore.Condition,
 ) (bool, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	if publicationID == "" {

@@ -26,7 +26,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	status taskjournal.TaskStatus,
 	result TaskResultRecord,
 	revision int64,
-	evidenceConditions ...Condition,
+	evidenceConditions ...etcdstore.Condition,
 ) (etcdstore.Versioned[TaskRecord], bool, error) {
 	if task.Params[TaskReleasePublicationParam] == "" || !result.ReconciliationRequired {
 		return etcdstore.Versioned[TaskRecord]{}, false, nil

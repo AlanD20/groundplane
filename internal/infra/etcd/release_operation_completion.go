@@ -21,7 +21,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
-	proofConditions ...Condition,
+	proofConditions ...etcdstore.Condition,
 ) (bool, error) {
 	for _, value := range terminals.Values {
 		if value == nil {
