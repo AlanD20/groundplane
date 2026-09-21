@@ -1,4 +1,4 @@
-package etcd
+package environmentqueries
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *ServiceRepository) GetServiceLifecycleRenderInput(
+func (repository *ServiceReader) GetServiceLifecycleRenderInput(
 	ctx context.Context,
 	taskID string,
 ) (etcdstore.Versioned[releaserender.ServiceLifecycleRenderInput], bool, error) {

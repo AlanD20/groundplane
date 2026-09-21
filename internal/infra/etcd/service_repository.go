@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -11,6 +12,7 @@ import (
 // ServiceRepository projects head-selected desired Services and joins their
 // independently mutable runtime sidecars.
 type ServiceRepository struct {
+	*environmentqueries.ServiceReader
 	store hierarchyStore
 }
 
@@ -47,5 +49,5 @@ func newServiceRepository(store hierarchyStore) (*ServiceRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "Service store is required")
 	}
-	return &ServiceRepository{store: store}, nil
+	return &ServiceRepository{store: store, ServiceReader: environmentqueries.NewServiceReader(store)}, nil
 }

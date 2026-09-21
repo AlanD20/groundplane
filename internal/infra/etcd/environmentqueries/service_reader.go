@@ -1,9 +1,8 @@
-package etcd
+package environmentqueries
 
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
@@ -14,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *ServiceRepository) GetService(
+func (repository *ServiceReader) GetService(
 	ctx context.Context,
 	serviceID string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
@@ -24,16 +23,16 @@ func (repository *ServiceRepository) GetService(
 	if err := recordcodec.ValidateID(ids.KindService, serviceID); err != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
-	return environmentqueries.FindServiceAtRevision(ctx, repository.store, serviceID, 0)
+	return FindServiceAtRevision(ctx, repository.store, serviceID, 0)
 }
 
-func (repository *ServiceRepository) GetServiceRevision(
+func (repository *ServiceReader) GetServiceRevision(
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
 	serviceID string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
-	hierarchy := composeHierarchyRepository(repository.store)
+	hierarchy := NewProjectionReader(repository.store)
 	projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 	if err != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
@@ -45,7 +44,7 @@ func (repository *ServiceRepository) GetServiceRevision(
 		blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID))
 }
 
-func (repository *ServiceRepository) GetServiceByName(
+func (repository *ServiceReader) GetServiceByName(
 	ctx context.Context,
 	environmentID string,
 	name string,
@@ -62,7 +61,7 @@ func (repository *ServiceRepository) GetServiceByName(
 	}
 	for _, service := range projection.Record.DesiredServices {
 		if service.Desired.Name == name &&
-			!environmentqueries.IsComponentService(projection.Record.Components, service.Desired.ID) {
+			!IsComponentService(projection.Record.Components, service.Desired.ID) {
 			return servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, service.Desired.ID,
 				blueprints.EnvironmentBlueprintHeadKey(environmentID))
 		}
@@ -70,7 +69,7 @@ func (repository *ServiceRepository) GetServiceByName(
 	return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 }
 
-func (repository *ServiceRepository) ListServices(
+func (repository *ServiceReader) ListServices(
 	ctx context.Context,
 	environmentID string,
 	request etcdstore.PageRequest,
@@ -94,7 +93,7 @@ func (repository *ServiceRepository) ListServices(
 	if !found {
 		return etcdstore.Page[servicerecord.ServiceRecord]{Items: []etcdstore.Versioned[servicerecord.ServiceRecord]{}, Revision: projection.ReadRevision}, nil
 	}
-	desired := environmentqueries.OrdinaryServices(projection.Record)
+	desired := OrdinaryServices(projection.Record)
 	sort.Slice(desired, func(left, right int) bool { return desired[left].Desired.ID < desired[right].Desired.ID })
 	start := sort.Search(len(desired), func(index int) bool { return desired[index].Desired.ID > lastID })
 	end := min(start+limit, len(desired))
