@@ -52,7 +52,7 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 				Record: projection, Revision: value.ModRevision, ReadRevision: page.ReadRevision,
 			}
 			for _, desired := range projection.DesiredRoutes {
-				record, joinErr := routeRecordFromDesiredProjection(ctx, repository.store, versioned, desired)
+				record, joinErr := projectionrecord.ReadRoute(ctx, repository.store, versioned, desired)
 				if joinErr != nil {
 					clearRangeKeyValues(page.Values)
 					return nil, joinErr

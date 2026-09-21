@@ -68,7 +68,7 @@ func findRouteAtRevision(
 				if matched != nil {
 					return etcdstore.Versioned[routerecord.Record]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
-				joined, joinErr := routeRecordFromDesiredProjection(ctx, store, projection, desired)
+				joined, joinErr := projectionrecord.ReadRoute(ctx, store, projection, desired)
 				if joinErr != nil {
 					return etcdstore.Versioned[routerecord.Record]{}, joinErr
 				}
@@ -122,7 +122,7 @@ func listRoutesFromDesiredHead(
 	end := min(start+limit, len(desired))
 	items := make([]etcdstore.Versioned[routerecord.Record], 0, end-start)
 	for _, route := range desired[start:end] {
-		joined, joinErr := routeRecordFromDesiredProjection(ctx, store, projection, route)
+		joined, joinErr := projectionrecord.ReadRoute(ctx, store, projection, route)
 		if joinErr != nil {
 			return etcdstore.Page[routerecord.Record]{}, joinErr
 		}
@@ -154,7 +154,7 @@ func routeAtProjection(
 	}
 	for _, desired := range projection.DesiredRoutes {
 		if desired.Desired.ID == routeID {
-			joined, err := routeRecordFromDesiredProjection(ctx, store, versioned, desired)
+			joined, err := projectionrecord.ReadRoute(ctx, store, versioned, desired)
 			if err != nil {
 				return routerecord.Record{}, err
 			}
