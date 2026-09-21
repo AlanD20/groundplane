@@ -12,7 +12,7 @@ import (
 // RecoverTaskSecretPinSources runs during construction, before requests or
 // dispatch. It removes unpublished preparation and resumes authorized release.
 func RecoverTaskSecretPinSources(ctx context.Context, store hierarchyStore) error {
-	pins, err := recoverySecretPinRepository(store, "")
+	pins, err := tasksecretpins.NewEtcdRepository(store, "")
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (repository *TaskRepository) ResumeTaskSourceReleases(ctx context.Context) 
 	if repository == nil || repository.store == nil {
 		return false, errs.New(errs.KindInternal, "Task source release repository is missing")
 	}
-	pins, err := recoverySecretPinRepository(repository.store, "")
+	pins, err := tasksecretpins.NewEtcdRepository(repository.store, "")
 	if err != nil {
 		return false, err
 	}
@@ -94,7 +94,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 func (repository *TaskRepository) beginRecoverySecretPinRelease(
 	ctx context.Context, task TaskRecord,
 ) (taskMaterializationProjectionChange, error) {
-	pins, err := recoverySecretPinRepository(repository.store, taskSecretPinProjectID(task))
+	pins, err := tasksecretpins.NewEtcdRepository(repository.store, taskSecretPinProjectID(task))
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
@@ -116,7 +116,7 @@ func (repository *TaskRepository) beginRecoverySecretPinRelease(
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
-	conditions, mutations, err := recoverySecretPinFragment(fragment)
+	conditions, mutations, err := tasksecretpins.EtcdFragment(fragment)
 	if err != nil {
 		fragment.Clear()
 		return taskMaterializationProjectionChange{}, err
@@ -138,7 +138,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	if !isTerminalTaskStatus(task.Status) || task.RetainUntil == nil || task.RetainUntil.After(now) {
 		return true, errs.New(errs.KindStateConflict, "recovery Secret retry authority has not expired")
 	}
-	pins, err := recoverySecretPinRepository(repository.store, taskSecretPinProjectID(task))
+	pins, err := tasksecretpins.NewEtcdRepository(repository.store, taskSecretPinProjectID(task))
 	if err != nil {
 		return true, err
 	}
@@ -212,7 +212,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		return true, err
 	}
 	defer fragment.Clear()
-	conditions, mutations, err := recoverySecretPinFragment(fragment)
+	conditions, mutations, err := tasksecretpins.EtcdFragment(fragment)
 	if err != nil {
 		return true, err
 	}

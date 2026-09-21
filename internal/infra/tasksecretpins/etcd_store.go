@@ -1,4 +1,4 @@
-package etcd
+package tasksecretpins
 
 import (
 	"context"
@@ -9,31 +9,36 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
-	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+type etcdStore interface {
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
+}
+
 type recoverySecretPinStore struct {
-	store     hierarchyStore
+	store     etcdStore
 	projectID string
 }
 
-func recoverySecretPinRepository(store hierarchyStore, projectID string) (*tasksecretpins.Repository, error) {
-	return tasksecretpins.NewRepository(recoverySecretPinStore{store: store, projectID: projectID})
+func NewEtcdRepository(store etcdStore, projectID string) (*Repository, error) {
+	return NewRepository(recoverySecretPinStore{store: store, projectID: projectID})
 }
 
 func (adapter recoverySecretPinStore) GetMany(
 	ctx context.Context, keys []string, revision int64,
-) (*tasksecretpins.GetManyResult, error) {
+) (*GetManyResult, error) {
 	read, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil || read == nil {
 		return nil, err
 	}
-	result := &tasksecretpins.GetManyResult{ReadRevision: read.ReadRevision,
-		Values: make([]*tasksecretpins.KeyValue, len(read.Values))}
+	result := &GetManyResult{ReadRevision: read.ReadRevision,
+		Values: make([]*KeyValue, len(read.Values))}
 	for index, value := range read.Values {
 		if value != nil {
-			result.Values[index] = &tasksecretpins.KeyValue{
+			result.Values[index] = &KeyValue{
 				Key: value.Key, Value: value.Value, ModRevision: value.ModRevision,
 			}
 		}
@@ -43,15 +48,15 @@ func (adapter recoverySecretPinStore) GetMany(
 
 func (adapter recoverySecretPinStore) Range(
 	ctx context.Context, prefix string, limit int64,
-) (*tasksecretpins.RangeResult, error) {
+) (*RangeResult, error) {
 	read, err := adapter.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: limit})
 	if err != nil || read == nil {
 		return nil, err
 	}
-	result := &tasksecretpins.RangeResult{ReadRevision: read.ReadRevision, More: read.More,
-		Values: make([]tasksecretpins.KeyValue, len(read.Values))}
+	result := &RangeResult{ReadRevision: read.ReadRevision, More: read.More,
+		Values: make([]KeyValue, len(read.Values))}
 	for index, value := range read.Values {
-		result.Values[index] = tasksecretpins.KeyValue{
+		result.Values[index] = KeyValue{
 			Key: value.Key, Value: value.Value, ModRevision: value.ModRevision,
 		}
 	}
@@ -59,20 +64,20 @@ func (adapter recoverySecretPinStore) Range(
 }
 
 func (adapter recoverySecretPinStore) Transact(
-	ctx context.Context, conditions []tasksecretpins.Condition, mutations []tasksecretpins.Mutation,
-) (tasksecretpins.TransactionResult, error) {
-	compares, writes, err := recoverySecretPinFragment(
-		tasksecretpins.Fragment{Conditions: conditions, Mutations: mutations},
+	ctx context.Context, conditions []Condition, mutations []Mutation,
+) (TransactionResult, error) {
+	compares, writes, err := EtcdFragment(
+		Fragment{Conditions: conditions, Mutations: mutations},
 	)
 	if err != nil {
-		return tasksecretpins.TransactionResult{}, err
+		return TransactionResult{}, err
 	}
 	result, err := adapter.store.Transact(ctx, compares, writes)
 	clearKeyValues(result.FailureReads)
-	return tasksecretpins.TransactionResult{Succeeded: result.Succeeded, Revision: result.Revision}, err
+	return TransactionResult{Succeeded: result.Succeeded, Revision: result.Revision}, err
 }
 
-func recoverySecretPinFragment(fragment tasksecretpins.Fragment) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+func EtcdFragment(fragment Fragment) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	conditions := make([]etcdstore.Condition, len(fragment.Conditions))
 	for index, condition := range fragment.Conditions {
 		conditions[index] = etcdstore.Condition{Key: condition.Key, ModRevision: condition.ModRevision, Prefix: condition.Prefix}
@@ -81,9 +86,9 @@ func recoverySecretPinFragment(fragment tasksecretpins.Fragment) ([]etcdstore.Co
 	for index, mutation := range fragment.Mutations {
 		var kind etcdstore.MutationType
 		switch mutation.Type {
-		case tasksecretpins.MutationPut:
+		case MutationPut:
 			kind = etcdstore.MutationPut
-		case tasksecretpins.MutationDelete:
+		case MutationDelete:
 			kind = etcdstore.MutationDelete
 		default:
 			return nil, nil, errs.New(errs.KindInternal, "unknown recovery Secret pin mutation")
@@ -95,17 +100,17 @@ func recoverySecretPinFragment(fragment tasksecretpins.Fragment) ([]etcdstore.Co
 
 func (adapter recoverySecretPinStore) VerifySecret(
 	ctx context.Context, pin tasksecretpinrecord.Record,
-) (tasksecretpins.SecretAuthority, error) {
+) (SecretAuthority, error) {
 	if err := tasksecretpinrecord.Validate(pin); err != nil {
-		return tasksecretpins.SecretAuthority{}, err
+		return SecretAuthority{}, err
 	}
 	keys := []string{secretrecord.RecordKey(pin.SecretID), secretrecord.ValueKey(pin.SecretID)}
 	read, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
-		return tasksecretpins.SecretAuthority{}, err
+		return SecretAuthority{}, err
 	}
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 2 {
-		return tasksecretpins.SecretAuthority{}, errs.New(
+		return SecretAuthority{}, errs.New(
 			errs.KindInternal,
 			"recovery Secret source read is incomplete",
 		)
@@ -114,24 +119,24 @@ func (adapter recoverySecretPinStore) VerifySecret(
 	metadata, value := read.Values[0], read.Values[1]
 	if metadata == nil || value == nil || metadata.Key != keys[0] || value.Key != keys[1] ||
 		metadata.ModRevision != pin.MetadataRevision || value.ModRevision <= 0 {
-		return tasksecretpins.SecretAuthority{}, errs.New(
+		return SecretAuthority{}, errs.New(
 			errs.KindStateConflict,
 			"pinned recovery Secret is unavailable",
 		)
 	}
 	record, err := secretrecord.DecodeRecord(metadata.Value)
 	if err != nil || record.Secret.ID != pin.SecretID {
-		return tasksecretpins.SecretAuthority{}, secretrecord.CorruptRecord()
+		return SecretAuthority{}, secretrecord.CorruptRecord()
 	}
 	encrypted, err := secretrecord.DecodeEncryptedValue(value.Value)
 	defer clear(encrypted.Ciphertext)
 	if err != nil || encrypted.SecretID != pin.SecretID || encrypted.CiphertextSHA256 != pin.CiphertextSHA256 {
-		return tasksecretpins.SecretAuthority{}, errs.New(
+		return SecretAuthority{}, errs.New(
 			errs.KindStateConflict,
 			"pinned recovery Secret value changed",
 		)
 	}
-	authority := tasksecretpins.SecretAuthority{
+	authority := SecretAuthority{
 		MetadataRevision: metadata.ModRevision,
 		ValueRevision:    value.ModRevision,
 	}
@@ -139,7 +144,7 @@ func (adapter recoverySecretPinStore) VerifySecret(
 		return authority, nil
 	}
 	if record.Secret.ProjectID != adapter.projectID {
-		return tasksecretpins.SecretAuthority{}, errs.New(
+		return SecretAuthority{}, errs.New(
 			errs.KindStateConflict,
 			"recovery Secret belongs to another Project",
 		)
@@ -147,10 +152,10 @@ func (adapter recoverySecretPinStore) VerifySecret(
 	ownerKey := hierarchyrecord.ProjectKey(adapter.projectID)
 	owners, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{ownerKey}, Revision: read.ReadRevision})
 	if err != nil {
-		return tasksecretpins.SecretAuthority{}, err
+		return SecretAuthority{}, err
 	}
 	if owners == nil || owners.ReadRevision != read.ReadRevision || len(owners.Values) != 1 || owners.Values[0] == nil {
-		return tasksecretpins.SecretAuthority{}, errs.New(
+		return SecretAuthority{}, errs.New(
 			errs.KindStateConflict,
 			"recovery Secret Project is unavailable",
 		)
@@ -158,8 +163,17 @@ func (adapter recoverySecretPinStore) VerifySecret(
 	defer clearKeyValues(owners.Values)
 	project, err := hierarchyrecord.DecodeProject(owners.Values[0].Value)
 	if err != nil || project.ID != adapter.projectID || owners.Values[0].Key != ownerKey {
-		return tasksecretpins.SecretAuthority{}, recordcodec.CorruptRecord()
+		return SecretAuthority{}, recordcodec.CorruptRecord()
 	}
 	authority.ProjectID, authority.TenantID = project.ID, project.TenantID
 	return authority, nil
+}
+
+func clearKeyValues(values []*etcdstore.KeyValue) {
+	for _, value := range values {
+		if value != nil {
+			clear(value.Value)
+			value.Value = nil
+		}
+	}
 }

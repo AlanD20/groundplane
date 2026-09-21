@@ -122,7 +122,7 @@ func prepareRecoverySecretPinSet(
 		pins,
 		func(left, right tasksecretpinrecord.Record) int { return cmp.Compare(left.SecretID, right.SecretID) },
 	)
-	repository, err := recoverySecretPinRepository(store, taskSecretPinProjectID(task))
+	repository, err := tasksecretpins.NewEtcdRepository(store, taskSecretPinProjectID(task))
 	if err != nil {
 		return TaskRecord{}, tasksecretpins.Prepared{}, err
 	}
@@ -191,7 +191,7 @@ func finishRecoverySecretPreparation(ctx context.Context, store hierarchyStore, 
 		if read.Values[0] != nil {
 			return cause
 		}
-		repository, createErr := recoverySecretPinRepository(store, taskSecretPinProjectID(task))
+		repository, createErr := tasksecretpins.NewEtcdRepository(store, taskSecretPinProjectID(task))
 		if createErr != nil {
 			err = createErr
 		} else {
@@ -212,7 +212,7 @@ func recoverySecretPinActivation(prepared tasksecretpins.Prepared) (taskMaterial
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
-	conditions, mutations, err := recoverySecretPinFragment(fragment)
+	conditions, mutations, err := tasksecretpins.EtcdFragment(fragment)
 	if err != nil {
 		fragment.Clear()
 		return taskMaterializationProjectionChange{}, err
@@ -263,7 +263,7 @@ func (repository *TaskRepository) recoverySecretPinClaimConditions(
 func (repository *TaskRepository) loadTaskSecretPinRoot(
 	ctx context.Context, task TaskRecord,
 ) (tasksecretpins.ActiveRoot, error) {
-	pins, err := recoverySecretPinRepository(repository.store, taskSecretPinProjectID(task))
+	pins, err := tasksecretpins.NewEtcdRepository(repository.store, taskSecretPinProjectID(task))
 	if err != nil {
 		return tasksecretpins.ActiveRoot{}, err
 	}

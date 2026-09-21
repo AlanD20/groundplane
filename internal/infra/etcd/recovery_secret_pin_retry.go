@@ -26,7 +26,7 @@ func (repository *TaskRepository) newRetryTaskIdempotencyMutationPlan(
 		return nil, err
 	}
 	defer fragment.Clear()
-	compares, writes, err := recoverySecretPinFragment(fragment)
+	compares, writes, err := tasksecretpins.EtcdFragment(fragment)
 	if err != nil {
 		return nil, err
 	}
