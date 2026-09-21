@@ -27,7 +27,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
-	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/attachplanning"
 	"github.com/AlanD20/groundplane/internal/controller/backingservices"
@@ -46,7 +45,6 @@ import (
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
-	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	scriptoperations "github.com/AlanD20/groundplane/internal/controller/scripts"
 	"github.com/AlanD20/groundplane/internal/controller/secrets"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -556,29 +554,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)
 	}
-	runnerPools, err := cfg.AllocationPools()
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Runner allocation: %w", err)
-	}
-	runnerTokens := runnercapability.NewTokenBroker()
-	runnerProvisioning, err := runnercapability.NewProvisioningService(
-		runnerRecords, tasks, hierarchyRecords, idempotency, intentCoordinator, runnerTokens,
-		runnerallocation.RunnerAllocationConfigFromPools(runnerPools), cfg.Runner.Image,
+	runnerComposition, err := newControllerRunnerComposition(
+		cfg, runnerRecords, tasks, hierarchyRecords, idempotency, intentCoordinator,
 	)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Runner provisioning service: %w", err)
-	}
-	runnerMutations, err := runnercapability.NewMutationService(runnerRecords, idempotency, intentCoordinator)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Runner mutation service: %w", err)
-	}
-	runnerRemovals, err := runnercapability.NewRemovalService(runnerRecords, idempotency, intentCoordinator)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Runner removal service: %w", err)
+		return nil, err
 	}
 	releaseGroupMutations, err := releasegroup.NewMutationService(
 		releaseGroups, hierarchyRecords, tasks, idempotency, intentCoordinator,
@@ -981,7 +962,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	backingServiceCreations, err := backingservices.NewCreationService(
 		cfg.Storage.VolumeRoot,
-		runnerPools.Environment,
+		runnerComposition.pools.Environment,
 		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
 		intentProtector,
@@ -1053,7 +1034,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform runtime: %w", err)
 	}
-	runnerLifecycle, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerTokens, cfg, runnerPools)
+	runnerLifecycle, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerComposition.tokens, cfg, runnerComposition.pools)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
@@ -1127,9 +1108,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		ConnectorMutations:    connectorMutations,
 		ConnectorDeletions:    connectorDeletions,
 		Runners:               runnerRecords,
-		RunnerProvisioning:    runnerProvisioning,
-		RunnerMutations:       runnerMutations,
-		RunnerRemovals:        runnerRemovals,
+		RunnerProvisioning:    runnerComposition.provisioning,
+		RunnerMutations:       runnerComposition.mutations,
+		RunnerRemovals:        runnerComposition.removals,
 		BackupPolicies:        backupPolicies,
 		BackupPolicyMutations: backupPolicies,
 		RecoveryPoints:        backupPointReads,
