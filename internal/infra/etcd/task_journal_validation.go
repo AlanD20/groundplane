@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"unicode/utf8"
 )
@@ -36,13 +37,13 @@ func validateTaskRecord(record TaskRecord) error {
 	if !validTaskActor(record.Actor) {
 		return errs.New(errs.KindValidationFailed, "task actor is invalid")
 	}
-	if !validTaskExecutor(record.Executor) {
+	if !taskjournal.ValidExecutor(record.Executor) {
 		return errs.New(errs.KindValidationFailed, "task executor is invalid")
 	}
 	if !validTaskType(record.Type) {
 		return errs.New(errs.KindValidationFailed, "task type is not in the durable task catalog")
 	}
-	if record.Type == TaskBackupPrune && record.Actor != TaskActorSystem {
+	if record.Type == taskjournal.TaskBackupPrune && record.Actor != TaskActorSystem {
 		return errs.New(errs.KindValidationFailed, "backup_prune task actor must be system")
 	}
 	if record.Target == "" || !utf8.ValidString(record.Target) {
@@ -54,7 +55,7 @@ func validateTaskRecord(record TaskRecord) error {
 	if !recordcodec.ValidSHA256(record.PlanHash) {
 		return errs.New(errs.KindValidationFailed, "task plan hash must be a lowercase SHA-256 digest")
 	}
-	backupTask := record.Type == TaskBackup || record.Type == TaskBackupPrune
+	backupTask := record.Type == taskjournal.TaskBackup || record.Type == taskjournal.TaskBackupPrune
 	if backupTask && (record.RenderGeneration != 0 || record.TimeoutSeconds != backupTaskTimeoutSeconds ||
 		len(record.Params) != 0 || len(record.Materializations) != 0) {
 		return errs.New(errs.KindValidationFailed, "backup task shape is invalid")
@@ -79,7 +80,7 @@ func validateTaskRecord(record TaskRecord) error {
 	}
 	if record.TerminalAssignment != nil {
 		identity := record.TerminalAssignment
-		if record.Executor != TaskExecutorAgent || !isTerminalTaskStatus(record.Status) ||
+		if record.Executor != taskjournal.TaskExecutorAgent || !isTerminalTaskStatus(record.Status) ||
 			recordcodec.ValidateID(ids.KindAssignment, identity.AssignmentID) != nil ||
 			recordcodec.ValidateID(ids.KindAgent, identity.AgentID) != nil || identity.AgentGeneration == 0 {
 			return errs.New(errs.KindInternal, "task terminal assignment identity is invalid")
@@ -101,7 +102,7 @@ func validateTaskRecord(record TaskRecord) error {
 	if record.UpdatedAt.Before(record.CreatedAt) {
 		return errs.New(errs.KindInternal, "task updated_at precedes created_at")
 	}
-	if record.Status == TaskStatusPending && record.EventCount == 0 && !record.UpdatedAt.Equal(record.CreatedAt) {
+	if record.Status == taskjournal.TaskStatusPending && record.EventCount == 0 && !record.UpdatedAt.Equal(record.CreatedAt) {
 		return errs.New(errs.KindInternal, "new pending task timestamps are inconsistent")
 	}
 	if err := validateTaskSteps(record.Steps); err != nil {
@@ -182,10 +183,10 @@ func validateTaskTimeline(record TaskRecord) error {
 	if record.FinishedAt != nil || record.RetainUntil != nil {
 		return errs.New(errs.KindInternal, "nonterminal task has terminal retention timestamps")
 	}
-	if record.Status == TaskStatusPending && record.StartedAt != nil {
+	if record.Status == taskjournal.TaskStatusPending && record.StartedAt != nil {
 		return errs.New(errs.KindInternal, "pending task has a started_at timestamp")
 	}
-	if record.Status == TaskStatusRunning && record.StartedAt == nil {
+	if record.Status == taskjournal.TaskStatusRunning && record.StartedAt == nil {
 		return errs.New(errs.KindInternal, "running task is missing started_at")
 	}
 	return nil

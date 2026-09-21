@@ -10,6 +10,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"math"
 	"net/http"
@@ -419,10 +420,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 	task := etcd.TaskRecord{
 		ID: claim.RevisionID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: zoneStableIDFromRevision(ids.KindPlan, claim.RevisionID),
-		Type: etcd.TaskRemove, Target: zoneID,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: zoneStableIDFromRevision(ids.KindPlan, claim.RevisionID),
+		Type: taskjournal.TaskRemove, Target: zoneID,
 		TimeoutSeconds: zoneDeletionTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	intent, err := etcd.NewZoneRemovalIntent(
 		task.OperationID, task.ID, zone, authorities, claim, candidate, affected, now,
@@ -431,7 +432,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if backing {
-		task.Executor = etcd.TaskExecutorController
+		task.Executor = taskjournal.TaskExecutorController
 		task.Params = map[string]string{
 			etcd.TaskResourceKindParam:           etcd.TaskResourceBackingZone,
 			etcd.TaskZoneEnvironmentParam:        environment.Record.ID,
@@ -440,7 +441,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 			etcd.EnvironmentDesiredRevisionParam: claim.RevisionID,
 		}
 		task.RenderGeneration = int32(candidate.RenderGeneration)
-		task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
+		task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 		task.TimeoutSeconds = backingZoneCascadeTimeoutSeconds
 		task.PlanHash, err = backingZoneCascadePlanHash(intent, impactToken)
 		if err != nil {

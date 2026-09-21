@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -50,8 +51,8 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	if tombstone.TargetKind != deletionrecord.DeletionTargetScript || tombstone.TargetID != scriptID ||
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
-		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Executor != TaskExecutorController ||
-		task.Type != TaskRemove || task.Target != scriptID || task.Status != TaskStatusPending ||
+		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Executor != taskjournal.TaskExecutorController ||
+		task.Type != taskjournal.TaskRemove || task.Target != scriptID || task.Status != taskjournal.TaskStatusPending ||
 		len(task.Params) != 1 || task.Params[TaskResourceKindParam] != TaskResourceScript {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Script deletion Task and tombstone do not match",

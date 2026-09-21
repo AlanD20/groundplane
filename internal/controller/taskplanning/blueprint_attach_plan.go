@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
@@ -32,7 +33,7 @@ func (resolver *TaskPlanResolver) blueprintAttachPlanCandidates(
 		return nil, 0, err
 	}
 	intent := versionedIntent.Record
-	if intent.TaskID != task.ID || intent.EnvironmentID != task.Target || intent.Status != etcd.TaskStatusPending {
+	if intent.TaskID != task.ID || intent.EnvironmentID != task.Target || intent.Status != taskjournal.TaskStatusPending {
 		return nil, 0, errs.New(errs.KindStateConflict, "Blueprint Attach intent does not own the active Task")
 	}
 	if resolver.services == nil || resolver.attachIdentities == nil {
@@ -121,7 +122,7 @@ func (resolver *TaskPlanResolver) blueprintAttachProcedureSteps(
 		if candidate.stepCount == 0 {
 			if candidate.authentication == core.BackingAuthenticationNone {
 				procedureTask := task
-				procedureTask.Type = etcd.TaskAttach
+				procedureTask.Type = taskjournal.TaskAttach
 				procedureTask.Target = candidate.current.Record.ID
 				procedureTask.Steps = nil
 				err := resolver.attachIdentities.ResolveTaskIdentity(
@@ -154,9 +155,9 @@ func (resolver *TaskPlanResolver) blueprintAttachProcedureSteps(
 			return nil, stepIndex, errs.New(errs.KindInternal, "Blueprint Attach procedure steps are incomplete")
 		}
 		procedureTask := task
-		procedureTask.Type = etcd.TaskAttach
+		procedureTask.Type = taskjournal.TaskAttach
 		procedureTask.Target = candidate.current.Record.ID
-		procedureTask.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[stepIndex:end]...)
+		procedureTask.Steps = append([]taskjournal.TaskStepRecord(nil), task.Steps[stepIndex:end]...)
 		var procedures []*agentpb.ExecutionStep
 		err := resolver.attachIdentities.ResolveTaskIdentity(
 			ctx,

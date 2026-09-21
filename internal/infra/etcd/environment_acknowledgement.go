@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strings"
 	"time"
 
@@ -25,7 +26,7 @@ const environmentReleaseGroupOwnerPrefix = "/v1/indexes/release-groups/by-owner/
 func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, []byte, error) {
 	state, err := repository.readTaskEnvironmentMutationState(ctx, task.Target, readRevision, true)
@@ -42,7 +43,7 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	replacement, err := hierarchyrecord.CompleteEnvironmentProvisioning(
 		record,
 		task.ID,
-		terminalStatus == TaskStatusCompleted,
+		terminalStatus == taskjournal.TaskStatusCompleted,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -66,7 +67,7 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 func (repository *TaskRepository) validateEnvironmentCreationReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
 ) error {
 	state, err := repository.readTaskEnvironmentMutationState(ctx, task.Target, readRevision, false)
@@ -75,7 +76,7 @@ func (repository *TaskRepository) validateEnvironmentCreationReplay(
 	}
 	record := state.Environment.Record
 	want := hierarchyrecord.EnvironmentProvisioningFailed
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		want = hierarchyrecord.EnvironmentProvisioningReady
 	}
 	if record.ID != task.Target || record.CreateTaskID != task.ID ||
@@ -237,10 +238,10 @@ func environmentBlueprintRevisionIDFromKey(prefix string, key string) (string, e
 func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if err := cleanupTaskEnvironmentDeletionScriptLocators(ctx, repository.store, task.Target, task.ID); err != nil {
 			return nil, nil, err
 		}
@@ -356,7 +357,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		return nil, nil, err
 	}
 	conditions = append(conditions, intentConditions...)
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		projectedKeys := make([]string, 0)
 		if stored.Values[2] != nil || stored.Values[3] != nil {
 			if stored.Values[2] == nil || stored.Values[3] == nil {
@@ -385,7 +386,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			environmentDeletionLiveAuthorityConditions(environment.ID, task.OperationID, projectedKeys...)...)
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(intentMutations)+12)
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		mutations = append(mutations,
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
@@ -528,7 +529,7 @@ func validateEnvironmentMutationTransactionBudget(
 func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
 ) error {
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -554,7 +555,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			"environment deletion terminal state does not match its Task",
 		)
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if stored.Values[0] != nil || stored.Values[1] != nil || stored.Values[2] != nil ||
 			stored.Values[3] != nil ||
 			stored.Values[5] != nil ||

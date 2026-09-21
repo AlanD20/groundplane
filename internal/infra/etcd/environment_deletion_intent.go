@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -183,7 +184,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (environmentTaskChange, error) {
-	if source.Executor != TaskExecutorAgent || source.Type != TaskRemove ||
+	if source.Executor != taskjournal.TaskExecutorAgent || source.Type != taskjournal.TaskRemove ||
 		recordcodec.ValidateID(ids.KindEnvironment, source.Target) != nil {
 		return environmentTaskChange{}, nil
 	}
@@ -340,7 +341,7 @@ func (repository *TaskRepository) prepareEnvironmentDeletionIntentTerminal(
 	ctx context.Context,
 	task TaskRecord,
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	intent, err := loadEnvironmentDeletionIntent(ctx, repository.store, task, tombstone, revision)
@@ -350,7 +351,7 @@ func (repository *TaskRepository) prepareEnvironmentDeletionIntentTerminal(
 	conditions := []etcdstore.Condition{{
 		Key: environmentDeletionIntentKey(task.OperationID), ModRevision: intent.Revision,
 	}}
-	if terminalStatus != TaskStatusCompleted {
+	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return conditions, nil, nil
 	}
 	if intent.Record.CleanupPhase != EnvironmentDeletionCleanupComplete {
@@ -494,7 +495,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
-	if task.Executor != TaskExecutorAgent || task.Type != TaskRemove ||
+	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		recordcodec.ValidateID(ids.KindEnvironment, task.Target) != nil {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindValidationFailed,
@@ -653,7 +654,7 @@ func (repository *TaskRepository) validateEnvironmentDeletionIntentReplay(
 	ctx context.Context,
 	task TaskRecord,
 	tombstone *deletionrecord.DeletionTombstoneRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -676,7 +677,7 @@ func (repository *TaskRepository) validateEnvironmentDeletionIntentReplay(
 		)
 	}
 	defer clearKeyValues(result.Values)
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if result.Values[0] != nil {
 			return errs.New(
 				errs.KindStateConflict,

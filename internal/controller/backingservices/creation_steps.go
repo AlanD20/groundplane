@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -28,7 +29,7 @@ type backingCreationStepInput struct {
 }
 type backingCreationSteps struct {
 	steps            []*agentpb.ExecutionStep
-	records          []etcd.TaskStepRecord
+	records          []taskjournal.TaskStepRecord
 	params           map[string]string
 	materializations []materializationrecord.Record
 }
@@ -51,7 +52,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 			},
 		},
 	}
-	stepRecords := []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: environmentStepID}}
+	stepRecords := []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: environmentStepID}}
 	taskParams := map[string]string{
 		etcd.EnvironmentDesiredRevisionParam:           input.TaskID,
 		etcd.TaskMaterializationEnvironmentParam:       environment.ID,
@@ -82,7 +83,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 				},
 			},
 		})
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: volumeStepID})
+		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: volumeStepID})
 		taskParams[taskcontract.EnvironmentBlueprintManagedVolumesParam] = volumeID
 		taskParams[taskplanning.VolumeTaskIntentSHA256Param] = hex.EncodeToString(intentDigest)
 	}
@@ -97,7 +98,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 		steps = append(steps, materializeStep)
 		stepRecords = append(
 			stepRecords,
-			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: materializeStep.StepId},
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: materializeStep.StepId},
 		)
 		materializations = []materializationrecord.Record{materialization}
 	}
@@ -108,7 +109,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 			ComposeApply: &agentpb.ComposeApply{ArtifactId: artifactID, FullReconcile: true},
 		},
 	})
-	stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: applyStepID})
+	stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: applyStepID})
 	if spec.HasHealthcheck() {
 		healthStepID := allocator.Named(ids.KindStep, "wait-healthy")
 		steps = append(steps, &agentpb.ExecutionStep{
@@ -118,7 +119,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 				WaitHealthy: &agentpb.WaitHealthy{ArtifactId: artifactID, ServiceIds: []string{serviceID}},
 			},
 		})
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: healthStepID})
+		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: healthStepID})
 		taskParams[etcd.TaskBackingServiceHealthParam] = serviceID
 	}
 

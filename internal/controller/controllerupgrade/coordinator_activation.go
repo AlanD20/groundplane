@@ -3,17 +3,18 @@ package controllerupgrade
 import (
 	"context"
 	"errors"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (coordinator *Coordinator) prepare(
 	ctx context.Context, operation *nativeOperation, prepared bool,
-) (etcd.TaskStatus, error) {
+) (taskjournal.TaskStatus, error) {
 	expected := operation.expected
 	budget := min(expected.CandidateDeadline().Sub(coordinator.now()), upgrade.DrainTimeoutSeconds*time.Second)
 	preparation, cancel := context.WithTimeout(ctx, budget)
@@ -45,7 +46,7 @@ func (coordinator *Coordinator) prepare(
 		}
 		if found {
 			if journal.Phase == upgrade.PhaseCancelled {
-				return coordinator.settle(operation, etcd.TaskStatusAborted), nil
+				return coordinator.settle(operation, taskjournal.TaskStatusAborted), nil
 			}
 			// A copy/fsync response may be lost after journal publication.
 			// Retain its claim rather than treating the failure as no effect.
@@ -57,11 +58,11 @@ func (coordinator *Coordinator) prepare(
 		coordinator.mu.Lock()
 		aborted := operation.aborted
 		coordinator.mu.Unlock()
-		status := etcd.TaskStatusFailed
+		status := taskjournal.TaskStatusFailed
 		if aborted {
-			status = etcd.TaskStatusAborted
+			status = taskjournal.TaskStatusAborted
 		} else if !coordinator.now().Before(expected.Deadline) {
-			status = etcd.TaskStatusTimedOut
+			status = taskjournal.TaskStatusTimedOut
 		}
 		return coordinator.settle(operation, status), nil
 	}
@@ -78,7 +79,7 @@ func (coordinator *Coordinator) prepare(
 		return "", err
 	}
 	if phase == upgrade.PhaseCancelled {
-		return coordinator.settle(operation, etcd.TaskStatusAborted), nil
+		return coordinator.settle(operation, taskjournal.TaskStatusAborted), nil
 	}
 	return coordinator.handoff(ctx, operation)
 }

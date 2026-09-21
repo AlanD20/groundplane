@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -15,13 +16,13 @@ func taskProgressStatuses(
 ) (map[string]apiTypes.TaskStatus, error) {
 	values := make(map[string]apiTypes.TaskStatus, len(record.Steps))
 	initial := apiTypes.TaskPending
-	if record.Executor == etcd.TaskExecutorController {
+	if record.Executor == taskjournal.TaskExecutorController {
 		initial = status
 	}
 	for _, step := range record.Steps {
 		values[step.ID] = initial
 	}
-	set := func(id string, state etcd.TaskEventState) error {
+	set := func(id string, state taskjournal.TaskEventState) error {
 		mapped, err := taskEventAPIStatus(state)
 		if err != nil {
 			return err

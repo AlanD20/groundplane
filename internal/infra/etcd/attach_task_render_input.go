@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -289,7 +290,7 @@ func validateAttachTaskRenderInputScope(
 		!slices.Equal(input.GrantAttachIDs, record.GrantAttachIDs) {
 		return errs.New(errs.KindValidationFailed, "Attach Task render input does not match its pinned desired state")
 	}
-	if task.Type == TaskAttach {
+	if task.Type == taskjournal.TaskAttach {
 		coveredByBackingNetwork := make(map[string]struct{})
 		for _, join := range input.NetworkJoins {
 			if join.NetworkID != record.BackingNetworkID {

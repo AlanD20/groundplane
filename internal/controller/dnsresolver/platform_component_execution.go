@@ -10,6 +10,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"io"
 	"net/netip"
 
@@ -190,7 +191,7 @@ func (planner *PlatformExecutionPlanner) resolve(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (resolvedPlatformComponent, error) {
-	if ctx == nil || task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskUpdate ||
+	if ctx == nil || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate ||
 		ids.Validate(ids.KindComponent, task.Target) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
 		task.RenderGeneration <= 0 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceComponent ||
 		!validPlatformComponentTaskParams(task) {

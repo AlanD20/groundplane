@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ type Store interface {
 	AcknowledgeControllerTask(
 		context.Context,
 		string,
-		etcd.TaskStatus,
+		taskjournal.TaskStatus,
 		time.Time,
 	) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
@@ -136,8 +137,8 @@ func (runner *Runner) runOne(ctx context.Context) (bool, error) {
 }
 
 func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (result error) {
-	if claim.Assignment.Record.Executor != etcd.TaskExecutorController ||
-		claim.Task.Record.Executor != etcd.TaskExecutorController ||
+	if claim.Assignment.Record.Executor != taskjournal.TaskExecutorController ||
+		claim.Task.Record.Executor != taskjournal.TaskExecutorController ||
 		claim.Assignment.Record.TaskID != claim.Task.Record.ID {
 		return errs.New(errs.KindInternal, "Controller Task runner received an invalid claim")
 	}
@@ -148,7 +149,7 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 	now := runner.now().UTC()
 	if !now.Before(deadline) {
 		_, err := runner.store.AcknowledgeControllerTask(
-			ctx, claim.Task.Record.ID, etcd.TaskStatusTimedOut, now,
+			ctx, claim.Task.Record.ID, taskjournal.TaskStatusTimedOut, now,
 		)
 		return err
 	}
@@ -171,9 +172,9 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 		return ctx.Err()
 	}
 	terminalAt := runner.now().UTC()
-	status := etcd.TaskStatusCompleted
+	status := taskjournal.TaskStatusCompleted
 	if executionErr != nil {
-		status = etcd.TaskStatusFailed
+		status = taskjournal.TaskStatusFailed
 		runner.logger.Error(
 			"Controller Task execution failed",
 			slog.String("task_id", claim.Task.Record.ID),
@@ -184,9 +185,9 @@ func (runner *Runner) execute(ctx context.Context, claim etcd.TaskAssignment) (r
 		operatorAbort := active.operatorAbort
 		runner.mu.Unlock()
 		if operatorAbort && errors.Is(executionErr, context.Canceled) {
-			status = etcd.TaskStatusAborted
+			status = taskjournal.TaskStatusAborted
 		} else if errors.Is(executionContext.Err(), context.DeadlineExceeded) || !terminalAt.Before(deadline) {
-			status = etcd.TaskStatusTimedOut
+			status = taskjournal.TaskStatusTimedOut
 		}
 	}
 	_, err := runner.store.AcknowledgeControllerTask(ctx, claim.Task.Record.ID, status, terminalAt)

@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -40,7 +41,7 @@ type RouteMutationIntent struct {
 	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
 	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
 	Provider                  *RouteProviderPin                              `json:"provider,omitempty"`
-	Status                    TaskStatus                                     `json:"status"`
+	Status                    taskjournal.TaskStatus                         `json:"status"`
 	CreatedAt                 time.Time                                      `json:"created_at"`
 	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
 }
@@ -84,7 +85,7 @@ func NewRouteMutationIntent(
 	intent := RouteMutationIntent{
 		TaskID: taskID, OperationID: operationID, EnvironmentID: environmentID,
 		RouteID: route.Desired.ID, Kind: RouteMutationCreate, Route: route,
-		Status: TaskStatusPending, CreatedAt: createdAt,
+		Status: taskjournal.TaskStatusPending, CreatedAt: createdAt,
 	}
 	if previous != nil {
 		intent.Kind = RouteMutationEdit
@@ -154,10 +155,10 @@ func (repository *HierarchyRepository) GetRouteMutationIntent(
 
 func terminalRouteMutationIntent(
 	intent RouteMutationIntent,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (RouteMutationIntent, error) {
-	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
 		return RouteMutationIntent{}, errs.New(errs.KindStateConflict, "Route mutation intent is not pending")
 	}
 	terminal := cloneRouteMutationIntent(intent)
@@ -225,7 +226,7 @@ func validateRouteMutationIntent(intent RouteMutationIntent) error {
 	default:
 		return errs.New(errs.KindValidationFailed, "Route mutation intent kind is invalid")
 	}
-	if intent.Status == TaskStatusPending {
+	if intent.Status == taskjournal.TaskStatusPending {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Route mutation intent has a terminal timestamp")
 		}

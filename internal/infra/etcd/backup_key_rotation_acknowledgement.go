@@ -7,6 +7,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -26,12 +27,12 @@ func (repository *BackupPolicyRepository) ApplyBackupKeyRotation(ctx context.Con
 	if err != nil {
 		return err
 	}
-	if task.Record.Type != TaskRotate || task.Record.Executor != TaskExecutorController ||
-		task.Record.Status != TaskStatusRunning {
+	if task.Record.Type != taskjournal.TaskRotate || task.Record.Executor != taskjournal.TaskExecutorController ||
+		task.Record.Status != taskjournal.TaskStatusRunning {
 		return errs.New(errs.KindStateConflict, "backup key rotation Task is not running")
 	}
 	change, err := tasks.prepareBackupKeyRotationTaskAcknowledgement(
-		ctx, task.Record, TaskStatusCompleted, task.Record.UpdatedAt, task.ReadRevision,
+		ctx, task.Record, taskjournal.TaskStatusCompleted, task.Record.UpdatedAt, task.ReadRevision,
 	)
 	change.clear()
 	return err
@@ -54,14 +55,14 @@ func (change *backupKeyRotationTaskChange) clear() {
 func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 	readRevision int64,
 ) (backupKeyRotationTaskChange, error) {
-	if task.Type != TaskRotate {
+	if task.Type != taskjournal.TaskRotate {
 		return backupKeyRotationTaskChange{}, nil
 	}
-	if task.Executor != TaskExecutorController || task.Target != task.Owner.EnvironmentID ||
+	if task.Executor != taskjournal.TaskExecutorController || task.Target != task.Owner.EnvironmentID ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || !isTerminalTaskStatus(status) ||
 		!backuppolicy.ValidUTCInstant(terminalAt) || readRevision <= 0 {
 		return backupKeyRotationTaskChange{}, errs.New(
@@ -135,7 +136,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations := make([]etcdstore.Mutation, 0, 5)
-	if status == TaskStatusCompleted {
+	if status == taskjournal.TaskStatusCompleted {
 		nextRecord := backuppolicy.BackupKeyRecord{
 			EnvironmentID: task.Target,
 			Recipient:     rotation.NextRecipient,

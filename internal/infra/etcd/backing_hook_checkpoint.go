@@ -7,6 +7,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -143,16 +144,16 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		stepFound = stepFound || step.ID == input.StepID
 	}
 	if !stepFound || task.ID != input.TaskID || task.OperationID != input.OperationID ||
-		task.Status != TaskStatusRunning || task.Executor != TaskExecutorAgent || task.PlanHash != input.PlanHash ||
+		task.Status != taskjournal.TaskStatusRunning || task.Executor != taskjournal.TaskExecutorAgent || task.PlanHash != input.PlanHash ||
 		assignment.TaskID != input.TaskID || assignment.AssignmentID != input.AssignmentID ||
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration ||
-		assignment.ExecutionEpoch != input.ExecutionEpoch || assignment.Executor != TaskExecutorAgent {
+		assignment.ExecutionEpoch != input.ExecutionEpoch || assignment.Executor != taskjournal.TaskExecutorAgent {
 		return backingHookCheckpointAnchor{}, errs.New(
 			errs.KindStateConflict,
 			"Backing hook checkpoint does not own the running assignment",
 		)
 	}
-	claimKey := taskExecutionClaimKey(TaskExecutorAgent, input.AgentID, input.TaskID)
+	claimKey := taskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
 	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{claimKey}, Revision: primary.ReadRevision})
 	if err != nil {
 		return backingHookCheckpointAnchor{}, err

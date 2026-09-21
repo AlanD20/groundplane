@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"strings"
 	"time"
@@ -225,13 +226,13 @@ func newRunnerRemovalTask(record runnerrecord.RunnerRecord, key string, now time
 	planDigest := sha256.Sum256([]byte(planInput))
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: key,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorController,
+		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
-		Type: etcd.TaskRemove, Target: record.Desired.ID,
+		Type: taskjournal.TaskRemove, Target: record.Desired.ID,
 		Params: etcd.RunnerRemovalTaskParams(record),
-		Steps: []etcd.TaskStepRecord{
-			{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+		Steps: []taskjournal.TaskStepRecord{
+			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		}, TimeoutSeconds: runnerRemoveTimeoutSeconds,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 }

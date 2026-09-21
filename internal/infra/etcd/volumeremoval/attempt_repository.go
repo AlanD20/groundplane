@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -98,7 +99,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 	}
 	defer clearKeyValues(primary.Values)
 	task, err := etcd.DecodeCapabilityTaskRecord(primary.Values[0].Value)
-	if err != nil || task.ID != input.TaskID || task.Status != etcd.TaskStatusRunning ||
+	if err != nil || task.ID != input.TaskID || task.Status != taskjournal.TaskStatusRunning ||
 		validateEnvironmentVolumeRemovalTask(task, runtime, attempt) != nil {
 		return etcd.TaskRecord{}, nil, errs.New(
 			errs.KindStateConflict,
@@ -107,14 +108,14 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 	}
 	assignment, err := etcd.DecodeCapabilityTaskAssignment(primary.Values[1].Value)
 	if err != nil || assignment.AssignmentID != input.AssignmentID ||
-		assignment.TaskID != input.TaskID || assignment.Executor != etcd.TaskExecutorAgent ||
+		assignment.TaskID != input.TaskID || assignment.Executor != taskjournal.TaskExecutorAgent ||
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration {
 		return etcd.TaskRecord{}, nil, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal assignment changed",
 		)
 	}
-	claimKey := etcd.CapabilityTaskExecutionClaimKey(etcd.TaskExecutorAgent, input.AgentID, input.TaskID)
+	claimKey := etcd.CapabilityTaskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
 	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{claimKey, etcd.CapabilityTaskTimeoutIndexKey(input.TaskID, assignment.Deadline)},
 		Revision: revision,

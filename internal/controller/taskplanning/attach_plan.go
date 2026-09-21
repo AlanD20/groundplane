@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"slices"
 
@@ -64,7 +65,7 @@ func BuildAttachProvisionSteps(
 	adapterKey string,
 	identity AttachPlanIdentity,
 ) ([]*agentpb.ExecutionStep, error) {
-	if task.Type != etcd.TaskAttach {
+	if task.Type != taskjournal.TaskAttach {
 		return nil, errs.New(errs.KindInternal, "Attach provision procedure requires an Attach Task shape")
 	}
 	return attachProcedureSteps(task, record, adapterKey, identity)
@@ -116,7 +117,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
 	if resolver.attaches == nil || resolver.services == nil || resolver.attachIdentities == nil ||
-		task.Executor != etcd.TaskExecutorAgent || ids.Validate(ids.KindAttach, task.Target) != nil ||
+		task.Executor != taskjournal.TaskExecutorAgent || ids.Validate(ids.KindAttach, task.Target) != nil ||
 		len(task.Params) != 1 || len(task.Materializations) != 0 || task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Attach Task shape is invalid")
@@ -312,8 +313,8 @@ func attachNetworkProcedureSteps(
 		return nil, errs.New(errs.KindInternal, "durable Attach Task step count is invalid")
 	}
 	procedureTask := task
-	if task.Type == etcd.TaskAttach {
-		procedureTask.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[:len(task.Steps)-1]...)
+	if task.Type == taskjournal.TaskAttach {
+		procedureTask.Steps = append([]taskjournal.TaskStepRecord(nil), task.Steps[:len(task.Steps)-1]...)
 		procedures, err := attachProcedureSteps(procedureTask, record, adapterKey, identity)
 		if err != nil {
 			return nil, err
@@ -323,7 +324,7 @@ func attachNetworkProcedureSteps(
 		)), nil
 	}
 	grantCount := len(identity.Grants)
-	procedureTask.Steps = append([]etcd.TaskStepRecord(nil), task.Steps[:grantCount]...)
+	procedureTask.Steps = append([]taskjournal.TaskStepRecord(nil), task.Steps[:grantCount]...)
 	procedureTask.Steps = append(procedureTask.Steps, task.Steps[len(task.Steps)-1])
 	procedures, err := attachProcedureSteps(procedureTask, record, adapterKey, identity)
 	if err != nil {
@@ -360,13 +361,13 @@ func attachComposeStep(
 
 func attachPlanOperation(task etcd.TaskRecord, record attachrecord.Record) (agentpb.PlanOperation, error) {
 	switch task.Type {
-	case etcd.TaskAttach:
+	case taskjournal.TaskAttach:
 		if record.Operation != attachrecord.AttachOperationProvision ||
 			(record.Status != core.AttachPending && record.Status != core.AttachProvisioning) {
 			return 0, errs.New(errs.KindStateConflict, "Attach is not provisionable")
 		}
 		return agentpb.PlanOperation_PLAN_OPERATION_ATTACH, nil
-	case etcd.TaskDetach:
+	case taskjournal.TaskDetach:
 		if record.Operation != attachrecord.AttachOperationDetach || record.Status != core.AttachDetaching {
 			return 0, errs.New(errs.KindStateConflict, "Attach is not detaching")
 		}
@@ -437,7 +438,7 @@ func attachProcedureSteps(
 			}},
 		})
 	}
-	if task.Type == etcd.TaskAttach {
+	if task.Type == taskjournal.TaskAttach {
 		appendProcedure(0, agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION,
 			identity.Database, "", identity.Password)
 		for index, grant := range identity.Grants {

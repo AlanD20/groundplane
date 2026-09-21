@@ -2,18 +2,19 @@ package etcd
 
 import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strconv"
 	"time"
 )
 
-func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus TaskStatus, result TaskResultRecord) (uint32, error) {
-	if terminalStatus == TaskStatusCompleted {
+func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus taskjournal.TaskStatus, result TaskResultRecord) (uint32, error) {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		return 0, nil
 	}
 	ordinal := releaseFailedOrdinalFromResult(task, result)
 	if ordinal == 0 &&
-		(result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect || unassignedReleaseAbort(task, terminalStatus)) {
+		(result.Diagnostic == taskjournal.TaskResultDiagnosticTimeoutBeforeEffect || unassignedReleaseAbort(task, terminalStatus)) {
 		return 1, nil
 	}
 	if ordinal == 0 {
@@ -44,12 +45,12 @@ func releaseFailedOrdinalFromResult(task TaskRecord, result TaskResultRecord) ui
 func releaseMemberTerminalState(
 	head ReleaseOperationHead,
 	ordinal uint32,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	failedOrdinal uint32,
 	result TaskResultRecord,
 	compensated bool,
 ) (domain.State, bool, bool) {
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		return domain.StateCompleted, true, false
 	}
 	if compensated {
@@ -95,7 +96,7 @@ func releaseRecreateEvidence(result TaskResultRecord, serviceID string) (TaskRec
 	return TaskRecreateEvidence{}, false
 }
 
-func releaseOperationTerminalState(status TaskStatus) domain.State {
+func releaseOperationTerminalState(status taskjournal.TaskStatus) domain.State {
 	switch status {
 	case TaskStatusCompleted:
 		return domain.StateCompleted

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
@@ -77,7 +78,7 @@ type releaseRecoveryRecord struct {
 	PlanHash                   string                            `json:"plan_hash"`
 	RestorationAuthoritySHA256 string                            `json:"restoration_authority_sha256"`
 	PrimaryReportSHA256        string                            `json:"primary_report_sha256"`
-	PrimaryStatus              TaskStatus                        `json:"primary_status"`
+	PrimaryStatus              taskjournal.TaskStatus            `json:"primary_status"`
 	PrimaryResult              TaskResultRecord                  `json:"primary_result"`
 	RecoveryDeadline           time.Time                         `json:"recovery_deadline"`
 	MutationEvidence           []releaseRecoveryMutationEvidence `json:"mutation_evidence"`
@@ -144,7 +145,7 @@ func validateReleaseRecoveryRecord(record releaseRecoveryRecord) error {
 			record.AssignmentID,
 		) != nil || ids.Validate(ids.KindOperation, record.OperationID) != nil ||
 		!recordcodec.ValidSHA256(record.PlanHash) || !recordcodec.ValidSHA256(record.RestorationAuthoritySHA256) ||
-		!recordcodec.ValidSHA256(record.PrimaryReportSHA256) || record.PrimaryStatus == TaskStatusCompleted ||
+		!recordcodec.ValidSHA256(record.PrimaryReportSHA256) || record.PrimaryStatus == taskjournal.TaskStatusCompleted ||
 		!validTerminalTaskStatus(record.PrimaryStatus) || len(record.RecoveryStepIDs) == 0 ||
 		!record.RecoveryDeadline.Equal(record.RecoveryDeadline.UTC()) || record.RecoveryDeadline.IsZero() ||
 		int(record.Cursor) > len(record.RecoveryStepIDs) || record.EvidenceRevision <= 0 {
@@ -187,8 +188,8 @@ func validateReleaseRecoveryRecord(record releaseRecoveryRecord) error {
 		return errs.New(errs.KindInternal, "release recovery record is corrupt")
 	}
 	reportDigest, err := domain.Digest(struct {
-		Status TaskStatus       `json:"status"`
-		Result TaskResultRecord `json:"result"`
+		Status taskjournal.TaskStatus `json:"status"`
+		Result TaskResultRecord       `json:"result"`
 	}{record.PrimaryStatus, record.PrimaryResult})
 	if err != nil || reportDigest != record.PrimaryReportSHA256 {
 		return errs.New(errs.KindInternal, "release recovery record is corrupt")
@@ -226,7 +227,7 @@ func releaseRecoveryRecordSHA256(record releaseRecoveryRecord) (string, error) {
 		PlanHash                   string                            `json:"plan_hash"`
 		RestorationAuthoritySHA256 string                            `json:"restoration_authority_sha256"`
 		PrimaryReportSHA256        string                            `json:"primary_report_sha256"`
-		PrimaryStatus              TaskStatus                        `json:"primary_status"`
+		PrimaryStatus              taskjournal.TaskStatus            `json:"primary_status"`
 		PrimaryResult              TaskResultRecord                  `json:"primary_result"`
 		RecoveryDeadline           time.Time                         `json:"recovery_deadline"`
 		MutationEvidence           []releaseRecoveryMutationEvidence `json:"mutation_evidence"`
@@ -307,7 +308,7 @@ func advanceReleaseRecoveryRecord(
 		)
 	}
 	switch input.State {
-	case TaskEventStateRunning, TaskEventStateFailed, TaskEventStateAborted, TaskEventStateTimedOut:
+	case taskjournal.TaskEventStateRunning, taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, TaskEventStateTimedOut:
 		return record, false, nil
 	case TaskEventStateCompleted:
 		next := record
@@ -384,19 +385,19 @@ func (repository *TaskRepository) releaseRecoveryDirectiveAtRevision(
 	}, nil
 }
 
-func validTerminalTaskStatus(status TaskStatus) bool {
+func validTerminalTaskStatus(status taskjournal.TaskStatus) bool {
 	switch status {
-	case TaskStatusFailed, TaskStatusAborted, TaskStatusTimedOut:
+	case taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, TaskStatusTimedOut:
 		return true
 	default:
 		return false
 	}
 }
 
-func canonicalPrimaryReportSHA256(status TaskStatus, result TaskResultRecord) (string, error) {
+func canonicalPrimaryReportSHA256(status taskjournal.TaskStatus, result TaskResultRecord) (string, error) {
 	return domain.Digest(struct {
-		Status TaskStatus       `json:"status"`
-		Result TaskResultRecord `json:"result"`
+		Status taskjournal.TaskStatus `json:"status"`
+		Result TaskResultRecord       `json:"result"`
 	}{status, result})
 }
 

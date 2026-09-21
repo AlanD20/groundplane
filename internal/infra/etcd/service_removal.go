@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -124,7 +125,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		tombstone.TargetKind != deletionrecord.DeletionTargetService || tombstone.TargetID != current.Record.Desired.ID ||
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
-		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Status != TaskStatusPending {
+		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || task.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Service removal state does not match its Task",

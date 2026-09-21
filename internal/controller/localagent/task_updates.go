@@ -2,6 +2,7 @@ package localagent
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
 	"math"
 	"strconv"
@@ -45,7 +46,7 @@ type agentUpdateOperation struct {
 	cancel   context.CancelFunc
 	aborted  bool
 	restore  bool
-	settled  etcd.TaskStatus
+	settled  taskjournal.TaskStatus
 }
 
 func NewTaskUpdates(agents UpdateLifecycle, sessions UpdateAdmission, logger *slog.Logger) (*TaskUpdates, error) {
@@ -61,7 +62,7 @@ func (updates *TaskUpdates) Restore(ctx context.Context, claim etcd.TaskAssignme
 		return err
 	}
 	assignment := claim.Assignment.Record
-	if assignment.Executor != etcd.TaskExecutorController || assignment.TaskID != claim.Task.Record.ID ||
+	if assignment.Executor != taskjournal.TaskExecutorController || assignment.TaskID != claim.Task.Record.ID ||
 		assignment.Deadline.IsZero() {
 		return errs.New(errs.KindValidationFailed, "agent update Task claim is invalid")
 	}
@@ -92,7 +93,7 @@ func (updates *TaskUpdates) Restore(ctx context.Context, claim etcd.TaskAssignme
 
 func (updates *TaskUpdates) Execute(
 	ctx context.Context, task etcd.TaskRecord, deadline time.Time,
-) (etcd.TaskStatus, error) {
+) (taskjournal.TaskStatus, error) {
 	updates.mu.Lock()
 	operation := updates.active
 	if operation == nil || operation.taskID != task.ID || !operation.deadline.Equal(deadline) {
@@ -137,10 +138,10 @@ func (updates *TaskUpdates) Execute(
 		}
 		if err == nil && !aborted {
 			if result == UpdateReadyDesired {
-				return updates.settle(operation, etcd.TaskStatusCompleted)
+				return updates.settle(operation, taskjournal.TaskStatusCompleted)
 			}
 			if result == UpdateReadyPrevious {
-				return updates.settle(operation, etcd.TaskStatusFailed)
+				return updates.settle(operation, taskjournal.TaskStatusFailed)
 			}
 			return "", errs.New(errs.KindInternal, "agent update returned an invalid recovery result")
 		}
@@ -162,18 +163,18 @@ func (updates *TaskUpdates) Execute(
 	if result != UpdateReadyPrevious {
 		return "", errs.New(errs.KindInternal, "agent predecessor recovery returned another image")
 	}
-	status := etcd.TaskStatusFailed
+	status := taskjournal.TaskStatusFailed
 	if updates.wasAborted(operation) {
-		status = etcd.TaskStatusAborted
+		status = taskjournal.TaskStatusAborted
 	} else if !updates.now().Before(deadline) {
-		status = etcd.TaskStatusTimedOut
+		status = taskjournal.TaskStatusTimedOut
 	}
 	return updates.settle(operation, status)
 }
 
 func (updates *TaskUpdates) recoverReadyCandidate(
 	ctx context.Context, operation *agentUpdateOperation,
-) (etcd.TaskStatus, error) {
+) (taskjournal.TaskStatus, error) {
 	ctx, cancel := context.WithTimeout(ctx, updateRecoveryReserve)
 	defer cancel()
 	result, err := updates.agents.RecoverUpdate(ctx, operation.request, UpdateFinish)
@@ -183,7 +184,7 @@ func (updates *TaskUpdates) recoverReadyCandidate(
 	if result != UpdateReadyDesired {
 		return "", errs.New(errs.KindStateConflict, "agent ready update replay changed")
 	}
-	return updates.settle(operation, etcd.TaskStatusCompleted)
+	return updates.settle(operation, taskjournal.TaskStatusCompleted)
 }
 
 func (updates *TaskUpdates) Abort(ctx context.Context, taskID string) error {
@@ -210,15 +211,15 @@ func (updates *TaskUpdates) wasAborted(operation *agentUpdateOperation) bool {
 }
 
 func (updates *TaskUpdates) settle(
-	operation *agentUpdateOperation, status etcd.TaskStatus,
-) (etcd.TaskStatus, error) {
+	operation *agentUpdateOperation, status taskjournal.TaskStatus,
+) (taskjournal.TaskStatus, error) {
 	updates.mu.Lock()
 	defer updates.mu.Unlock()
 	if operation.aborted {
-		if status == etcd.TaskStatusCompleted {
+		if status == taskjournal.TaskStatusCompleted {
 			return "", errs.New(errs.KindStateConflict, "agent update abort won before qualification")
 		}
-		status = etcd.TaskStatusAborted
+		status = taskjournal.TaskStatusAborted
 	}
 	operation.settled = status
 	operation.resume()
@@ -228,7 +229,7 @@ func (updates *TaskUpdates) settle(
 // DecodeUpdateTask parses the frozen native Task, never current mutable
 // configuration. This same grammar owns execution and cold-start recovery.
 func DecodeUpdateTask(task etcd.TaskRecord) (UpdateRequest, error) {
-	if task.Executor != etcd.TaskExecutorController || task.Type != etcd.TaskUpdate ||
+	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskUpdate ||
 		ids.Validate(ids.KindTask, task.ID) != nil || len(task.Params) != 4 ||
 		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceAgent {
 		return UpdateRequest{}, invalidUpdateTask()

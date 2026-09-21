@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -90,10 +91,10 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects ||
 		!tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
-		task.Executor != TaskExecutorAgent ||
-		task.Type != TaskRemove ||
+		task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskRemove ||
 		task.Target != environment.Record.ID ||
-		task.Status != TaskStatusPending {
+		task.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"environment deletion Task and tombstone do not match",

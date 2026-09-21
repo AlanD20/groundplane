@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
 	"strconv"
@@ -20,7 +21,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	ctx context.Context, source etcdstore.Versioned[TaskRecord], retryID string, actor TaskActor, marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if actor != TaskActorOperator ||
-		(source.Record.Status != TaskStatusFailed && source.Record.Status != TaskStatusTimedOut) {
+		(source.Record.Status != taskjournal.TaskStatusFailed && source.Record.Status != taskjournal.TaskStatusTimedOut) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindTaskNotRetryable,
 			"Volume removal attempt is not retryable",
@@ -286,9 +287,9 @@ func ValidateEnvironmentVolumeRemovalPendingRecovery(
 	ordinal, err := strconv.ParseUint(origin.Params[removalrecord.AttemptParam], 10, 32)
 	if err != nil || ordinal == 0 || ordinal > uint64(runtime.AttemptOrdinal) ||
 		removalrecord.ValidatePendingPath(pending) != nil || origin.ID != pending.TaskID ||
-		origin.Type != TaskRemove || (ordinal == 1) != (origin.ID == runtime.OriginTaskID) ||
+		origin.Type != taskjournal.TaskRemove || (ordinal == 1) != (origin.ID == runtime.OriginTaskID) ||
 		(ordinal == 1 && origin.RetryOf != "") ||
-		(origin.Status != TaskStatusFailed && origin.Status != TaskStatusTimedOut) ||
+		(origin.Status != taskjournal.TaskStatusFailed && origin.Status != taskjournal.TaskStatusTimedOut) ||
 		origin.CreatedAt.After(pending.CreatedAt) ||
 		(uint32(ordinal) == runtime.AttemptOrdinal) != (origin.ID == runtime.CurrentTaskID) ||
 		runtime.Checkpoint != removalrecord.ConsumersDetached || progress.DirectoryAbsent ||

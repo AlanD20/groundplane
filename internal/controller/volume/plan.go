@@ -6,6 +6,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"sort"
 	"strings"
@@ -28,7 +29,7 @@ func buildVolumeMutationPlan(
 	newArtifact *agentpb.ComposeArtifact,
 	intentDigest []byte,
 	consumerIDs []string,
-) (*agentpb.ExecutionPlan, []etcd.TaskStepRecord, error) {
+) (*agentpb.ExecutionPlan, []taskjournal.TaskStepRecord, error) {
 	steps := make([]*agentpb.ExecutionStep, 0, 4)
 	timeout := volumeMutationTimeoutSeconds
 	if request.action == volumeMutationActionRemove {
@@ -65,9 +66,9 @@ func buildVolumeMutationPlan(
 	if err != nil {
 		return nil, nil, err
 	}
-	records := make([]etcd.TaskStepRecord, len(steps))
+	records := make([]taskjournal.TaskStepRecord, len(steps))
 	for index, step := range steps {
-		records[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId}
+		records[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: step.StepId}
 	}
 	return plan, records, nil
 }
@@ -150,14 +151,14 @@ func (value volumeDirectoryRemovePayload) step(id string, timeout uint32) *agent
 	}
 }
 
-func volumeMutationTaskType(action string) etcd.TaskType {
+func volumeMutationTaskType(action string) taskjournal.TaskType {
 	switch action {
 	case volumeMutationActionAdd:
-		return etcd.TaskCreate
+		return taskjournal.TaskCreate
 	case volumeMutationActionRemove:
-		return etcd.TaskRemove
+		return taskjournal.TaskRemove
 	default:
-		return etcd.TaskUpdate
+		return taskjournal.TaskUpdate
 	}
 }
 

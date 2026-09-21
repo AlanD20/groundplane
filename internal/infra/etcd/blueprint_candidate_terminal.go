@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
@@ -96,17 +97,17 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	task TaskRecord,
 	writer taskMaterializationWriterRecord,
 	assignment TaskAssignmentRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
 	revision int64,
 ) (blueprintCandidateTerminalChange, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
-	if publicationID == "" || task.Type != TaskUpdate {
+	if publicationID == "" || task.Type != taskjournal.TaskUpdate {
 		return blueprintCandidateTerminalChange{}, nil
 	}
-	if task.Executor != TaskExecutorAgent || task.Owner.EnvironmentID == "" ||
+	if task.Executor != taskjournal.TaskExecutorAgent || task.Owner.EnvironmentID == "" ||
 		task.Params[TaskMaterializationEnvironmentParam] != task.Owner.EnvironmentID ||
 		task.Params[EnvironmentDesiredRevisionParam] == "" {
 		return blueprintCandidateTerminalChange{}, corruptReleaseRecord()
@@ -114,7 +115,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	if validateTaskMaterializationWriterForTask(writer, task, task.Owner.EnvironmentID) != nil {
 		return blueprintCandidateTerminalChange{}, corruptTaskMaterializationWriter()
 	}
-	if terminalStatus != TaskStatusCompleted && result.ReconciliationRequired {
+	if terminalStatus != taskjournal.TaskStatusCompleted && result.ReconciliationRequired {
 		return blueprintCandidateTerminalChange{}, errs.New(errs.KindReleaseRecoveryRequired,
 			"Blueprint candidate restoration is not yet proven")
 	}
@@ -139,7 +140,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		return blueprintCandidateTerminalChange{}, err
 	}
 	var compensationResult *TaskResultRecord
-	if terminalStatus != TaskStatusCompleted {
+	if terminalStatus != taskjournal.TaskStatusCompleted {
 		compensationResult, err = blueprintCandidateCompensationResult(task, result)
 		if err != nil {
 			return blueprintCandidateTerminalChange{}, err
@@ -158,7 +159,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		return blueprintCandidateTerminalChange{}, err
 	}
 	baseConditions = append(baseConditions, authorityConditions...)
-	if terminalStatus != TaskStatusCompleted {
+	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return blueprintCandidateTerminalChange{
 			applies:    true,
 			conditions: append(baseConditions, candidateConditions...),
@@ -286,11 +287,11 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	publicationID := task.Params[TaskReleasePublicationParam]
-	if publicationID == "" || task.Type != TaskUpdate {
+	if publicationID == "" || task.Type != taskjournal.TaskUpdate {
 		return nil
 	}
 	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
@@ -337,7 +338,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	}
 	expectedAttemptIDs := blueprintAttemptIDs(attempts)
 	detailWidth := 2
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		detailWidth = 5
 	}
 	detailKeys := make([]string, 0, len(manifest.Members)*detailWidth)
@@ -346,7 +347,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			releaseIntentStagingKey(publicationID, member.ReleaseID),
 			releaseRenderInputStagingKey(publicationID, member.ReleaseID),
 		)
-		if terminalStatus == TaskStatusCompleted {
+		if terminalStatus == taskjournal.TaskStatusCompleted {
 			detailKeys = append(detailKeys,
 				releaseCheckpointStagingKey(publicationID, member.ReleaseID),
 				releaseTerminalKey(member.ReleaseID),
@@ -383,9 +384,9 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			render.EnvironmentID != task.Owner.EnvironmentID || render.Strategy != intent.Strategy {
 			return corruptReleaseRecord()
 		}
-		if terminalStatus != TaskStatusCompleted {
+		if terminalStatus != taskjournal.TaskStatusCompleted {
 			if task.Result == nil || task.Result.ReconciliationRequired ||
-				task.Result.Kind != TaskResultCompose {
+				task.Result.Kind != taskjournal.TaskResultCompose {
 				return corruptReleaseRecord()
 			}
 			compensationResult, proofErr := blueprintCandidateCompensationResult(task, *task.Result)
@@ -407,7 +408,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			return corruptReleaseRecord()
 		}
 		if task.FinishedAt == nil || checkpoint.State != domain.StateCompleted ||
-			task.Result == nil || task.Result.Kind != TaskResultCompose || task.Result.ReconciliationRequired {
+			task.Result == nil || task.Result.Kind != taskjournal.TaskResultCompose || task.Result.ReconciliationRequired {
 			return corruptReleaseRecord()
 		}
 		terminal, decodeErr := decodeReleaseRecord[domain.TerminalSummary](
@@ -447,12 +448,12 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	revision int64,
 ) (releaseTaskRetryChange, error) {
 	publicationID := source.Params[TaskReleasePublicationParam]
-	if source.Type != TaskUpdate || retry.Type != TaskUpdate ||
-		source.Executor != TaskExecutorAgent || retry.Executor != source.Executor ||
+	if source.Type != taskjournal.TaskUpdate || retry.Type != taskjournal.TaskUpdate ||
+		source.Executor != taskjournal.TaskExecutorAgent || retry.Executor != source.Executor ||
 		retry.OperationID != source.OperationID || retry.RetryOf != source.ID ||
 		retry.Params[TaskReleasePublicationParam] != publicationID ||
 		source.Result == nil || source.Result.ReconciliationRequired ||
-		(source.Status != TaskStatusFailed && source.Status != TaskStatusAborted && source.Status != TaskStatusTimedOut) {
+		(source.Status != taskjournal.TaskStatusFailed && source.Status != taskjournal.TaskStatusAborted && source.Status != taskjournal.TaskStatusTimedOut) {
 		return releaseTaskRetryChange{}, errs.New(
 			errs.KindTaskNotRetryable,
 			"Blueprint Task does not own a retryable candidate",

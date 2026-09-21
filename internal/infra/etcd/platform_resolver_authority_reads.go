@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 	"strings"
@@ -158,7 +159,7 @@ func (repository *TaskRepository) platformResolverActiveAtRevision(
 	}
 	activeTask, err := decodeTaskRecord(state.Values[0].Value)
 	if err != nil || !isPlatformDNSResolverTaskAttempt(activeTask) || activeTask.ID != string(active.Value) ||
-		activeTask.Target != componentID || (activeTask.Status != TaskStatusPending && activeTask.Status != TaskStatusRunning) {
+		activeTask.Target != componentID || (activeTask.Status != taskjournal.TaskStatusPending && activeTask.Status != taskjournal.TaskStatusRunning) {
 		return nil, errs.New(errs.KindStateConflict, "platform resolver active Task is invalid")
 	}
 	return active, nil

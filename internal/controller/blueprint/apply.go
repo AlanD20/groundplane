@@ -25,6 +25,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -501,9 +502,9 @@ func (service *Service) applyBlueprintOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	steps := append([]*agentpb.ExecutionStep(nil), materializationSteps...)
-	stepRecords := make([]etcd.TaskStepRecord, 0, len(materializationSteps)+4)
+	stepRecords := make([]taskjournal.TaskStepRecord, 0, len(materializationSteps)+4)
 	for _, step := range materializationSteps {
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId})
+		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: step.StepId})
 	}
 	managedVolumeIDs := managedEnvironmentVolumeIDs(changes.Current.Volumes)
 	var volumeIntentDigest []byte
@@ -526,7 +527,7 @@ func (service *Service) applyBlueprintOnce(
 				},
 			},
 		})
-		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID})
+		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID})
 	}
 	attachSteps, attachStepRecords, err := preparedAttaches.procedureSteps(
 		taskID, desiredrevision.TaskTimeoutSeconds, allocator.Named,
@@ -604,11 +605,11 @@ func (service *Service) applyBlueprintOnce(
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: planID,
-		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: taskTarget,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: planID,
+		RenderGeneration: int32(generation), Type: taskjournal.TaskUpdate, Target: taskTarget,
 		Params: params, Steps: stepRecords, TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
 		Materializations: materializations,
-		Status:           etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status:           taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	task.ManagedComponentTeardownSources = componentPreparation.ManagedComponentTeardownSources()
 	preparedRelease, err := service.blueprintReleases.Prepare(ctx, blueprintrelease.PrepareInput{

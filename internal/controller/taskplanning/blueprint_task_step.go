@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -14,7 +15,7 @@ type blueprintTaskScriptIdentity struct {
 func blueprintTaskStepRecords(
 	steps []*agentpb.ExecutionStep,
 	members []etcd.ReleaseTaskRenderMember,
-) ([]etcd.TaskStepRecord, error) {
+) ([]taskjournal.TaskStepRecord, error) {
 	byExecution := make(map[string]blueprintTaskScriptIdentity)
 	for _, member := range members {
 		for _, hook := range member.Render.Hooks {
@@ -30,12 +31,12 @@ func blueprintTaskStepRecords(
 		}
 	}
 
-	result := make([]etcd.TaskStepRecord, len(steps))
+	result := make([]taskjournal.TaskStepRecord, len(steps))
 	for index, step := range steps {
 		if step == nil {
 			return nil, errs.New(errs.KindValidationFailed, "blueprint Task step is missing")
 		}
-		result[index].Kind = etcd.TaskStepOperation
+		result[index].Kind = taskjournal.TaskStepOperation
 		result[index].ID = step.StepId
 		run := step.GetRunScript()
 		if run == nil {
@@ -45,7 +46,7 @@ func blueprintTaskStepRecords(
 		if !exists || identity.id != run.ScriptId {
 			return nil, errs.New(errs.KindValidationFailed, "blueprint RunScript step does not match its sealed hook")
 		}
-		result[index].Kind = etcd.TaskStepScript
+		result[index].Kind = taskjournal.TaskStepScript
 		result[index].ScriptID = identity.id
 		result[index].ScriptSlug = identity.slug
 		delete(byExecution, run.ScriptExecutionId)

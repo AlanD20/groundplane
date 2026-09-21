@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -11,11 +12,11 @@ import (
 // Once closing, the original report is immutable and effect classification is
 // no longer permitted; in particular cleanup itself cannot trigger recovery.
 func (repository *TaskRepository) prepareReleaseTerminalReport(
-	ctx context.Context, current TaskAssignment, status TaskStatus, result *TaskResultRecord,
+	ctx context.Context, current TaskAssignment, status taskjournal.TaskStatus, result *TaskResultRecord,
 ) ([]etcdstore.Condition, error) {
 	task, assignment := current.Task.Record, current.Assignment.Record
-	if task.Executor != TaskExecutorAgent || result == nil ||
-		(task.Type != TaskScript && task.Params[TaskReleasePublicationParam] == "") {
+	if task.Executor != taskjournal.TaskExecutorAgent || result == nil ||
+		(task.Type != taskjournal.TaskScript && task.Params[TaskReleasePublicationParam] == "") {
 		return nil, nil
 	}
 	if task.Params[TaskReleasePublicationParam] != "" && assignment.ExecutionMode == TaskExecutionModeForward &&
@@ -35,12 +36,12 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 			return nil, nil
 		}
 	}
-	if task.Type == TaskScript {
+	if task.Type == taskjournal.TaskScript {
 		return nil, nil
 	}
 	if assignment.ExecutionMode != TaskExecutionModeForward ||
-		result.Diagnostic != TaskResultDiagnosticTimeoutBeforeEffect || result.ReconciliationRequired {
-		if task.Type == TaskUpdate && result.ReconciliationRequired {
+		result.Diagnostic != taskjournal.TaskResultDiagnosticTimeoutBeforeEffect || result.ReconciliationRequired {
+		if task.Type == taskjournal.TaskUpdate && result.ReconciliationRequired {
 			conditions = append(conditions, etcdstore.Condition{Key: blueprintClosingReportKey(task.ID)})
 		}
 		return conditions, nil
@@ -60,9 +61,9 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 		return nil, err
 	}
 	if effect {
-		result.Diagnostic = TaskResultDiagnosticNone
+		result.Diagnostic = taskjournal.TaskResultDiagnosticNone
 		result.ReconciliationRequired = true
-		if task.Type == TaskUpdate {
+		if task.Type == taskjournal.TaskUpdate {
 			conditions = append(conditions, etcdstore.Condition{Key: blueprintClosingReportKey(task.ID)})
 		}
 	}

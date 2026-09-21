@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -19,7 +20,7 @@ func (repository *TaskRepository) ClaimNextTask(
 	agentGeneration uint64,
 	assignedAt time.Time,
 ) (TaskAssignment, bool, error) {
-	return repository.claimNextTask(ctx, TaskExecutorAgent, agentID, agentGeneration, assignedAt)
+	return repository.claimNextTask(ctx, taskjournal.TaskExecutorAgent, agentID, agentGeneration, assignedAt)
 }
 
 // ClaimNextControllerTask claims the oldest native Controller Task without
@@ -28,12 +29,12 @@ func (repository *TaskRepository) ClaimNextControllerTask(
 	ctx context.Context,
 	assignedAt time.Time,
 ) (TaskAssignment, bool, error) {
-	return repository.claimNextTask(ctx, TaskExecutorController, "", 0, assignedAt)
+	return repository.claimNextTask(ctx, taskjournal.TaskExecutorController, "", 0, assignedAt)
 }
 
 func (repository *TaskRepository) claimNextTask(
 	ctx context.Context,
-	executor TaskExecutor,
+	executor taskjournal.TaskExecutor,
 	agentID string,
 	agentGeneration uint64,
 	assignedAt time.Time,
@@ -41,9 +42,9 @@ func (repository *TaskRepository) claimNextTask(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return TaskAssignment{}, false, err
 	}
-	if !validTaskExecutor(executor) ||
-		(executor == TaskExecutorAgent && (recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0)) ||
-		(executor == TaskExecutorController && (agentID != "" || agentGeneration != 0)) {
+	if !taskjournal.ValidExecutor(executor) ||
+		(executor == taskjournal.TaskExecutorAgent && (recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0)) ||
+		(executor == taskjournal.TaskExecutorController && (agentID != "" || agentGeneration != 0)) {
 		return TaskAssignment{}, false, errs.New(errs.KindValidationFailed, "task execution claim identity is invalid")
 	}
 	if err := recordcodec.ValidateTimestamp("task assignment assigned_at", assignedAt); err != nil {
@@ -100,7 +101,7 @@ func (repository *TaskRepository) claimNextTask(
 			}
 			continue
 		}
-		running, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusRunning, claimAt)
+		running, err := transitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, claimAt)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
@@ -305,7 +306,7 @@ type taskClaimCandidate struct {
 
 func (repository *TaskRepository) nextTaskClaimCandidate(
 	ctx context.Context,
-	executor TaskExecutor,
+	executor taskjournal.TaskExecutor,
 ) (taskClaimCandidate, bool, error) {
 	prefix := taskQueueScopePrefix(executor)
 	start := ""
@@ -349,7 +350,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 			if err != nil {
 				return taskClaimCandidate{}, false, err
 			}
-			if task.ID != taskID || task.Executor != executor || task.Status != TaskStatusPending ||
+			if task.ID != taskID || task.Executor != executor || task.Status != taskjournal.TaskStatusPending ||
 				task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
 				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task is not claimable")
 			}

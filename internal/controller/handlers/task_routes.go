@@ -5,6 +5,7 @@ import (
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"io"
 	"log/slog"
 	"net/http"
@@ -245,17 +246,17 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 	}, nil
 }
 
-func taskAPIType(taskType etcd.TaskType, actor etcd.TaskActor) (string, error) {
+func taskAPIType(taskType taskjournal.TaskType, actor etcd.TaskActor) (string, error) {
 	switch taskType {
-	case etcd.TaskDeploy, etcd.TaskRollback, etcd.TaskBackup, etcd.TaskBackupPrune,
-		etcd.TaskRestore, etcd.TaskAttach, etcd.TaskDetach, etcd.TaskRun,
-		etcd.TaskScript, etcd.TaskProvision, etcd.TaskCreate, etcd.TaskUpdate,
-		etcd.TaskRemove, etcd.TaskStart, etcd.TaskStop, etcd.TaskDestroy,
-		etcd.TaskRotate:
+	case taskjournal.TaskDeploy, taskjournal.TaskRollback, taskjournal.TaskBackup, taskjournal.TaskBackupPrune,
+		taskjournal.TaskRestore, taskjournal.TaskAttach, taskjournal.TaskDetach, taskjournal.TaskRun,
+		taskjournal.TaskScript, taskjournal.TaskProvision, taskjournal.TaskCreate, taskjournal.TaskUpdate,
+		taskjournal.TaskRemove, taskjournal.TaskStart, taskjournal.TaskStop, taskjournal.TaskDestroy,
+		taskjournal.TaskRotate:
 	default:
 		return "", errs.New(errs.KindInternal, "task has an invalid durable type")
 	}
-	if taskType == etcd.TaskBackupPrune && actor != etcd.TaskActorSystem {
+	if taskType == taskjournal.TaskBackupPrune && actor != etcd.TaskActorSystem {
 		return "", errs.New(errs.KindInternal, "backup_prune task has an invalid durable actor")
 	}
 	return string(taskType), nil

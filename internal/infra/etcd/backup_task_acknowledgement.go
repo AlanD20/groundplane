@@ -5,6 +5,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -19,7 +20,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 	agentGeneration uint64,
 	taskID string,
 	assignmentID string,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
@@ -112,7 +113,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			var prunePlan backupPruneTransactionPlan
-			if terminalStatus == TaskStatusCompleted {
+			if terminalStatus == taskjournal.TaskStatusCompleted {
 				prunePlan, prepareErr = runtime.prepareBackupPruneCompletion(ctx, dispatch, prunes)
 			} else {
 				prunePlan, prepareErr = runtime.prepareBackupPruneFailure(
@@ -185,8 +186,8 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 	}
 	defer clearKeyValues(read.Values)
 	task, err := decodeTaskRecord(read.Values[0].Value)
-	if err != nil || task.ID != taskID || task.Executor != TaskExecutorAgent ||
-		(task.Type != TaskBackup && task.Type != TaskBackupPrune) {
+	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorAgent ||
+		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune) {
 		return TaskAssignment{}, false, errs.New(errs.KindInternal, "backup Task assignment is corrupt")
 	}
 	current := TaskAssignment{Task: etcdstore.Versioned[TaskRecord]{
@@ -206,10 +207,10 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 		return TaskAssignment{}, false, errs.New(errs.KindInternal, "backup Task assignment copies differ")
 	}
 	assignment, err := decodeTaskAssignment(read.Values[1].Value)
-	if err != nil || assignment.TaskID != taskID || assignment.Executor != TaskExecutorAgent ||
+	if err != nil || assignment.TaskID != taskID || assignment.Executor != taskjournal.TaskExecutorAgent ||
 		assignment.AssignmentID != assignmentID || assignment.AgentID != agentID ||
 		assignment.AgentGeneration != agentGeneration || assignment.ClaimedTaskRevision >= read.Values[1].ModRevision ||
-		task.Status != TaskStatusRunning || task.StartedAt == nil ||
+		task.Status != taskjournal.TaskStatusRunning || task.StartedAt == nil ||
 		!task.StartedAt.Equal(assignment.AssignedAt) ||
 		!assignment.Deadline.Equal(assignment.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
 		read.Values[0].ModRevision < read.Values[1].ModRevision || task.idempotencyMarker == nil {
@@ -294,7 +295,7 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 
 func backupRunForTaskTerminal(
 	current backupruntime.BackupRunRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (backupruntime.BackupRunRecord, error) {
 	next := current
@@ -361,7 +362,7 @@ func backupRunForTaskTerminal(
 }
 
 func validateBackupRunTaskBinding(task TaskRecord, run backupruntime.BackupRunRecord) error {
-	if task.Type != TaskBackup || task.ID != run.TaskID || task.OperationID != run.OperationID ||
+	if task.Type != taskjournal.TaskBackup || task.ID != run.TaskID || task.OperationID != run.OperationID ||
 		task.Owner.EnvironmentID == "" || task.Owner.EnvironmentID != run.EnvironmentID ||
 		task.Target != run.EnvironmentID || !task.CreatedAt.Equal(run.CreatedAt) ||
 		task.RetryOf != run.RetryOfTaskID {
@@ -374,7 +375,7 @@ func validateBackupPruneTaskBinding(
 	task TaskRecord,
 	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
 ) error {
-	if task.Type != TaskBackupPrune || task.ID != dispatch.TaskID ||
+	if task.Type != taskjournal.TaskBackupPrune || task.ID != dispatch.TaskID ||
 		task.OperationID != dispatch.OperationID || task.Owner.EnvironmentID == "" ||
 		task.Owner.EnvironmentID != dispatch.EnvironmentID || task.Target != dispatch.EnvironmentID ||
 		!task.CreatedAt.Equal(dispatch.CreatedAt) {
@@ -414,7 +415,7 @@ func backupTerminalTimestamp(supplied time.Time, previous time.Time) time.Time {
 func (repository *TaskRepository) validateBackupTaskTerminalReplay(
 	ctx context.Context,
 	task etcdstore.Versioned[TaskRecord],
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result *TaskResultRecord,
 	assignment *TaskTerminalAssignmentRecord,
 ) error {
@@ -433,7 +434,7 @@ func (repository *TaskRepository) validateBackupTaskTerminalReplay(
 	return repository.validateBackupTerminalReceiptReplay(ctx, task)
 }
 
-func backupRunStateForTaskStatus(status TaskStatus) (backupruntime.BackupRunState, error) {
+func backupRunStateForTaskStatus(status taskjournal.TaskStatus) (backupruntime.BackupRunState, error) {
 	switch status {
 	case TaskStatusCompleted:
 		return backupruntime.BackupRunCompleted, nil

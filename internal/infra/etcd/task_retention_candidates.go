@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 )
@@ -64,7 +65,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		!task.RetainUntil.Equal(deadline) {
 		return false, corruptTaskPruneIntent()
 	}
-	if task.Type != TaskScript {
+	if task.Type != taskjournal.TaskScript {
 		return false, nil
 	}
 	sources, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{

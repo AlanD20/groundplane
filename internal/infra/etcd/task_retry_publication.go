@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -58,18 +59,18 @@ func (repository *TaskRepository) retryTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if source.Record.Type == TaskBackup || source.Record.Type == TaskBackupPrune {
+	if source.Record.Type == taskjournal.TaskBackup || source.Record.Type == taskjournal.TaskBackupPrune {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindTaskNotRetryable, "backup retry requires its atomic domain retry protocol",
 		)
 	}
-	if source.Record.Type == TaskRotate {
+	if source.Record.Type == taskjournal.TaskRotate {
 		return repository.retryBackupKeyRotationTask(ctx, source, retryTaskID, actor, marker)
 	}
 	if source.Record.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion {
 		return repository.retryHierarchyDeletionTask(ctx, source, retryTaskID, actor, provided, marker)
 	}
-	if source.Record.Type == TaskRemove && source.Record.Params[TaskResourceKindParam] == TaskResourceVolume {
+	if source.Record.Type == taskjournal.TaskRemove && source.Record.Params[TaskResourceKindParam] == TaskResourceVolume {
 		return repository.retryVolumeRemovalTask(ctx, source, retryTaskID, actor, marker)
 	}
 	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
@@ -298,7 +299,7 @@ func (repository *TaskRepository) retryTask(
 		sourceTaskID,
 		retry.OperationID,
 		source.Record.Target,
-		attachChange.applies && source.Record.Type == TaskDetach,
+		attachChange.applies && source.Record.Type == taskjournal.TaskDetach,
 		len(attachChange.conditions),
 		len(environmentChange.conditions),
 		len(secretChange.conditions),

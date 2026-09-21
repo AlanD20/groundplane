@@ -7,6 +7,7 @@ import (
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -231,14 +232,14 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		IdempotencyKey:    idempotencyKey,
 		Owner:             owner,
 		Actor:             etcd.TaskActorOperator,
-		Executor:          etcd.TaskExecutorAgent,
+		Executor:          taskjournal.TaskExecutorAgent,
 		PlanID:            planID,
 		RenderGeneration:  int32(generation),
-		Type:              etcd.TaskUpdate,
+		Type:              taskjournal.TaskUpdate,
 		Target:            input.environmentID,
 		Materializations:  materializationRecords,
 		TimeoutSeconds:    controllerrevision.TaskTimeoutSeconds,
-		Status:            etcd.TaskStatusPending,
+		Status:            taskjournal.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         claim.CreatedAt,
 		UpdatedAt:         claim.CreatedAt,

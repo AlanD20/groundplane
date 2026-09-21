@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
@@ -13,13 +14,13 @@ import (
 // TaskEventCheckpoint retains bounded step progress and mutation facts, not a
 // second history. Its identity is the replay watermark of evicted events.
 type TaskEventCheckpoint struct {
-	Identity       TaskEventIdentity `json:"identity"`
-	Sequence       uint64            `json:"sequence"`
-	PayloadSHA256  string            `json:"payload_sha256"`
-	State          TaskEventState    `json:"state"`
-	Running        bool              `json:"running"`
-	Completed      bool              `json:"completed"`
-	EffectPossible bool              `json:"effect_possible"`
+	Identity       TaskEventIdentity          `json:"identity"`
+	Sequence       uint64                     `json:"sequence"`
+	PayloadSHA256  string                     `json:"payload_sha256"`
+	State          taskjournal.TaskEventState `json:"state"`
+	Running        bool                       `json:"running"`
+	Completed      bool                       `json:"completed"`
+	EffectPossible bool                       `json:"effect_possible"`
 }
 
 func firstTaskEventSequence(task TaskRecord) uint64 {
@@ -53,9 +54,9 @@ func validateTaskEventCheckpoints(task TaskRecord) error {
 			checkpoint.Sequence == 0 || checkpoint.Sequence >= firstTaskEventSequence(task) ||
 			!recordcodec.ValidSHA256(checkpoint.PayloadSHA256) || !validTaskEventState(checkpoint.State) ||
 			checkpoint.Completed && !checkpoint.Running || checkpoint.Running && !checkpoint.EffectPossible ||
-			checkpoint.State == TaskEventStateRunning && !checkpoint.Running ||
-			checkpoint.State == TaskEventStateCompleted && !checkpoint.Completed ||
-			checkpoint.State != TaskEventStatePending && !checkpoint.EffectPossible {
+			checkpoint.State == taskjournal.TaskEventStateRunning && !checkpoint.Running ||
+			checkpoint.State == taskjournal.TaskEventStateCompleted && !checkpoint.Completed ||
+			checkpoint.State != taskjournal.TaskEventStatePending && !checkpoint.EffectPossible {
 			return recordcodec.CorruptRecord()
 		}
 		previous = checkpoint.Identity.StepID
@@ -125,8 +126,8 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 	}
 	checkpoint := TaskEventCheckpoint{Identity: event.Identity, Sequence: event.Sequence,
 		PayloadSHA256: event.PayloadSHA256, State: event.State,
-		Running:   event.State == TaskEventStateRunning || event.State == TaskEventStateCompleted,
-		Completed: event.State == TaskEventStateCompleted, EffectPossible: event.State != TaskEventStatePending}
+		Running:   event.State == taskjournal.TaskEventStateRunning || event.State == taskjournal.TaskEventStateCompleted,
+		Completed: event.State == taskjournal.TaskEventStateCompleted, EffectPossible: event.State != taskjournal.TaskEventStatePending}
 	index := slices.IndexFunc(
 		prepared.Task.EventCheckpoints,
 		func(value TaskEventCheckpoint) bool { return value.Identity.StepID == event.Identity.StepID },

@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -21,7 +22,7 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if retry.Executor != TaskExecutorController {
+	if retry.Executor != taskjournal.TaskExecutorController {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindTaskNotRetryable,
 			"hierarchy child Tasks retry through their parent operation",

@@ -5,6 +5,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,19 +18,19 @@ type taskRecordData struct {
 	IdempotencyKey     string                                `json:"idempotency_key,omitempty"`
 	Owner              TaskOwner                             `json:"owner"`
 	Actor              TaskActor                             `json:"actor"`
-	Executor           TaskExecutor                          `json:"executor"`
+	Executor           taskjournal.TaskExecutor              `json:"executor"`
 	PlanID             string                                `json:"plan_id"`
 	PlanHash           string                                `json:"plan_hash,omitempty"`
 	RenderGeneration   int32                                 `json:"render_generation"`
-	Type               TaskType                              `json:"type"`
+	Type               taskjournal.TaskType                  `json:"type"`
 	Target             string                                `json:"target"`
 	Params             map[string]string                     `json:"params,omitempty"`
-	Steps              []TaskStepRecord                      `json:"steps,omitempty"`
+	Steps              []taskjournal.TaskStepRecord          `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record        `json:"materializations,omitempty"`
 	EntryRuntime       *EntryTaskRuntime                     `json:"entry_runtime,omitempty"`
 	Configuration      *TaskConfiguration                    `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                 `json:"timeout_seconds"`
-	Status             TaskStatus                            `json:"status"`
+	Status             taskjournal.TaskStatus                `json:"status"`
 	Result             *taskResultData                       `json:"result,omitempty"`
 	TerminalAssignment *TaskTerminalAssignmentRecord         `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                                `json:"next_event_sequence"`

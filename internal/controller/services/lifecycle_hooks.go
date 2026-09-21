@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -25,7 +26,7 @@ type serviceLifecycleHookInputs interface {
 
 func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	ctx context.Context,
-	taskType etcd.TaskType,
+	taskType taskjournal.TaskType,
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -81,7 +82,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 			task.TimeoutSeconds = minimumTimeout
 		}
 	}
-	task.Executor = etcd.TaskExecutorAgent
+	task.Executor = taskjournal.TaskExecutorAgent
 	if task.TimeoutSeconds < serviceLifecycleAgentTimeoutSeconds {
 		task.TimeoutSeconds = serviceLifecycleAgentTimeoutSeconds
 	}
@@ -91,7 +92,7 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	}
 	if input.HookConfiguration != nil {
 		hookStepID := ids.New(ids.KindStep)
-		if taskType == etcd.TaskStart {
+		if taskType == taskjournal.TaskStart {
 			stepIDs = append(stepIDs, hookStepID)
 		} else {
 			stepIDs = append([]string{hookStepID}, stepIDs...)
@@ -108,16 +109,16 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 }
 
 func serviceLifecycleHookDefinition(
-	taskType etcd.TaskType,
+	taskType taskjournal.TaskType,
 	configuration *backinghook.Configuration,
 ) *backinghook.Definition {
 	if configuration == nil {
 		return nil
 	}
-	if taskType == etcd.TaskStart {
+	if taskType == taskjournal.TaskStart {
 		return configuration.AfterStart
 	}
-	if taskType == etcd.TaskStop || taskType == etcd.TaskDestroy {
+	if taskType == taskjournal.TaskStop || taskType == taskjournal.TaskDestroy {
 		return configuration.BeforeStop
 	}
 	return nil

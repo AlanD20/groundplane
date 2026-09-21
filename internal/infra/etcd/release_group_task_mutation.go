@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -18,7 +19,7 @@ type ReleaseGroupPreparedMutation struct {
 	environmentID string
 	groupID       string
 	groupRevision int64
-	taskType      TaskType
+	taskType      taskjournal.TaskType
 	conditions    []etcdstore.Condition
 	mutations     []etcdstore.Mutation
 }
@@ -39,7 +40,7 @@ func newReleaseGroupPreparedMutation(
 	environmentID string,
 	groupID string,
 	groupRevision int64,
-	taskType TaskType,
+	taskType taskjournal.TaskType,
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) ReleaseGroupPreparedMutation {
@@ -71,7 +72,7 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if prepared.taskType != TaskCreate && prepared.taskType != TaskUpdate {
+	if prepared.taskType != taskjournal.TaskCreate && prepared.taskType != taskjournal.TaskUpdate {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"release group direct mutation type is invalid",
@@ -176,7 +177,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 	)
-	if prepared.taskType == TaskRemove {
+	if prepared.taskType == taskjournal.TaskRemove {
 		tombstone := deletionrecord.DeletionTombstoneRecord{
 			TargetKind: deletionrecord.DeletionTargetReleaseGroup, TargetID: prepared.groupID,
 			TargetRevision: prepared.groupRevision, TaskID: task.ID,
@@ -220,20 +221,20 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 func validateReleaseGroupPreparedMutation(prepared ReleaseGroupPreparedMutation, task TaskRecord) error {
 	if ids.Validate(ids.KindEnvironment, prepared.environmentID) != nil ||
 		ids.Validate(ids.KindReleaseGroup, prepared.groupID) != nil || prepared.taskType != task.Type ||
-		task.Executor != TaskExecutorController || task.Target != prepared.groupID ||
-		task.Status != TaskStatusPending || task.Params[TaskResourceKindParam] != TaskResourceReleaseGroup ||
+		task.Executor != taskjournal.TaskExecutorController || task.Target != prepared.groupID ||
+		task.Status != taskjournal.TaskStatusPending || task.Params[TaskResourceKindParam] != TaskResourceReleaseGroup ||
 		len(task.Params) != 1 ||
-		(prepared.taskType != TaskCreate && prepared.taskType != TaskUpdate && prepared.taskType != TaskRemove) {
+		(prepared.taskType != taskjournal.TaskCreate && prepared.taskType != taskjournal.TaskUpdate && prepared.taskType != taskjournal.TaskRemove) {
 		return errs.New(errs.KindValidationFailed, "release group prepared mutation is invalid")
 	}
-	if prepared.taskType == TaskRemove && prepared.groupRevision <= 0 {
+	if prepared.taskType == taskjournal.TaskRemove && prepared.groupRevision <= 0 {
 		return errs.New(errs.KindValidationFailed, "release group removal revision is invalid")
 	}
 	if err := validateReleaseGroupPreparedFragment(prepared); err != nil {
 		return err
 	}
 	for _, mutation := range prepared.mutations {
-		if prepared.taskType == TaskRemove && strings.HasPrefix(mutation.Key, releaseGroupRecordPrefix) {
+		if prepared.taskType == taskjournal.TaskRemove && strings.HasPrefix(mutation.Key, releaseGroupRecordPrefix) {
 			return errs.New(errs.KindInternal, "release group removal preparation contains a primary mutation")
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -61,15 +62,15 @@ func (service *scriptMutationService) RunScript(
 	}
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorAgent,
-		PlanID: ids.New(ids.KindPlan), Type: etcd.TaskScript, Target: scriptID,
+		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
+		PlanID: ids.New(ids.KindPlan), Type: taskjournal.TaskScript, Target: scriptID,
 		Params: map[string]string{
 			etcd.ScriptExecutionIDParam: ids.NewULID(),
 			etcd.ScriptGenerationParam:  jsonNumber(sources.BodyGeneration.Record.Generation),
 		},
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
+		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: executionplan.ScriptExecutionTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	prepared, err := service.preparation.Prepare(ctx, sources)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,8 +29,8 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if ids.Validate(ids.KindTask, sourceTaskID) != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "source task id is invalid")
 	}
-	if retry.RetryOf != sourceTaskID || retry.Executor != TaskExecutorController || retry.Type != TaskCreate ||
-		retry.Status != TaskStatusPending || retry.IdempotencyKey == "" || len(retry.Params) != 2 ||
+	if retry.RetryOf != sourceTaskID || retry.Executor != taskjournal.TaskExecutorController || retry.Type != taskjournal.TaskCreate ||
+		retry.Status != taskjournal.TaskStatusPending || retry.IdempotencyKey == "" || len(retry.Params) != 2 ||
 		retry.Params[TaskResourceKindParam] != TaskResourceRunner ||
 		retry.Params[RunnerRegistrationTokenPresentParam] != "true" {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -91,8 +92,8 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	}
 	if retry.RetryOf != source.ID || retry.OperationID != source.OperationID ||
 		retry.Owner != source.Owner ||
-		retry.Executor != TaskExecutorController || retry.Type != TaskCreate ||
-		retry.Target != source.Target || retry.Status != TaskStatusPending ||
+		retry.Executor != taskjournal.TaskExecutorController || retry.Type != taskjournal.TaskCreate ||
+		retry.Target != source.Target || retry.Status != taskjournal.TaskStatusPending ||
 		retry.IdempotencyKey != source.IdempotencyKey || retry.PlanID != source.PlanID ||
 		retry.PlanHash != source.PlanHash || retry.RenderGeneration != source.RenderGeneration ||
 		retry.TimeoutSeconds != source.TimeoutSeconds || !runnerTaskStepsEqual(retry.Steps, source.Steps) ||
@@ -206,7 +207,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func runnerTaskStepsEqual(left []TaskStepRecord, right []TaskStepRecord) bool {
+func runnerTaskStepsEqual(left []taskjournal.TaskStepRecord, right []taskjournal.TaskStepRecord) bool {
 	if len(left) != len(right) {
 		return false
 	}

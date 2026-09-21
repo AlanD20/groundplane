@@ -5,6 +5,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -89,8 +90,8 @@ func validateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) err
 		recordcodec.ValidateID(ids.KindOperation, evidence.OperationID) != nil ||
 		(evidence.RetryOf != "" && recordcodec.ValidateID(ids.KindTask, evidence.RetryOf) != nil) ||
 		validateTaskOwner(evidence.Owner) != nil || evidence.Owner.EnvironmentID == "" ||
-		!validTaskActor(evidence.Actor) || !validTaskExecutor(evidence.Executor) ||
-		evidence.Executor != TaskExecutorAgent || evidence.Target != evidence.Owner.EnvironmentID ||
+		!validTaskActor(evidence.Actor) || !taskjournal.ValidExecutor(evidence.Executor) ||
+		evidence.Executor != taskjournal.TaskExecutorAgent || evidence.Target != evidence.Owner.EnvironmentID ||
 		recordcodec.ValidateID(ids.KindPlan, evidence.PlanID) != nil || !recordcodec.ValidSHA256(evidence.PlanHash) ||
 		!isTerminalTaskStatus(evidence.Status) || !recordcodec.ValidSHA256(evidence.ResultDigest) ||
 		!recordcodec.ValidSHA256(evidence.TaskDigest) || recordcodec.ValidateTimestamp("receipt created_at", evidence.CreatedAt) != nil ||
@@ -111,10 +112,10 @@ func validateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) err
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt assignment is invalid")
 		}
 	}
-	if evidence.TaskType != TaskBackup && evidence.TaskType != TaskBackupPrune {
+	if evidence.TaskType != taskjournal.TaskBackup && evidence.TaskType != taskjournal.TaskBackupPrune {
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt Task evidence type is invalid")
 	}
-	if evidence.TaskType == TaskBackupPrune && evidence.Actor != TaskActorSystem {
+	if evidence.TaskType == taskjournal.TaskBackupPrune && evidence.Actor != TaskActorSystem {
 		return errs.New(errs.KindValidationFailed, "backup prune terminal receipt actor is invalid")
 	}
 	return nil

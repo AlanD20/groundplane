@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -55,7 +56,7 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 
 func prepareTerminalTaskMarker(
 	task TaskRecord,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (idempotencyrecord.IdempotencyMarker, string, string, error) {
 	if task.idempotencyMarker == nil {
@@ -69,7 +70,7 @@ func prepareTerminalTaskMarker(
 		return idempotencyrecord.IdempotencyMarker{}, "", "", errs.New(errs.KindInternal, "task idempotency marker locator is corrupt")
 	}
 	state := idempotencyrecord.IdempotencyMarkerFailed
-	if status == TaskStatusCompleted {
+	if status == taskjournal.TaskStatusCompleted {
 		state = idempotencyrecord.IdempotencyMarkerCompleted
 	}
 	marker := idempotencyrecord.IdempotencyMarker{

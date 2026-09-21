@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -57,7 +58,7 @@ func validateEnvironmentVolumeRemovalTask(
 	if task.ID != attempt.TaskID || task.ID != runtime.CurrentTaskID ||
 		task.OperationID != runtime.OperationID || task.RetryOf != attempt.PredecessorTaskID ||
 		task.Owner.EnvironmentID != runtime.EnvironmentID || task.Actor != etcd.TaskActorOperator ||
-		task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove || task.Target != runtime.VolumeID ||
+		task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove || task.Target != runtime.VolumeID ||
 		task.RenderGeneration != int32(runtime.DesiredGeneration) ||
 		task.TimeoutSeconds != removalrecord.TimeoutSeconds ||
 		task.IdempotencyKey != runtime.RootLocator.Key || !etcd.EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||

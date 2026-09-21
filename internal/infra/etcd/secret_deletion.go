@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -37,8 +38,8 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(
 			tombstone.CreatedAt,
-		) || task.Executor != TaskExecutorController ||
-		task.Type != TaskRemove || task.Target != secretID || task.Status != TaskStatusPending ||
+		) || task.Executor != taskjournal.TaskExecutorController ||
+		task.Type != taskjournal.TaskRemove || task.Target != secretID || task.Status != taskjournal.TaskStatusPending ||
 		len(task.Params) != 1 || task.Params[TaskResourceKindParam] != TaskResourceSecret {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,

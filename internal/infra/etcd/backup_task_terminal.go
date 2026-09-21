@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -29,7 +30,7 @@ func (plan *backupTaskTerminalPlan) clear() {
 func (repository *TaskRepository) prepareBackupTaskTerminal(
 	ctx context.Context,
 	current TaskAssignment,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
 ) (backupTaskTerminalPlan, error) {
@@ -41,10 +42,10 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	if current.Task.Revision <= 0 || current.Assignment.Revision <= 0 ||
 		current.Task.ReadRevision <= 0 || current.Assignment.ReadRevision <= 0 ||
 		current.Task.ReadRevision != current.Assignment.ReadRevision ||
-		(task.Type != TaskBackup && task.Type != TaskBackupPrune) ||
+		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune) ||
 		task.Owner.EnvironmentID == "" || task.Target != task.Owner.EnvironmentID ||
-		task.Executor != TaskExecutorAgent || task.Status != TaskStatusRunning ||
-		assignment.Executor != TaskExecutorAgent || assignment.TaskID != task.ID ||
+		task.Executor != taskjournal.TaskExecutorAgent || task.Status != taskjournal.TaskStatusRunning ||
+		assignment.Executor != taskjournal.TaskExecutorAgent || assignment.TaskID != task.ID ||
 		assignment.TaskID != current.Task.Record.ID ||
 		assignment.ClaimedTaskRevision >= current.Assignment.Revision ||
 		!isTerminalTaskStatus(terminalStatus) ||
@@ -58,7 +59,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
-	terminal, err := transitionTaskStatus(task, TaskStatusRunning, terminalStatus, terminalAt)
+	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}

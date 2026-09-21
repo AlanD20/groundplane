@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
 	"time"
@@ -283,23 +284,23 @@ func (service *MutationService) apply(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	taskType := etcd.TaskCreate
+	taskType := taskjournal.TaskCreate
 	if method == http.MethodPatch {
-		taskType = etcd.TaskUpdate
+		taskType = taskjournal.TaskUpdate
 	}
 	if method == http.MethodDelete {
-		taskType = etcd.TaskRemove
+		taskType = taskjournal.TaskRemove
 	}
 	now := service.now().UTC()
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: key,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorController,
+		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskType, Target: desired.ID,
 		Params: map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceReleaseGroup},
-		Steps: []etcd.TaskStepRecord{
-			{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+		Steps: []taskjournal.TaskStepRecord{
+			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		}, TimeoutSeconds: releaseGroupTaskTimeout,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	task.PlanHash, err = releaseGroupMutationPlanHash(taskType, desired)
 	if err != nil {
@@ -381,11 +382,11 @@ func releaseGroupReplayResponse(resolution requestidempotency.Resolution) (idemp
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }
 
-func releaseGroupMutationPlanHash(kind etcd.TaskType, group domain.Group) (string, error) {
+func releaseGroupMutationPlanHash(kind taskjournal.TaskType, group domain.Group) (string, error) {
 	value, err := json.Marshal(struct {
-		Version int           `json:"version"`
-		Type    etcd.TaskType `json:"type"`
-		Group   domain.Group  `json:"group"`
+		Version int                  `json:"version"`
+		Type    taskjournal.TaskType `json:"type"`
+		Group   domain.Group         `json:"group"`
 	}{1, kind, group})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)

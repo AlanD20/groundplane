@@ -5,6 +5,7 @@ import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -260,7 +261,7 @@ func backupRunCheckpointBinding(run backupruntime.BackupRunRecord, ordinal uint3
 		return backupCheckpointBinding{}
 	}
 	return backupCheckpointBinding{
-		taskType: TaskBackup, ordinal: ordinal, pointID: run.Sources[ordinal].RecoveryPointID,
+		taskType: taskjournal.TaskBackup, ordinal: ordinal, pointID: run.Sources[ordinal].RecoveryPointID,
 	}
 }
 

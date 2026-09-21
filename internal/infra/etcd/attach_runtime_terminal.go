@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 	ctx context.Context, terminal TaskRecord, assignment TaskAssignmentRecord, revision int64,
 ) (attachTaskChange, error) {
 	change, err := repository.prepareAttachTaskAcknowledgement(ctx, terminal, terminal.Status, revision)
-	if err != nil || !change.applies || terminal.Status != TaskStatusCompleted {
+	if err != nil || !change.applies || terminal.Status != taskjournal.TaskStatusCompleted {
 		return change, err
 	}
 	input, inputRevision, err := repository.readAttachRuntimePreparation(ctx, terminal, revision)
@@ -38,8 +39,8 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 		return change, nil
 	}
 	result := terminal.Result
-	if result == nil || result.Kind != TaskResultCompose || result.ExitCode != 0 ||
-		result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired ||
+	if result == nil || result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 ||
+		result.Diagnostic != taskjournal.TaskResultDiagnosticNone || result.ReconciliationRequired ||
 		result.ExecutionEpoch == 0 || result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		terminal.TerminalAssignment == nil || terminal.TerminalAssignment.AssignmentID != assignment.AssignmentID ||
 		terminal.TerminalAssignment.AgentID != assignment.AgentID || terminal.FinishedAt == nil {

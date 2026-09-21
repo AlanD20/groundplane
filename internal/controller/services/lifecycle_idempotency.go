@@ -6,6 +6,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
@@ -27,7 +28,7 @@ type serviceLifecycleIdempotency interface {
 		context.Context,
 		idempotencyrecord.IdempotencyLocator,
 		string,
-		etcd.TaskType,
+		taskjournal.TaskType,
 		string,
 	) (serviceLifecycleEvidence, error)
 	ResolveExisting(
@@ -77,7 +78,7 @@ func (service *durableServiceLifecycleIdempotency) Prepare(
 	ctx context.Context,
 	locator idempotencyrecord.IdempotencyLocator,
 	serviceID string,
-	taskType etcd.TaskType,
+	taskType taskjournal.TaskType,
 	route string,
 ) (serviceLifecycleEvidence, error) {
 	if locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
@@ -96,7 +97,7 @@ func (service *durableServiceLifecycleIdempotency) Prepare(
 		return serviceLifecycleEvidence{}, err
 	}
 	defer digest.Destroy()
-	if taskType != etcd.TaskStart && taskType != etcd.TaskStop && taskType != etcd.TaskDestroy {
+	if taskType != taskjournal.TaskStart && taskType != taskjournal.TaskStop && taskType != taskjournal.TaskDestroy {
 		return serviceLifecycleEvidence{}, errs.New(errs.KindInternal, "Service lifecycle intent type is invalid")
 	}
 	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)

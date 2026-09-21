@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/hierarchyplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"math"
@@ -15,7 +16,7 @@ func (resolver *TaskPlanResolver) resolveHierarchyDeletionPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
-	if resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove ||
+	if resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || task.RenderGeneration != 1 ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 9 ||
 		task.Params[etcd.TaskHierarchyDeletionProcedureParam] != "environment.cleanup" ||

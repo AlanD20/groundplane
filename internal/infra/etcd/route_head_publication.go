@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -296,7 +297,7 @@ func validateCompletedRouteHeadReplay(
 	revision int64,
 ) error {
 	environmentID := task.Params[TaskRouteEnvironmentParam]
-	if task.Type != TaskRemove || task.Params[TaskResourceKindParam] != TaskResourceRoute ||
+	if task.Type != taskjournal.TaskRemove || task.Params[TaskResourceKindParam] != TaskResourceRoute ||
 		recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 		return nil
 	}

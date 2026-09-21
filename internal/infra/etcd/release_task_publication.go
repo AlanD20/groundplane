@@ -3,6 +3,7 @@ package etcd
 import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -24,8 +25,8 @@ func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
 	if err := validateTaskRecord(task); err != nil {
 		return releaseTaskPublicationFragment{}, err
 	}
-	if task.Executor != TaskExecutorAgent || task.Status != TaskStatusPending ||
-		(task.Type != TaskDeploy && task.Type != TaskRollback) || task.Owner.EnvironmentID == "" {
+	if task.Executor != taskjournal.TaskExecutorAgent || task.Status != taskjournal.TaskStatusPending ||
+		(task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback) || task.Owner.EnvironmentID == "" {
 		return releaseTaskPublicationFragment{}, errs.New(
 			errs.KindValidationFailed,
 			"release task publication shape is invalid",

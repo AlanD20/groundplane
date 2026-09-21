@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
@@ -21,7 +22,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	taskValue *etcdstore.KeyValue,
 	assignment TaskAssignmentRecord,
 	assignmentValue, assignmentIndexValue *etcdstore.KeyValue,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	terminalAt *time.Time,
 	revision int64,
 	result TaskResultRecord,
@@ -54,14 +55,14 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
 	}
 	if execution.State == ScriptExecutionNotStarted && !result.ReconciliationRequired &&
-		(status == TaskStatusFailed || status == TaskStatusTimedOut) {
+		(status == taskjournal.TaskStatusFailed || status == taskjournal.TaskStatusTimedOut) {
 		change, err := repository.prepareManualScriptRetryAvailability(ctx, task, execution, executionValue,
 			read.Values[0], status, terminalAt)
 		return change, false, err
 	}
 	preparedAbort := false
 	if root.Phase == ScriptOperationSourceActive && execution.State == ScriptExecutionNotStarted &&
-		status == TaskStatusAborted && !result.ReconciliationRequired {
+		status == taskjournal.TaskStatusAborted && !result.ReconciliationRequired {
 		execution, err = abortAssignedManualScriptBeforeStart(execution, *terminalAt)
 		if err != nil {
 			return scriptTerminalSourceRelease{}, false, err
@@ -70,7 +71,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	agentCleanupProven := execution.State == ScriptExecutionCleanupProven &&
 		execution.AssignmentID == assignment.AssignmentID && execution.ControllerCleanup == "" && !execution.ReconciliationRequired
-	controllerAbortProven := status == TaskStatusAborted && manualScriptAssignedAbortMatches(execution)
+	controllerAbortProven := status == taskjournal.TaskStatusAborted && manualScriptAssignedAbortMatches(execution)
 	if result.ReconciliationRequired || (!agentCleanupProven && !controllerAbortProven) {
 		return scriptTerminalSourceRelease{}, false, errs.New(
 			errs.KindStateConflict,
@@ -110,7 +111,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		return scriptTerminalSourceRelease{}, false, err
 	}
 	disposition := sourceref.RetryDispositionForbidden
-	if status == TaskStatusAborted {
+	if status == taskjournal.TaskStatusAborted {
 		disposition = sourceref.RetryDispositionAbandoned
 	}
 	if root.Phase == ScriptOperationSourceActive {

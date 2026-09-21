@@ -3,6 +3,7 @@ package volumeremoval
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -46,7 +47,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Create(
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
 	if runtime.Checkpoint != removalrecord.IntentSealed || runtime.AttemptOrdinal != 1 ||
-		runtime.CurrentTaskID != task.ID || task.Status != etcd.TaskStatusPending {
+		runtime.CurrentTaskID != task.ID || task.Status != taskjournal.TaskStatusPending {
 		return EnvironmentVolumeRemovalResumeState{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment Volume removal root state is invalid",

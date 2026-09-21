@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -15,7 +16,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	ctx context.Context,
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
@@ -133,7 +134,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		if decodeErr != nil {
 			return false, decodeErr
 		}
-		successful := terminalStatus == TaskStatusCompleted && !result.ReconciliationRequired
+		successful := terminalStatus == taskjournal.TaskStatusCompleted && !result.ReconciliationRequired
 		state := releaseOperationTerminalState(terminalStatus)
 		if result.ReconciliationRequired {
 			state = domain.StateRecoveryRequired

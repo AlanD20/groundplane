@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -78,7 +79,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 		}
 		assignmentValue := result.Values[2]
 		assignmentIndexValue := result.Values[3]
-		if task.Status != TaskStatusRunning || assignmentValue == nil || assignmentIndexValue == nil {
+		if task.Status != taskjournal.TaskStatusRunning || assignmentValue == nil || assignmentIndexValue == nil {
 			return TaskEventAppend{}, errs.New(errs.KindStateConflict, "task event has no matching active assignment")
 		}
 		assignment, err := decodeTaskAssignment(assignmentValue.Value)
@@ -90,7 +91,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, errs.New(errs.KindInternal, "task event assignment index is inconsistent")
 		}
 		if assignment.AssignmentID != input.Identity.AssignmentID ||
-			assignment.TaskID != input.Identity.TaskID || assignment.Executor != TaskExecutorAgent ||
+			assignment.TaskID != input.Identity.TaskID || assignment.Executor != taskjournal.TaskExecutorAgent ||
 			assignment.AgentID != input.Identity.AgentID ||
 			assignment.AgentGeneration != input.Identity.AgentGeneration ||
 			assignment.ExecutionEpoch != input.Identity.Attempt {

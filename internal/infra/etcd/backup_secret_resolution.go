@@ -12,6 +12,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -133,7 +134,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 	baseKeys := []string{
 		taskKey(request.TaskID),
 		taskAssignmentIndexKey(request.TaskID),
-		taskExecutionClaimKey(TaskExecutorAgent, request.AgentID, request.TaskID),
+		taskExecutionClaimKey(taskjournal.TaskExecutorAgent, request.AgentID, request.TaskID),
 		taskTimeoutIndexKey(request.TaskID, assignmentForKey.Deadline),
 		backupruntime.BackupRunKey(request.TaskID),
 		backupruntime.BackupRecoveryPointPruneDispatchKey(request.TaskID),
@@ -223,7 +224,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 	evidence := BackupSecretResolutionEvidence{
 		ReadRevision: fixedRevision, Task: task, Assignment: assignment,
 	}
-	if task.Type == TaskBackup {
+	if task.Type == taskjournal.TaskBackup {
 		if base.Values[4] == nil || base.Values[5] != nil {
 			return BackupSecretResolutionEvidence{}, errs.New(
 				errs.KindStateConflict,

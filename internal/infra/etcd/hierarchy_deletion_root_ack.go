@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -27,7 +28,7 @@ func (change *hierarchyDeletionRootAckChange) clear() {
 func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTask(
 	ctx context.Context,
 	taskID string,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	var lastErr error
@@ -59,10 +60,10 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTask(
 func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce(
 	ctx context.Context,
 	taskID string,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
-	claimKey := taskExecutionClaimKey(TaskExecutorController, "", taskID)
+	claimKey := taskExecutionClaimKey(taskjournal.TaskExecutorController, "", taskID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 	}})
@@ -74,7 +75,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	}
 	taskValue := read.Values[0]
 	task, err := decodeTaskRecord(taskValue.Value)
-	if err != nil || task.ID != taskID || task.Executor != TaskExecutorController ||
+	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorController ||
 		task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict,
@@ -123,8 +124,8 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	if assignment.TaskID != task.ID || assignment.Executor != TaskExecutorController ||
-		assignment.AgentID != "" || assignment.AgentGeneration != 0 || task.Status != TaskStatusRunning ||
+	if assignment.TaskID != task.ID || assignment.Executor != taskjournal.TaskExecutorController ||
+		assignment.AgentID != "" || assignment.AgentGeneration != 0 || task.Status != taskjournal.TaskStatusRunning ||
 		task.StartedAt == nil || assignment.ClaimedTaskRevision >= assignmentValue.ModRevision ||
 		!assignment.AssignedAt.Equal(*task.StartedAt) {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion root claim changed")
@@ -133,7 +134,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	terminal, err := transitionTaskStatus(task, TaskStatusRunning, terminalStatus, terminalAt)
+	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}

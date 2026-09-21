@@ -7,6 +7,7 @@ import (
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -121,27 +122,27 @@ func finalizePlatformComponentTask(
 }
 
 func startupResolverTask(componentID string, createdAt time.Time, ensureService bool) etcd.TaskRecord {
-	steps := []etcd.TaskStepRecord{
-		{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
-		{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+	steps := []taskjournal.TaskStepRecord{
+		{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+		{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 	}
 	if ensureService {
 		steps = append(steps,
-			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
-			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		)
 	}
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
 		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorSystem,
-		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: etcd.TaskUpdate, Target: componentID,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
+		Type: taskjournal.TaskUpdate, Target: componentID,
 		Params: map[string]string{
 			etcd.TaskResourceKindParam:       etcd.TaskResourceComponent,
 			etcd.TaskAutomaticReconcileParam: "true",
 		},
 		Steps:          steps,
-		TimeoutSeconds: 480, Status: etcd.TaskStatusPending, NextEventSequence: 1,
+		TimeoutSeconds: 480, Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 }

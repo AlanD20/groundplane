@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -36,7 +37,7 @@ func NewEntryRemovalPlanner(
 func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 	ctx context.Context, task etcd.TaskRecord, claim etcd.EnvironmentBlueprintStageClaim,
 ) (etcd.TaskRecord, error) {
-	if planner == nil || planner.hierarchy == nil || task.Type != etcd.TaskRemove ||
+	if planner == nil || planner.hierarchy == nil || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindEnvEntry, task.Target) != nil || task.ID != claim.TaskID ||
 		task.Owner.EnvironmentID != claim.EnvironmentID || !task.CreatedAt.Equal(claim.CreatedAt) ||
 		claim.RenderGeneration > math.MaxInt32 {
@@ -74,12 +75,12 @@ func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 		return etcd.TaskRecord{}, err
 	}
 	if cleanup == nil {
-		task.Executor, task.TimeoutSeconds = etcd.TaskExecutorController, 30
+		task.Executor, task.TimeoutSeconds = taskjournal.TaskExecutorController, 30
 		task.RenderGeneration = int32(claim.RenderGeneration)
 		task.Params = map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceEntry,
 			etcd.TaskEntryEnvironmentParam: claim.EnvironmentID, etcd.EnvironmentDesiredRevisionParam: claim.RevisionID}
 		task.Materializations = nil
-		task.Steps = []etcd.TaskStepRecord{{ID: ids.New(ids.KindStep), Kind: etcd.TaskStepOperation}}
+		task.Steps = []taskjournal.TaskStepRecord{{ID: ids.New(ids.KindStep), Kind: taskjournal.TaskStepOperation}}
 		digest := sha256.Sum256(
 			[]byte(task.PlanID + "/" + task.Target + "/" + claim.DescriptorID + "/" + claim.RevisionID),
 		)
@@ -109,7 +110,7 @@ func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 		}
 		identity.TenantSlug = tenant.Record.Slug
 	}
-	task.Executor, task.TimeoutSeconds = etcd.TaskExecutorAgent, 120
+	task.Executor, task.TimeoutSeconds = taskjournal.TaskExecutorAgent, 120
 	return planner.plans.prepareEntryRemovalTask(ctx, task, intent,
 		entryRemovalTaskProcedureIDs{ArtifactID: ids.New(ids.KindConfig)}, planner.materials, identity)
 }

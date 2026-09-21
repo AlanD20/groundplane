@@ -8,16 +8,17 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func serviceLifecycleContract(taskType etcd.TaskType) (string, core.ServiceRuntimeIntent, error) {
+func serviceLifecycleContract(taskType taskjournal.TaskType) (string, core.ServiceRuntimeIntent, error) {
 	switch taskType {
-	case etcd.TaskStart:
+	case taskjournal.TaskStart:
 		return serviceStartRoute, core.ServiceRuntimeIntentRunning, nil
-	case etcd.TaskStop:
+	case taskjournal.TaskStop:
 		return serviceStopRoute, core.ServiceRuntimeIntentStopped, nil
-	case etcd.TaskDestroy:
+	case taskjournal.TaskDestroy:
 		return serviceDestroyRoute, core.ServiceRuntimeIntentAbsent, nil
 	default:
 		return "", "", errs.New(errs.KindValidationFailed, "Service lifecycle action is invalid")
@@ -48,21 +49,21 @@ func prepareControllerServiceLifecycleTask(
 	if serviceRevision <= 0 || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Controller Service lifecycle input is invalid")
 	}
-	task.Executor = etcd.TaskExecutorController
+	task.Executor = taskjournal.TaskExecutorController
 	task.RenderGeneration = 1
 	task.Params = map[string]string{
 		etcd.TaskResourceKindParam:       etcd.TaskResourceService,
 		etcd.TaskServiceEnvironmentParam: environmentID,
 	}
-	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
+	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	task.TimeoutSeconds = serviceLifecycleControlTimeoutSeconds
 	value, err := json.Marshal(struct {
-		Version         int           `json:"version"`
-		PlanID          string        `json:"plan_id"`
-		Type            etcd.TaskType `json:"type"`
-		ServiceID       string        `json:"service_id"`
-		EnvironmentID   string        `json:"environment_id"`
-		ServiceRevision int64         `json:"service_revision"`
+		Version         int                  `json:"version"`
+		PlanID          string               `json:"plan_id"`
+		Type            taskjournal.TaskType `json:"type"`
+		ServiceID       string               `json:"service_id"`
+		EnvironmentID   string               `json:"environment_id"`
+		ServiceRevision int64                `json:"service_revision"`
 	}{
 		Version: 1, PlanID: task.PlanID, Type: task.Type, ServiceID: task.Target,
 		EnvironmentID: environmentID, ServiceRevision: serviceRevision,

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
@@ -41,7 +42,7 @@ func (repository *TaskRepository) ResumeTaskSourceReleases(ctx context.Context) 
 func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 	ctx context.Context, task TaskRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
-	if task.Configuration == nil || task.Status != TaskStatusCompleted {
+	if task.Configuration == nil || task.Status != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}
 	change := taskMaterializationProjectionChange{}

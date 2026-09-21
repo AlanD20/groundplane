@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -232,11 +233,11 @@ func newAgentRemovalTask(
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
 		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: etcd.TaskExecutorController,
+		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
-		Type: etcd.TaskRemove, Target: agentID,
+		Type: taskjournal.TaskRemove, Target: agentID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceAgent},
-		TimeoutSeconds: agentRemovalTimeoutSeconds, Status: etcd.TaskStatusPending,
+		TimeoutSeconds: agentRemovalTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil
 }
@@ -246,7 +247,7 @@ func agentRemovalPlanHash(agentID string) (string, error) {
 		Version int    `json:"version"`
 		Type    string `json:"type"`
 		AgentID string `json:"agent_id"`
-	}{Version: 1, Type: string(etcd.TaskRemove), AgentID: agentID})
+	}{Version: 1, Type: string(taskjournal.TaskRemove), AgentID: agentID})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}

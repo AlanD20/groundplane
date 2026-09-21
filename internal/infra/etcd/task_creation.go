@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +20,7 @@ func (repository *TaskRepository) CreateTask(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != record.ID || !marker.CreatedAt.Equal(record.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || record.Status != TaskStatusPending {
+		!marker.UpdatedAt.Equal(marker.CreatedAt) || record.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"task creation marker does not match its Task",

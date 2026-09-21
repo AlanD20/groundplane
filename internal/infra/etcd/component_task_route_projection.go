@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -119,18 +120,18 @@ type componentTaskRouteObservationChange struct {
 func (repository *TaskRepository) prepareComponentTaskRouteObservationAcknowledgement(
 	ctx context.Context,
 	intent ComponentTaskIntent,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (componentTaskRouteObservationChange, error) {
 	projection := intent.RouteProjection
 	if projection == nil || len(projection.Routes) == 0 ||
-		projection.Provider == nil && terminalStatus != TaskStatusCompleted {
+		projection.Provider == nil && terminalStatus != taskjournal.TaskStatusCompleted {
 		return componentTaskRouteObservationChange{}, nil
 	}
 	status := routerecord.ObservedUnserved
 	if projection.Provider != nil {
 		status = routerecord.ObservedDegraded
-		if terminalStatus == TaskStatusCompleted {
+		if terminalStatus == taskjournal.TaskStatusCompleted {
 			status = routerecord.ObservedServed
 		}
 	}

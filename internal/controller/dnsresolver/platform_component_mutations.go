@@ -6,6 +6,7 @@ import (
 	"errors"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"net/netip"
 	"sort"
@@ -513,26 +514,26 @@ func newPlatformComponentConfigTask(
 	createdAt time.Time,
 	ensureService bool,
 ) etcd.TaskRecord {
-	steps := []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
+	steps := []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	if ensureService {
 		steps = append(steps,
-			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
-			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
-			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		)
 	} else {
-		steps = append(steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)})
+		steps = append(steps, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)})
 	}
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
 		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: etcd.TaskExecutorAgent,
+		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: etcd.TaskUpdate, Target: componentID,
+		Type: taskjournal.TaskUpdate, Target: componentID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceComponent},
 		Steps:          steps,
 		TimeoutSeconds: platformComponentTaskTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 }
@@ -549,7 +550,7 @@ func newPlatformComponentLifecycleTask(
 	}
 	task := newPlatformComponentConfigTask(componentID, idempotencyKey, createdAt, false)
 	task.Steps = task.Steps[:1]
-	task.Steps = append(task.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)})
+	task.Steps = append(task.Steps, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)})
 	return task
 }
 

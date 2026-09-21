@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -45,9 +46,9 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		tombstone.Phase != entryRemovalTombstonePhase(intent) || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || intent.TaskID != task.ID ||
 		intent.EnvironmentID != environment.Record.ID || intent.EntryID != entry.Record.Entry.ID ||
-		intent.EntryRevision != entry.Revision || intent.Status != TaskStatusPending ||
-		!intent.CreatedAt.Equal(task.CreatedAt) || intent.TerminalAt != nil || task.Type != TaskRemove ||
-		task.Target != entry.Record.Entry.ID || task.Status != TaskStatusPending {
+		intent.EntryRevision != entry.Revision || intent.Status != taskjournal.TaskStatusPending ||
+		!intent.CreatedAt.Equal(task.CreatedAt) || intent.TerminalAt != nil || task.Type != taskjournal.TaskRemove ||
+		task.Target != entry.Record.Entry.ID || task.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"entry deletion Task, intent, and tombstone do not match",

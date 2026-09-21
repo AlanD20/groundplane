@@ -12,6 +12,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"math"
@@ -60,10 +61,10 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
-	if task.Type == etcd.TaskDeploy || task.Type == etcd.TaskRollback {
+	if task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
 		return resolver.resolveReleasePlan(ctx, task)
 	}
-	if task.Type == etcd.TaskStart || task.Type == etcd.TaskStop || task.Type == etcd.TaskDestroy {
+	if task.Type == taskjournal.TaskStart || task.Type == taskjournal.TaskStop || task.Type == taskjournal.TaskDestroy {
 		return resolver.resolveServiceLifecyclePlan(ctx, task)
 	}
 	if ctx == nil {
@@ -75,7 +76,7 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if resolver == nil || resolver.volumeRoot == "" {
 		return nil, errs.New(errs.KindInternal, "execution plan resolver is not configured")
 	}
-	if task.Type == etcd.TaskScript {
+	if task.Type == taskjournal.TaskScript {
 		if resolver.scriptPlans == nil {
 			return nil, errs.New(errs.KindInternal, "Script Task plan resolver is not configured")
 		}
@@ -87,7 +88,7 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		}
 		return resolver.componentPlans.ResolveComponentExecutionPlan(ctx, task)
 	}
-	if task.Type == etcd.TaskBackup {
+	if task.Type == taskjournal.TaskBackup {
 		return resolver.resolveBackupRunPlan(ctx, task)
 	}
 	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceHierarchyDeletion {
@@ -96,19 +97,19 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceVolume {
 		return resolver.resolveVolumePlan(ctx, task)
 	}
-	if task.Type == etcd.TaskAttach || task.Type == etcd.TaskDetach {
+	if task.Type == taskjournal.TaskAttach || task.Type == taskjournal.TaskDetach {
 		return resolver.resolveAttachPlan(ctx, task)
 	}
-	if _, backingCreation := task.Params[etcd.TaskBackingServiceCreationParam]; task.Type == etcd.TaskUpdate && backingCreation {
+	if _, backingCreation := task.Params[etcd.TaskBackingServiceCreationParam]; task.Type == taskjournal.TaskUpdate && backingCreation {
 		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
 	}
-	if task.Type == etcd.TaskUpdate {
+	if task.Type == taskjournal.TaskUpdate {
 		return resolver.resolveUpdatePlan(ctx, task)
 	}
-	if task.Type == etcd.TaskCreate && ids.Validate(ids.KindRoute, task.Target) == nil {
+	if task.Type == taskjournal.TaskCreate && ids.Validate(ids.KindRoute, task.Target) == nil {
 		return resolver.resolveRouteMutationPlan(ctx, task)
 	}
-	if task.Type == etcd.TaskRemove {
+	if task.Type == taskjournal.TaskRemove {
 		if ids.Validate(ids.KindEnvironment, task.Target) == nil {
 			return resolver.resolveEnvironmentRemovalPlan(ctx, task)
 		}
@@ -126,7 +127,7 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 		}
 		return nil, errs.New(errs.KindInternal, "durable removal Task target is invalid")
 	}
-	if task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskCreate ||
+	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskCreate ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != 1 ||
 		len(task.Steps) != 1 || task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Environment creation Task shape is invalid")

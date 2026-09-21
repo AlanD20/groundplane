@@ -6,6 +6,7 @@ import (
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -197,7 +198,7 @@ func (service *taskRetryService) retryTask(
 			errs.KindTaskNotRetryable, "Controller update requires a fresh explicit release selection after recovery",
 		)
 	}
-	if source.Record.Type == etcd.TaskBackupPrune {
+	if source.Record.Type == taskjournal.TaskBackupPrune {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
 			errs.KindTaskNotRetryable,
 			"internal task %s of type %s is not operator-retryable",
@@ -249,7 +250,7 @@ func (service *taskRetryService) retryTask(
 	}
 	var result etcd.IdempotencyTransactionResult
 	var retryErr error
-	if source.Record.Type == etcd.TaskBackup {
+	if source.Record.Type == taskjournal.TaskBackup {
 		if initiation != nil {
 			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindTaskNotRetryable,

@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math/rand/v2"
 	"time"
 
@@ -261,7 +262,7 @@ func (repository *TaskRepository) GetSystemTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	if parent.Record.Executor != TaskExecutorController || parent.Record.Status != TaskStatusRunning {
+	if parent.Record.Executor != taskjournal.TaskExecutorController || parent.Record.Status != taskjournal.TaskStatusRunning {
 		return TaskInitiation{}, errs.New(
 			errs.KindStateConflict,
 			"system task initiation parent is not a running controller task",

@@ -5,6 +5,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -19,108 +20,6 @@ const (
 	TaskBackingServiceCreationParam        = "backing_service_creation_service_id"
 	TaskBackingServiceHealthParam          = "backing_service_health_service_id"
 	TaskBackingServiceVolumeDirectoryParam = "backing_service_volume_directory"
-)
-
-// TaskType is the closed durable task catalog. It is a persistence DTO rather
-// than a controller model so infra remains independent of controller and core.
-type TaskType string
-
-const (
-	TaskDeploy      TaskType = "deploy"
-	TaskRollback    TaskType = "rollback"
-	TaskBackup      TaskType = "backup"
-	TaskBackupPrune TaskType = "backup_prune"
-	TaskRestore     TaskType = "restore"
-	TaskAttach      TaskType = "attach"
-	TaskDetach      TaskType = "detach"
-	TaskRun         TaskType = "run"
-	TaskScript      TaskType = "script"
-	TaskProvision   TaskType = "provision"
-	TaskCreate      TaskType = "create"
-	TaskUpdate      TaskType = "update"
-	TaskRemove      TaskType = "remove"
-	TaskStart       TaskType = "start"
-	TaskStop        TaskType = "stop"
-	TaskDestroy     TaskType = "destroy"
-	TaskRotate      TaskType = "rotate"
-)
-
-// TaskExecutor is the immutable authority allowed to claim a Task. It is
-// explicit durable input so execution placement is never inferred from type or
-// target identity.
-type TaskExecutor string
-
-const (
-	TaskExecutorAgent      TaskExecutor = "agent"
-	TaskExecutorController TaskExecutor = "controller"
-)
-
-func validTaskExecutor(executor TaskExecutor) bool {
-	switch executor {
-	case TaskExecutorAgent, TaskExecutorController:
-		return true
-	default:
-		return false
-	}
-}
-
-// TaskStatus is the durable state machine. Acknowledgement remains a streamed
-// Agent event and is deliberately not a task status.
-type TaskStatus string
-
-const (
-	TaskStatusPending   TaskStatus = "pending"
-	TaskStatusRunning   TaskStatus = "running"
-	TaskStatusCompleted TaskStatus = "completed"
-	TaskStatusFailed    TaskStatus = "failed"
-	TaskStatusAborted   TaskStatus = "aborted"
-	TaskStatusTimedOut  TaskStatus = "timed_out"
-)
-
-// TaskEventState is the lifecycle of one step, not the Task lifecycle. A
-// terminal step event never completes the Task; the Agent acknowledgement
-// drives the separate TaskStatus transition after the full procedure ends.
-type TaskEventState string
-
-const (
-	TaskEventStatePending   TaskEventState = "pending"
-	TaskEventStateRunning   TaskEventState = "running"
-	TaskEventStateCompleted TaskEventState = "completed"
-	TaskEventStateFailed    TaskEventState = "failed"
-	TaskEventStateAborted   TaskEventState = "aborted"
-	TaskEventStateTimedOut  TaskEventState = "timed_out"
-)
-
-type TaskStepKind string
-
-const (
-	TaskStepOperation TaskStepKind = "operation"
-	TaskStepScript    TaskStepKind = "script"
-)
-
-// TaskStepRecord is the immutable execution procedure stored with a Task.
-// ID is stable within the task and participates in Agent event identity.
-type TaskStepRecord struct {
-	Kind       TaskStepKind `json:"kind"`
-	ID         string       `json:"id"`
-	ScriptID   string       `json:"script_id,omitempty"`
-	ScriptSlug string       `json:"script_slug,omitempty"`
-}
-
-type TaskResultKind string
-
-const (
-	TaskResultCompose              TaskResultKind = "compose"
-	TaskResultEnvironmentDirectory TaskResultKind = "environment_directory"
-)
-
-type TaskResultDiagnostic string
-
-const (
-	TaskResultDiagnosticNone                TaskResultDiagnostic = "none"
-	TaskResultDiagnosticConfigRejected      TaskResultDiagnostic = "config_rejected"
-	TaskResultDiagnosticComposeFailed       TaskResultDiagnostic = "compose_failed"
-	TaskResultDiagnosticTimeoutBeforeEffect TaskResultDiagnostic = "timeout_before_effect"
 )
 
 type TaskObservedProjectSummary struct {
@@ -165,10 +64,10 @@ type TaskCandidateAbsenceEvidence struct {
 }
 
 type TaskResultRecord struct {
-	Kind                            TaskResultKind                      `json:"kind"`
+	Kind                            taskjournal.TaskResultKind          `json:"kind"`
 	ExitCode                        int32                               `json:"exit_code"`
 	FailedStepID                    string                              `json:"failed_step_id,omitempty"`
-	Diagnostic                      TaskResultDiagnostic                `json:"diagnostic"`
+	Diagnostic                      taskjournal.TaskResultDiagnostic    `json:"diagnostic"`
 	ReconciliationRequired          bool                                `json:"reconciliation_required"`
 	Projects                        []TaskObservedProjectSummary        `json:"projects,omitempty"`
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`
@@ -197,19 +96,19 @@ type TaskRecord struct {
 	IdempotencyKey     string                         `json:"idempotency_key,omitempty"`
 	Owner              TaskOwner                      `json:"owner"`
 	Actor              TaskActor                      `json:"actor"`
-	Executor           TaskExecutor                   `json:"executor"`
+	Executor           taskjournal.TaskExecutor       `json:"executor"`
 	PlanID             string                         `json:"plan_id"`
 	PlanHash           string                         `json:"plan_hash,omitempty"`
 	RenderGeneration   int32                          `json:"render_generation"`
-	Type               TaskType                       `json:"type"`
+	Type               taskjournal.TaskType           `json:"type"`
 	Target             string                         `json:"target"`
 	Params             map[string]string              `json:"params,omitempty"`
-	Steps              []TaskStepRecord               `json:"steps,omitempty"`
+	Steps              []taskjournal.TaskStepRecord   `json:"steps,omitempty"`
 	Materializations   []materializationrecord.Record `json:"materializations,omitempty"`
 	EntryRuntime       *EntryTaskRuntime              `json:"entry_runtime,omitempty"`
 	Configuration      *TaskConfiguration             `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                          `json:"timeout_seconds"`
-	Status             TaskStatus                     `json:"status"`
+	Status             taskjournal.TaskStatus         `json:"status"`
 	Result             *TaskResultRecord              `json:"result,omitempty"`
 	TerminalAssignment *TaskTerminalAssignmentRecord  `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                         `json:"next_event_sequence"`
@@ -231,23 +130,23 @@ func newTaskRecord(
 	operationID string,
 	owner TaskOwner,
 	actor TaskActor,
-	taskType TaskType,
+	taskType taskjournal.TaskType,
 	target string,
 	timeoutSeconds int64,
 	createdAt time.Time,
 ) TaskRecord {
 	return TaskRecord{
 		ID: id, OperationID: operationID, Owner: owner, Actor: actor,
-		Executor: TaskExecutorAgent, Type: taskType, Target: target,
-		TimeoutSeconds: timeoutSeconds, Status: TaskStatusPending,
+		Executor: taskjournal.TaskExecutorAgent, Type: taskType, Target: target,
+		TimeoutSeconds: timeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 }
 
 func transitionTaskStatus(
 	record TaskRecord,
-	expected TaskStatus,
-	next TaskStatus,
+	expected taskjournal.TaskStatus,
+	next taskjournal.TaskStatus,
 	at time.Time,
 ) (TaskRecord, error) {
 	if err := validateTaskRecord(record); err != nil {
@@ -282,7 +181,7 @@ func transitionTaskStatus(
 	replacement := cloneTaskRecord(record)
 	replacement.Status = next
 	replacement.UpdatedAt = at
-	if next == TaskStatusRunning {
+	if next == taskjournal.TaskStatusRunning {
 		replacement.StartedAt = timePointer(at)
 	}
 	if isTerminalTaskStatus(next) {
@@ -296,10 +195,10 @@ func transitionTaskStatus(
 	return replacement, nil
 }
 
-func validTaskTransition(current TaskStatus, next TaskStatus) bool {
+func validTaskTransition(current taskjournal.TaskStatus, next taskjournal.TaskStatus) bool {
 	switch current {
 	case TaskStatusPending:
-		return next == TaskStatusRunning || next == TaskStatusAborted
+		return next == taskjournal.TaskStatusRunning || next == taskjournal.TaskStatusAborted
 	case TaskStatusRunning:
 		return isTerminalTaskStatus(next)
 	default:
@@ -307,30 +206,30 @@ func validTaskTransition(current TaskStatus, next TaskStatus) bool {
 	}
 }
 
-func isTerminalTaskStatus(status TaskStatus) bool {
+func isTerminalTaskStatus(status taskjournal.TaskStatus) bool {
 	switch status {
-	case TaskStatusCompleted, TaskStatusFailed, TaskStatusAborted, TaskStatusTimedOut:
+	case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, TaskStatusTimedOut:
 		return true
 	default:
 		return false
 	}
 }
 
-func validTaskType(taskType TaskType) bool {
+func validTaskType(taskType taskjournal.TaskType) bool {
 	switch taskType {
-	case TaskDeploy, TaskRollback, TaskBackup, TaskBackupPrune, TaskRestore, TaskAttach, TaskDetach,
-		TaskRun, TaskScript, TaskProvision, TaskCreate, TaskUpdate, TaskRemove,
-		TaskStart, TaskStop, TaskDestroy, TaskRotate:
+	case taskjournal.TaskDeploy, taskjournal.TaskRollback, taskjournal.TaskBackup, taskjournal.TaskBackupPrune, taskjournal.TaskRestore, taskjournal.TaskAttach, taskjournal.TaskDetach,
+		taskjournal.TaskRun, taskjournal.TaskScript, taskjournal.TaskProvision, taskjournal.TaskCreate, taskjournal.TaskUpdate, taskjournal.TaskRemove,
+		taskjournal.TaskStart, taskjournal.TaskStop, taskjournal.TaskDestroy, TaskRotate:
 		return true
 	default:
 		return false
 	}
 }
 
-func validTaskStatus(status TaskStatus) bool {
+func validTaskStatus(status taskjournal.TaskStatus) bool {
 	switch status {
-	case TaskStatusPending, TaskStatusRunning, TaskStatusCompleted,
-		TaskStatusFailed, TaskStatusAborted, TaskStatusTimedOut:
+	case taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, taskjournal.TaskStatusCompleted,
+		taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, TaskStatusTimedOut:
 		return true
 	default:
 		return false

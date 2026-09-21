@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -35,11 +36,11 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	if publicationID == "" {
 		return releaseTaskRetryChange{}, nil
 	}
-	if source.Type == TaskUpdate {
+	if source.Type == taskjournal.TaskUpdate {
 		return repository.prepareBlueprintCandidateRetry(ctx, source, retry, revision)
 	}
-	if validatePublicationID(publicationID) != nil || source.Executor != TaskExecutorAgent ||
-		(source.Type != TaskDeploy && source.Type != TaskRollback) || retry.Type != source.Type ||
+	if validatePublicationID(publicationID) != nil || source.Executor != taskjournal.TaskExecutorAgent ||
+		(source.Type != taskjournal.TaskDeploy && source.Type != taskjournal.TaskRollback) || retry.Type != source.Type ||
 		retry.OperationID != source.OperationID || retry.Params[TaskReleasePublicationParam] != publicationID ||
 		source.Result == nil || !source.Result.ReconciliationRequired {
 		return releaseTaskRetryChange{}, errs.New(

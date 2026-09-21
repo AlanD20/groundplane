@@ -5,6 +5,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,7 +18,7 @@ type entryDesiredRemovalPublication struct {
 }
 
 func desiredRevisionTaskEnvironment(task TaskRecord) (string, bool, error) {
-	if task.Executor == TaskExecutorController && task.Type == TaskRemove &&
+	if task.Executor == taskjournal.TaskExecutorController && task.Type == taskjournal.TaskRemove &&
 		ids.Validate(ids.KindEnvEntry, task.Target) == nil && len(task.Params) == 3 &&
 		task.Params[TaskResourceKindParam] == TaskResourceEntry && len(task.Materializations) == 0 &&
 		ids.Validate(ids.KindEnvironment, task.Params[TaskEntryEnvironmentParam]) == nil &&
@@ -31,7 +32,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 	ctx context.Context, claim EnvironmentBlueprintStageClaim, candidate projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord, removed preparedDesiredScriptRemoval, revision int64,
 ) (entryDesiredRemovalPublication, error) {
-	if task.Type != TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil {
+	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil {
 		return entryDesiredRemovalPublication{}, nil
 	}
 	if claim.SourceKind != EnvironmentBlueprintSourceMutation || len(removed.entryIDs) != 1 ||
@@ -167,7 +168,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 }
 
 func entryRemovalControllerWriter(task TaskRecord) ([]etcdstore.Mutation, error) {
-	if task.Executor != TaskExecutorController {
+	if task.Executor != taskjournal.TaskExecutorController {
 		return nil, nil
 	}
 	environmentID := task.Params[TaskEntryEnvironmentParam]

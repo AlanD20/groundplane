@@ -10,6 +10,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"slices"
 	"sort"
@@ -64,12 +65,12 @@ func (runtime EntryMutationRuntime) PrepareTask(
 		references,
 		func(left, right int) bool { return references[left].Destination < references[right].Destination },
 	)
-	task.Steps = make([]etcd.TaskStepRecord, 0, len(references)+1)
+	task.Steps = make([]taskjournal.TaskStepRecord, 0, len(references)+1)
 	for _, reference := range references {
-		task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: reference.StepID, Kind: etcd.TaskStepOperation})
+		task.Steps = append(task.Steps, taskjournal.TaskStepRecord{ID: reference.StepID, Kind: taskjournal.TaskStepOperation})
 	}
 	if len(selected) != 0 {
-		task.Steps = append(task.Steps, etcd.TaskStepRecord{ID: applyStepID, Kind: etcd.TaskStepOperation})
+		task.Steps = append(task.Steps, taskjournal.TaskStepRecord{ID: applyStepID, Kind: taskjournal.TaskStepOperation})
 	}
 	plan, err := buildEntryMutationPlan(volumeRoot, task, baseline, candidate)
 	if err != nil {
@@ -161,7 +162,7 @@ func (resolver *TaskPlanResolver) resolveEntryMutationPlan(
 func buildEntryMutationPlan(
 	volumeRoot string, task etcd.TaskRecord, baseline, candidate projectionrecord.EnvironmentComposeProjection,
 ) (*agentpb.ExecutionPlan, error) {
-	if task.Type != etcd.TaskUpdate || task.Executor != etcd.TaskExecutorAgent || task.RenderGeneration <= 0 ||
+	if task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent || task.RenderGeneration <= 0 ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 6 ||
 		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceEntry ||
 		task.Target != candidate.EnvironmentID || baseline.EnvironmentID != candidate.EnvironmentID ||
@@ -211,7 +212,7 @@ func buildEntryMutationPlan(
 	}
 	steps := make([]*agentpb.ExecutionStep, 0, expectedSteps)
 	for index, record := range task.Steps {
-		if record.Kind != etcd.TaskStepOperation {
+		if record.Kind != taskjournal.TaskStepOperation {
 			return nil, errs.New(errs.KindInternal, "Entry mutation Task step kind is invalid")
 		}
 		if index == len(task.Materializations) {

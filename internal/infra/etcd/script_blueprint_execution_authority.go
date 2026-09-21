@@ -7,11 +7,12 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func blueprintScriptTaskShape(task TaskRecord) bool {
-	return task.Type == TaskUpdate && task.Executor == TaskExecutorAgent &&
+	return task.Type == taskjournal.TaskUpdate && task.Executor == taskjournal.TaskExecutorAgent &&
 		validatePublicationID(task.Params[TaskReleasePublicationParam]) == nil &&
 		task.Owner.EnvironmentID != "" && task.Target == task.Owner.EnvironmentID &&
 		task.Params[TaskMaterializationEnvironmentParam] == task.Owner.EnvironmentID &&

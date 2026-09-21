@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -247,8 +248,8 @@ func validateVolumeRemovalInitialBinding(
 	}
 	if task.ID != runtime.OriginTaskID || task.OperationID != runtime.OperationID || task.RetryOf != "" ||
 		task.Owner.EnvironmentID != runtime.EnvironmentID || task.Target != runtime.VolumeID ||
-		task.Actor != TaskActorOperator || task.Executor != TaskExecutorAgent || task.Type != TaskRemove ||
-		task.Status != TaskStatusPending || task.RenderGeneration != int32(runtime.DesiredGeneration) ||
+		task.Actor != TaskActorOperator || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
+		task.Status != taskjournal.TaskStatusPending || task.RenderGeneration != int32(runtime.DesiredGeneration) ||
 		task.TimeoutSeconds != removalrecord.TimeoutSeconds || task.IdempotencyKey != runtime.RootLocator.Key ||
 		!EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||
 		!task.CreatedAt.Equal(runtime.CreatedAt) || !task.UpdatedAt.Equal(runtime.CreatedAt) {
@@ -283,6 +284,6 @@ func validateVolumeRemovalInitialBinding(
 // EnvironmentVolumeRemovalStepMatches binds the path checkpoint to the final
 // step. Detachment and Docker removal may precede it; plan reconstruction
 // validates their exact payloads against the sealed source projection.
-func EnvironmentVolumeRemovalStepMatches(steps []TaskStepRecord, pathStepID string) bool {
+func EnvironmentVolumeRemovalStepMatches(steps []taskjournal.TaskStepRecord, pathStepID string) bool {
 	return len(steps) >= 1 && len(steps) <= 3 && steps[len(steps)-1].ID == pathStepID
 }

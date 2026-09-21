@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -84,7 +85,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	environmentDeletionFenceStart := -1
 	var environmentDeletionFenceKeys []string
-	if task.Executor == TaskExecutorAgent && task.Type == TaskRemove &&
+	if task.Executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&
 		ids.Validate(ids.KindEnvironment, task.Target) == nil {
 		environmentDeletionFenceStart = len(companionKeys)
 		environmentDeletionFenceKeys = []string{
@@ -101,17 +102,17 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	companionKeys = append(companionKeys, ownerIndexKeys...)
 	planReferenceIndex := -1
-	if task.Type == TaskAttach || task.Type == TaskDetach {
+	if task.Type == taskjournal.TaskAttach || task.Type == taskjournal.TaskDetach {
 		planReferenceIndex = len(companionKeys)
 		companionKeys = append(companionKeys, attachTaskPlanReferenceKey(task.PlanID, task.ID))
 	}
 	backupPruneDispatchIndex := -1
-	if task.Type == TaskBackupPrune {
+	if task.Type == taskjournal.TaskBackupPrune {
 		backupPruneDispatchIndex = len(companionKeys)
 		companionKeys = append(companionKeys, backupruntime.BackupRecoveryPointPruneDispatchKey(task.ID))
 	}
 	backupTerminalReceiptIndex := -1
-	if task.Type == TaskBackup || task.Type == TaskBackupPrune {
+	if task.Type == taskjournal.TaskBackup || task.Type == taskjournal.TaskBackupPrune {
 		backupTerminalReceiptIndex = len(companionKeys)
 		companionKeys = append(companionKeys, backupTerminalReceiptKey(task.ID))
 	}

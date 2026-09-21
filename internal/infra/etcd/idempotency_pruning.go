@@ -5,6 +5,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -421,7 +422,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	if err != nil || task.ID != marker.TaskID {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	if task.Type != TaskRemove || task.Params[TaskResourceKindParam] != TaskResourceVolume {
+	if task.Type != taskjournal.TaskRemove || task.Params[TaskResourceKindParam] != TaskResourceVolume {
 		return nil, false, nil
 	}
 	root := removalrecord.Root(task.OperationID)

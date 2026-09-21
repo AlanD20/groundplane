@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"io"
 	"time"
@@ -44,7 +45,7 @@ type TaskStore interface {
 		uint64,
 		string,
 		string,
-		etcd.TaskStatus,
+		taskjournal.TaskStatus,
 		etcd.TaskResultRecord,
 		time.Time,
 	) (etcdstore.Versioned[etcd.TaskRecord], error)
@@ -57,7 +58,7 @@ type environmentCreationTaskStore interface {
 		string,
 		string,
 		string,
-		etcd.TaskStatus,
+		taskjournal.TaskStatus,
 		etcd.TaskResultRecord,
 		time.Time,
 	) (etcdstore.Versioned[etcd.TaskRecord], error)

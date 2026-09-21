@@ -9,6 +9,7 @@ import (
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -27,7 +28,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (scriptTaskChange, error) {
-	if source.Type == TaskScript {
+	if source.Type == taskjournal.TaskScript {
 		return repository.prepareManualScriptRetry(ctx, source, retry, revision)
 	}
 	applies, err := taskOwnsScriptRemoval(source)
@@ -164,7 +165,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (scriptTaskChange, error) {
 	applies, err := taskOwnsScriptRemoval(task)
@@ -235,7 +236,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 			Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target),
 		}},
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		change.mutations = append(
 			change.mutations,
 			etcdstore.Mutation{
@@ -274,7 +275,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	applies, err := taskOwnsScriptRemoval(task)
@@ -291,7 +292,7 @@ func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 		return errs.New(errs.KindStateConflict, "Script deletion terminal state does not match its Task")
 	}
 	storage, scriptErr := readActiveScriptStorage(ctx, repository.store, task.Target, revision)
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if scriptErr == nil || !errors.Is(scriptErr, errs.New(errs.KindScriptNotFound, "")) {
 			return errs.New(errs.KindStateConflict, "completed Script deletion retained its target")
 		}
@@ -307,10 +308,10 @@ func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 }
 
 func taskOwnsScriptRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceScript {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceScript {
 		return false, nil
 	}
-	if task.Type != TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindScript, task.Target) != nil {
+	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindScript, task.Target) != nil {
 		return false, errs.New(errs.KindInternal, "Script deletion Task has invalid durable input")
 	}
 	return true, nil

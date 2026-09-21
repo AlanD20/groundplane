@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -12,7 +13,7 @@ const (
 
 func validateTaskMaterializationReferences(
 	references []taskmaterialization.Record,
-	steps []TaskStepRecord,
+	steps []taskjournal.TaskStepRecord,
 	environmentID string,
 	hasEnvironment bool,
 	renderGeneration uint64,

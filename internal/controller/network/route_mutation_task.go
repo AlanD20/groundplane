@@ -12,6 +12,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -56,12 +57,12 @@ func (service *routeMutationService) prepareRouteMutationTask(
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, IdempotencyKey: idempotencyKey,
 		Owner: owner, Actor: etcd.TaskActorOperator, PlanID: ids.New(ids.KindPlan),
-		Type: etcd.TaskCreate, Target: record.Desired.ID,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1,
+		Type: taskjournal.TaskCreate, Target: record.Desired.ID,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if previous != nil {
-		task.Type = etcd.TaskUpdate
+		task.Type = taskjournal.TaskUpdate
 	}
 	intent, err := etcd.NewRouteMutationIntent(
 		taskID, operationID, environment.Record.ID, record, previous, applied, now,
@@ -144,14 +145,14 @@ func prepareControllerRouteMutationTask(
 	if intent.Provider != nil || intent.CurrentProjection != nil || intent.CandidateProjection != nil {
 		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "desired-only Route mutation has provider state")
 	}
-	task.Executor = etcd.TaskExecutorController
+	task.Executor = taskjournal.TaskExecutorController
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = int32(intent.Route.DesiredGeneration)
 	task.Params = map[string]string{
 		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
 		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
-	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
+	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	value, err := json.Marshal(struct {
 		Version    int    `json:"version"`
 		TaskID     string `json:"task_id"`

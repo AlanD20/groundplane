@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -379,7 +380,7 @@ func actionToEtcd(value Action) etcdinfra.HierarchyDeletionAction {
 	if value.Procedure.AgentChild != nil {
 		converted.AgentProcedure = &etcdinfra.HierarchyDeletionAgentProcedure{
 			ChildOperationID: value.Procedure.AgentChild.ChildOperationID,
-			TaskType:         etcdinfra.TaskType(value.Procedure.AgentChild.TaskType),
+			TaskType:         taskjournal.TaskType(value.Procedure.AgentChild.TaskType),
 			TypedProcedure:   value.Procedure.AgentChild.TypedProcedure,
 			InputDigest:      value.Procedure.AgentChild.InputDigest,
 			TimeoutSeconds:   int64(value.Procedure.AgentChild.Timeout.Seconds()),
@@ -471,7 +472,7 @@ func procedureInputToEtcd(value ProcedureInput) etcdinfra.HierarchyDeletionProce
 	input := etcdinfra.HierarchyDeletionProcedureInput{Kind: etcdinfra.HierarchyDeletionProcedureKind(value.Kind)}
 	if value.AgentChild != nil {
 		input.AgentChild = &etcdinfra.HierarchyDeletionAgentInput{
-			TaskType: etcdinfra.TaskType(value.AgentChild.TaskType), TypedProcedure: value.AgentChild.TypedProcedure,
+			TaskType: taskjournal.TaskType(value.AgentChild.TaskType), TypedProcedure: value.AgentChild.TypedProcedure,
 			InputDigest: value.AgentChild.InputDigest, TimeoutSeconds: int64(value.AgentChild.Timeout.Seconds()),
 		}
 	}

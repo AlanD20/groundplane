@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -220,7 +221,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (connectorTaskChange, error) {
 	applies, err := taskOwnsConnectorRemoval(task)
@@ -302,7 +303,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	}
 	clear(credentials.Ciphertext)
 	referenceConditions := []etcdstore.Condition(nil)
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		referenceConditions, err = requireConnectorReferencePrefixesEmpty(
 			ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
 		)
@@ -335,7 +336,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		},
 	}
 	change.conditions = append(change.conditions, referenceConditions...)
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		change.mutations = append(change.mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
@@ -349,7 +350,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	applies, err := taskOwnsConnectorRemoval(task)
@@ -410,7 +411,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 			return errs.New(errs.KindStateConflict, "connector deletion replay target is corrupt")
 		}
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if _, err := requireConnectorReferencePrefixesEmpty(
 			ctx, repository.store, task.Target, environmentID, revision,
 		); err != nil {
@@ -451,10 +452,10 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 }
 
 func taskOwnsConnectorRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceConnector {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceConnector {
 		return false, nil
 	}
-	if task.Type != TaskRemove || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
+	if task.Type != taskjournal.TaskRemove || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
 		len(task.Params) != 3 || ids.Validate(ids.KindConnector, task.Target) != nil ||
 		ids.Validate(ids.KindEnvironment, task.Params[TaskConnectorEnvironmentParam]) != nil ||
 		recordcodec.ValidateLabel("connector name", task.Params[TaskConnectorNameParam]) != nil {

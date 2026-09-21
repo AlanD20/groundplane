@@ -6,16 +6,17 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	readRevision int64,
 ) error {
-	if task.Type != TaskRotate {
+	if task.Type != taskjournal.TaskRotate {
 		return nil
 	}
 	keys := []string{
@@ -52,7 +53,7 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 		currentValue.EnvironmentID != task.Target || current.KeyEra != currentValue.KeyEra {
 		return errs.New(errs.KindStateConflict, "backup key rotation terminal replay changed")
 	}
-	if status == TaskStatusCompleted {
+	if status == taskjournal.TaskStatusCompleted {
 		if rotation.State != backupruntime.BackupKeyRotationApplied || len(rotation.NextEncryptedIdentity) != 0 ||
 			current.KeyEra != rotation.NextKeyEra || current.Recipient != rotation.NextRecipient {
 			return errs.New(errs.KindStateConflict, "backup key rotation completion replay changed")

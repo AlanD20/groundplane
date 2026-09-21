@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // validatePendingAbortReplay checks resource state at the aborted Task's
@@ -17,72 +18,72 @@ func (repository *TaskRepository) validatePendingAbortReplay(
 	}
 	if environmentCreation {
 		if err := repository.validateEnvironmentCreationReplay(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		); err != nil {
 			return err
 		}
 	}
 	if environmentRemoval {
 		if err := repository.validateEnvironmentRemovalReplay(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		); err != nil {
 			return err
 		}
 	}
 	if zoneRemoval {
 		if err := repository.validateZoneRemovalReplay(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		); err != nil {
 			return err
 		}
 	}
 	if err := repository.validateAttachTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateBlueprintAttachTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateSecretTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateConnectorTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateRunnerTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateScriptTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateReleaseGroupTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateRemovalTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateBackingZoneTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
 	if err := repository.validateComponentTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}
@@ -92,7 +93,7 @@ func (repository *TaskRepository) validatePendingAbortReplay(
 		return err
 	}
 	if err := repository.validateBackupKeyRotationTaskAcknowledgementReplay(
-		ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+		ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 	); err != nil {
 		return err
 	}

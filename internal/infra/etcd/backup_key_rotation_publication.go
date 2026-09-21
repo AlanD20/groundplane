@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -57,7 +58,7 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	publication.state.plan = backupKeyRotationPublicationPlan{}
 	publication.state.mu.Unlock()
 	defer plan.clear()
-	if task.Type != TaskRotate || task.Executor != TaskExecutorController || task.Status != TaskStatusPending ||
+	if task.Type != taskjournal.TaskRotate || task.Executor != taskjournal.TaskExecutorController || task.Status != taskjournal.TaskStatusPending ||
 		task.Target != plan.record.EnvironmentID || task.ID != plan.record.TaskID || task.OperationID != plan.record.OperationID ||
 		task.Owner.EnvironmentID != plan.record.EnvironmentID || task.CreatedAt.UTC() != plan.record.CreatedAt ||
 		marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != task.ID {

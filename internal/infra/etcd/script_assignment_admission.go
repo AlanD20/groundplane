@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,7 +20,7 @@ func (repository *ScriptRepository) GetScriptExecutionPlan(
 	task TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
 	executionID := task.Params[ScriptExecutionIDParam]
-	if ctx == nil || repository == nil || repository.store == nil || task.Type != TaskScript ||
+	if ctx == nil || repository == nil || repository.store == nil || task.Type != taskjournal.TaskScript ||
 		!validRawScriptExecutionID(executionID) || len(task.Steps) != 1 {
 		return nil, errs.New(errs.KindValidationFailed, "Script execution plan request is invalid")
 	}
@@ -54,8 +55,8 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 	task TaskRecord,
 ) (*agentpb.ExecutionPlan, bool, error) {
 	if ctx == nil || repository == nil || repository.store == nil ||
-		(task.Type != TaskDeploy && task.Type != TaskRollback &&
-			(task.Type != TaskUpdate || task.Params[TaskReleasePublicationParam] == "")) {
+		(task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback &&
+			(task.Type != taskjournal.TaskUpdate || task.Params[TaskReleasePublicationParam] == "")) {
 		return nil, false, errs.New(errs.KindValidationFailed, "release Script execution plan request is invalid")
 	}
 	executionIDs := make(map[string]string)
@@ -86,7 +87,7 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 			record.PlanHash != task.PlanHash {
 			return nil, false, errs.New(errs.KindInternal, "release Script execution record is corrupt")
 		}
-		if task.Type == TaskUpdate {
+		if task.Type == taskjournal.TaskUpdate {
 			if authorityErr := repository.validateBlueprintScriptExecutionAuthority(
 				ctx, task, record, read.ReadRevision,
 			); authorityErr != nil {
@@ -117,10 +118,10 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 }
 
 func scriptAssignmentTaskOwnsPlan(task TaskRecord, plan *agentpb.ExecutionPlan) bool {
-	if task.Type == TaskScript || task.Type == TaskDeploy || task.Type == TaskRollback {
+	if task.Type == taskjournal.TaskScript || task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
 		return true
 	}
-	return task.Type == TaskUpdate && task.Params[TaskReleasePublicationParam] != "" &&
+	return task.Type == taskjournal.TaskUpdate && task.Params[TaskReleasePublicationParam] != "" &&
 		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY && plan.TargetId == task.Target
 }
 
@@ -161,7 +162,7 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 			execution.PlanHash != task.PlanHash || !execution.ActiveReference {
 			return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
 		}
-		if task.Type == TaskScript {
+		if task.Type == taskjournal.TaskScript {
 			if _, err := repository.manualScriptExecutionAuthority(ctx, task, execution, executionRead.ReadRevision); err != nil {
 				return nil, err
 			}

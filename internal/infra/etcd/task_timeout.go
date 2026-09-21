@@ -5,6 +5,7 @@ import (
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -59,7 +60,7 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 			continue
 		}
 		result := TaskResultRecord{
-			Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+			Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 			ReconciliationRequired: true, ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch,
 			ReleaseRecoveryRecordSHA256: assignment.Assignment.Record.ReleaseRecoveryRecordSHA256,
 		}
@@ -75,7 +76,7 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 			agentGeneration,
 			assignment.Task.Record.ID,
 			assignment.Assignment.Record.AssignmentID,
-			TaskStatusTimedOut,
+			taskjournal.TaskStatusTimedOut,
 			result,
 			terminalAt,
 		)
@@ -133,11 +134,11 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 			}
 			continue
 		}
-		if assignment.Executor == TaskExecutorController {
-			_, err = repository.AcknowledgeControllerTask(ctx, taskID, TaskStatusTimedOut, now)
+		if assignment.Executor == taskjournal.TaskExecutorController {
+			_, err = repository.AcknowledgeControllerTask(ctx, taskID, taskjournal.TaskStatusTimedOut, now)
 		} else {
 			result := TaskResultRecord{
-				Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+				Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 				ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
 				ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,
 			}
@@ -155,7 +156,7 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 				assignment.AgentGeneration,
 				taskID,
 				assignment.AssignmentID,
-				TaskStatusTimedOut,
+				taskjournal.TaskStatusTimedOut,
 				result,
 				now,
 			)

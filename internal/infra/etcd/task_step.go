@@ -4,10 +4,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateTaskSteps(steps []TaskStepRecord) error {
+func validateTaskSteps(steps []taskjournal.TaskStepRecord) error {
 	seenSteps := make(map[string]struct{}, len(steps))
 	seenScriptIDs := make(map[string]struct{}, len(steps))
 	seenScriptSlugs := make(map[string]struct{}, len(steps))
@@ -53,11 +54,11 @@ func validateTaskSteps(steps []TaskStepRecord) error {
 	return nil
 }
 
-func cloneTaskSteps(steps []TaskStepRecord) []TaskStepRecord {
+func cloneTaskSteps(steps []taskjournal.TaskStepRecord) []taskjournal.TaskStepRecord {
 	if steps == nil {
 		return nil
 	}
-	cloned := make([]TaskStepRecord, len(steps))
+	cloned := make([]taskjournal.TaskStepRecord, len(steps))
 	copy(cloned, steps)
 	return cloned
 }

@@ -5,6 +5,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
@@ -18,10 +19,12 @@ func ValidateCapabilityTimestamp(field string, value time.Time) error {
 	return recordcodec.ValidateTimestamp(field, value)
 }
 func ValidateCapabilityTaskRecord(record TaskRecord) error { return validateTaskRecord(record) }
-func ValidateCapabilityTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
+func ValidateCapabilityTaskResult(result TaskResultRecord, steps []taskjournal.TaskStepRecord, status taskjournal.TaskStatus) error {
 	return validateTaskResult(result, steps, status)
 }
-func IsCapabilityTerminalTaskStatus(status TaskStatus) bool        { return isTerminalTaskStatus(status) }
+func IsCapabilityTerminalTaskStatus(status taskjournal.TaskStatus) bool {
+	return isTerminalTaskStatus(status)
+}
 func ValidateCapabilityVolumeComposeKey(key string) error          { return volumeidentity.ValidateKey(key) }
 func EncodeCapabilityTaskRecord(record TaskRecord) ([]byte, error) { return encodeTaskRecord(record) }
 func DecodeCapabilityTaskRecord(value []byte) (TaskRecord, error)  { return decodeTaskRecord(value) }
@@ -50,10 +53,10 @@ func CapabilityTaskOperationIndexKey(operationID, taskID string) string {
 func CapabilityTaskActiveOperationKey(operationID string) string {
 	return taskActiveOperationKey(operationID)
 }
-func CapabilityTaskQueueKey(executor TaskExecutor, taskID string) string {
+func CapabilityTaskQueueKey(executor taskjournal.TaskExecutor, taskID string) string {
 	return taskQueueKey(executor, taskID)
 }
-func CapabilityTaskExecutionClaimKey(executor TaskExecutor, agentID, taskID string) string {
+func CapabilityTaskExecutionClaimKey(executor taskjournal.TaskExecutor, agentID, taskID string) string {
 	return taskExecutionClaimKey(executor, agentID, taskID)
 }
 func CapabilityTaskAssignmentIndexKey(taskID string) string { return taskAssignmentIndexKey(taskID) }
@@ -73,6 +76,6 @@ func CloneCapabilityRetryTask(source TaskRecord, id string, actor TaskActor, cre
 	return cloneRetryTask(source, id, actor, createdAt)
 }
 
-func TransitionCapabilityTaskStatus(record TaskRecord, expected, next TaskStatus, at time.Time) (TaskRecord, error) {
+func TransitionCapabilityTaskStatus(record TaskRecord, expected, next taskjournal.TaskStatus, at time.Time) (TaskRecord, error) {
 	return transitionTaskStatus(record, expected, next, at)
 }

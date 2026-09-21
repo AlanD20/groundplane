@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -32,7 +33,7 @@ func (service *Service) prepareReleaseHooks(
 	}
 	selectionScope := scope.Clone()
 	selectionScope.ReadRevision = revision
-	preSteps, postSteps, failureSteps := []etcd.TaskStepRecord{}, []etcd.TaskStepRecord{}, []etcd.TaskStepRecord{}
+	preSteps, postSteps, failureSteps := []taskjournal.TaskStepRecord{}, []taskjournal.TaskStepRecord{}, []taskjournal.TaskStepRecord{}
 	sourcesByExecution := make(map[string]etcd.ScriptExecutionSources)
 	bodyBytes := uint64(0)
 	for memberIndex := range members {
@@ -79,7 +80,7 @@ func (service *Service) prepareReleaseHooks(
 			bodyBytes += uint64(hook.BodySize)
 			task.Params[etcd.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
 			task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] = executionID
-			step := etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID}
+			step := taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID}
 			switch hook.When {
 			case core.ScriptPreDeploy, core.ScriptPreRollback:
 				preSteps = append(preSteps, step)

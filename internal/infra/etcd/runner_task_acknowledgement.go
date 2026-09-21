@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,14 +20,14 @@ type runnerTaskChange struct {
 func (repository *TaskRepository) prepareRunnerTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (runnerTaskChange, error) {
 	applies, err := taskOwnsRunner(task)
 	if err != nil || !applies {
 		return runnerTaskChange{}, err
 	}
-	if task.Type == TaskCreate {
+	if task.Type == taskjournal.TaskCreate {
 		return repository.prepareRunnerCreationAcknowledgement(ctx, task, terminalStatus, revision)
 	}
 	return repository.prepareRunnerRemovalAcknowledgement(ctx, task, terminalStatus, revision)
@@ -35,7 +36,7 @@ func (repository *TaskRepository) prepareRunnerTaskAcknowledgement(
 func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (runnerTaskChange, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -58,7 +59,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		return runnerTaskChange{}, err
 	}
 	proofValue := result.Values[4]
-	if terminalStatus == TaskStatusCompleted || proofValue != nil {
+	if terminalStatus == taskjournal.TaskStatusCompleted || proofValue != nil {
 		if result.Values[3] == nil || proofValue == nil || record.ContainerID == "" {
 			return runnerTaskChange{}, errs.New(errs.KindStateConflict, "exact runner readiness proof is required")
 		}
@@ -75,7 +76,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 			)
 		}
 	}
-	replacement, err := runnerrecord.CompleteRunnerProvisioning(record, task.ID, terminalStatus == TaskStatusCompleted)
+	replacement, err := runnerrecord.CompleteRunnerProvisioning(record, task.ID, terminalStatus == taskjournal.TaskStatusCompleted)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -125,7 +126,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (runnerTaskChange, error) {
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -194,7 +195,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			{Type: etcdstore.MutationDelete, Key: runnerRemovalIntentKey(task.Target)},
 		},
 	}
-	if terminalStatus != TaskStatusCompleted {
+	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return change, nil
 	}
 	if base.Values[5] != nil {

@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -64,7 +65,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 	if err != nil {
 		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
-	if !applies || task.ID != taskID || task.Status != TaskStatusRunning {
+	if !applies || task.ID != taskID || task.Status != taskjournal.TaskStatusRunning {
 		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"runner readiness task is not running",

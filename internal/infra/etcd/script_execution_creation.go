@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -22,7 +23,7 @@ func NewScriptExecutionRecord(
 	if err != nil {
 		return ScriptExecutionRecord{}, err
 	}
-	if task.Type != TaskScript || len(records) != 1 {
+	if task.Type != taskjournal.TaskScript || len(records) != 1 {
 		for index := range records {
 			clear(records[index].Plan)
 			clear(records[index].Snapshot)
@@ -44,12 +45,12 @@ func NewScriptExecutionRecords(
 	if err != nil {
 		return nil, err
 	}
-	releaseTask := task.Type == TaskDeploy || task.Type == TaskRollback ||
-		(task.Type == TaskUpdate && blueprintScriptTaskShape(task) &&
+	releaseTask := task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback ||
+		(task.Type == taskjournal.TaskUpdate && blueprintScriptTaskShape(task) &&
 			validated.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY &&
 			validated.TargetId == task.Target)
-	if task.Executor != TaskExecutorAgent || task.Status != TaskStatusPending ||
-		(!releaseTask && task.Type != TaskScript) || len(validated.ScriptRunnerSnapshots) == 0 ||
+	if task.Executor != taskjournal.TaskExecutorAgent || task.Status != taskjournal.TaskStatusPending ||
+		(!releaseTask && task.Type != taskjournal.TaskScript) || len(validated.ScriptRunnerSnapshots) == 0 ||
 		len(validated.ScriptRunnerSnapshots) != len(validated.ScriptBodyArtifacts) ||
 		validated.RenderGeneration > math.MaxInt32 || task.PlanID != validated.PlanId ||
 		task.RenderGeneration != int32(validated.RenderGeneration) ||
@@ -80,7 +81,7 @@ func NewScriptExecutionRecords(
 		if snapshot == nil || snapshot.SnapshotId != run.RunnerSnapshotId {
 			return nil, errs.New(errs.KindValidationFailed, "RunScript snapshot is missing")
 		}
-		if task.Type == TaskScript && (task.Target != run.ScriptId || len(validated.Steps) != 1 ||
+		if task.Type == taskjournal.TaskScript && (task.Target != run.ScriptId || len(validated.Steps) != 1 ||
 			task.TimeoutSeconds != executionplan.ScriptExecutionTimeoutSeconds ||
 			task.Params[ScriptExecutionIDParam] != run.ScriptExecutionId ||
 			task.Params[ScriptGenerationParam] != strconv.FormatUint(run.ScriptGeneration, 10)) {

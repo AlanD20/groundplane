@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
@@ -81,7 +82,7 @@ func validateBlueprintCandidateManifest(
 }
 
 func blueprintCandidateCompensationResult(task TaskRecord, result TaskResultRecord) (*TaskResultRecord, error) {
-	if result.FailedStepID == "" && result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect {
+	if result.FailedStepID == "" && result.Diagnostic == taskjournal.TaskResultDiagnosticTimeoutBeforeEffect {
 		return nil, nil
 	}
 	if result.FailedStepID == "" || !taskContainsStep(task, result.FailedStepID) {

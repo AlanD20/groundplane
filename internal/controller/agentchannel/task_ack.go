@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -80,7 +81,7 @@ func (s *Server) acknowledge(
 		}
 	}
 	environmentTarget := ids.Validate(ids.KindEnvironment, task.Record.Target) == nil
-	environmentCreation := task.Record.Type == etcd.TaskCreate && environmentTarget
+	environmentCreation := task.Record.Type == taskjournal.TaskCreate && environmentTarget
 	if s.plans == nil {
 		return taskReportRejected, errs.New(errs.KindInternal, "Agent Task plan resolver is not configured")
 	}
@@ -106,16 +107,16 @@ func (s *Server) acknowledge(
 			"Agent Task acknowledgement plan hash does not match",
 		)
 	}
-	var terminal etcd.TaskStatus
+	var terminal taskjournal.TaskStatus
 	switch acknowledgement.Terminal {
 	case agentpb.TaskTerminal_TASK_TERMINAL_COMPLETED:
-		terminal = etcd.TaskStatusCompleted
+		terminal = taskjournal.TaskStatusCompleted
 	case agentpb.TaskTerminal_TASK_TERMINAL_FAILED:
-		terminal = etcd.TaskStatusFailed
+		terminal = taskjournal.TaskStatusFailed
 	case agentpb.TaskTerminal_TASK_TERMINAL_TIMED_OUT:
-		terminal = etcd.TaskStatusTimedOut
+		terminal = taskjournal.TaskStatusTimedOut
 	case agentpb.TaskTerminal_TASK_TERMINAL_ABORTED:
-		terminal = etcd.TaskStatusAborted
+		terminal = taskjournal.TaskStatusAborted
 	default:
 		return taskReportRejected, errs.New(
 			errs.KindValidationFailed,

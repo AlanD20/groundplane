@@ -6,6 +6,7 @@ import (
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -29,43 +30,43 @@ func platformComponentTaskActiveKey(componentID string) string {
 func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRecord {
 	return TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
-		Owner: PlatformTaskOwner(), Actor: TaskActorSystem, Executor: TaskExecutorAgent,
-		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: TaskUpdate, Target: componentID,
+		Owner: PlatformTaskOwner(), Actor: TaskActorSystem, Executor: taskjournal.TaskExecutorAgent,
+		PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, Type: taskjournal.TaskUpdate, Target: componentID,
 		Params: map[string]string{
 			TaskResourceKindParam:       TaskResourceComponent,
 			TaskAutomaticReconcileParam: "true",
 		},
-		Steps: []TaskStepRecord{
-			{Kind: TaskStepOperation, ID: ids.New(ids.KindStep)}, {Kind: TaskStepOperation, ID: ids.New(ids.KindStep)},
+		Steps: []taskjournal.TaskStepRecord{
+			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}, {Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		}, TimeoutSeconds: 480,
-		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 }
 
-func platformResolverTaskSteps(input PlatformComponentTaskRenderInput) []TaskStepRecord {
+func platformResolverTaskSteps(input PlatformComponentTaskRenderInput) []taskjournal.TaskStepRecord {
 	count := 2
 	if input.EnsureService {
 		count = 4
 	} else if input.DisableService {
 		count = 2
 	}
-	steps := make([]TaskStepRecord, count)
+	steps := make([]taskjournal.TaskStepRecord, count)
 	for index := range steps {
-		steps[index] = TaskStepRecord{Kind: TaskStepOperation, ID: ids.New(ids.KindStep)}
+		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	return steps
 }
 
 func isPlatformDNSResolverTask(task TaskRecord) bool {
 	return task.Owner == PlatformTaskOwner() && task.Actor == TaskActorSystem &&
-		task.Executor == TaskExecutorAgent && task.Type == TaskUpdate &&
+		task.Executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskUpdate &&
 		task.Params[TaskResourceKindParam] == TaskResourceComponent &&
 		task.Params[TaskAutomaticReconcileParam] == "true" &&
 		ids.Validate(ids.KindComponent, task.Target) == nil
 }
 
 func isPlatformDNSResolverTaskAttempt(task TaskRecord) bool {
-	if task.Owner != PlatformTaskOwner() || task.Executor != TaskExecutorAgent || task.Type != TaskUpdate ||
+	if task.Owner != PlatformTaskOwner() || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate ||
 		task.Params[TaskResourceKindParam] != TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return false
@@ -87,7 +88,7 @@ func clearHostResolutionReconciliationChange(change hostResolutionReconciliation
 func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 	baseConditions []etcdstore.Condition,
 	platformChange platformComponentTaskChange,

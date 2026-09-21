@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"math"
@@ -15,7 +16,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
-	if resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove ||
+	if resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 || len(task.Materializations) != 0 ||
 		(len(task.Params) != 1 && len(task.Params) != 4) {

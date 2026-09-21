@@ -3,6 +3,7 @@ package etcd
 import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -19,7 +20,7 @@ func cloneRetryTask(source TaskRecord, id string, actor TaskActor, createdAt tim
 			"Controller update requires a fresh explicit release selection",
 		)
 	}
-	if source.Status != TaskStatusFailed && source.Status != TaskStatusTimedOut && source.Status != TaskStatusAborted {
+	if source.Status != taskjournal.TaskStatusFailed && source.Status != taskjournal.TaskStatusTimedOut && source.Status != taskjournal.TaskStatusAborted {
 		return TaskRecord{}, errs.Newf(
 			errs.KindTaskNotRetryable,
 			"task %s has status %s",
@@ -46,7 +47,7 @@ func cloneRetryTask(source TaskRecord, id string, actor TaskActor, createdAt tim
 		Materializations:                materializationrecord.Clone(source.Materializations),
 		EntryRuntime:                    cloneEntryTaskRuntime(source.EntryRuntime),
 		Configuration:                   cloneTaskConfiguration(source.Configuration),
-		Status:                          TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
+		Status:                          taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	if err := validateTaskRecord(retry); err != nil {
 		return TaskRecord{}, err

@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
@@ -49,7 +50,7 @@ func (dispatcher *HierarchyDispatcher) Execute(
 }
 
 func validateHierarchyDeletionTask(task etcd.TaskRecord) error {
-	if task.Executor != etcd.TaskExecutorController || task.Type != etcd.TaskRemove ||
+	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindTask, task.ID) != nil || len(task.Params) != 3 ||
 		task.Params[etcd.TaskHierarchyDeletionOperationParam] == "" {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion Controller Task is invalid")

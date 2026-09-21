@@ -14,6 +14,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"net/netip"
@@ -357,11 +358,11 @@ func (service *CreationService) createBackingServiceFromStage(
 	task := etcd.TaskRecord{
 		ID: stage.Record.TaskID, OperationID: allocator.Named(ids.KindOperation, "operation"),
 		IdempotencyKey: stage.Record.Locator.Key, Owner: owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: planID,
-		RenderGeneration: 1, Type: etcd.TaskUpdate, Target: environment.ID,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: planID,
+		RenderGeneration: 1, Type: taskjournal.TaskUpdate, Target: environment.ID,
 		Params: taskParams, Steps: stepRecords,
 		Materializations: materializations,
-		TimeoutSeconds:   desiredrevision.TaskTimeoutSeconds, Status: etcd.TaskStatusPending,
+		TimeoutSeconds:   desiredrevision.TaskTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: stage.Record.CreatedAt, UpdatedAt: stage.Record.CreatedAt,
 	}
 	var hookInputs *etcd.BackingHookEncryptedInputs
@@ -386,8 +387,8 @@ func (service *CreationService) createBackingServiceFromStage(
 			}
 		}
 		task.Params[etcd.TaskBackingServiceAfterStartParam] = serviceID
-		task.Steps = append(task.Steps, etcd.TaskStepRecord{
-			Kind: etcd.TaskStepOperation, ID: allocator.Named(ids.KindStep, "backing-after-start"),
+		task.Steps = append(task.Steps, taskjournal.TaskStepRecord{
+			Kind: taskjournal.TaskStepOperation, ID: allocator.Named(ids.KindStep, "backing-after-start"),
 		})
 		minimumTimeout := int64(desiredService.Hooks.AfterStart.TimeoutSeconds) + 30
 		if task.TimeoutSeconds < minimumTimeout {

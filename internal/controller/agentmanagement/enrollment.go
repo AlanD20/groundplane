@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"maps"
 	"net/http"
 	"time"
@@ -254,10 +255,10 @@ func (service *agentEnrollmentService) newTask(
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation),
 		Owner: etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: etcd.TaskExecutorController,
+		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: planHash, RenderGeneration: 1,
-		Type: etcd.TaskCreate, Target: agentID, Params: params,
-		TimeoutSeconds: agentEnrollmentTimeoutSeconds, Status: etcd.TaskStatusPending,
+		Type: taskjournal.TaskCreate, Target: agentID, Params: params,
+		TimeoutSeconds: agentEnrollmentTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil
 }

@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -217,8 +218,8 @@ func validateConnectorDeletionEnvelope(
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || intent.TaskID != task.ID ||
 		intent.EnvironmentID != connector.EnvironmentID || intent.ConnectorID != connector.ID ||
 		intent.ConnectorRevision != current.Revision || !intent.CreatedAt.Equal(task.CreatedAt) ||
-		task.Executor != TaskExecutorController || task.Type != TaskRemove || task.Target != connector.ID ||
-		task.Status != TaskStatusPending || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
+		task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove || task.Target != connector.ID ||
+		task.Status != taskjournal.TaskStatusPending || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||
 		task.IdempotencyKey == "" || task.IdempotencyKey != marker.Locator.Key || len(task.Params) != 3 ||
 		task.Params[TaskResourceKindParam] != TaskResourceConnector ||
 		task.Params[TaskConnectorEnvironmentParam] != connector.EnvironmentID ||

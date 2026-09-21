@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"sort"
 	"time"
@@ -39,13 +40,13 @@ type EnvironmentBlueprintAttachCandidateInput struct {
 // BlueprintAttachTaskIntent is the non-secret, task-owned lifecycle manifest
 // for every Attach introduced by one Blueprint application.
 type BlueprintAttachTaskIntent struct {
-	TaskID               string                `json:"task_id"`
-	EnvironmentID        string                `json:"environment_id"`
-	Status               TaskStatus            `json:"status"`
-	OwnsEnvironmentFence bool                  `json:"owns_environment_fence"`
-	Candidates           []attachrecord.Record `json:"candidates"`
-	CreatedAt            time.Time             `json:"created_at"`
-	TerminalAt           *time.Time            `json:"terminal_at,omitempty"`
+	TaskID               string                 `json:"task_id"`
+	EnvironmentID        string                 `json:"environment_id"`
+	Status               taskjournal.TaskStatus `json:"status"`
+	OwnsEnvironmentFence bool                   `json:"owns_environment_fence"`
+	Candidates           []attachrecord.Record  `json:"candidates"`
+	CreatedAt            time.Time              `json:"created_at"`
+	TerminalAt           *time.Time             `json:"terminal_at,omitempty"`
 }
 
 // BlueprintAttachTaskPreparation is immutable publication input. Ciphertext
@@ -94,7 +95,7 @@ func PrepareEnvironmentBlueprintAttachTask(
 	}
 	preparation := BlueprintAttachTaskPreparation{
 		Intent: BlueprintAttachTaskIntent{
-			TaskID: taskID, EnvironmentID: environmentID, Status: TaskStatusPending,
+			TaskID: taskID, EnvironmentID: environmentID, Status: taskjournal.TaskStatusPending,
 			OwnsEnvironmentFence: ownsEnvironmentFence, CreatedAt: createdAt.UTC(),
 		},
 		candidates: cloneEnvironmentBlueprintAttachCandidateInputs(inputs),
@@ -172,10 +173,10 @@ func decodeBlueprintAttachTaskIntent(value []byte) (BlueprintAttachTaskIntent, e
 
 func terminalBlueprintAttachTaskIntent(
 	intent BlueprintAttachTaskIntent,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (BlueprintAttachTaskIntent, error) {
-	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) || terminalAt.IsZero() {
+	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) || terminalAt.IsZero() {
 		return BlueprintAttachTaskIntent{}, errs.New(errs.KindStateConflict, "Blueprint Attach intent is not pending")
 	}
 	terminal := intent
@@ -353,7 +354,7 @@ func validateBlueprintAttachTaskIntent(intent BlueprintAttachTaskIntent) error {
 		len(intent.Candidates) == 0 {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach Task intent is invalid")
 	}
-	if intent.Status == TaskStatusPending {
+	if intent.Status == taskjournal.TaskStatusPending {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "Pending Blueprint Attach intent has a terminal timestamp")
 		}

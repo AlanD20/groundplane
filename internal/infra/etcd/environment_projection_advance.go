@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -27,7 +28,7 @@ func validateEnvironmentComposeProjectionPublicationAdvance(
 	task TaskRecord,
 ) error {
 	removedVolumeID := ""
-	if task.Type == TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
+	if task.Type == taskjournal.TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
 		removedVolumeID = task.Target
 		if recordcodec.ValidateID(ids.KindVolume, removedVolumeID) != nil {
 			return errs.New(errs.KindValidationFailed, "Volume removal Task target is invalid")

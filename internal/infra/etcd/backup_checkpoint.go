@@ -8,6 +8,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -96,7 +97,7 @@ type backupCheckpointPlan struct {
 }
 
 type backupCheckpointBinding struct {
-	taskType TaskType
+	taskType taskjournal.TaskType
 	ordinal  uint32
 	pointID  string
 }
@@ -174,7 +175,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 	if err != nil || task.ID != input.TaskID {
 		return backupCheckpointPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	if task.Status != TaskStatusRunning || !taskContainsStep(task, input.StepID) {
+	if task.Status != taskjournal.TaskStatusRunning || !taskContainsStep(task, input.StepID) {
 		return backupCheckpointPlan{}, errs.New(
 			errs.KindStateConflict,
 			"backup task assignment changed",
@@ -343,7 +344,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 }
 
 func validateBackupCheckpointBinding(binding backupCheckpointBinding) error {
-	if (binding.taskType != TaskBackup && binding.taskType != TaskBackupPrune) ||
+	if (binding.taskType != taskjournal.TaskBackup && binding.taskType != taskjournal.TaskBackupPrune) ||
 		recordcodec.ValidateID(ids.KindRecoveryPoint, binding.pointID) != nil {
 		return errs.New(errs.KindValidationFailed, "backup checkpoint binding is invalid")
 	}
@@ -378,7 +379,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 	if err != nil || task.ID != input.TaskID {
 		return nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	if task.Status != TaskStatusRunning || !taskContainsStep(task, input.StepID) {
+	if task.Status != taskjournal.TaskStatusRunning || !taskContainsStep(task, input.StepID) {
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
 	claimKey := taskExecutionClaimKey(task.Executor, input.AgentID, input.TaskID)

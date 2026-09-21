@@ -4,6 +4,7 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -57,7 +58,7 @@ func (repository *HierarchyRepository) prepareDesiredScriptRemoval(
 		removal.entryIDs = append(removal.entryIDs, entry.Entry.ID)
 		removal.conditions = append(removal.conditions, fences...)
 	}
-	if task.Type == TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
+	if task.Type == taskjournal.TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
 		// The advance validator above already proves that no other Volume is
 		// omitted. Preserve that closed explicit-removal authority here.
 		for _, volume := range previous.Record.Volumes {

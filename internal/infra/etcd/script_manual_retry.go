@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
@@ -13,13 +14,13 @@ import (
 
 func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	ctx context.Context, task TaskRecord, execution ScriptExecutionRecord,
-	executionValue, rootValue *etcdstore.KeyValue, status TaskStatus, terminalAt *time.Time,
+	executionValue, rootValue *etcdstore.KeyValue, status taskjournal.TaskStatus, terminalAt *time.Time,
 ) (scriptTerminalSourceRelease, error) {
 	if execution.State != ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
 		!execution.ActiveReference || execution.ReconciliationRequired {
 		return scriptTerminalSourceRelease{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
 	}
-	terminal, err := transitionTaskStatus(task, TaskStatusRunning, status, *terminalAt)
+	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, status, *terminalAt)
 	if err != nil || terminal.RetainUntil == nil || terminal.FinishedAt == nil {
 		return scriptTerminalSourceRelease{}, corruptTaskAssignment()
 	}
@@ -49,10 +50,10 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 func (repository *TaskRepository) prepareManualScriptRetry(
 	ctx context.Context, source, retry TaskRecord, revision int64,
 ) (scriptTaskChange, error) {
-	if (source.Status != TaskStatusFailed && source.Status != TaskStatusTimedOut) || source.RetainUntil == nil ||
+	if (source.Status != taskjournal.TaskStatusFailed && source.Status != taskjournal.TaskStatusTimedOut) || source.RetainUntil == nil ||
 		!retry.CreatedAt.Before(
 			*source.RetainUntil,
-		) || retry.Type != TaskScript || retry.OperationID != source.OperationID ||
+		) || retry.Type != taskjournal.TaskScript || retry.OperationID != source.OperationID ||
 		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash || retry.Target != source.Target ||
 		retry.Params[ScriptExecutionIDParam] != source.Params[ScriptExecutionIDParam] ||
 		len(source.Steps) != 1 || len(retry.Steps) != 1 || retry.Steps[0].ID != source.Steps[0].ID {

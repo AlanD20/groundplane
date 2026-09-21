@@ -9,15 +9,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func durableEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultRecord {
 	return etcd.TaskResultRecord{
-		Kind: etcd.TaskResultEnvironmentDirectory, ExitCode: acknowledgement.GetExitCode(),
+		Kind: taskjournal.TaskResultEnvironmentDirectory, ExitCode: acknowledgement.GetExitCode(),
 		FailedStepID: acknowledgement.GetEnvironmentDirectoryResult().GetFailedStepId(),
-		Diagnostic:   etcd.TaskResultDiagnosticNone,
+		Diagnostic:   taskjournal.TaskResultDiagnosticNone,
 	}
 }
 
@@ -41,17 +42,17 @@ func validateEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) er
 
 func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultRecord {
 	result := acknowledgement.GetComposeResult()
-	diagnostic := etcd.TaskResultDiagnosticNone
+	diagnostic := taskjournal.TaskResultDiagnosticNone
 	switch result.GetDiagnostic() {
 	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_CONFIG_REJECTED,
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED:
-		diagnostic = etcd.TaskResultDiagnosticConfigRejected
+		diagnostic = taskjournal.TaskResultDiagnosticConfigRejected
 	case agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPOSE_FAILED,
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED:
-		diagnostic = etcd.TaskResultDiagnosticComposeFailed
+		diagnostic = taskjournal.TaskResultDiagnosticComposeFailed
 	}
 	durable := etcd.TaskResultRecord{
-		Kind: etcd.TaskResultCompose, ExitCode: acknowledgement.GetExitCode(),
+		Kind: taskjournal.TaskResultCompose, ExitCode: acknowledgement.GetExitCode(),
 		FailedStepID: result.GetFailedStepId(), Diagnostic: diagnostic,
 		ReconciliationRequired: result.GetReconciliationRequired(),
 		Projects:               make([]etcd.TaskObservedProjectSummary, len(result.GetProjects())),

@@ -5,6 +5,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -29,11 +30,11 @@ func (repository *TaskRepository) prepareEnvironmentTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (environmentTaskChange, error) {
-	if source.Executor == TaskExecutorAgent && source.Type == TaskRemove &&
+	if source.Executor == taskjournal.TaskExecutorAgent && source.Type == taskjournal.TaskRemove &&
 		ids.Validate(ids.KindEnvironment, source.Target) == nil {
 		return repository.prepareEnvironmentRemovalTaskRetry(ctx, source, retry, revision)
 	}
-	if source.Executor != TaskExecutorAgent || source.Type != TaskCreate ||
+	if source.Executor != taskjournal.TaskExecutorAgent || source.Type != taskjournal.TaskCreate ||
 		ids.Validate(ids.KindEnvironment, source.Target) != nil {
 		return environmentTaskChange{}, nil
 	}

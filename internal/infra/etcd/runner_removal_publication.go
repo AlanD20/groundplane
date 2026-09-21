@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -221,8 +222,8 @@ func validateRunnerDeletionTask(
 		tombstone.TargetID != current.Record.Desired.ID || tombstone.TargetRevision != current.Revision ||
 		tombstone.TaskID != task.ID || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
-		task.Executor != TaskExecutorController || task.Type != TaskRemove ||
-		task.Target != current.Record.Desired.ID || task.Status != TaskStatusPending ||
+		task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
+		task.Target != current.Record.Desired.ID || task.Status != taskjournal.TaskStatusPending ||
 		evidenceErr != nil || !evidence.matchesRecord(current.Record) {
 		return errs.New(errs.KindValidationFailed, "runner removal task and tombstone do not match")
 	}

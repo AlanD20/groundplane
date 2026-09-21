@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -35,17 +36,17 @@ func (repository *TaskRepository) AbortPendingTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		if current.Record.Type == TaskBackup || current.Record.Type == TaskBackupPrune {
+		if current.Record.Type == taskjournal.TaskBackup || current.Record.Type == taskjournal.TaskBackupPrune {
 			return repository.abortPendingBackupTask(ctx, taskID, terminalAt)
 		}
-		environmentCreation := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskCreate &&
+		environmentCreation := current.Record.Executor == taskjournal.TaskExecutorAgent && current.Record.Type == taskjournal.TaskCreate &&
 			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
-		environmentRemoval := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskRemove &&
+		environmentRemoval := current.Record.Executor == taskjournal.TaskExecutorAgent && current.Record.Type == taskjournal.TaskRemove &&
 			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
-		zoneRemoval := current.Record.Executor == TaskExecutorAgent && current.Record.Type == TaskRemove &&
+		zoneRemoval := current.Record.Executor == taskjournal.TaskExecutorAgent && current.Record.Type == taskjournal.TaskRemove &&
 			recordcodec.ValidateID(ids.KindNetwork, current.Record.Target) == nil &&
 			current.Record.Params[TaskZoneRemovalOperationParam] != ""
-		if current.Record.Status == TaskStatusAborted {
+		if current.Record.Status == taskjournal.TaskStatusAborted {
 			if err := repository.validatePendingAbortReplay(
 				ctx, current, environmentCreation, environmentRemoval, zoneRemoval,
 			); err != nil {
@@ -53,7 +54,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			}
 			return repository.finishUnassignedReleaseAbort(ctx, current)
 		}
-		if current.Record.Status != TaskStatusPending {
+		if current.Record.Status != taskjournal.TaskStatusPending {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"only a pending Task can be aborted before assignment",
@@ -69,14 +70,14 @@ func (repository *TaskRepository) AbortPendingTask(
 		if blueprintAbortChange.applies {
 			terminalAt = blueprintAbortChange.terminalAt
 		}
-		terminal, err := transitionTaskStatus(current.Record, TaskStatusPending, TaskStatusAborted, terminalAt)
+		terminal, err := transitionTaskStatus(current.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, terminalAt)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		terminalAt = *terminal.FinishedAt
 		transitionedMarker, markerKey, retentionKey, err := prepareTerminalTaskMarker(
 			current.Record,
-			TaskStatusAborted,
+			taskjournal.TaskStatusAborted,
 			terminalAt,
 		)
 		if err != nil {
@@ -163,7 +164,7 @@ func (repository *TaskRepository) AbortPendingTask(
 				repository.prepareEnvironmentCreationAcknowledgement(
 					ctx,
 					current.Record,
-					TaskStatusAborted,
+					taskjournal.TaskStatusAborted,
 					current.ReadRevision,
 				)
 			if prepareErr != nil {
@@ -180,7 +181,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		if environmentRemoval {
 			environmentConditions, environmentMutations, prepareErr :=
 				repository.prepareEnvironmentRemovalAcknowledgement(
-					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+					ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 				)
 			if prepareErr != nil {
 				clear(terminalValue)
@@ -196,7 +197,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		var zoneMutations []etcdstore.Mutation
 		if zoneRemoval {
 			zoneConditions, preparedZoneMutations, prepareErr := repository.prepareZoneRemovalAcknowledgement(
-				ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+				ctx, current.Record, taskjournal.TaskStatusAborted, terminalAt, current.ReadRevision,
 			)
 			if prepareErr != nil {
 				clear(terminalValue)
@@ -211,7 +212,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = append(mutations, zoneMutations...)
 		}
 		attachChange, err := repository.prepareAttachTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -227,7 +228,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = append(mutations, attachChange.mutations...)
 		}
 		blueprintAttachChange, err := repository.prepareBlueprintAttachTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -245,7 +246,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = append(mutations, blueprintAttachChange.mutations...)
 		}
 		secretChange, err := repository.prepareSecretTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -258,7 +259,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		scriptChange, err := repository.prepareScriptTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -272,7 +273,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		releaseGroupChange, err := repository.prepareReleaseGroupTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -292,7 +293,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = append(mutations, releaseGroupChange.mutations...)
 		}
 		routeChange, err := repository.prepareRemovalTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -321,7 +322,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -337,7 +338,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		componentChange, err := repository.prepareComponentTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -378,7 +379,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = append(mutations, componentChange.mutations...)
 		}
 		platformComponentChange, err := repository.preparePlatformComponentTaskAcknowledgement(
-			ctx, terminal, TaskStatusAborted, nil, current.ReadRevision,
+			ctx, terminal, taskjournal.TaskStatusAborted, nil, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -401,7 +402,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		}
 		hostResolutionBaseConditionCount := len(conditions)
 		hostResolutionChange, err := repository.prepareHostResolutionReconciliation(
-			ctx, terminal, TaskStatusAborted, current.ReadRevision, conditions, platformComponentChange,
+			ctx, terminal, taskjournal.TaskStatusAborted, current.ReadRevision, conditions, platformComponentChange,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -425,7 +426,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = append(mutations, hostResolutionChange.mutations...)
 		}
 		connectorChange, err := repository.prepareConnectorTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -448,7 +449,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = append(mutations, connectorChange.mutations...)
 		}
 		runnerChange, err := repository.prepareRunnerTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, current.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)
@@ -472,7 +473,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = append(mutations, runnerChange.mutations...)
 		}
 		rotationChange, err := repository.prepareBackupKeyRotationTaskAcknowledgement(
-			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
+			ctx, current.Record, taskjournal.TaskStatusAborted, terminalAt, current.ReadRevision,
 		)
 		if err != nil {
 			clearPlatformComponentTaskChange(platformComponentChange)

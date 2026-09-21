@@ -2,6 +2,7 @@ package controllerupgrade
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
 	"math"
 	"sync"
@@ -73,7 +74,7 @@ type nativeOperation struct {
 	resume   func()
 	cancel   context.CancelFunc
 	aborted  bool
-	settled  etcd.TaskStatus
+	settled  taskjournal.TaskStatus
 }
 
 func NewCoordinator(dependencies Dependencies) (*Coordinator, error) {
@@ -93,7 +94,7 @@ func NewCoordinator(dependencies Dependencies) (*Coordinator, error) {
 // launches a process; storage and the immutable Task restore admission first.
 func (coordinator *Coordinator) Restore(ctx context.Context, claim etcd.TaskAssignment) error {
 	assignment := claim.Assignment.Record
-	if assignment.Executor != etcd.TaskExecutorController || assignment.TaskID != claim.Task.Record.ID {
+	if assignment.Executor != taskjournal.TaskExecutorController || assignment.TaskID != claim.Task.Record.ID {
 		return errs.New(errs.KindValidationFailed, "native controller update claim is invalid")
 	}
 	expected, err := DecodeTask(claim.Task.Record, assignment.AssignedAt, assignment.Deadline)
@@ -131,7 +132,7 @@ func (coordinator *Coordinator) Restore(ctx context.Context, claim etcd.TaskAssi
 
 func (coordinator *Coordinator) Execute(
 	ctx context.Context, task etcd.TaskRecord, deadline time.Time,
-) (etcd.TaskStatus, error) {
+) (taskjournal.TaskStatus, error) {
 	coordinator.mu.Lock()
 	operation := coordinator.active
 	if operation == nil || operation.expected.TaskID != task.ID || !operation.expected.Deadline.Equal(deadline) {
@@ -166,7 +167,7 @@ func (coordinator *Coordinator) Execute(
 	case upgrade.PhaseRolledBack, upgrade.PhaseRecovered:
 		return coordinator.recoverPredecessor(ctx, operation, journal.Phase)
 	case upgrade.PhaseCancelled:
-		return coordinator.settle(operation, etcd.TaskStatusAborted), nil
+		return coordinator.settle(operation, taskjournal.TaskStatusAborted), nil
 	default:
 		return "", errs.New(errs.KindInternal, "native controller update phase is invalid")
 	}
@@ -194,11 +195,11 @@ func (coordinator *Coordinator) current(
 	return journal, true, nil
 }
 
-func (coordinator *Coordinator) settle(operation *nativeOperation, status etcd.TaskStatus) etcd.TaskStatus {
+func (coordinator *Coordinator) settle(operation *nativeOperation, status taskjournal.TaskStatus) taskjournal.TaskStatus {
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
-	if operation.aborted && status != etcd.TaskStatusCompleted {
-		status = etcd.TaskStatusAborted
+	if operation.aborted && status != taskjournal.TaskStatusCompleted {
+		status = taskjournal.TaskStatusAborted
 	}
 	operation.settled = status
 	if operation.resume != nil {
@@ -207,7 +208,7 @@ func (coordinator *Coordinator) settle(operation *nativeOperation, status etcd.T
 	return status
 }
 
-func (coordinator *Coordinator) handoff(ctx context.Context, operation *nativeOperation) (etcd.TaskStatus, error) {
+func (coordinator *Coordinator) handoff(ctx context.Context, operation *nativeOperation) (taskjournal.TaskStatus, error) {
 	// The transient predecessor service must stop this process. Never ACK from
 	// the outgoing process, and never wait unboundedly if the manager is down.
 	duration := max(operation.expected.Deadline.Sub(coordinator.now()), upgrade.RecoveryReserveSeconds*time.Second)

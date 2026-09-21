@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -16,7 +17,7 @@ import (
 type TaskAssignmentRecord struct {
 	AssignmentID                string
 	TaskID                      string
-	Executor                    TaskExecutor
+	Executor                    taskjournal.TaskExecutor
 	AgentID                     string
 	AgentGeneration             uint64
 	ClaimedTaskRevision         int64
@@ -53,7 +54,7 @@ type taskAssignmentJSON struct {
 	Schema                      int                          `json:"schema"`
 	AssignmentID                string                       `json:"assignment_id"`
 	TaskID                      string                       `json:"task_id"`
-	Executor                    TaskExecutor                 `json:"executor"`
+	Executor                    taskjournal.TaskExecutor     `json:"executor"`
 	AgentID                     string                       `json:"agent_id"`
 	AgentGeneration             uint64                       `json:"agent_generation"`
 	ClaimedTaskRevision         int64                        `json:"claimed_task_revision"`
@@ -139,7 +140,7 @@ func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 
 func validateTaskAssignment(record TaskAssignmentRecord) error {
 	if recordcodec.ValidateID(ids.KindAssignment, record.AssignmentID) != nil ||
-		recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil || !validTaskExecutor(record.Executor) ||
+		recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil || !taskjournal.ValidExecutor(record.Executor) ||
 		record.ClaimedTaskRevision <= 0 ||
 		record.ExecutionEpoch == 0 ||
 		recordcodec.ValidateTimestamp("task assignment assigned_at", record.AssignedAt) != nil ||
@@ -147,11 +148,11 @@ func validateTaskAssignment(record TaskAssignmentRecord) error {
 		!record.Deadline.After(record.AssignedAt) || !record.RecoveryDeadline.After(record.Deadline) {
 		return corruptTaskAssignment()
 	}
-	if record.Executor == TaskExecutorAgent &&
+	if record.Executor == taskjournal.TaskExecutorAgent &&
 		(recordcodec.ValidateID(ids.KindAgent, record.AgentID) != nil || record.AgentGeneration == 0) {
 		return corruptTaskAssignment()
 	}
-	if record.Executor == TaskExecutorController && (record.AgentID != "" || record.AgentGeneration != 0) {
+	if record.Executor == taskjournal.TaskExecutorController && (record.AgentID != "" || record.AgentGeneration != 0) {
 		return corruptTaskAssignment()
 	}
 	switch record.ExecutionMode {

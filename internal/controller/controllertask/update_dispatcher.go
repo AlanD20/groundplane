@@ -2,6 +2,7 @@ package controllertask
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sync"
 	"time"
 
@@ -27,7 +28,7 @@ func NewUpdateDispatcher(agent, controller UpdateExecutor) (*UpdateDispatcher, e
 }
 
 func (dispatcher *UpdateDispatcher) owner(task etcd.TaskRecord) (UpdateExecutor, error) {
-	if task.Executor != etcd.TaskExecutorController || !isPlatformUpdate(task) {
+	if task.Executor != taskjournal.TaskExecutorController || !isPlatformUpdate(task) {
 		return nil, errs.New(errs.KindValidationFailed, "platform update Task is invalid")
 	}
 	if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceAgent {
@@ -57,7 +58,7 @@ func (dispatcher *UpdateDispatcher) Execute(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	deadline time.Time,
-) (etcd.TaskStatus, error) {
+) (taskjournal.TaskStatus, error) {
 	owner, err := dispatcher.owner(task)
 	if err != nil {
 		return "", err

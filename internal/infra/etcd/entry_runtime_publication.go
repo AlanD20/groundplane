@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"strconv"
 
@@ -41,7 +42,7 @@ func validateTaskEntryRuntime(task TaskRecord) error {
 		// Historical Tasks remain readable without inventing capture authority.
 		return nil
 	}
-	if task.Type != TaskUpdate || task.Executor != TaskExecutorAgent ||
+	if task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Params[TaskResourceKindParam] != TaskResourceEntry || task.EntryRuntime.RunningServiceIDs == nil ||
 		task.EntryRuntime.Updates == nil {
 		return errs.New(errs.KindValidationFailed, "Entry runtime capture shape is invalid")
@@ -86,14 +87,14 @@ func EntryRuntimeEpochRevision(task TaskRecord) (int64, error) {
 	value := task.Params[TaskEntryRuntimeEpochParam]
 	epoch, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || epoch <= 0 || strconv.FormatInt(epoch, 10) != value ||
-		task.Type != TaskUpdate || task.Params[TaskResourceKindParam] != TaskResourceEntry {
+		task.Type != taskjournal.TaskUpdate || task.Params[TaskResourceKindParam] != TaskResourceEntry {
 		return 0, errs.New(errs.KindValidationFailed, "Entry runtime capture epoch is invalid")
 	}
 	return epoch, nil
 }
 
 func validateEntryRuntimePublication(task TaskRecord, fence environmentMutationFenceEvidence) error {
-	entryMutation := task.Type == TaskUpdate && task.Params[TaskResourceKindParam] == TaskResourceEntry
+	entryMutation := task.Type == taskjournal.TaskUpdate && task.Params[TaskResourceKindParam] == TaskResourceEntry
 	if !entryMutation && task.Params[TaskEntryRuntimeEpochParam] == "" && task.EntryRuntime == nil {
 		return nil
 	}
@@ -180,13 +181,13 @@ func (repository *TaskRepository) entryRuntimeClaimConditions(
 func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 	ctx context.Context, terminal TaskRecord, assignment TaskAssignmentRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
-	if terminal.Type != TaskUpdate || terminal.Params[TaskResourceKindParam] != TaskResourceEntry ||
-		terminal.Status != TaskStatusCompleted || terminal.EntryRuntime == nil || len(terminal.EntryRuntime.Updates) == 0 {
+	if terminal.Type != taskjournal.TaskUpdate || terminal.Params[TaskResourceKindParam] != TaskResourceEntry ||
+		terminal.Status != taskjournal.TaskStatusCompleted || terminal.EntryRuntime == nil || len(terminal.EntryRuntime.Updates) == 0 {
 		return taskMaterializationProjectionChange{}, nil
 	}
 	result := terminal.Result
-	if result == nil || result.Kind != TaskResultCompose || result.ExitCode != 0 ||
-		result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired ||
+	if result == nil || result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 ||
+		result.Diagnostic != taskjournal.TaskResultDiagnosticNone || result.ReconciliationRequired ||
 		result.ExecutionEpoch == 0 || result.ExecutionEpoch != assignment.ExecutionEpoch || terminal.FinishedAt == nil ||
 		terminal.TerminalAssignment == nil || terminal.TerminalAssignment.AssignmentID != assignment.AssignmentID ||
 		terminal.TerminalAssignment.AgentID != assignment.AgentID {
@@ -296,7 +297,7 @@ func entryRuntimeComposeStep(task TaskRecord) (string, error) {
 		if _, materializes := materializations[step.ID]; materializes {
 			continue
 		}
-		if stepID != "" || step.Kind != TaskStepOperation {
+		if stepID != "" || step.Kind != taskjournal.TaskStepOperation {
 			return "", errs.New(errs.KindStateConflict, "Entry runtime Compose step is ambiguous")
 		}
 		stepID = step.ID

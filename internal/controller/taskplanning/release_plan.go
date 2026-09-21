@@ -7,6 +7,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -33,7 +34,7 @@ func (resolver *TaskPlanResolver) PrepareReleaseTask(
 	input etcd.ReleaseTaskRenderInput,
 ) (etcd.TaskRecord, *agentpb.ExecutionPlan, error) {
 	if resolver == nil || ctx == nil || len(input.Members) == 0 || len(input.Members) > 32 ||
-		task.Executor != etcd.TaskExecutorAgent || task.OperationID != input.Operation.OperationID ||
+		task.Executor != taskjournal.TaskExecutorAgent || task.OperationID != input.Operation.OperationID ||
 		task.Params[etcd.TaskReleasePublicationParam] != input.PublicationID {
 		return etcd.TaskRecord{}, nil, errs.New(errs.KindValidationFailed, "release Task preparation is invalid")
 	}
@@ -84,7 +85,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	}
 	first := input.Members[0].Render
 	expectedPhase := core.ServiceLifecycleDeploy
-	if task.Type == etcd.TaskRollback {
+	if task.Type == taskjournal.TaskRollback {
 		expectedPhase = core.ServiceLifecycleRollback
 	}
 	serviceNames := make([]string, len(first.Projection.DesiredServices))
@@ -208,7 +209,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		}
 	}
 	operation := agentpb.PlanOperation_PLAN_OPERATION_DEPLOY
-	if task.Type == etcd.TaskRollback {
+	if task.Type == taskjournal.TaskRollback {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
 	}
 	steps, err := buildReleaseMemberSteps(task, input, priorArtifacts)
@@ -261,7 +262,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		}
 		preCursor, postCursor, failureCursor = preCursor+preCount, postCursor+postCount, failureCursor+failureCount
 		hookOperation := domain.OperationDeploy
-		if task.Type == etcd.TaskRollback {
+		if task.Type == taskjournal.TaskRollback {
 			hookOperation = domain.OperationRollback
 		}
 		hooks, err := BuildReleaseHookPlan(ReleaseHookPlanInput{

@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -241,7 +242,7 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 ) (ReleaseTaskRenderInput, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	if ctx == nil || ledger == nil || validatePublicationID(publicationID) != nil ||
-		(task.Type != TaskDeploy && task.Type != TaskRollback) || ids.Validate(ids.KindPlan, task.PlanID) != nil {
+		(task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback) || ids.Validate(ids.KindPlan, task.PlanID) != nil {
 		return ReleaseTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
 			"release Task render input request is invalid",

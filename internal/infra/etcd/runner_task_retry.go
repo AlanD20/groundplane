@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -20,7 +21,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	if err != nil || !applies {
 		return runnerTaskChange{}, err
 	}
-	if source.Type == TaskCreate {
+	if source.Type == taskjournal.TaskCreate {
 		return runnerTaskChange{}, errs.New(
 			errs.KindValidationFailed,
 			"runner creation retry requires a fresh registration token",
@@ -28,7 +29,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	}
 	sourceEvidence, sourceEvidenceErr := decodeRunnerRemovalTaskEvidence(source)
 	retryEvidence, retryEvidenceErr := decodeRunnerRemovalTaskEvidence(retry)
-	if retry.Type != TaskRemove || retry.Target != source.Target || sourceEvidenceErr != nil ||
+	if retry.Type != taskjournal.TaskRemove || retry.Target != source.Target || sourceEvidenceErr != nil ||
 		retryEvidenceErr != nil || sourceEvidence != retryEvidence || !runnerStringMapsEqual(source.Params, retry.Params) {
 		return runnerTaskChange{}, errs.New(errs.KindInternal, "runner removal retry changed its durable target")
 	}

@@ -11,6 +11,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -100,7 +101,7 @@ func (gate BlueprintRequirementGate) validateTaskIdentity(task TaskRecord, requi
 		return err
 	}
 	if gate.TaskID != task.ID || gate.OperationID != task.OperationID || gate.PlanID != task.PlanID ||
-		gate.RetryOf != task.RetryOf || task.Type != TaskUpdate || task.Executor != TaskExecutorAgent ||
+		gate.RetryOf != task.RetryOf || task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Params[EnvironmentDesiredRevisionParam] != gate.DAG.RootTaskID {
 		return errs.New(errs.KindValidationFailed, "Blueprint requirement gate does not match its Task")
 	}
@@ -277,7 +278,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 	revision int64,
 ) (blueprintRequirementGateClaimEvidence, bool, bool, error) {
 	desiredRevision := task.Params[EnvironmentDesiredRevisionParam]
-	if task.Type != TaskUpdate || task.Executor != TaskExecutorAgent || desiredRevision == "" {
+	if task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent || desiredRevision == "" {
 		return blueprintRequirementGateClaimEvidence{}, false, true, nil
 	}
 	gateKey := blueprintRequirementGateKey(task.ID)
@@ -355,7 +356,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 			if decodeErr != nil || producer.ID != attach.TaskID {
 				return blueprintRequirementGateClaimEvidence{}, true, false, corruptBlueprintRequirementGate()
 			}
-			if producer.Status != TaskStatusCompleted {
+			if producer.Status != taskjournal.TaskStatusCompleted {
 				return blueprintRequirementGateClaimEvidence{}, true, false, nil
 			}
 			evidence.conditions = append(evidence.conditions, etcdstore.Condition{
@@ -374,7 +375,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	fence environmentMutationFenceEvidence,
 	readRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
-	if task.Status != TaskStatusCompleted || task.Type != TaskAttach ||
+	if task.Status != taskjournal.TaskStatusCompleted || task.Type != taskjournal.TaskAttach ||
 		ids.Validate(ids.KindAttach, task.Target) != nil ||
 		task.Params[TaskMutationEnvironmentParam] != fence.environmentID {
 		return nil, nil, nil
@@ -422,7 +423,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 		return nil, nil, nil
 	}
 	candidate, err := decodeTaskRecord(candidateRead.Values[0].Value)
-	if err != nil || candidate.Status != TaskStatusPending ||
+	if err != nil || candidate.Status != taskjournal.TaskStatusPending ||
 		candidate.Owner.EnvironmentID != fence.environmentID || candidate.Target != fence.environmentID ||
 		candidate.Params[EnvironmentDesiredRevisionParam] != candidateTaskID ||
 		!taskHasBlueprintCandidateAppliedAuthority(candidate) ||

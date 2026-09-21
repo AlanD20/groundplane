@@ -11,6 +11,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -158,7 +159,7 @@ func (repository *EtcdRepository) PublishRemoval(
 	task := etcd.TaskRecord{
 		ID: taskInput.ID, OperationID: taskInput.OperationID, IdempotencyKey: request.IdempotencyKey,
 		Owner: owner, Actor: etcd.TaskActorOperator, PlanID: taskInput.PlanID,
-		Type: etcd.TaskRemove, Target: request.EntryID, Status: etcd.TaskStatusPending,
+		Type: taskjournal.TaskRemove, Target: request.EntryID, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: taskInput.CreatedAt, UpdatedAt: taskInput.CreatedAt,
 	}
 	intent, err := etcd.NewEntryRemovalIntent(
@@ -400,7 +401,7 @@ func applyRemovalTaskPlan(task etcd.TaskRecord, plan RemovalTaskPlan) (etcd.Task
 	switch plan.Executor {
 	case RemovalExecutorAgent:
 		identity := plan.Identity
-		task.Executor = etcd.TaskExecutorAgent
+		task.Executor = taskjournal.TaskExecutorAgent
 		task.Params = map[string]string{
 			etcd.TaskEntryEnvironmentParam:           plan.EnvironmentID,
 			etcd.TaskMaterializationEnvironmentParam: plan.EnvironmentID,
@@ -412,7 +413,7 @@ func applyRemovalTaskPlan(task etcd.TaskRecord, plan RemovalTaskPlan) (etcd.Task
 			etcd.TaskEntryAuthorizedVolumeDirParam:   identity.AuthorizedVolumeDir,
 		}
 	case RemovalExecutorController:
-		task.Executor = etcd.TaskExecutorController
+		task.Executor = taskjournal.TaskExecutorController
 		task.Params = map[string]string{
 			etcd.TaskResourceKindParam:     etcd.TaskResourceEntry,
 			etcd.TaskEntryEnvironmentParam: plan.EnvironmentID,
@@ -423,9 +424,9 @@ func applyRemovalTaskPlan(task etcd.TaskRecord, plan RemovalTaskPlan) (etcd.Task
 	task.PlanHash = plan.PlanHash
 	task.RenderGeneration = plan.RenderGeneration
 	task.TimeoutSeconds = plan.TimeoutSeconds
-	task.Steps = make([]etcd.TaskStepRecord, len(plan.Steps))
+	task.Steps = make([]taskjournal.TaskStepRecord, len(plan.Steps))
 	for index, step := range plan.Steps {
-		task.Steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.ID}
+		task.Steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: step.ID}
 	}
 	task.Materializations = make([]materializationrecord.Record, len(plan.Materializations))
 	for index, materialization := range plan.Materializations {

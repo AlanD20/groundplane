@@ -2,6 +2,7 @@ package etcd
 
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,7 +16,7 @@ func prepareBackupTerminalReceiptPruneCompanion(
 	taskRevision int64,
 	value *etcdstore.KeyValue,
 ) (backupTerminalReceiptPruneCompanion, error) {
-	if task.Type != TaskBackup && task.Type != TaskBackupPrune {
+	if task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune {
 		return backupTerminalReceiptPruneCompanion{}, errs.New(
 			errs.KindInternal,
 			"ordinary Task requested a Backup terminal receipt",

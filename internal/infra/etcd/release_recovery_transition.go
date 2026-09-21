@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"slices"
 	"time"
@@ -22,7 +23,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	assignment TaskAssignmentRecord,
 	assignmentValue *etcdstore.KeyValue,
 	assignmentIndexValue *etcdstore.KeyValue,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	result TaskResultRecord,
 	revision int64,
 	evidenceConditions ...Condition,
@@ -162,7 +163,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	ctx context.Context,
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	result TaskResultRecord,
 	revision int64,
 ) (releaseRecoveryAcknowledgement, error) {
@@ -203,7 +204,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 			"release recovery acknowledgement epoch changed",
 		)
 	}
-	if status != TaskStatusCompleted || result.ReconciliationRequired {
+	if status != taskjournal.TaskStatusCompleted || result.ReconciliationRequired {
 		return resolved, nil
 	}
 	if record.Phase != ReleaseRecoveryPhaseProven || int(record.Cursor) != len(record.RecoveryStepIDs) {
@@ -268,17 +269,17 @@ func composeServiceReleaseID(service *agentpb.ComposeService) string {
 func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 	ctx context.Context,
 	task TaskRecord,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	result TaskResultRecord,
 	agentID string,
 	agentGeneration uint64,
 	assignmentID string,
 	revision int64,
-) (TaskStatus, *TaskResultRecord, bool, error) {
+) (taskjournal.TaskStatus, *TaskResultRecord, bool, error) {
 	if result.ReleaseRecoveryRecordSHA256 == "" {
 		return status, nil, false, nil
 	}
-	if status != TaskStatusCompleted || result.ReconciliationRequired ||
+	if status != taskjournal.TaskStatusCompleted || result.ReconciliationRequired ||
 		!recordcodec.ValidSHA256(result.ReleaseRecoveryRecordSHA256) {
 		return status, nil, true, errs.New(errs.KindStateConflict, "terminal release recovery replay status changed")
 	}
@@ -361,7 +362,7 @@ func (repository *TaskRepository) candidateReleaseTimeoutResult(
 		return TaskResultRecord{}, true, corruptTaskAssignment()
 	}
 	result := TaskResultRecord{
-		Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticTimeoutBeforeEffect,
+		Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticTimeoutBeforeEffect,
 		ExecutionEpoch: record.ExecutionEpoch,
 	}
 	return result, true, nil
@@ -448,7 +449,7 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 	}
 	task, err := decodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != assignment.TaskID || task.OperationID != assignment.RestorationAuthority.OperationID ||
-		task.PlanHash != assignment.RestorationAuthority.PlanHash || task.Status != TaskStatusRunning {
+		task.PlanHash != assignment.RestorationAuthority.PlanHash || task.Status != taskjournal.TaskStatusRunning {
 		return false, corruptTaskAssignment()
 	}
 	recovery, err := decodeReleaseRecoveryRecord(read.Values[5].Value)

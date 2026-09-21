@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -220,19 +221,19 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 }
 
 func isVolumeRemovalTerminalTask(task TaskRecord) bool {
-	return task.Type == TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume &&
-		task.Status == TaskStatusCompleted
+	return task.Type == taskjournal.TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume &&
+		task.Status == taskjournal.TaskStatusCompleted
 }
 
 func volumeRemovalTerminalTaskMatches(task TaskRecord, runtime removalrecord.Runtime) bool {
-	return task.Status == TaskStatusCompleted && runtime.Checkpoint == removalrecord.DirectoryAbsent &&
+	return task.Status == taskjournal.TaskStatusCompleted && runtime.Checkpoint == removalrecord.DirectoryAbsent &&
 		volumeRemovalTaskMatchesRuntime(task, runtime) && task.Result != nil &&
-		task.Result.Kind == TaskResultEnvironmentDirectory && task.Result.Diagnostic == TaskResultDiagnosticNone &&
+		task.Result.Kind == taskjournal.TaskResultEnvironmentDirectory && task.Result.Diagnostic == taskjournal.TaskResultDiagnosticNone &&
 		!task.Result.ReconciliationRequired && len(task.Result.Projects) == 0 && task.Result.ExitCode == 0
 }
 
 func volumeRemovalTaskMatchesRuntime(task TaskRecord, runtime removalrecord.Runtime) bool {
-	if task.Actor != TaskActorOperator || task.Executor != TaskExecutorAgent || task.FinishedAt == nil ||
+	if task.Actor != TaskActorOperator || task.Executor != taskjournal.TaskExecutorAgent || task.FinishedAt == nil ||
 		task.FinishedAt.Before(
 			runtime.UpdatedAt,
 		) || task.ID != runtime.CurrentTaskID || task.OperationID != runtime.OperationID ||
@@ -261,9 +262,9 @@ func volumeRemovalTaskMatchesRuntime(task TaskRecord, runtime removalrecord.Runt
 func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	ctx context.Context, task TaskRecord, conditions []etcdstore.Condition, mutations []etcdstore.Mutation,
 ) (etcdstore.TransactionResult, error) {
-	if (task.Status != TaskStatusFailed && task.Status != TaskStatusTimedOut) ||
-		task.Result == nil || task.Result.Kind != TaskResultEnvironmentDirectory ||
-		task.Result.Diagnostic != TaskResultDiagnosticNone || task.Result.ReconciliationRequired ||
+	if (task.Status != taskjournal.TaskStatusFailed && task.Status != taskjournal.TaskStatusTimedOut) ||
+		task.Result == nil || task.Result.Kind != taskjournal.TaskResultEnvironmentDirectory ||
+		task.Result.Diagnostic != taskjournal.TaskResultDiagnosticNone || task.Result.ReconciliationRequired ||
 		len(task.Result.Projects) != 0 {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}

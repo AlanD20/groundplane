@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -73,7 +74,7 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 		return taskMaterializationWriterRecord{}, nil, err
 	}
 	conditions := append(entryRuntimeConditions, predecessorCondition)
-	if record.RetryOf != "" && record.Type == TaskUpdate && record.Params[TaskReleasePublicationParam] != "" {
+	if record.RetryOf != "" && record.Type == taskjournal.TaskUpdate && record.Params[TaskReleasePublicationParam] != "" {
 		authority, authorityCondition, authorityErr := repository.blueprintCandidateAttemptAuthority(
 			ctx, record, readRevision,
 		)
@@ -167,7 +168,7 @@ func validateTaskMaterializationWriterForTask(
 }
 
 func taskHasBlueprintCandidateAppliedAuthority(record TaskRecord) bool {
-	return record.Type == TaskUpdate && record.Params[TaskReleasePublicationParam] != ""
+	return record.Type == taskjournal.TaskUpdate && record.Params[TaskReleasePublicationParam] != ""
 }
 
 func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
@@ -175,16 +176,16 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 	if !declared {
 		return "", false, nil
 	}
-	resourceRemoval := record.Type == TaskRemove &&
+	resourceRemoval := record.Type == taskjournal.TaskRemove &&
 		(recordcodec.ValidateID(ids.KindRoute, record.Target) == nil || recordcodec.ValidateID(ids.KindEnvEntry, record.Target) == nil)
 	volumeMutation := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
 		recordcodec.ValidateID(ids.KindVolume, record.Target) == nil &&
-		(record.Type == TaskCreate || record.Type == TaskUpdate || record.Type == TaskRemove)
+		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate || record.Type == taskjournal.TaskRemove)
 	routeMutation := record.Params[TaskResourceKindParam] == TaskResourceRoute &&
 		recordcodec.ValidateID(ids.KindRoute, record.Target) == nil &&
-		(record.Type == TaskCreate || record.Type == TaskUpdate) &&
+		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate) &&
 		record.Params[TaskRouteEnvironmentParam] == environmentID && record.Owner.EnvironmentID == environmentID
-	if record.Executor != TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
+	if record.Executor != taskjournal.TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
 		(record.Target != environmentID && !resourceRemoval && !volumeMutation && !routeMutation) {
 		return "", false, errs.New(errs.KindValidationFailed, "task materialization Environment is invalid")
 	}
@@ -242,10 +243,10 @@ func (repository *TaskRepository) prepareTaskMaterializationAcknowledgement(
 func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledgement(
 	ctx context.Context,
 	record TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
 ) (taskMaterializationProjectionChange, error) {
-	if terminalStatus != TaskStatusCompleted {
+	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}
 	revisionID, declared := record.Params[EnvironmentDesiredRevisionParam]
@@ -283,11 +284,11 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	// Metadata edits and Volume identity Tasks do not execute desired runtime.
 	// Blueprint Apply can execute Components even without native Releases.
 	volumeIdentity := record.Params[TaskResourceKindParam] == TaskResourceVolume &&
-		(record.Type == TaskCreate || record.Type == TaskUpdate)
-	entryMutation := record.Params[TaskResourceKindParam] == TaskResourceEntry && record.Type == TaskUpdate
+		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate)
+	entryMutation := record.Params[TaskResourceKindParam] == TaskResourceEntry && record.Type == taskjournal.TaskUpdate
 	configuredApply := record.Params[componentTaskBlueprintProcedureParam] == componentTaskBlueprintProcedureNone
 	if volumeIdentity ||
-		record.Type == TaskUpdate && !entryMutation && !configuredApply && !taskHasBlueprintCandidateAppliedAuthority(record) &&
+		record.Type == taskjournal.TaskUpdate && !entryMutation && !configuredApply && !taskHasBlueprintCandidateAppliedAuthority(record) &&
 			state.Values[1] != nil {
 		if state.Values[1] != nil {
 			if _, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[1].Value); err != nil {
@@ -392,7 +393,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 }
 
 func taskHasSpecializedProjectionAcknowledgement(record TaskRecord) bool {
-	return record.Type == TaskRemove &&
+	return record.Type == taskjournal.TaskRemove &&
 		(recordcodec.ValidateID(ids.KindRoute, record.Target) == nil ||
 			recordcodec.ValidateID(ids.KindEnvEntry, record.Target) == nil)
 }
@@ -416,8 +417,8 @@ func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {
 	if !mutates {
 		return "", false, nil
 	}
-	if record.Executor != TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, mutationEnvironment) != nil ||
-		(record.Type != TaskAttach && record.Type != TaskDetach) {
+	if record.Executor != taskjournal.TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, mutationEnvironment) != nil ||
+		(record.Type != taskjournal.TaskAttach && record.Type != taskjournal.TaskDetach) {
 		return "", false, errs.New(errs.KindValidationFailed, "task mutation Environment is invalid")
 	}
 	return mutationEnvironment, true, nil

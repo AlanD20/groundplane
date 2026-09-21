@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"maps"
 	"time"
 
@@ -62,7 +63,7 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	}
 	retryIntent := cloneEntryRemovalIntent(intent)
 	retryIntent.TaskID = retry.ID
-	retryIntent.Status = TaskStatusPending
+	retryIntent.Status = taskjournal.TaskStatusPending
 	retryIntent.CreatedAt = retry.CreatedAt
 	retryIntent.TerminalAt = nil
 	if err := validateEntryRemovalIntent(retryIntent); err != nil {
@@ -225,7 +226,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 }
 
 func (repository *TaskRepository) prepareRemovalTaskAcknowledgement(
-	ctx context.Context, task TaskRecord, terminalStatus TaskStatus, terminalAt time.Time, revision int64,
+	ctx context.Context, task TaskRecord, terminalStatus taskjournal.TaskStatus, terminalAt time.Time, revision int64,
 ) (routeTaskChange, error) {
 	change, err := repository.prepareRouteTaskAcknowledgement(ctx, task, terminalStatus, terminalAt, revision)
 	if err != nil || change.applies {
@@ -239,7 +240,7 @@ func (repository *TaskRepository) prepareRemovalTaskAcknowledgement(
 }
 
 func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
-	ctx context.Context, task TaskRecord, terminalStatus TaskStatus, terminalAt time.Time, revision int64,
+	ctx context.Context, task TaskRecord, terminalStatus taskjournal.TaskStatus, terminalAt time.Time, revision int64,
 ) (routeTaskChange, error) {
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{entryRemovalIntentKey(task.ID)}, Revision: revision,
@@ -261,7 +262,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 	if err := validateEntryRemovalTaskOwner(task, intent); err != nil {
 		return routeTaskChange{}, err
 	}
-	if intent.Status != TaskStatusPending {
+	if intent.Status != taskjournal.TaskStatusPending {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "entry removal intent is not pending")
 	}
 	if intent.Desired != nil {
@@ -359,7 +360,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 			Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		})
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		scriptConditions, err := prepareEntryScriptAbsence(ctx, repository.store, intent.EntryID, revision)
 		if err != nil {
 			clearRouteTaskChange(change)
@@ -387,7 +388,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 	return change, nil
 }
 func (repository *TaskRepository) validateRemovalTaskAcknowledgementReplay(
-	ctx context.Context, task TaskRecord, terminalStatus TaskStatus, revision int64,
+	ctx context.Context, task TaskRecord, terminalStatus taskjournal.TaskStatus, revision int64,
 ) error {
 	if err := repository.validateRouteTaskAcknowledgementReplay(ctx, task, terminalStatus, revision); err != nil {
 		return err
@@ -399,7 +400,7 @@ func (repository *TaskRepository) validateRemovalTaskAcknowledgementReplay(
 }
 
 func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
-	ctx context.Context, task TaskRecord, terminalStatus TaskStatus, revision int64,
+	ctx context.Context, task TaskRecord, terminalStatus taskjournal.TaskStatus, revision int64,
 ) error {
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{entryRemovalIntentKey(task.ID)}, Revision: revision,
@@ -443,10 +444,10 @@ func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
 	if state == nil || len(state.Values) != 3 || state.Values[1] != nil {
 		return errs.New(errs.KindStateConflict, "entry removal terminal fence is inconsistent")
 	}
-	if terminalStatus == TaskStatusCompleted && state.Values[0] != nil {
+	if terminalStatus == taskjournal.TaskStatusCompleted && state.Values[0] != nil {
 		return errs.New(errs.KindStateConflict, "completed Entry removal retained its target")
 	}
-	if terminalStatus != TaskStatusCompleted && state.Values[0] == nil {
+	if terminalStatus != taskjournal.TaskStatusCompleted && state.Values[0] == nil {
 		return errs.New(errs.KindStateConflict, "failed Entry removal lost its target")
 	}
 	if state.Values[2] != nil {
@@ -459,7 +460,7 @@ func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
 }
 
 func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) error {
-	expectedExecutor := TaskExecutorController
+	expectedExecutor := taskjournal.TaskExecutorController
 	validParams := len(task.Params) == 2 &&
 		task.Params[TaskResourceKindParam] == TaskResourceEntry &&
 		task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID
@@ -468,7 +469,7 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID
 	}
 	if intent.CurrentProjection != nil {
-		expectedExecutor = TaskExecutorAgent
+		expectedExecutor = taskjournal.TaskExecutorAgent
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 8 &&
 			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
@@ -483,7 +484,7 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 		uint64(task.RenderGeneration) != intent.Desired.RenderGeneration) {
 		validParams = false
 	}
-	if task.ID != intent.TaskID || task.Executor != expectedExecutor || task.Type != TaskRemove ||
+	if task.ID != intent.TaskID || task.Executor != expectedExecutor || task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.EntryID || !task.CreatedAt.Equal(intent.CreatedAt) || !validParams {
 		return errs.New(errs.KindStateConflict, "entry removal intent does not belong to its Task")
 	}

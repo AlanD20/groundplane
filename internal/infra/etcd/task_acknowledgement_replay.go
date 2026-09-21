@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // validateTaskAcknowledgementReplay checks the resource transitions already
@@ -10,7 +11,7 @@ import (
 func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
 	environmentID string,
 	environmentRemoval, zoneRemoval bool,
@@ -71,7 +72,7 @@ func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	); err != nil {
 		return err
 	}
-	if task.Params[TaskReleasePublicationParam] != "" && task.Type == TaskUpdate {
+	if task.Params[TaskReleasePublicationParam] != "" && task.Type == taskjournal.TaskUpdate {
 		if err := repository.validateBlueprintCandidateTerminalReplay(
 			ctx, task, terminalStatus, readRevision,
 		); err != nil {

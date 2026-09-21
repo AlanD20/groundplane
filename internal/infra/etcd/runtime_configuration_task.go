@@ -5,6 +5,7 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -322,7 +323,7 @@ func (repository *TaskRepository) runtimeConfigurationClaimConditions(
 func prepareRuntimeConfigurationAcknowledgement(
 	task TaskRecord,
 ) (taskMaterializationProjectionChange, error) {
-	if task.Status != TaskStatusCompleted {
+	if task.Status != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}
 	condition, present, err := taskConfigurationCondition(task)

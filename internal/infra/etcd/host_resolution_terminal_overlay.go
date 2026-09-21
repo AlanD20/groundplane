@@ -5,13 +5,14 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (repository *TaskRepository) hostResolutionTerminalOverlay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (string, map[string]routerecord.Record, map[string]componentrecord.Record, error) {
 	removal := ""
@@ -46,7 +47,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 				if decodeErr != nil {
 					return "", nil, nil, decodeErr
 				}
-				if terminalStatus == TaskStatusCompleted {
+				if terminalStatus == taskjournal.TaskStatusCompleted {
 					removal = intent.RouteID
 				}
 			}
@@ -55,7 +56,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 			if decodeErr != nil {
 				return "", nil, nil, decodeErr
 			}
-			if terminalStatus == TaskStatusCompleted {
+			if terminalStatus == taskjournal.TaskStatusCompleted {
 				route := intent.Route
 				if intent.Provider != nil {
 					route.Observed.Provider = routerecord.ProviderObservation{
@@ -85,7 +86,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 			}
 			for _, candidate := range intent.Candidates {
 				componentOverride[candidate.Candidate.Desired.ID] = candidate.Current
-				if terminalStatus == TaskStatusCompleted {
+				if terminalStatus == taskjournal.TaskStatusCompleted {
 					promoted, promoteErr := componentrecord.SetRuntime(candidate.Candidate,
 						candidate.Candidate.Runtime.GeneratedServices, candidate.Candidate.Runtime.PinnedIPv4,
 						candidate.Candidate.Desired.Enabled)
@@ -109,14 +110,14 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 							"Component Route desired state changed during host reconciliation",
 						)
 					}
-					if intent.RouteProjection.Provider == nil && terminalStatus != TaskStatusCompleted {
+					if intent.RouteProjection.Provider == nil && terminalStatus != taskjournal.TaskStatusCompleted {
 						continue
 					}
 					status := routerecord.ObservedUnserved
 					provider := routerecord.ProviderObservation{}
 					if intent.RouteProjection.Provider != nil {
 						status = routerecord.ObservedDegraded
-						if terminalStatus == TaskStatusCompleted {
+						if terminalStatus == taskjournal.TaskStatusCompleted {
 							status = routerecord.ObservedServed
 						}
 						pin := intent.RouteProjection.Provider

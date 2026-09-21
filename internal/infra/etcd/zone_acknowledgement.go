@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 )
 
 func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
-	ctx context.Context, task TaskRecord, terminalStatus TaskStatus, terminalAt time.Time, readRevision int64,
+	ctx context.Context, task TaskRecord, terminalStatus taskjournal.TaskStatus, terminalAt time.Time, readRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	environmentID, operationID, err := zoneRemovalTaskIdentity(task)
 	if err != nil {
@@ -43,7 +44,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	if err := validateZoneRemovalTaskOwner(task, intent); err != nil {
 		return nil, nil, err
 	}
-	if intent.Status != TaskStatusPending || state.Values[4].ModRevision != intent.DesiredHeadRevision ||
+	if intent.Status != taskjournal.TaskStatusPending || state.Values[4].ModRevision != intent.DesiredHeadRevision ||
 		state.Values[5].ModRevision != intent.AppliedProjectionRevision || string(state.Values[6].Value) != task.ID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal terminal ownership changed")
 	}
@@ -88,7 +89,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		{Key: keys[5], ModRevision: state.Values[5].ModRevision},
 		{Key: keys[6], ModRevision: state.Values[6].ModRevision},
 	}
-	if terminalStatus != TaskStatusCompleted {
+	if terminalStatus != taskjournal.TaskStatusCompleted {
 		terminalIntent, transitionErr := terminalZoneRemovalIntent(intent, terminalStatus, terminalAt)
 		if transitionErr != nil {
 			return nil, nil, transitionErr
@@ -166,7 +167,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 }
 
 func (repository *TaskRepository) validateZoneRemovalReplay(
-	ctx context.Context, task TaskRecord, terminalStatus TaskStatus, readRevision int64,
+	ctx context.Context, task TaskRecord, terminalStatus taskjournal.TaskStatus, readRevision int64,
 ) error {
 	environmentID, operationID, err := zoneRemovalTaskIdentity(task)
 	if err != nil {
@@ -194,7 +195,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	if err != nil {
 		return err
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if state.Values[2] != nil || headID != task.Params[EnvironmentDesiredRevisionParam] ||
 			applied.RevisionID != headID || projectionContainsZone(applied, task.Target) {
 			return errs.New(errs.KindStateConflict, "completed Zone removal retained old desired state")
@@ -269,7 +270,7 @@ func projectionContainsZone(projection projectionrecord.EnvironmentComposeProjec
 func zoneRemovalTaskIdentity(task TaskRecord) (string, string, error) {
 	environmentID := task.Params[TaskZoneEnvironmentParam]
 	operationID := task.Params[TaskZoneRemovalOperationParam]
-	if task.Type != TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil ||
+	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil ||
 		ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindOperation, operationID) != nil {
 		return "", "", errs.New(errs.KindInternal, "durable Zone removal Task shape is invalid")
 	}

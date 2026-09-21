@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
 	"sort"
@@ -34,7 +35,7 @@ type ZoneRemovalIntent struct {
 	AppliedProjection         projectionrecord.EnvironmentComposeProjection `json:"applied_projection"`
 	CandidateProjection       projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
 	AffectedServiceIDs        []string                                      `json:"affected_service_ids"`
-	Status                    TaskStatus                                    `json:"status"`
+	Status                    taskjournal.TaskStatus                        `json:"status"`
 	CreatedAt                 time.Time                                     `json:"created_at"`
 	UpdatedAt                 time.Time                                     `json:"updated_at"`
 	TerminalAt                *time.Time                                    `json:"terminal_at,omitempty"`
@@ -61,7 +62,7 @@ func NewZoneRemovalIntent(
 		AppliedProjection:         projectionrecord.CloneEnvironmentComposeProjection(authorities.Applied.Record),
 		CandidateProjection:       projectionrecord.CloneEnvironmentComposeProjection(candidate),
 		AffectedServiceIDs:        append([]string(nil), affected...),
-		Status:                    TaskStatusPending, CreatedAt: createdAt, UpdatedAt: createdAt,
+		Status:                    taskjournal.TaskStatusPending, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	if err := validateZoneRemovalIntent(intent); err != nil {
 		return ZoneRemovalIntent{}, err
@@ -110,13 +111,13 @@ func TransferZoneRemovalIntent(
 	taskID string,
 	createdAt time.Time,
 ) (ZoneRemovalIntent, error) {
-	if !isTerminalTaskStatus(intent.Status) && intent.Status != TaskStatusPending {
+	if !isTerminalTaskStatus(intent.Status) && intent.Status != taskjournal.TaskStatusPending {
 		return ZoneRemovalIntent{}, errs.New(errs.KindStateConflict, "Zone removal intent cannot transfer")
 	}
 	next := cloneZoneRemovalIntent(intent)
 	next.ActiveTaskID = taskID
 	next.ActiveTaskCreatedAt = createdAt
-	next.Status = TaskStatusPending
+	next.Status = taskjournal.TaskStatusPending
 	next.UpdatedAt = createdAt
 	next.TerminalAt = nil
 	if err := validateZoneRemovalIntent(next); err != nil {
@@ -125,8 +126,8 @@ func TransferZoneRemovalIntent(
 	return next, nil
 }
 
-func terminalZoneRemovalIntent(intent ZoneRemovalIntent, status TaskStatus, at time.Time) (ZoneRemovalIntent, error) {
-	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
+func terminalZoneRemovalIntent(intent ZoneRemovalIntent, status taskjournal.TaskStatus, at time.Time) (ZoneRemovalIntent, error) {
+	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
 		return ZoneRemovalIntent{}, errs.New(errs.KindStateConflict, "Zone removal intent is not pending")
 	}
 	next := cloneZoneRemovalIntent(intent)
@@ -170,7 +171,7 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		intent.UpdatedAt.Before(intent.ActiveTaskCreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Zone removal intent identity is invalid")
 	}
-	if intent.Status == TaskStatusPending {
+	if intent.Status == taskjournal.TaskStatusPending {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Zone removal intent has terminal time")
 		}
@@ -245,7 +246,7 @@ func sameZoneRemovalProjection(left, right projectionrecord.EnvironmentComposePr
 }
 
 func validateZoneRemovalTaskOwner(task TaskRecord, intent ZoneRemovalIntent) error {
-	if task.ID != intent.ActiveTaskID || task.Target != intent.ZoneID || task.Type != TaskRemove ||
+	if task.ID != intent.ActiveTaskID || task.Target != intent.ZoneID || task.Type != taskjournal.TaskRemove ||
 		!task.CreatedAt.Equal(
 			intent.ActiveTaskCreatedAt,
 		) || task.Params[TaskZoneRemovalOperationParam] != intent.OperationID ||
@@ -253,13 +254,13 @@ func validateZoneRemovalTaskOwner(task TaskRecord, intent ZoneRemovalIntent) err
 		task.Params[EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID {
 		return errs.New(errs.KindStateConflict, "Zone removal intent does not belong to its Task")
 	}
-	if task.Executor == TaskExecutorAgent {
+	if task.Executor == taskjournal.TaskExecutorAgent {
 		if len(task.Params) != 4 || ids.Validate(ids.KindConfig, task.Params[TaskComposeArtifactParam]) != nil {
 			return errs.New(errs.KindStateConflict, "Zone removal Agent Task input changed")
 		}
 		return nil
 	}
-	if task.Executor != TaskExecutorController || len(task.Params) != 5 ||
+	if task.Executor != taskjournal.TaskExecutorController || len(task.Params) != 5 ||
 		task.Params[TaskResourceKindParam] != TaskResourceBackingZone || !recordcodec.ValidSHA256(task.Params[TaskZoneImpactTokenParam]) {
 		return errs.New(errs.KindStateConflict, "Zone removal Controller Task input changed")
 	}

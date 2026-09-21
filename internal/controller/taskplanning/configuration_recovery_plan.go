@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -48,7 +49,7 @@ func (resolver *TaskPlanResolver) configurationRecoverySuffix(
 	}
 	for _, file := range prepared.Files {
 		for _, id := range []string{file.Probe.StepID, file.Compensate.StepID} {
-			if task.Steps[start].ID != id || task.Steps[start].Kind != etcd.TaskStepOperation {
+			if task.Steps[start].ID != id || task.Steps[start].Kind != taskjournal.TaskStepOperation {
 				return errs.New(errs.KindInternal, "durable Blueprint configuration recovery order is invalid")
 			}
 			start++

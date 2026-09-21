@@ -2,6 +2,7 @@ package controllertask
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -14,7 +15,7 @@ import (
 // Restore establishes admission holds without requiring a running channel.
 type UpdateExecutor interface {
 	Restore(context.Context, etcd.TaskAssignment) error
-	Execute(context.Context, etcd.TaskRecord, time.Time) (etcd.TaskStatus, error)
+	Execute(context.Context, etcd.TaskRecord, time.Time) (taskjournal.TaskStatus, error)
 	Abort(context.Context, string) error
 }
 
@@ -61,7 +62,7 @@ func (runner *Runner) executeUpdate(ctx context.Context, claim etcd.TaskAssignme
 		return err
 	}
 	switch status {
-	case etcd.TaskStatusCompleted, etcd.TaskStatusFailed, etcd.TaskStatusAborted, etcd.TaskStatusTimedOut:
+	case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
 	default:
 		return errs.New(errs.KindInternal, "controller update recovery returned no settled result")
 	}
@@ -71,6 +72,6 @@ func (runner *Runner) executeUpdate(ctx context.Context, claim etcd.TaskAssignme
 
 func isPlatformUpdate(task etcd.TaskRecord) bool {
 	resource := task.Params[etcd.TaskResourceKindParam]
-	return task.Type == etcd.TaskUpdate &&
+	return task.Type == taskjournal.TaskUpdate &&
 		(resource == etcd.TaskResourceAgent || resource == etcd.TaskResourceController)
 }

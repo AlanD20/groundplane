@@ -5,6 +5,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 	"time"
 
@@ -17,11 +18,11 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	agentGeneration uint64,
 	taskID string,
 	assignmentID string,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
-	claimKey := taskExecutionClaimKey(TaskExecutorAgent, agentID, taskID)
+	claimKey := taskExecutionClaimKey(taskjournal.TaskExecutorAgent, agentID, taskID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 	}})
@@ -33,7 +34,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	}
 	taskValue := read.Values[0]
 	task, err := decodeTaskRecord(taskValue.Value)
-	if err != nil || task.ID != taskID || task.Executor != TaskExecutorAgent ||
+	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict,
@@ -82,9 +83,9 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	if assignment.TaskID != task.ID || assignment.Executor != TaskExecutorAgent ||
+	if assignment.TaskID != task.ID || assignment.Executor != taskjournal.TaskExecutorAgent ||
 		assignment.AssignmentID != assignmentID || assignment.AgentID != agentID ||
-		assignment.AgentGeneration != agentGeneration || task.Status != TaskStatusRunning || task.StartedAt == nil ||
+		assignment.AgentGeneration != agentGeneration || task.Status != taskjournal.TaskStatusRunning || task.StartedAt == nil ||
 		assignment.ClaimedTaskRevision >= assignmentValue.ModRevision ||
 		!assignment.AssignedAt.Equal(*task.StartedAt) {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion child assignment changed")
@@ -93,7 +94,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	terminal, err := transitionTaskStatus(task, TaskStatusRunning, terminalStatus, terminalAt)
+	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusRunning, terminalStatus, terminalAt)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}

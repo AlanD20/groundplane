@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -71,7 +72,7 @@ func NewExecutor(
 }
 
 func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecord) error {
-	if ctx == nil || task.Executor != etcd.TaskExecutorController || task.Type != etcd.TaskCreate ||
+	if ctx == nil || task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCreate ||
 		ids.Validate(ids.KindTask, task.ID) != nil || ids.Validate(ids.KindRunner, task.Target) != nil ||
 		len(task.Params) != 2 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceRunner ||
 		task.Params[etcd.RunnerRegistrationTokenPresentParam] != "true" {
@@ -117,7 +118,7 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 }
 
 func (executor *Executor) ExecuteRemove(ctx context.Context, task etcd.TaskRecord) error {
-	if ctx == nil || task.Executor != etcd.TaskExecutorController || task.Type != etcd.TaskRemove ||
+	if ctx == nil || task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindTask, task.ID) != nil || ids.Validate(ids.KindRunner, task.Target) != nil ||
 		len(task.Params) != 6 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceRunner {
 		return errs.New(errs.KindValidationFailed, "Controller Task Runner removal is invalid")

@@ -8,6 +8,7 @@ import (
 	"errors"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -230,8 +231,8 @@ func (service *Service) RotateBackupKey(
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, IdempotencyKey: idempotencyKey,
 		Owner: prepared.Owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorController, PlanID: planID, PlanHash: corebackup.KeyRotationPlanHash(), RenderGeneration: 1,
-		Type: etcd.TaskRotate, Target: environmentID, TimeoutSeconds: corebackup.KeyRotationTimeoutSeconds, Status: etcd.TaskStatusPending,
+		Executor: taskjournal.TaskExecutorController, PlanID: planID, PlanHash: corebackup.KeyRotationPlanHash(), RenderGeneration: 1,
+		Type: taskjournal.TaskRotate, Target: environmentID, TimeoutSeconds: corebackup.KeyRotationTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
@@ -273,7 +274,7 @@ func (service *Service) RotateBackupKey(
 }
 
 func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error {
-	if task.Type != etcd.TaskRotate || task.Executor != etcd.TaskExecutorController {
+	if task.Type != taskjournal.TaskRotate || task.Executor != taskjournal.TaskExecutorController {
 		return errs.New(errs.KindValidationFailed, "backup key rotation Task is invalid")
 	}
 	return service.repository.ApplyBackupKeyRotation(ctx, task.ID)

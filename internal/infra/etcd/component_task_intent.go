@@ -3,6 +3,7 @@ package etcd
 import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
 	"reflect"
 	"sort"
@@ -29,7 +30,7 @@ type ComponentTaskCandidate struct {
 type ComponentTaskIntent struct {
 	TaskID          string                        `json:"task_id"`
 	EnvironmentID   string                        `json:"environment_id"`
-	Status          TaskStatus                    `json:"status"`
+	Status          taskjournal.TaskStatus        `json:"status"`
 	Candidates      []ComponentTaskCandidate      `json:"candidates"`
 	RouteProjection *ComponentTaskRouteProjection `json:"route_projection,omitempty"`
 	CreatedAt       time.Time                     `json:"created_at"`
@@ -45,7 +46,7 @@ func NewComponentTaskIntent(
 	intent := ComponentTaskIntent{
 		TaskID:        taskID,
 		EnvironmentID: environmentID,
-		Status:        TaskStatusPending,
+		Status:        taskjournal.TaskStatusPending,
 		Candidates:    cloneComponentTaskCandidates(candidates),
 		CreatedAt:     createdAt,
 	}
@@ -68,10 +69,10 @@ func componentTaskActiveEnvironmentKey(environmentID string) string {
 
 func terminalComponentTaskIntent(
 	intent ComponentTaskIntent,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (ComponentTaskIntent, error) {
-	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
 		return ComponentTaskIntent{}, errs.New(errs.KindStateConflict, "Component candidate is not pending")
 	}
 	terminal := cloneComponentTaskIntent(intent)
@@ -109,7 +110,7 @@ func validateComponentTaskIntent(intent ComponentTaskIntent) error {
 	if err := recordcodec.ValidateTimestamp("component candidate created_at", intent.CreatedAt); err != nil {
 		return err
 	}
-	if intent.Status == TaskStatusPending {
+	if intent.Status == taskjournal.TaskStatusPending {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Component candidate has a terminal timestamp")
 		}

@@ -8,6 +8,7 @@ import (
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"maps"
 )
@@ -51,7 +52,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	}
 	retryIntent := cloneRouteRemovalIntent(intent)
 	retryIntent.TaskID = retry.ID
-	retryIntent.Status = TaskStatusPending
+	retryIntent.Status = taskjournal.TaskStatusPending
 	retryIntent.CreatedAt = retry.CreatedAt
 	retryIntent.TerminalAt = nil
 	if err := validateRouteRemovalIntent(retryIntent); err != nil {
@@ -174,7 +175,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	}
 	retryIntent := cloneRouteMutationIntent(intent)
 	retryIntent.TaskID, retryIntent.Status, retryIntent.CreatedAt, retryIntent.TerminalAt =
-		retry.ID, TaskStatusPending, retry.CreatedAt, nil
+		retry.ID, taskjournal.TaskStatusPending, retry.CreatedAt, nil
 	if err := validateRouteMutationIntent(retryIntent); err != nil {
 		return routeTaskChange{}, err
 	}

@@ -5,6 +5,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 	"time"
@@ -17,7 +18,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 	fence ReleaseFenceSet,
 	base *etcdstore.GetManyResult,
 	terminals *etcdstore.GetManyResult,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
 	proofConditions ...Condition,
@@ -87,7 +88,7 @@ func (repository *TaskRepository) validateReleaseTerminalMembers(
 	ctx context.Context,
 	task TaskRecord,
 	head ReleaseOperationHead,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	keys := make([]string, len(head.Members))

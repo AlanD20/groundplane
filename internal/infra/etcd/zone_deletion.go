@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
 
@@ -64,13 +65,13 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	if err := validateZoneRemovalTaskOwner(task, intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	ordinaryTask := ordinary && task.Executor == TaskExecutorAgent
-	backingTask := backing && task.Executor == TaskExecutorController
+	ordinaryTask := ordinary && task.Executor == taskjournal.TaskExecutorAgent
+	backingTask := backing && task.Executor == taskjournal.TaskExecutorController
 	if tombstone.TargetKind != deletionrecord.DeletionTargetZone || tombstone.TargetID != zone.Record.Desired.ID ||
 		tombstone.TargetRevision != zone.Revision || tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) ||
-		task.Type != TaskRemove || task.Target != zone.Record.Desired.ID || task.Status != TaskStatusPending ||
+		task.Type != taskjournal.TaskRemove || task.Target != zone.Record.Desired.ID || task.Status != taskjournal.TaskStatusPending ||
 		(!ordinaryTask && !backingTask) || intent.ZoneRevision != zone.Revision ||
 		authorities.Desired.Revision != intent.DesiredHeadRevision ||
 		authorities.Applied.Revision != intent.AppliedProjectionRevision ||
@@ -357,8 +358,8 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	if err := validateZoneRemovalTaskOwner(task, intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if task.Executor != TaskExecutorAgent || task.Type != TaskRemove || task.Target != zone.Record.Desired.ID ||
-		task.Status != TaskStatusPending ||
+	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove || task.Target != zone.Record.Desired.ID ||
+		task.Status != taskjournal.TaskStatusPending ||
 		marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.ReplayTarget != nil ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
@@ -400,8 +401,8 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "backing Zone parent Task is missing")
 	}
 	parent, err := decodeTaskRecord(parentResult.Values[0].Value)
-	if err != nil || parent.ID != parentTaskID || parent.Executor != TaskExecutorController ||
-		parent.Status != TaskStatusRunning || parent.Target != zone.Record.Desired.ID ||
+	if err != nil || parent.ID != parentTaskID || parent.Executor != taskjournal.TaskExecutorController ||
+		parent.Status != taskjournal.TaskStatusRunning || parent.Target != zone.Record.Desired.ID ||
 		parent.Params[TaskResourceKindParam] != TaskResourceBackingZone {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
@@ -412,7 +413,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	headID, headErr := idempotencyrecord.DecodeTaskReference(parentResult.Values[3].Value)
 	applied, appliedErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(parentResult.Values[4].Value)
 	if err != nil || currentIntent.OperationID != intent.OperationID || currentIntent.ActiveTaskID != parentTaskID ||
-		currentIntent.Status != TaskStatusPending || string(parentResult.Values[2].Value) != parentTaskID ||
+		currentIntent.Status != taskjournal.TaskStatusPending || string(parentResult.Values[2].Value) != parentTaskID ||
 		headErr != nil || headID != currentIntent.DesiredProjection.RevisionID ||
 		parentResult.Values[3].ModRevision != currentIntent.DesiredHeadRevision ||
 		appliedErr != nil || parentResult.Values[4].ModRevision != currentIntent.AppliedProjectionRevision ||

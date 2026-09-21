@@ -2,15 +2,16 @@ package controllerupgrade
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (coordinator *Coordinator) qualify(ctx context.Context, operation *nativeOperation) (etcd.TaskStatus, error) {
+func (coordinator *Coordinator) qualify(ctx context.Context, operation *nativeOperation) (taskjournal.TaskStatus, error) {
 	expected := operation.expected
 	if coordinator.process != expected.Manifest.ControllerSHA256 {
 		return coordinator.requestRollback(
@@ -42,12 +43,12 @@ func (coordinator *Coordinator) qualify(ctx context.Context, operation *nativeOp
 	); err != nil {
 		return "", err
 	}
-	return coordinator.settle(operation, etcd.TaskStatusCompleted), nil
+	return coordinator.settle(operation, taskjournal.TaskStatusCompleted), nil
 }
 
 func (coordinator *Coordinator) confirmHealthy(
 	ctx context.Context, operation *nativeOperation,
-) (etcd.TaskStatus, error) {
+) (taskjournal.TaskStatus, error) {
 	if coordinator.process != operation.expected.Manifest.ControllerSHA256 {
 		return "", errs.New(errs.KindStateConflict, "qualified controller process identity differs")
 	}
@@ -59,12 +60,12 @@ func (coordinator *Coordinator) confirmHealthy(
 	if err := coordinator.recoverAgent(ctx, operation, localagent.UpdateFinish); err != nil {
 		return "", err
 	}
-	return coordinator.settle(operation, etcd.TaskStatusCompleted), nil
+	return coordinator.settle(operation, taskjournal.TaskStatusCompleted), nil
 }
 
 func (coordinator *Coordinator) recoverPredecessor(
 	ctx context.Context, operation *nativeOperation, phase upgrade.Phase,
-) (etcd.TaskStatus, error) {
+) (taskjournal.TaskStatus, error) {
 	if coordinator.process != operation.expected.PreviousController {
 		return "", errs.New(errs.KindStateConflict, "recovered controller process identity differs")
 	}
@@ -83,7 +84,7 @@ func (coordinator *Coordinator) recoverPredecessor(
 			return "", err
 		}
 	}
-	return coordinator.settle(operation, etcd.TaskStatusFailed), nil
+	return coordinator.settle(operation, taskjournal.TaskStatusFailed), nil
 }
 
 func (coordinator *Coordinator) recoverAgent(
@@ -148,7 +149,7 @@ func (coordinator *Coordinator) recoverAgent(
 
 func (coordinator *Coordinator) requestRollback(
 	ctx context.Context, operation *nativeOperation, cause error,
-) (etcd.TaskStatus, error) {
+) (taskjournal.TaskStatus, error) {
 	coordinator.logger.Error("native controller candidate requires recovery", "task_id", operation.expected.TaskID,
 		"error", cause)
 	journal, found, err := coordinator.current(ctx, operation)

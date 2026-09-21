@@ -6,6 +6,7 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -191,7 +192,7 @@ func validateSemanticAuthority(
 	record := proof.Record()
 	if projection.EnvironmentID != record.EnvironmentID || projection.RevisionID != record.AppliedRevisionID ||
 		projection.RenderGeneration != record.RenderGeneration || task.ID != record.ProducingTaskID ||
-		task.Executor != base.TaskExecutorAgent || uint64(task.RenderGeneration) != record.RenderGeneration ||
+		task.Executor != taskjournal.TaskExecutorAgent || uint64(task.RenderGeneration) != record.RenderGeneration ||
 		task.Params[base.TaskMaterializationEnvironmentParam] != record.EnvironmentID ||
 		task.Params[base.EnvironmentDesiredRevisionParam] != record.AppliedRevisionID {
 		return authorityConflict()

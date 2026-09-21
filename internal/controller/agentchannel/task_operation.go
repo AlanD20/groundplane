@@ -4,34 +4,35 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord) bool {
 	switch task.Type {
-	case etcd.TaskScript:
+	case taskjournal.TaskScript:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT
-	case etcd.TaskDeploy:
+	case taskjournal.TaskDeploy:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DEPLOY
-	case etcd.TaskRollback:
+	case taskjournal.TaskRollback:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
-	case etcd.TaskStart:
+	case taskjournal.TaskStart:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_START
-	case etcd.TaskStop:
+	case taskjournal.TaskStop:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_STOP
-	case etcd.TaskDestroy:
+	case taskjournal.TaskDestroy:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DESTROY
-	case etcd.TaskRemove:
+	case taskjournal.TaskRemove:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_REMOVE
-	case etcd.TaskCreate:
+	case taskjournal.TaskCreate:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE ||
 			task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceVolume &&
 				operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
-	case etcd.TaskAttach:
+	case taskjournal.TaskAttach:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_ATTACH
-	case etcd.TaskDetach:
+	case taskjournal.TaskDetach:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_DETACH
-	case etcd.TaskUpdate:
+	case taskjournal.TaskUpdate:
 		// Direct resource mutations have their own sealed plan procedures. They
 		// are not unmarked Environment reconciliation or Blueprint Apply.
 		switch task.Params[etcd.TaskResourceKindParam] {
@@ -59,9 +60,9 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 		}
 		_, backingCreation := task.Params[etcd.TaskBackingServiceCreationParam]
 		return backingCreation && operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
-	case etcd.TaskBackup:
+	case taskjournal.TaskBackup:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP
-	case etcd.TaskBackupPrune:
+	case taskjournal.TaskBackupPrune:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE
 	default:
 		return false

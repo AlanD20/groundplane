@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -25,7 +26,7 @@ const (
 )
 
 func validateComponentTaskOwner(task TaskRecord, intent ComponentTaskIntent) error {
-	if task.Executor != TaskExecutorAgent || task.Type != TaskUpdate || task.ID != intent.TaskID ||
+	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate || task.ID != intent.TaskID ||
 		task.Target != intent.EnvironmentID || !task.CreatedAt.Equal(intent.CreatedAt) {
 		return errs.New(errs.KindStateConflict, "Component candidate does not belong to its Task")
 	}

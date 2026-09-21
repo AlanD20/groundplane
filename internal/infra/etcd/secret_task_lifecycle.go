@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -141,7 +142,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (secretTaskChange, error) {
 	applies, err := taskOwnsSecretRemoval(task)
@@ -211,7 +212,7 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 			Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), task.Target),
 		}},
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		fences, err := prepareSecretScriptAbsence(ctx, repository.store, task.Target)
 		if err != nil {
 			return secretTaskChange{}, err
@@ -230,7 +231,7 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 func (repository *TaskRepository) validateSecretTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	applies, err := taskOwnsSecretRemoval(task)
@@ -250,7 +251,7 @@ func (repository *TaskRepository) validateSecretTaskAcknowledgementReplay(
 	if stored == nil || len(stored.Values) != 2 || stored.Values[1] != nil {
 		return errs.New(errs.KindStateConflict, "Secret deletion terminal state does not match its Task")
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if stored.Values[0] != nil {
 			return errs.New(errs.KindStateConflict, "completed Secret deletion retained its target")
 		}
@@ -267,10 +268,10 @@ func (repository *TaskRepository) validateSecretTaskAcknowledgementReplay(
 }
 
 func taskOwnsSecretRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceSecret {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceSecret {
 		return false, nil
 	}
-	if task.Type != TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindSecret, task.Target) != nil {
+	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindSecret, task.Target) != nil {
 		return false, errs.New(errs.KindInternal, "Secret deletion Task has invalid durable input")
 	}
 	return true, nil

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 )
 
@@ -10,7 +11,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
 ) (hierarchyDeletionRootAckChange, error) {
@@ -57,7 +58,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 		{Key: replayKey, ModRevision: auxiliary.Values[0].ModRevision},
 		{Key: lockKey, ModRevision: auxiliary.Values[1].ModRevision},
 	}}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		completed, err := repository.prepareHierarchyDeletionCompletedRoot(
 			ctx, operation, terminalAt, revision, &nextTombstone, &nextFence, &replay,
 		)

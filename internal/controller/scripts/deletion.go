@@ -12,6 +12,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -290,12 +291,12 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: etcd.TaskRemove, Target: scriptID,
+		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
+		Type: taskjournal.TaskRemove, Target: scriptID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceScript},
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
+		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: scriptDeletionTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	task.PlanHash, err = scriptDeletionPlanHash(scriptID)
 	if err != nil {
@@ -349,7 +350,7 @@ func scriptDeletionPlanHash(scriptID string) (string, error) {
 		Version  int    `json:"version"`
 		Type     string `json:"type"`
 		ScriptID string `json:"script_id"`
-	}{Version: 1, Type: string(etcd.TaskRemove), ScriptID: scriptID})
+	}{Version: 1, Type: string(taskjournal.TaskRemove), ScriptID: scriptID})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}

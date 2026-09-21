@@ -5,6 +5,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -22,7 +23,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	ctx context.Context,
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
@@ -33,17 +34,17 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	if publicationID == "" {
 		return false, nil
 	}
-	if task.Executor != TaskExecutorAgent ||
-		(task.Type != TaskDeploy && task.Type != TaskRollback && task.Type != TaskUpdate) ||
+	if task.Executor != taskjournal.TaskExecutorAgent ||
+		(task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback && task.Type != taskjournal.TaskUpdate) ||
 		validatePublicationID(publicationID) != nil || task.OperationID == "" || task.RenderGeneration <= 0 {
 		return false, corruptReleaseRecord()
 	}
-	if terminalStatus != TaskStatusCompleted && result.FailedStepID == "" &&
+	if terminalStatus != taskjournal.TaskStatusCompleted && result.FailedStepID == "" &&
 		!unassignedReleaseAbort(task, terminalStatus) &&
-		result.Diagnostic != TaskResultDiagnosticTimeoutBeforeEffect {
+		result.Diagnostic != taskjournal.TaskResultDiagnosticTimeoutBeforeEffect {
 		return false, errs.New(errs.KindStateConflict, "release failure is missing its failed step identity")
 	}
-	if task.Type == TaskUpdate {
+	if task.Type == taskjournal.TaskUpdate {
 		if !result.ReconciliationRequired {
 			processed, terminalErr := repository.finalizeReleaseHookExecutionBatch(ctx, task, terminalAt, readRevision)
 			if terminalErr != nil || processed {
@@ -221,7 +222,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 				return false, errs.New(errs.KindStateConflict, "release serving evidence does not match its candidate")
 			}
 			stepID := task.Steps[index*5+2].ID
-			if member.Ordinal == failedOrdinal && terminalStatus != TaskStatusCompleted {
+			if member.Ordinal == failedOrdinal && terminalStatus != taskjournal.TaskStatusCompleted {
 				stepID = result.FailedStepID
 			}
 			effectDigest, digestErr := domain.Digest(struct {

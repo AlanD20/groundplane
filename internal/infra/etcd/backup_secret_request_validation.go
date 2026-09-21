@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"time"
@@ -25,10 +26,10 @@ func validateBackupSecretTaskAssignment(
 	assignment TaskAssignmentRecord,
 	request backupsecret.Request,
 ) error {
-	if task.ID != request.TaskID || task.Type != TaskBackup && task.Type != TaskBackupPrune ||
-		task.Status != TaskStatusRunning || task.Executor != TaskExecutorAgent ||
+	if task.ID != request.TaskID || task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune ||
+		task.Status != taskjournal.TaskStatusRunning || task.Executor != taskjournal.TaskExecutorAgent ||
 		assignment.AssignmentID != request.AssignmentID || assignment.TaskID != task.ID ||
-		assignment.Executor != TaskExecutorAgent || assignment.AgentID != request.AgentID ||
+		assignment.Executor != taskjournal.TaskExecutorAgent || assignment.AgentID != request.AgentID ||
 		assignment.AgentGeneration != request.AgentGeneration ||
 		!assignment.Deadline.Equal(request.Deadline) || task.StartedAt == nil ||
 		!task.StartedAt.Equal(assignment.AssignedAt) ||

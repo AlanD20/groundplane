@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -15,7 +16,7 @@ import (
 func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
 ) (routeTaskChange, error) {
@@ -43,7 +44,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	if err := validateRouteRemovalTaskOwner(task, intent); err != nil {
 		return routeTaskChange{}, err
 	}
-	if intent.Status != TaskStatusPending {
+	if intent.Status != taskjournal.TaskStatusPending {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal intent is not pending")
 	}
 
@@ -111,7 +112,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		change.mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 	)
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		change.mutations[0] = etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeRemovalIntentKey(task.ID)}
 		promotion, promotionErr := prepareRouteHeadPromotion(ctx, repository.store, intent, revision)
 		if promotionErr != nil {
@@ -156,7 +157,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
 ) (routeTaskChange, error) {
@@ -179,7 +180,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	if err := validateRouteMutationTaskOwner(task, intent); err != nil {
 		return routeTaskChange{}, err
 	}
-	if intent.Status != TaskStatusPending {
+	if intent.Status != taskjournal.TaskStatusPending {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation intent is not pending")
 	}
 	stateKeys := []string{
@@ -218,7 +219,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	var provider routerecord.ProviderObservation
 	if intent.Provider != nil {
 		status = routerecord.ObservedDegraded
-		if terminalStatus == TaskStatusCompleted {
+		if terminalStatus == taskjournal.TaskStatusCompleted {
 			status = routerecord.ObservedServed
 		}
 		provider = routerecord.ProviderObservation{

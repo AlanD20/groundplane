@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/codes"
@@ -46,26 +47,26 @@ func (s *Server) recordTaskEvent(
 	if err != nil || !bytes.Equal(planHash, event.PlanHash) {
 		return errs.New(errs.KindStateConflict, "Agent Task event plan hash does not match")
 	}
-	if task.Record.Status != etcd.TaskStatusRunning {
+	if task.Record.Status != taskjournal.TaskStatusRunning {
 		return errs.New(
 			errs.KindStateConflict,
 			"Agent Task event does not belong to a running Task",
 		)
 	}
-	var state etcd.TaskEventState
+	var state taskjournal.TaskEventState
 	switch event.State {
 	case agentpb.TaskState_TASK_STATE_PENDING:
-		state = etcd.TaskEventStatePending
+		state = taskjournal.TaskEventStatePending
 	case agentpb.TaskState_TASK_STATE_RUNNING:
-		state = etcd.TaskEventStateRunning
+		state = taskjournal.TaskEventStateRunning
 	case agentpb.TaskState_TASK_STATE_COMPLETED:
-		state = etcd.TaskEventStateCompleted
+		state = taskjournal.TaskEventStateCompleted
 	case agentpb.TaskState_TASK_STATE_FAILED:
-		state = etcd.TaskEventStateFailed
+		state = taskjournal.TaskEventStateFailed
 	case agentpb.TaskState_TASK_STATE_ABORTED:
-		state = etcd.TaskEventStateAborted
+		state = taskjournal.TaskEventStateAborted
 	case agentpb.TaskState_TASK_STATE_TIMED_OUT:
-		state = etcd.TaskEventStateTimedOut
+		state = taskjournal.TaskEventStateTimedOut
 	default:
 		return errs.New(errs.KindValidationFailed, "Agent Task event state is invalid")
 	}

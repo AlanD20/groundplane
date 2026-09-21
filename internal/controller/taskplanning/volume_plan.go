@@ -9,6 +9,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"sort"
 	"strings"
@@ -39,7 +40,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 	task etcd.TaskRecord,
 ) (*agentpb.ExecutionPlan, error) {
 	params := task.Params
-	if task.Type == etcd.TaskRemove {
+	if task.Type == taskjournal.TaskRemove {
 		var err error
 		params, err = resolver.volumeRemovalPlanParams(ctx, task)
 		if err != nil {
@@ -51,7 +52,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 	if action == VolumeTaskActionRemove {
 		expectedParams++
 	}
-	if resolver == nil || resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent ||
+	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
 		ids.Validate(ids.KindVolume, task.Target) != nil || task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 || task.RenderGeneration <= 0 || len(params) != expectedParams ||
 		params[etcd.TaskResourceKindParam] != etcd.TaskResourceVolume ||
@@ -63,9 +64,9 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 		return nil, errs.New(errs.KindInternal, "durable Volume Task shape is invalid")
 	}
 	if (action != VolumeTaskActionAdd && action != VolumeTaskActionEdit && action != VolumeTaskActionRemove) ||
-		(action == VolumeTaskActionAdd && task.Type != etcd.TaskCreate) ||
-		(action == VolumeTaskActionEdit && task.Type != etcd.TaskUpdate) ||
-		(action == VolumeTaskActionRemove && task.Type != etcd.TaskRemove) {
+		(action == VolumeTaskActionAdd && task.Type != taskjournal.TaskCreate) ||
+		(action == VolumeTaskActionEdit && task.Type != taskjournal.TaskUpdate) ||
+		(action == VolumeTaskActionRemove && task.Type != taskjournal.TaskRemove) {
 		return nil, errs.New(errs.KindInternal, "durable Volume Task action is invalid")
 	}
 	intentDigest, err := decodeVolumeTaskDigest(params[VolumeTaskIntentSHA256Param])
@@ -343,7 +344,7 @@ func volumeArtifactContainsVolume(artifact *agentpb.ComposeArtifact, volumeID, k
 	return false
 }
 
-func volumeTaskStepIDsValid(steps []etcd.TaskStepRecord) bool {
+func volumeTaskStepIDsValid(steps []taskjournal.TaskStepRecord) bool {
 	seen := make(map[string]struct{}, len(steps))
 	for _, step := range steps {
 		if ids.Validate(ids.KindStep, step.ID) != nil {

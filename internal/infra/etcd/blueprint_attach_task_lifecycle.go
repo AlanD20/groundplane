@@ -5,6 +5,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -27,7 +28,7 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskClaim(
 	if err != nil || !found {
 		return blueprintAttachTaskChange{}, err
 	}
-	if intent.Status != TaskStatusPending {
+	if intent.Status != taskjournal.TaskStatusPending {
 		return blueprintAttachTaskChange{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint Attach Task intent is not pending",
@@ -44,7 +45,7 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskClaim(
 func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
 ) (blueprintAttachTaskChange, error) {
@@ -56,11 +57,11 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 	if err != nil {
 		return blueprintAttachTaskChange{}, err
 	}
-	succeeded := terminalStatus == TaskStatusCompleted
+	succeeded := terminalStatus == taskjournal.TaskStatusCompleted
 	change, err := repository.prepareBlueprintAttachCandidateTransition(
 		ctx, task, intentValue, intent, revision,
 		func(record attachrecord.Record) (attachrecord.Record, error) {
-			if terminalStatus == TaskStatusAborted && record.Status == core.AttachPending {
+			if terminalStatus == taskjournal.TaskStatusAborted && record.Status == core.AttachPending {
 				return attachrecord.AbortPendingAttachProvisioning(record, task.ID)
 			}
 			return attachrecord.CompleteAttachProvisioning(record, task.ID, succeeded)
@@ -195,7 +196,7 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 		})
 	}
 	retryIntent := BlueprintAttachTaskIntent{
-		TaskID: retry.ID, EnvironmentID: intent.EnvironmentID, Status: TaskStatusPending,
+		TaskID: retry.ID, EnvironmentID: intent.EnvironmentID, Status: taskjournal.TaskStatusPending,
 		OwnsEnvironmentFence: intent.OwnsEnvironmentFence, Candidates: retryCandidates, CreatedAt: retry.CreatedAt,
 	}
 	intentBytes, err := encodeBlueprintAttachTaskIntent(retryIntent)
@@ -213,7 +214,7 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 func (repository *TaskRepository) validateBlueprintAttachTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	_, intent, found, err := repository.readBlueprintAttachTaskIntent(ctx, task, revision)
@@ -239,7 +240,7 @@ func (repository *TaskRepository) validateBlueprintAttachTaskAcknowledgementRepl
 		return errs.New(errs.KindInternal, "Blueprint Attach terminal replay is incomplete")
 	}
 	expectedStatus := core.AttachFailed
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		expectedStatus = core.AttachReady
 	}
 	for index, candidate := range intent.Candidates {

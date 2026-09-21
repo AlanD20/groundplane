@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -52,9 +53,9 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		tombstone.Phase != routeRemovalTombstonePhase(intent) || !tombstone.CreatedAt.Equal(task.CreatedAt) ||
 		!tombstone.UpdatedAt.Equal(tombstone.CreatedAt) || intent.TaskID != task.ID ||
 		intent.EnvironmentID != environment.Record.ID || intent.RouteID != route.Record.Desired.ID ||
-		intent.RouteRevision != route.Revision || intent.Status != TaskStatusPending ||
-		!intent.CreatedAt.Equal(task.CreatedAt) || intent.TerminalAt != nil || task.Type != TaskRemove ||
-		task.Target != route.Record.Desired.ID || task.Status != TaskStatusPending {
+		intent.RouteRevision != route.Revision || intent.Status != taskjournal.TaskStatusPending ||
+		!intent.CreatedAt.Equal(task.CreatedAt) || intent.TerminalAt != nil || task.Type != taskjournal.TaskRemove ||
+		task.Target != route.Record.Desired.ID || task.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Route deletion Task, intent, and tombstone do not match",

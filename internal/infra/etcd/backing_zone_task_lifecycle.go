@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"maps"
 	"time"
 
@@ -142,7 +143,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 func (repository *TaskRepository) prepareBackingZoneTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
 ) (backingZoneTaskChange, error) {
@@ -159,7 +160,7 @@ func (repository *TaskRepository) prepareBackingZoneTaskAcknowledgement(
 func (repository *TaskRepository) validateBackingZoneTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	if task.Params[TaskZoneRemovalOperationParam] != "" {
@@ -170,10 +171,10 @@ func (repository *TaskRepository) validateBackingZoneTaskAcknowledgementReplay(
 }
 
 func taskOwnsBackingZoneCascade(task TaskRecord) (bool, error) {
-	if task.Executor != TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceBackingZone {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceBackingZone {
 		return false, nil
 	}
-	if task.Type != TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 5 ||
+	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 5 ||
 		ids.Validate(ids.KindEnvironment, task.Params[TaskZoneEnvironmentParam]) != nil ||
 		ids.Validate(ids.KindOperation, task.Params[TaskZoneRemovalOperationParam]) != nil ||
 		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) != nil ||

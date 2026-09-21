@@ -11,6 +11,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -273,12 +274,12 @@ func (service *secretDeletionService) deleteSecretOnce(
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: etcd.TaskRemove, Target: secretID,
+		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
+		Type: taskjournal.TaskRemove, Target: secretID,
 		Params:         map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceSecret},
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
+		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: secretDeletionTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	task.PlanHash, err = secretDeletionPlanHash(secretID)
 	if err != nil {
@@ -332,7 +333,7 @@ func secretDeletionPlanHash(secretID string) (string, error) {
 		Version  int    `json:"version"`
 		Type     string `json:"type"`
 		SecretID string `json:"secret_id"`
-	}{Version: 1, Type: string(etcd.TaskRemove), SecretID: secretID})
+	}{Version: 1, Type: string(taskjournal.TaskRemove), SecretID: secretID})
 	if err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}

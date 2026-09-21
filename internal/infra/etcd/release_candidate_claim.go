@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"sort"
 	"time"
@@ -78,7 +79,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	task TaskRecord,
 	revision int64,
 ) (ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
-	if task.Type == TaskUpdate || task.Params[TaskReleasePublicationParam] == "" {
+	if task.Type == taskjournal.TaskUpdate || task.Params[TaskReleasePublicationParam] == "" {
 		return ReleaseRestorationAuthority{}, "", nil, corruptTaskAssignment()
 	}
 	publicationID := task.Params[TaskReleasePublicationParam]
@@ -316,7 +317,7 @@ func validateReleaseCandidateMarker(
 	if err != nil {
 		return nil, err
 	}
-	if task.Type == TaskUpdate {
+	if task.Type == taskjournal.TaskUpdate {
 		if err := validateBlueprintNativePredecessorReferences(marker.NativePredecessors, procedure); err != nil {
 			return nil, err
 		}
@@ -386,7 +387,7 @@ func validateAssignmentRestorationDescriptor(
 			return corruptTaskAssignment()
 		}
 	}
-	if taskHasBlueprintCandidateAppliedAuthority(task) || task.Type == TaskDeploy || task.Type == TaskRollback {
+	if taskHasBlueprintCandidateAppliedAuthority(task) || task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
 		if err := validateNativeRestorationDescriptor(*authority, procedure); err != nil {
 			return err
 		}

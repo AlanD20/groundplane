@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
 	"strings"
@@ -417,17 +418,17 @@ func newRunnerCreateTask(
 	planDigest := sha256.Sum256([]byte(planInput))
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorController,
+		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: ids.New(ids.KindPlan), PlanHash: hex.EncodeToString(planDigest[:]), RenderGeneration: 1,
-		Type: etcd.TaskCreate, Target: desired.ID,
+		Type: taskjournal.TaskCreate, Target: desired.ID,
 		Params: map[string]string{
 			etcd.TaskResourceKindParam:               etcd.TaskResourceRunner,
 			etcd.RunnerRegistrationTokenPresentParam: "true",
 		},
-		Steps: []etcd.TaskStepRecord{
-			{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)},
+		Steps: []taskjournal.TaskStepRecord{
+			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		}, TimeoutSeconds: runnerCreateTimeoutSeconds,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
 
@@ -439,7 +440,7 @@ func newRunnerRetryTask(source etcd.TaskRecord, now time.Time) etcd.TaskRecord {
 		RenderGeneration: source.RenderGeneration, Type: source.Type, Target: source.Target,
 		Params: cloneRunnerTaskParams(source.Params), Steps: slices.Clone(source.Steps),
 		Materializations: slices.Clone(source.Materializations), TimeoutSeconds: source.TimeoutSeconds,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 }
 

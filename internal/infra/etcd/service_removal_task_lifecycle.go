@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -39,7 +40,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskRetry(
 func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
 ) (routeTaskChange, error) {
@@ -63,7 +64,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	if err := validateServiceRemovalTaskOwner(task, intent); err != nil {
 		return routeTaskChange{}, err
 	}
-	if intent.Status != TaskStatusPending {
+	if intent.Status != taskjournal.TaskStatusPending {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
 	}
 	keys := []string{
@@ -131,7 +132,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		},
 		values: [][]byte{terminalValue},
 	}
-	if terminalStatus != TaskStatusCompleted {
+	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return change, nil
 	}
 	scriptConditions, err := prepareServiceScriptAbsence(ctx, repository.store, intent.ServiceID, revision)
@@ -190,7 +191,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -230,7 +231,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	}
 	wantRevision := intent.ExpectedHeadRevision
 	wantProjection := intent.CurrentProjection
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if state.Values[0] != nil {
 			return errs.New(errs.KindStateConflict, "completed Service removal retained its target")
 		}

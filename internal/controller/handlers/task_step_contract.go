@@ -1,20 +1,21 @@
 package handlers
 
 import (
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
-func taskStepKindResponse(step etcd.TaskStepRecord) (apiTypes.TaskStepKind, error) {
+func taskStepKindResponse(step taskjournal.TaskStepRecord) (apiTypes.TaskStepKind, error) {
 	switch step.Kind {
-	case etcd.TaskStepOperation:
+	case taskjournal.TaskStepOperation:
 		if step.ScriptID != "" || step.ScriptSlug != "" {
 			return "", errs.New(errs.KindInternal, "Task operation step carries Script identity")
 		}
 		return apiTypes.TaskStepOperation, nil
-	case etcd.TaskStepScript:
+	case taskjournal.TaskStepScript:
 		if step.ScriptID == "" || step.ScriptSlug == "" {
 			return "", errs.New(errs.KindInternal, "Task Script step identity is incomplete")
 		}

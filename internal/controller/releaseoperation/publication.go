@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
 	"strings"
@@ -42,11 +43,11 @@ func (service *Service) publish(
 	}
 	now := service.now().UTC()
 	operationKind := domain.OperationDeploy
-	taskType := etcd.TaskDeploy
+	taskType := taskjournal.TaskDeploy
 	for _, candidate := range candidates {
 		if candidate.rollbackSource != "" {
 			operationKind = domain.OperationRollback
-			taskType = etcd.TaskRollback
+			taskType = taskjournal.TaskRollback
 			break
 		}
 	}
@@ -74,17 +75,17 @@ func (service *Service) publish(
 	}
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, IdempotencyKey: locator.Key,
-		Owner: owner, Actor: etcd.TaskActorOperator, Executor: etcd.TaskExecutorAgent,
+		Owner: owner, Actor: etcd.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: planID, Type: taskType, Target: desiredID,
 		Params: map[string]string{
 			etcd.TaskReleasePublicationParam: publicationID,
 			etcd.TaskComposeArtifactParam:    artifactID,
 		},
-		Steps: make([]etcd.TaskStepRecord, len(candidates)*5), TimeoutSeconds: configured,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Steps: make([]taskjournal.TaskStepRecord, len(candidates)*5), TimeoutSeconds: configured,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	for index := range task.Steps {
-		task.Steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
+		task.Steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	stage := etcd.ReleaseStage{
 		PublicationID: publicationID, OperationID: operationID,

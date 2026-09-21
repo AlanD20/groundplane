@@ -11,6 +11,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -341,16 +342,16 @@ func newConnectorDeletionTask(
 	return etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
 		Owner: owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
-		Type: etcd.TaskRemove, Target: connector.ID,
+		Executor: taskjournal.TaskExecutorController, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1,
+		Type: taskjournal.TaskRemove, Target: connector.ID,
 		Params: map[string]string{
 			etcd.TaskResourceKindParam:         etcd.TaskResourceConnector,
 			etcd.TaskConnectorEnvironmentParam: connector.EnvironmentID,
 			etcd.TaskConnectorNameParam:        connector.Name,
 		},
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}},
+		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
 		TimeoutSeconds: connectorDeletionTimeoutSeconds, PlanHash: planHash,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil
 }
 
@@ -362,7 +363,7 @@ func connectorDeletionPlanHash(connectorID string, environmentID string, name st
 		EnvironmentID string `json:"environment_id"`
 		Name          string `json:"name"`
 	}{
-		Version: 1, Type: string(etcd.TaskRemove), ConnectorID: connectorID,
+		Version: 1, Type: string(taskjournal.TaskRemove), ConnectorID: connectorID,
 		EnvironmentID: environmentID, Name: name,
 	})
 	if err != nil {

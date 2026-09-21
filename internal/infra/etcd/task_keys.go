@@ -3,6 +3,7 @@ package etcd
 import (
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 	"strings"
 	"time"
@@ -82,17 +83,17 @@ func taskEventDedupKey(identity TaskEventIdentity) string {
 		strconv.FormatUint(uint64(identity.Attempt), 10) + "/" + strconv.FormatUint(identity.Ordinal, 10)
 }
 
-func taskQueueScopePrefix(executor TaskExecutor) string {
+func taskQueueScopePrefix(executor taskjournal.TaskExecutor) string {
 	return taskQueueRootPrefix + string(executor) + "/"
 }
 
-func taskQueueKey(executor TaskExecutor, taskID string) string {
+func taskQueueKey(executor taskjournal.TaskExecutor, taskID string) string {
 	return taskQueueScopePrefix(executor) + taskID
 }
 
-func taskIDFromQueueKey(executor TaskExecutor, key string) (string, error) {
+func taskIDFromQueueKey(executor taskjournal.TaskExecutor, key string) (string, error) {
 	prefix := taskQueueScopePrefix(executor)
-	if !validTaskExecutor(executor) || !strings.HasPrefix(key, prefix) {
+	if !taskjournal.ValidExecutor(executor) || !strings.HasPrefix(key, prefix) {
 		return "", errs.New(errs.KindInternal, "task queue key is outside the queue")
 	}
 	taskID := strings.TrimPrefix(key, prefix)
@@ -110,8 +111,8 @@ func controllerTaskClaimKey(taskID string) string {
 	return controllerTaskClaimPrefix + taskID
 }
 
-func taskExecutionClaimKey(executor TaskExecutor, agentID string, taskID string) string {
-	if executor == TaskExecutorController {
+func taskExecutionClaimKey(executor taskjournal.TaskExecutor, agentID string, taskID string) string {
+	if executor == taskjournal.TaskExecutorController {
 		return controllerTaskClaimKey(taskID)
 	}
 	return taskAssignmentKey(agentID, taskID)

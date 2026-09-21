@@ -5,6 +5,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -248,9 +249,9 @@ func validateComponentObservation(record ComponentObservationRecord) error {
 	if record.Enabled {
 		if !recordcodec.ValidSHA256(record.CorefileSHA256) || !recordcodec.ValidSHA256(record.InputSHA256) ||
 			record.DNSResolverProof == nil || validateTaskResult(TaskResultRecord{
-			Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+			Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 			DNSResolverCandidateObservation: record.DNSResolverProof,
-		}, nil, TaskStatusCompleted) != nil || record.DNSResolverProof.ComponentID != record.ComponentID ||
+		}, nil, taskjournal.TaskStatusCompleted) != nil || record.DNSResolverProof.ComponentID != record.ComponentID ||
 			record.DNSResolverProof.ServiceID != record.ServiceID ||
 			record.DNSResolverProof.RenderGeneration != record.RenderGeneration ||
 			record.DNSResolverProof.ArtifactSHA256 != record.CorefileSHA256 ||

@@ -10,6 +10,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -84,7 +85,7 @@ func (resolver *TaskPlanResolver) prepareServiceLifecycleTask(
 		wantSteps++
 	}
 	if resolver == nil || ctx == nil || len(stepIDs) != wantSteps ||
-		task.Executor != etcd.TaskExecutorAgent || task.PlanID != input.PlanID || task.Target != input.ServiceID {
+		task.Executor != taskjournal.TaskExecutorAgent || task.PlanID != input.PlanID || task.Target != input.ServiceID {
 		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Service lifecycle Task preparation is invalid")
 	}
 	for _, stepID := range stepIDs {
@@ -101,9 +102,9 @@ func (resolver *TaskPlanResolver) prepareServiceLifecycleTask(
 		etcd.TaskServiceEnvironmentParam: input.EnvironmentID,
 		etcd.TaskComposeArtifactParam:    input.ArtifactID,
 	}
-	prepared.Steps = make([]etcd.TaskStepRecord, len(stepIDs))
+	prepared.Steps = make([]taskjournal.TaskStepRecord, len(stepIDs))
 	for index, stepID := range stepIDs {
-		prepared.Steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID}
+		prepared.Steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID}
 	}
 	plan, err := resolver.buildServiceLifecyclePlanWithHookInputs(ctx, prepared, input, hookInputs)
 	if err != nil {
@@ -160,7 +161,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 		return nil, errs.New(errs.KindInternal, "Service lifecycle Task procedure changed")
 	}
 	phase := core.ServiceLifecyclePhase("")
-	if task.Type == etcd.TaskStart {
+	if task.Type == taskjournal.TaskStart {
 		phase = core.ServiceLifecycleStart
 	}
 	artifacts, err := resolver.renderServiceLifecycleArtifacts(ctx, input, phase)
@@ -170,7 +171,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 	composeTask := task
 	composeTask.Steps = task.Steps
 	if definition != nil {
-		if task.Type == etcd.TaskStart {
+		if task.Type == taskjournal.TaskStart {
 			composeTask.Steps = task.Steps[:len(task.Steps)-1]
 		} else {
 			composeTask.Steps = task.Steps[1:]
@@ -187,7 +188,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 			return nil, errs.New(errs.KindInternal, "Service lifecycle hook input resolver is not configured")
 		}
 		hookRecord := task.Steps[0]
-		if task.Type == etcd.TaskStart {
+		if task.Type == taskjournal.TaskStart {
 			hookRecord = task.Steps[len(task.Steps)-1]
 		}
 		consume := func(resolved backinghook.Input) error {
@@ -195,7 +196,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 			if buildErr != nil {
 				return buildErr
 			}
-			if task.Type == etcd.TaskStart {
+			if task.Type == taskjournal.TaskStart {
 				hookStep.PrerequisiteStepId = composeSteps[len(composeSteps)-1].StepId
 				steps = append(composeSteps, hookStep)
 			} else {
@@ -245,15 +246,15 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 
 func serviceLifecycleHook(
 	input etcd.ServiceLifecycleRenderInput,
-	taskType etcd.TaskType,
+	taskType taskjournal.TaskType,
 ) (backinghook.Event, *backinghook.Definition) {
 	if input.HookConfiguration == nil {
 		return "", nil
 	}
 	switch taskType {
-	case etcd.TaskStart:
+	case taskjournal.TaskStart:
 		return backinghook.AfterStart, input.HookConfiguration.AfterStart
-	case etcd.TaskStop, etcd.TaskDestroy:
+	case taskjournal.TaskStop, taskjournal.TaskDestroy:
 		return backinghook.BeforeStop, input.HookConfiguration.BeforeStop
 	default:
 		return "", nil
@@ -419,15 +420,15 @@ func serviceLifecycleProcedure(
 			step.PrerequisiteStepId = steps[index-1].StepId
 		}
 		switch task.Type {
-		case etcd.TaskStart:
+		case taskjournal.TaskStart:
 			step.Payload = &agentpb.ExecutionStep_ComposeApply{ComposeApply: &agentpb.ComposeApply{
 				ArtifactId: artifact.ArtifactId, ServiceIds: []string{task.Target}, FullReconcile: false,
 			}}
-		case etcd.TaskStop:
+		case taskjournal.TaskStop:
 			step.Payload = &agentpb.ExecutionStep_ComposeStop{ComposeStop: &agentpb.ComposeStop{
 				ArtifactId: artifact.ArtifactId, ServiceIds: []string{task.Target}, GraceSeconds: ServiceStopGraceSeconds,
 			}}
-		case etcd.TaskDestroy:
+		case taskjournal.TaskDestroy:
 			step.Payload = &agentpb.ExecutionStep_ComposeRemove{ComposeRemove: &agentpb.ComposeRemove{
 				ArtifactId: artifact.ArtifactId, ServiceIds: []string{task.Target}, WholeProject: false,
 			}}
@@ -438,11 +439,11 @@ func serviceLifecycleProcedure(
 		steps[index] = step
 	}
 	switch task.Type {
-	case etcd.TaskStart:
+	case taskjournal.TaskStart:
 		return agentpb.PlanOperation_PLAN_OPERATION_START, steps, nil
-	case etcd.TaskStop:
+	case taskjournal.TaskStop:
 		return agentpb.PlanOperation_PLAN_OPERATION_STOP, steps, nil
-	case etcd.TaskDestroy:
+	case taskjournal.TaskDestroy:
 		return agentpb.PlanOperation_PLAN_OPERATION_DESTROY, steps, nil
 	default:
 		return agentpb.PlanOperation_PLAN_OPERATION_UNSPECIFIED, nil,

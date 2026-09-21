@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 )
@@ -391,8 +392,8 @@ func validateAttachCreateScope(
 func validateAttachCreationTask(record attachrecord.Record, task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {
 	pendingAttachOwned := record.Status == core.AttachPending && record.Operation == attachrecord.AttachOperationProvision &&
 		record.TaskID == task.ID && record.CreatedAt.Equal(task.CreatedAt)
-	validTaskShape := task.Type == TaskAttach && task.Target == record.ID && task.Executor == TaskExecutorAgent &&
-		task.Status == TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
+	validTaskShape := task.Type == taskjournal.TaskAttach && task.Target == record.ID && task.Executor == taskjournal.TaskExecutorAgent &&
+		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
 		task.Params[TaskMutationEnvironmentParam] == record.EnvironmentID
 	if !pendingAttachOwned || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach creation Task does not own its pending Attach")

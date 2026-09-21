@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
@@ -38,14 +39,14 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	assignmentValue *etcdstore.KeyValue,
 	assignmentIndexValue *etcdstore.KeyValue,
 	recovery releaseRecoveryAcknowledgement,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt *time.Time,
 	revision int64,
-	submittedStatus TaskStatus,
+	submittedStatus taskjournal.TaskStatus,
 	submittedResult TaskResultRecord,
 	advanceNow bool,
 ) (scriptTerminalSourceRelease, bool, error) {
-	if task.Type == TaskScript {
+	if task.Type == taskjournal.TaskScript {
 		return repository.prepareManualScriptTerminalRelease(ctx, task, taskValue, assignment,
 			assignmentValue, assignmentIndexValue, terminalStatus, terminalAt, revision, submittedResult)
 	}
@@ -127,7 +128,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 		}
 		executions[index] = record
-		if root.Phase == ScriptOperationSourceActive && terminalStatus == TaskStatusCompleted &&
+		if root.Phase == ScriptOperationSourceActive && terminalStatus == taskjournal.TaskStatusCompleted &&
 			(record.State != ScriptExecutionCleanupProven || record.AssignmentID != assignment.AssignmentID || record.ReconciliationRequired) {
 			return scriptTerminalSourceRelease{}, false, errs.New(
 				errs.KindStateConflict,
@@ -162,7 +163,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	}
 	guards = append(guards, executionGuards...)
 	var pending *blueprintTerminalSourceAdvance
-	if task.Type == TaskUpdate && !advanceNow {
+	if task.Type == taskjournal.TaskUpdate && !advanceNow {
 		pending = &blueprintTerminalSourceAdvance{
 			task: task, taskValue: taskValue, assignment: assignment, assignmentValue: assignmentValue,
 			assignmentIndexValue: assignmentIndexValue, recovery: recovery, terminalStatus: terminalStatus,
@@ -171,7 +172,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	}
 	var closingCondition etcdstore.Condition
 	var closingMutation etcdstore.Mutation
-	if task.Type == TaskUpdate {
+	if task.Type == taskjournal.TaskUpdate {
 		current := TaskAssignment{
 			Task:       etcdstore.Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
 			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
@@ -204,7 +205,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		if pending != nil {
 			return pending.projection(executionGuards), false, nil
 		}
-		if task.Type == TaskUpdate {
+		if task.Type == taskjournal.TaskUpdate {
 			release.mutations = append(release.mutations, closingMutation)
 		}
 		transaction, transactErr := repository.store.Transact(
@@ -261,7 +262,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		conditions: append(append([]etcdstore.Condition(nil), final.conditions...), executionGuards...),
 		mutations:  cloneBlueprintCandidateMutations(final.mutations),
 	}
-	if task.Type == TaskUpdate {
+	if task.Type == taskjournal.TaskUpdate {
 		change.conditions = append(change.conditions, closingCondition)
 		change.mutations = append(change.mutations, closingMutation)
 	}

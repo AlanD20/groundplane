@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
 
@@ -67,7 +68,7 @@ func (service *taskAbortService) AbortTask(
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		if current.Record.Type == etcd.TaskBackupPrune {
+		if current.Record.Type == taskjournal.TaskBackupPrune {
 			return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
 				errs.KindTaskNotAbortable,
 				"internal task %s of type %s is not operator-abortable",
@@ -76,29 +77,29 @@ func (service *taskAbortService) AbortTask(
 			)
 		}
 		switch current.Record.Status {
-		case etcd.TaskStatusAborted:
+		case taskjournal.TaskStatusAborted:
 			if current.Record.StartedAt == nil && current.Record.Params[etcd.TaskReleasePublicationParam] != "" &&
-				(current.Record.Type == etcd.TaskDeploy || current.Record.Type == etcd.TaskRollback) {
+				(current.Record.Type == taskjournal.TaskDeploy || current.Record.Type == taskjournal.TaskRollback) {
 				if _, err := service.repository.AbortPendingTask(ctx, taskID, service.now().UTC()); err != nil {
 					return idempotencyrecord.IdempotencyResponse{}, err
 				}
 			}
 			return taskAbortResponse(taskID)
-		case etcd.TaskStatusCompleted, etcd.TaskStatusFailed, etcd.TaskStatusTimedOut:
+		case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusTimedOut:
 			return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
 				errs.KindTaskNotAbortable,
 				"task %s has status %s",
 				taskID,
 				current.Record.Status,
 			)
-		case etcd.TaskStatusPending:
+		case taskjournal.TaskStatusPending:
 			if _, err := service.repository.AbortPendingTask(ctx, taskID, service.now().UTC()); err != nil {
 				if isTaskAbortStateRace(err) {
 					continue
 				}
 				return idempotencyrecord.IdempotencyResponse{}, err
 			}
-		case etcd.TaskStatusRunning:
+		case taskjournal.TaskStatusRunning:
 			assignment, err := service.repository.GetTaskAssignment(ctx, taskID)
 			if err != nil {
 				if isTaskAbortStateRace(err) {
@@ -107,9 +108,9 @@ func (service *taskAbortService) AbortTask(
 				return idempotencyrecord.IdempotencyResponse{}, err
 			}
 			switch assignment.Assignment.Record.Executor {
-			case etcd.TaskExecutorAgent:
+			case taskjournal.TaskExecutorAgent:
 				err = service.abortAgentTask(ctx, assignment)
-			case etcd.TaskExecutorController:
+			case taskjournal.TaskExecutorController:
 				err = service.controller.AbortTask(ctx, taskID)
 			default:
 				err = errs.New(errs.KindInternal, "Task abort executor is invalid")

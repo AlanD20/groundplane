@@ -5,17 +5,18 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
 	"unicode/utf8"
 )
 
-func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
-	if result.Kind != TaskResultCompose && result.Kind != TaskResultEnvironmentDirectory {
+func validateTaskResult(result TaskResultRecord, steps []taskjournal.TaskStepRecord, status taskjournal.TaskStatus) error {
+	if result.Kind != taskjournal.TaskResultCompose && result.Kind != taskjournal.TaskResultEnvironmentDirectory {
 		return errs.New(errs.KindValidationFailed, "task result kind is invalid")
 	}
 	switch result.Diagnostic {
-	case TaskResultDiagnosticNone, TaskResultDiagnosticConfigRejected, TaskResultDiagnosticComposeFailed,
+	case taskjournal.TaskResultDiagnosticNone, taskjournal.TaskResultDiagnosticConfigRejected, taskjournal.TaskResultDiagnosticComposeFailed,
 		TaskResultDiagnosticTimeoutBeforeEffect:
 	default:
 		return errs.New(errs.KindValidationFailed, "task result diagnostic is invalid")
@@ -32,12 +33,12 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 			return errs.New(errs.KindValidationFailed, "task result failed step does not belong to the task")
 		}
 	}
-	if status == TaskStatusCompleted && (result.ExitCode != 0 || result.FailedStepID != "" ||
-		result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired) {
+	if status == taskjournal.TaskStatusCompleted && (result.ExitCode != 0 || result.FailedStepID != "" ||
+		result.Diagnostic != taskjournal.TaskResultDiagnosticNone || result.ReconciliationRequired) {
 		return errs.New(errs.KindValidationFailed, "completed task result is inconsistent")
 	}
-	if result.Kind == TaskResultEnvironmentDirectory &&
-		(len(result.Projects) != 0 || result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired) {
+	if result.Kind == taskjournal.TaskResultEnvironmentDirectory &&
+		(len(result.Projects) != 0 || result.Diagnostic != taskjournal.TaskResultDiagnosticNone || result.ReconciliationRequired) {
 		return errs.New(errs.KindValidationFailed, "environment directory task result is inconsistent")
 	}
 	if len(result.Projects) > 64 {
@@ -82,7 +83,7 @@ func validateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status 
 		}
 	}
 	if evidence := result.CandidateAbsenceEvidence; evidence != nil {
-		if result.Kind != TaskResultCompose || ids.Validate(ids.KindAssignment, evidence.AssignmentID) != nil ||
+		if result.Kind != taskjournal.TaskResultCompose || ids.Validate(ids.KindAssignment, evidence.AssignmentID) != nil ||
 			!recordcodec.ValidSHA256(evidence.PlanHash) || !recordcodec.ValidSHA256(evidence.AuthoritySHA256) ||
 			evidence.ComposeProjectName == "" || ids.Validate(ids.KindConfig, evidence.CandidateArtifactID) != nil ||
 			len(evidence.Candidates) == 0 || len(evidence.Candidates) > 32 {

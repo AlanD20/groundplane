@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -24,8 +25,8 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 	stepID string,
 ) (etcd.TaskRecord, error) {
 	if resolver == nil || ctx == nil || ids.Validate(ids.KindConfig, artifactID) != nil ||
-		ids.Validate(ids.KindStep, stepID) != nil || task.Executor != etcd.TaskExecutorAgent ||
-		task.Type != etcd.TaskRemove || task.Target != intent.ServiceID || task.PlanID == "" {
+		ids.Validate(ids.KindStep, stepID) != nil || task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskRemove || task.Target != intent.ServiceID || task.PlanID == "" {
 		return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Service removal Task preparation is invalid")
 	}
 	prepared := task
@@ -36,7 +37,7 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 		etcd.TaskComposeArtifactParam:        artifactID,
 		etcd.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
 	}
-	prepared.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}
+	prepared.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}
 	plan, err := resolver.buildServiceRemovalPlan(ctx, prepared, intent)
 	if err != nil {
 		return etcd.TaskRecord{}, err
@@ -111,7 +112,7 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 }
 
 func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent etcd.ServiceRemovalIntent) error {
-	if task.ID != intent.TaskID || task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove ||
+	if task.ID != intent.TaskID || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.ServiceID || len(task.Params) != 4 || len(task.Steps) != 1 ||
 		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceService ||
 		task.Params[etcd.TaskServiceEnvironmentParam] != intent.EnvironmentID ||

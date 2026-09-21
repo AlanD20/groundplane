@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strings"
 	"time"
 
@@ -367,18 +368,18 @@ func hierarchyDeletionTask(
 	defer clear(intentValue)
 	task := TaskRecord{
 		ID: begin.TaskID, OperationID: begin.TaskOperationID, IdempotencyKey: begin.Marker.Locator.Key,
-		Owner: owner, Actor: TaskActorOperator, Executor: TaskExecutorController,
+		Owner: owner, Actor: TaskActorOperator, Executor: taskjournal.TaskExecutorController,
 		PlanID: "plan_" + suffix, PlanHash: hierarchyDeletionDigest(intentValue), RenderGeneration: 1,
-		Type: TaskRemove, Target: begin.TargetID,
+		Type: taskjournal.TaskRemove, Target: begin.TargetID,
 		Params: map[string]string{
 			TaskResourceKindParam:                TaskResourceHierarchyDeletion,
 			TaskHierarchyDeletionOperationParam:  begin.OperationID,
 			TaskHierarchyDeletionTargetKindParam: string(begin.TargetKind),
 		},
-		Steps: []TaskStepRecord{
-			{Kind: TaskStepOperation, ID: "step_" + suffix},
+		Steps: []taskjournal.TaskStepRecord{
+			{Kind: taskjournal.TaskStepOperation, ID: "step_" + suffix},
 		}, TimeoutSeconds: int64(hierarchyDeletionAttemptTimeout / time.Second),
-		Status: TaskStatusPending, NextEventSequence: 1, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: begin.CreatedAt, UpdatedAt: begin.CreatedAt,
 	}
 	if err := validateTaskRecord(task); err != nil {
 		return TaskRecord{}, err

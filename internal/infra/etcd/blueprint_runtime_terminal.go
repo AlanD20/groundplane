@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"encoding/hex"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -16,7 +17,7 @@ func blueprintAcknowledgedRuntime(
 	marker ReleasePublicationMarker, task TaskRecord, assignment TaskAssignmentRecord,
 	member ReleaseStagedMemberRef, result TaskResultRecord, terminalAt time.Time,
 ) ([]byte, error) {
-	if result.Kind != TaskResultCompose || result.ExitCode != 0 || result.Diagnostic != TaskResultDiagnosticNone ||
+	if result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 || result.Diagnostic != taskjournal.TaskResultDiagnosticNone ||
 		result.ReconciliationRequired || result.ExecutionEpoch == 0 || result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		marker.CandidateReleaseDescriptor.PlanID != task.PlanID ||
 		hex.EncodeToString(marker.CandidateReleaseDescriptor.PlanHash) != task.PlanHash {

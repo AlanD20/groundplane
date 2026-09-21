@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,7 +13,7 @@ import (
 const controllerUpdateHistoryPrefix = "/v1/indexes/tasks/controller-updates/"
 
 func isNativeControllerUpdate(task TaskRecord) bool {
-	return task.Executor == TaskExecutorController && task.Type == TaskUpdate && task.Target == "controller" &&
+	return task.Executor == taskjournal.TaskExecutorController && task.Type == taskjournal.TaskUpdate && task.Target == "controller" &&
 		task.Owner == PlatformTaskOwner() && task.Params[TaskResourceKindParam] == TaskResourceController
 }
 

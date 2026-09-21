@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -46,7 +47,7 @@ func prepareBackupRunTerminalReceipt(
 	terminal TaskRecord,
 	run backupruntime.BackupRunRecord,
 ) (backupTerminalReceiptPlan, error) {
-	if current.Revision <= 0 || current.Record.Type != TaskBackup || terminal.Type != TaskBackup ||
+	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackup || terminal.Type != taskjournal.TaskBackup ||
 		current.Record.ID != terminal.ID || !isTerminalTaskStatus(terminal.Status) ||
 		validateBackupRunTaskBinding(terminal, run) != nil || !terminalBackupRunState(run.State) ||
 		terminal.FinishedAt == nil || !run.UpdatedAt.Equal(*terminal.FinishedAt) {
@@ -100,8 +101,8 @@ func prepareBackupPruneTerminalReceipt(
 	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
 	prunes []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 ) (backupTerminalReceiptPlan, error) {
-	if current.Revision <= 0 || current.Record.Type != TaskBackupPrune ||
-		terminal.Type != TaskBackupPrune || !isTerminalTaskStatus(terminal.Status) ||
+	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackupPrune ||
+		terminal.Type != taskjournal.TaskBackupPrune || !isTerminalTaskStatus(terminal.Status) ||
 		terminal.FinishedAt == nil || validateBackupPruneTaskBinding(terminal, dispatch) != nil ||
 		len(prunes) != len(dispatch.RecoveryPointIDs) || terminal.ID != current.Record.ID {
 		return backupTerminalReceiptPlan{}, errs.New(
@@ -130,7 +131,7 @@ func prepareBackupPruneTerminalReceipt(
 		outcome := BackupPruneTerminalRetained
 		if prune.Record.State == backupruntime.BackupPruneVerifiedAbsent {
 			outcome = BackupPruneTerminalRemoved
-		} else if prune.Record.State != backupruntime.BackupPruneAssigned || terminal.Status == TaskStatusCompleted {
+		} else if prune.Record.State != backupruntime.BackupPruneAssigned || terminal.Status == taskjournal.TaskStatusCompleted {
 			return backupTerminalReceiptPlan{}, errs.New(
 				errs.KindValidationFailed,
 				"backup prune terminal receipt outcome is invalid",

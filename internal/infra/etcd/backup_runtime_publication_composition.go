@@ -5,6 +5,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"time"
@@ -65,7 +66,7 @@ func (plan backupRunPublicationPlan) taskIdempotencyPlan(
 	idempotencyPlan, err := prepareBackupTaskIdempotencyPlan(
 		backupTaskPublicationAuthority{
 			taskID: plan.record.TaskID, operationID: plan.record.OperationID,
-			environmentID: plan.record.EnvironmentID, taskType: TaskBackup,
+			environmentID: plan.record.EnvironmentID, taskType: taskjournal.TaskBackup,
 			retryOf: plan.record.RetryOfTaskID, createdAt: plan.record.CreatedAt,
 			validatePlan: func(value *agentpb.ExecutionPlan) error {
 				return validateBackupRunExecutionPlan(plan.record, value)
@@ -93,7 +94,7 @@ type backupTaskPublicationAuthority struct {
 	taskID        string
 	operationID   string
 	environmentID string
-	taskType      TaskType
+	taskType      taskjournal.TaskType
 	retryOf       string
 	createdAt     time.Time
 	validatePlan  backupTaskPlanValidator
@@ -112,7 +113,7 @@ func prepareBackupTaskIdempotencyPlan(
 		record.RetryOf != authority.retryOf ||
 		record.Owner.EnvironmentID != authority.environmentID ||
 		record.Type != authority.taskType || record.Target != authority.environmentID ||
-		record.Executor != TaskExecutorAgent || record.Status != TaskStatusPending ||
+		record.Executor != taskjournal.TaskExecutorAgent || record.Status != taskjournal.TaskStatusPending ||
 		!record.CreatedAt.Equal(authority.createdAt) || marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
 		marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != record.ID ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||

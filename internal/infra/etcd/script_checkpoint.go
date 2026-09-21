@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strings"
 	"time"
 
@@ -223,9 +224,9 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		execution.OperationID != input.OperationID || execution.StepID != input.StepID || execution.PlanHash != input.PlanHash ||
 		(execution.AssignmentID != "" && execution.AssignmentID != input.AssignmentID) ||
 		task.ID != input.TaskID || task.OperationID != input.OperationID ||
-		task.Status != TaskStatusRunning || task.Executor != TaskExecutorAgent || task.PlanHash != input.PlanHash ||
+		task.Status != taskjournal.TaskStatusRunning || task.Executor != taskjournal.TaskExecutorAgent || task.PlanHash != input.PlanHash ||
 		!taskOwnsScriptExecution(task, execution) || assignment.TaskID != input.TaskID ||
-		assignment.AssignmentID != input.AssignmentID || assignment.Executor != TaskExecutorAgent ||
+		assignment.AssignmentID != input.AssignmentID || assignment.Executor != taskjournal.TaskExecutorAgent ||
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration {
 		return scriptCheckpointAnchor{}, errs.New(
 			errs.KindStateConflict,
@@ -233,7 +234,7 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		)
 	}
 	var blueprintConditions []etcdstore.Condition
-	if task.Type == TaskUpdate {
+	if task.Type == taskjournal.TaskUpdate {
 		blueprintConditions, err = repository.blueprintScriptExecutionAuthority(
 			ctx, task, execution, primary.ReadRevision,
 		)
@@ -241,13 +242,13 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 			return scriptCheckpointAnchor{}, err
 		}
 	}
-	if task.Type == TaskScript {
+	if task.Type == taskjournal.TaskScript {
 		blueprintConditions, err = repository.manualScriptExecutionAuthority(ctx, task, execution, primary.ReadRevision)
 		if err != nil {
 			return scriptCheckpointAnchor{}, err
 		}
 	}
-	claimKey := taskExecutionClaimKey(TaskExecutorAgent, input.AgentID, input.TaskID)
+	claimKey := taskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
 	timeoutKey := taskTimeoutIndexKey(input.TaskID, assignment.Deadline)
 	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{claimKey, timeoutKey}, Revision: primary.ReadRevision,
@@ -286,7 +287,7 @@ func taskOwnsScriptExecution(task TaskRecord, execution ScriptExecutionRecord) b
 		return task.Target == execution.ScriptID && len(task.Steps) == 1 &&
 			task.Steps[0].ID == execution.StepID &&
 			task.Params[ScriptExecutionIDParam] == execution.ID
-	case TaskDeploy, TaskRollback:
+	case taskjournal.TaskDeploy, TaskRollback:
 		if task.Owner.EnvironmentID != execution.EnvironmentID ||
 			task.Params[TaskReleasePublicationParam] == "" {
 			return false

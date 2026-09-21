@@ -6,6 +6,7 @@ import (
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -27,8 +28,8 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if err := validatePlatformComponentRecord(current.Record); err != nil {
 		return err
 	}
-	if task.Owner != PlatformTaskOwner() || task.Actor != TaskActorSystem || task.Executor != TaskExecutorAgent ||
-		task.Type != TaskUpdate || task.Status != TaskStatusPending || task.Target != current.Record.Desired.ID ||
+	if task.Owner != PlatformTaskOwner() || task.Actor != TaskActorSystem || task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskUpdate || task.Status != taskjournal.TaskStatusPending || task.Target != current.Record.Desired.ID ||
 		task.Params[TaskResourceKindParam] != TaskResourceComponent ||
 		task.Params[TaskAutomaticReconcileParam] != "true" || len(task.Params) != 2 {
 		return errs.New(errs.KindValidationFailed, "platform DNS resolver Task shape is invalid")

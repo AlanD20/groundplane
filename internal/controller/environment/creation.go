@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"net/netip"
 	"time"
@@ -373,15 +374,15 @@ func newEnvironmentCreationTask(
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation),
 		Owner: owner, Actor: etcd.TaskActorOperator,
-		IdempotencyKey: idempotencyKey, Executor: etcd.TaskExecutorAgent,
+		IdempotencyKey: idempotencyKey, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash), RenderGeneration: 1,
-		Type: etcd.TaskCreate, Target: environment.ID,
+		Type: taskjournal.TaskCreate, Target: environment.ID,
 		Params: map[string]string{
 			taskcontract.EnvironmentCreateVolumeDirectoryParam: environment.VolumeDir,
 		},
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}},
+		Steps:          []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}},
 		TimeoutSeconds: environmentCreationTimeoutSeconds,
-		Status:         etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, nil
 }
 

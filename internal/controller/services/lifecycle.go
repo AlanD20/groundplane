@@ -12,6 +12,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -71,7 +72,7 @@ func (service *serviceMutationService) StartService(
 	serviceID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, etcd.TaskStart)
+	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, taskjournal.TaskStart)
 }
 
 func (service *serviceMutationService) StopService(
@@ -79,7 +80,7 @@ func (service *serviceMutationService) StopService(
 	serviceID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, etcd.TaskStop)
+	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, taskjournal.TaskStop)
 }
 
 func (service *serviceMutationService) DestroyService(
@@ -87,14 +88,14 @@ func (service *serviceMutationService) DestroyService(
 	serviceID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, etcd.TaskDestroy)
+	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, taskjournal.TaskDestroy)
 }
 
 func (service *serviceMutationService) runServiceLifecycle(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-	taskType etcd.TaskType,
+	taskType taskjournal.TaskType,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.lifecycle == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle is not configured")
@@ -106,7 +107,7 @@ func (service *serviceLifecycleService) Run(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-	taskType etcd.TaskType,
+	taskType taskjournal.TaskType,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle context is required")
@@ -134,7 +135,7 @@ func (service *serviceLifecycleService) runOnce(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-	taskType etcd.TaskType,
+	taskType taskjournal.TaskType,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	route, intent, err := serviceLifecycleContract(taskType)
 	if err != nil {
@@ -242,7 +243,7 @@ func (service *serviceLifecycleService) runOnce(
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: etcd.TaskActorOperator,
 		PlanID: ids.New(ids.KindPlan), Type: taskType, Target: serviceID,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	var renderInput *etcd.ServiceLifecycleRenderInput
 	var sealedHookInputs *etcd.BackingHookEncryptedInputs

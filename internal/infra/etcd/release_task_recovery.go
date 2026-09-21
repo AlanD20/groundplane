@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
@@ -14,7 +15,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	ctx context.Context,
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
@@ -24,7 +25,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	terminals *etcdstore.GetManyResult,
 	proofConditions ...Condition,
 ) (bool, error) {
-	if terminalStatus != TaskStatusCompleted || result.ReconciliationRequired {
+	if terminalStatus != taskjournal.TaskStatusCompleted || result.ReconciliationRequired {
 		return repository.returnReleaseToRecovery(ctx, task, head, base, terminalAt, proofConditions...)
 	}
 	pending := make([]int, 0, maximumReleaseTerminalBatchMembers)

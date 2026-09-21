@@ -3,14 +3,15 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func unassignedReleaseAbort(task TaskRecord, status TaskStatus) bool {
-	return status == TaskStatusAborted && task.Status == TaskStatusAborted && task.StartedAt == nil &&
-		task.FinishedAt != nil && task.Executor == TaskExecutorAgent &&
-		(task.Type == TaskDeploy || task.Type == TaskRollback) && task.Params[TaskReleasePublicationParam] != ""
+func unassignedReleaseAbort(task TaskRecord, status taskjournal.TaskStatus) bool {
+	return status == taskjournal.TaskStatusAborted && task.Status == taskjournal.TaskStatusAborted && task.StartedAt == nil &&
+		task.FinishedAt != nil && task.Executor == taskjournal.TaskExecutorAgent &&
+		(task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback) && task.Params[TaskReleasePublicationParam] != ""
 }
 
 // Task terminalization wins its assignment race first. Only then may the
@@ -49,8 +50,8 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			ctx,
 			task,
 			TaskAssignmentRecord{},
-			TaskStatusAborted,
-			TaskResultRecord{Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone},
+			taskjournal.TaskStatusAborted,
+			TaskResultRecord{Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone},
 			"",
 			*task.FinishedAt,
 			current.ReadRevision,

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -53,7 +54,7 @@ func (plan backupPruneTransactionPlan) taskIdempotencyPlan(
 	marker idempotencyrecord.IdempotencyMarker,
 	initiation TaskInitiation,
 ) (*idempotencyMutationPlan, error) {
-	if plan.authority == nil || plan.authority.taskType != TaskBackupPrune {
+	if plan.authority == nil || plan.authority.taskType != taskjournal.TaskBackupPrune {
 		return nil, errs.New(errs.KindInternal, "backup prune Task publication authority is missing")
 	}
 	return prepareBackupTaskIdempotencyPlan(
@@ -83,11 +84,11 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 	if authority.retryOf == "" {
 		authority.retryOf = source.Record.ID
 	}
-	if plan.authority == nil || plan.authority.taskType != TaskBackupPrune ||
+	if plan.authority == nil || plan.authority.taskType != taskjournal.TaskBackupPrune ||
 		plan.readRevision <= 0 ||
 		source.Revision <= 0 || source.ReadRevision != plan.readRevision ||
 		source.Record.ID != authority.retryOf ||
-		source.Record.Type != TaskBackupPrune ||
+		source.Record.Type != taskjournal.TaskBackupPrune ||
 		source.Record.OperationID != plan.authority.operationID ||
 		source.Record.Owner.EnvironmentID != plan.authority.environmentID ||
 		source.Record.Target != plan.authority.environmentID {

@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -20,9 +21,9 @@ func hierarchyDeletionAgentNode(
 	prerequisites []string,
 	parentOperationID string,
 ) HierarchyDeletionMembershipNode {
-	taskType := TaskRemove
+	taskType := taskjournal.TaskRemove
 	if action == HierarchyDeletionAttachDetach {
-		taskType = TaskDetach
+		taskType = taskjournal.TaskDetach
 	}
 	return HierarchyDeletionMembershipNode{
 		NodeID: nodeID, TargetKind: targetKind, TargetID: targetID, ActionKind: action,

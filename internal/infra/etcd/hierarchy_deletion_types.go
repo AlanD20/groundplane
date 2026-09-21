@@ -1,6 +1,9 @@
 package etcd
 
-import "time"
+import (
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"time"
+)
 
 type HierarchyDeletionTargetKind string
 
@@ -188,11 +191,11 @@ type HierarchyDeletionCleanupFence struct {
 }
 
 type HierarchyDeletionAgentProcedure struct {
-	ChildOperationID string   `json:"child_operation_id"`
-	TaskType         TaskType `json:"task_type"`
-	TypedProcedure   string   `json:"typed_procedure"`
-	InputDigest      string   `json:"input_digest"`
-	TimeoutSeconds   int64    `json:"timeout_seconds"`
+	ChildOperationID string               `json:"child_operation_id"`
+	TaskType         taskjournal.TaskType `json:"task_type"`
+	TypedProcedure   string               `json:"typed_procedure"`
+	InputDigest      string               `json:"input_digest"`
+	TimeoutSeconds   int64                `json:"timeout_seconds"`
 }
 
 type HierarchyDeletionControllerProcedure struct {

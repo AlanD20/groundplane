@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,11 +15,11 @@ import (
 
 func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 	ctx context.Context, task TaskRecord, intent EntryRemovalIntent, intentRevision int64,
-	status TaskStatus, terminalAt time.Time, revision int64,
+	status taskjournal.TaskStatus, terminalAt time.Time, revision int64,
 ) (routeTaskChange, error) {
 	keys := []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
-	if task.Executor == TaskExecutorController {
+	if task.Executor == taskjournal.TaskExecutorController {
 		keys = append(keys, taskMaterializationWriterKey(intent.EnvironmentID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -51,7 +52,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 			}, {Key: keys[1], ModRevision: read.Values[1].ModRevision}},
 		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: entryRemovalIntentKey(task.ID), Value: value},
 			{Type: etcdstore.MutationDelete, Key: keys[0]}, {Type: etcdstore.MutationDelete, Key: keys[1]}}, values: [][]byte{value}}
-	if task.Executor == TaskExecutorController {
+	if task.Executor == taskjournal.TaskExecutorController {
 		if read.Values[2] == nil {
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, errs.New(
@@ -70,7 +71,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 		change.conditions = append(change.conditions, etcdstore.Condition{Key: keys[2], ModRevision: read.Values[2].ModRevision})
 		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[2]})
 	}
-	if status != TaskStatusCompleted {
+	if status != taskjournal.TaskStatusCompleted {
 		return change, nil
 	}
 	promotion, err := repository.prepareEntryRemovalHeadPromotion(ctx, intent, revision)

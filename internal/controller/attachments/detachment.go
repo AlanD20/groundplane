@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
@@ -131,7 +132,7 @@ func (service *MutationService) detachAttachOnce(
 		scope.BackingService.Record.Desired.Hooks.Detach != nil
 	task, artifactID, err := newAttachMutationTask(
 		scope.Project.Record, scope.Environment.Record,
-		taskID, current.Record.ID, current.Record.EnvironmentID, etcd.TaskDetach,
+		taskID, current.Record.ID, current.Record.EnvironmentID, taskjournal.TaskDetach,
 		scope.ComposeProjection.Record.RenderGeneration,
 		attachTaskStepCount(
 			adapter, scope.BackingService.Record.Desired.Authentication,

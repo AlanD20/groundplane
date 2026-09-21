@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -39,7 +40,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	task etcd.TaskRecord,
 	input BlueprintReleasePlanInput,
 ) (etcd.TaskRecord, *agentpb.ExecutionPlan, error) {
-	if resolver == nil || ctx == nil || len(input.Members) == 0 || task.Type != etcd.TaskUpdate ||
+	if resolver == nil || ctx == nil || len(input.Members) == 0 || task.Type != taskjournal.TaskUpdate ||
 		task.Params[etcd.TaskReleasePublicationParam] == "" || len(input.ApplyStepIDs) != len(input.Members) ||
 		len(input.HealthStepIDs) != len(input.Members) || len(input.RecoveryProbeStepIDs) != len(input.Members) ||
 		len(input.RecoveryCompensateStepIDs) != len(input.Members) || len(input.PostStepIDs) != len(input.Members) ||

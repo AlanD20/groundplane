@@ -13,6 +13,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -84,7 +85,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		Path:        pin.Destination,
 		RouteTaskID: task.ID,
 	}
-	task.Executor = etcd.TaskExecutorAgent
+	task.Executor = taskjournal.TaskExecutorAgent
 	task.Params = map[string]string{
 		etcd.TaskRouteEnvironmentParam:           intent.EnvironmentID,
 		etcd.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
@@ -92,10 +93,10 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		EnvironmentBlueprintArtifactParam:        procedure.ArtifactID,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
-	task.Steps = []etcd.TaskStepRecord{
-		{Kind: etcd.TaskStepOperation, ID: procedure.MaterializeStepID},
-		{Kind: etcd.TaskStepOperation, ID: procedure.ComposeApplyStepID},
-		{Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID},
+	task.Steps = []taskjournal.TaskStepRecord{
+		{Kind: taskjournal.TaskStepOperation, ID: procedure.MaterializeStepID},
+		{Kind: taskjournal.TaskStepOperation, ID: procedure.ComposeApplyStepID},
+		{Kind: taskjournal.TaskStepOperation, ID: procedure.ActivateStepID},
 	}
 	materialization := materializationrecord.Record{
 		StepID:            procedure.MaterializeStepID,
@@ -150,13 +151,13 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	task etcd.TaskRecord,
 	intent etcd.RouteRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
-	if resolver == nil || resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent ||
-		task.Type != etcd.TaskRemove ||
+	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindRoute, task.Target) != nil ||
 		task.ID != intent.TaskID ||
 		task.Target != intent.RouteID ||
 		!task.CreatedAt.Equal(intent.CreatedAt) ||
-		intent.Status != etcd.TaskStatusPending ||
+		intent.Status != taskjournal.TaskStatusPending ||
 		intent.Provider == nil ||
 		intent.CandidateProjection == nil ||
 		intent.CurrentProjection == nil ||

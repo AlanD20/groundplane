@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -108,7 +109,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 		if err != nil {
 			return nil, err
 		}
-		if task.ID != record.TaskID || task.Status != TaskStatusRunning ||
+		if task.ID != record.TaskID || task.Status != taskjournal.TaskStatusRunning ||
 			task.StartedAt == nil || !task.StartedAt.Equal(record.AssignedAt) ||
 			!record.Deadline.Equal(record.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
 			!record.RecoveryDeadline.Equal(record.Deadline.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
@@ -170,7 +171,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 }
 
 func isMarkerlessHierarchyDeletionAgentChild(task TaskRecord) bool {
-	return task.Executor == TaskExecutorAgent && task.Actor == TaskActorSystem &&
+	return task.Executor == taskjournal.TaskExecutorAgent && task.Actor == TaskActorSystem &&
 		task.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion
 }
 
@@ -201,7 +202,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 	if err != nil {
 		return nil, err
 	}
-	if claim.Executor != TaskExecutorController || claimValue.Key != controllerTaskClaimKey(claim.TaskID) ||
+	if claim.Executor != taskjournal.TaskExecutorController || claimValue.Key != controllerTaskClaimKey(claim.TaskID) ||
 		claim.ClaimedTaskRevision >= claimValue.ModRevision {
 		return nil, errs.New(errs.KindInternal, "controller Task claim does not match its key")
 	}
@@ -231,8 +232,8 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 	if err != nil {
 		return nil, err
 	}
-	if task.ID != claim.TaskID || task.Executor != TaskExecutorController ||
-		task.Status != TaskStatusRunning || task.StartedAt == nil ||
+	if task.ID != claim.TaskID || task.Executor != taskjournal.TaskExecutorController ||
+		task.Status != taskjournal.TaskStatusRunning || task.StartedAt == nil ||
 		!task.StartedAt.Equal(claim.AssignedAt) ||
 		!claim.Deadline.Equal(claim.AssignedAt.Add(time.Duration(task.TimeoutSeconds)*time.Second)) ||
 		taskValue.ModRevision < claimValue.ModRevision || task.idempotencyMarker == nil {

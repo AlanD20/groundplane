@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -43,7 +44,7 @@ func RunnerRemovalTaskParams(record runnerrecord.RunnerRecord) map[string]string
 }
 
 func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence, error) {
-	if task.Executor != TaskExecutorController || task.Type != TaskRemove ||
+	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindRunner, task.Target) != nil || len(task.Params) != 6 ||
 		task.Params[TaskResourceKindParam] != TaskResourceRunner ||
 		ids.Validate(ids.KindTenant, task.Params[RunnerTenantIDParam]) != nil {
@@ -173,7 +174,7 @@ func runnerStringMapsEqual(left map[string]string, right map[string]string) bool
 }
 
 func taskOwnsRunner(task TaskRecord) (bool, error) {
-	if task.Executor != TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceRunner {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceRunner {
 		return false, nil
 	}
 	switch task.Type {
@@ -188,10 +189,10 @@ func taskOwnsRunner(task TaskRecord) (bool, error) {
 }
 
 func taskOwnsRunnerCreation(task TaskRecord) (bool, error) {
-	if task.Executor != TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceRunner {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceRunner {
 		return false, nil
 	}
-	if task.Type != TaskCreate || ids.Validate(ids.KindRunner, task.Target) != nil ||
+	if task.Type != taskjournal.TaskCreate || ids.Validate(ids.KindRunner, task.Target) != nil ||
 		len(task.Params) != 2 || task.Params[RunnerRegistrationTokenPresentParam] != "true" {
 		return false, errs.New(errs.KindInternal, "runner creation task has invalid durable input")
 	}
@@ -204,12 +205,12 @@ func runnerIntentMatchesRecord(intent RunnerRemovalIntent, record runnerrecord.R
 		intent.TenantID == record.Desired.TenantID && intent.Allocation == record.Allocation
 }
 
-func runnerRetryableTerminal(status TaskStatus) bool {
-	return status == TaskStatusFailed || status == TaskStatusAborted || status == TaskStatusTimedOut
+func runnerRetryableTerminal(status taskjournal.TaskStatus) bool {
+	return status == taskjournal.TaskStatusFailed || status == taskjournal.TaskStatusAborted || status == taskjournal.TaskStatusTimedOut
 }
 
-func runnerTerminal(status TaskStatus) bool {
-	return status == TaskStatusCompleted || runnerRetryableTerminal(status)
+func runnerTerminal(status taskjournal.TaskStatus) bool {
+	return status == taskjournal.TaskStatusCompleted || runnerRetryableTerminal(status)
 }
 
 func clearRunnerTaskChange(change runnerTaskChange) {

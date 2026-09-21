@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -74,7 +75,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	if tombstone.Terminal.RetainUntil.After(now) {
 		return false, false, nil
 	}
-	if tombstone.Terminal.Status != string(TaskStatusCompleted) || tombstone.Phase != HierarchyDeletionRetained {
+	if tombstone.Terminal.Status != string(taskjournal.TaskStatusCompleted) || tombstone.Phase != HierarchyDeletionRetained {
 		transaction, transactErr := repository.store.Transact(ctx,
 			[]etcdstore.Condition{
 				{Key: taskKey(task.ID), ModRevision: taskRevision},

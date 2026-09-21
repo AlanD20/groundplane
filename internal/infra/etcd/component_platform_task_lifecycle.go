@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -26,7 +27,7 @@ type platformComponentTaskChange struct {
 func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	result *TaskResultRecord,
 	revision int64,
 ) (platformComponentTaskChange, error) {
@@ -96,7 +97,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	change.conditions = append(change.conditions, etcdstore.Condition{
 		Key: platformComponentTaskActiveKey(task.Target), ModRevision: state.Values[2].ModRevision,
 	})
-	if terminalStatus != TaskStatusCompleted {
+	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return change, nil
 	}
 	priorObservation := state.Values[3]
@@ -233,7 +234,7 @@ func validatePlatformComponentObservation(
 		}
 		return nil
 	}
-	if result.Kind != TaskResultCompose || result.DNSResolverCandidateObservation == nil {
+	if result.Kind != taskjournal.TaskResultCompose || result.DNSResolverCandidateObservation == nil {
 		return errs.New(errs.KindStateConflict, "platform Component observation is missing")
 	}
 	evidence := result.DNSResolverCandidateObservation
@@ -287,7 +288,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 		input.DesiredSHA256 != task.Params[TaskPlatformComponentDesiredSHA256Param] {
 		return errs.New(errs.KindStateConflict, "platform Component Task replay evidence changed")
 	}
-	if task.Status == TaskStatusCompleted {
+	if task.Status == taskjournal.TaskStatusCompleted {
 		if task.Result == nil {
 			return errs.New(errs.KindStateConflict, "platform Component immutable Task result is missing")
 		}

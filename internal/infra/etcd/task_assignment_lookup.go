@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -47,7 +48,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 	if err != nil {
 		return TaskAssignment{}, err
 	}
-	if task.ID != taskID || task.Status != TaskStatusRunning || task.Executor != assignment.Executor ||
+	if task.ID != taskID || task.Status != taskjournal.TaskStatusRunning || task.Executor != assignment.Executor ||
 		assignment.TaskID != taskID {
 		return TaskAssignment{}, errs.New(errs.KindStateConflict, "Task is not actively assigned")
 	}

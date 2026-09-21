@@ -1,6 +1,7 @@
 package taskplanning
 
 import (
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
@@ -57,7 +58,7 @@ func blueprintReleaseProcedureStepIDs(
 		)
 	}
 	for _, stepID := range resourceIDs {
-		if task.Steps[start].ID != stepID || task.Steps[start].Kind != etcd.TaskStepOperation {
+		if task.Steps[start].ID != stepID || task.Steps[start].Kind != taskjournal.TaskStepOperation {
 			return BlueprintReleasePlanInput{}, 0, errs.New(
 				errs.KindInternal,
 				"durable Blueprint resource preparation order is invalid",

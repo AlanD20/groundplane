@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -60,7 +61,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	}
 	if record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningProvisioning ||
 		record.CreateTaskID != task.ID || !record.CreatedAt.Equal(task.CreatedAt) ||
-		task.Type != TaskCreate || task.Target != record.ID || task.Status != TaskStatusPending {
+		task.Type != taskjournal.TaskCreate || task.Target != record.ID || task.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment creation Task does not own its provisioning record",

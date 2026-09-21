@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 )
 
@@ -34,7 +35,7 @@ func (repository *TaskRepository) releaseComponentEffectAtRevision(
 			event.Identity.Attempt > assignment.ExecutionEpoch {
 			return false, corruptTaskAssignment()
 		}
-		if event.State != TaskEventStatePending {
+		if event.State != taskjournal.TaskEventStatePending {
 			return true, nil
 		}
 	}

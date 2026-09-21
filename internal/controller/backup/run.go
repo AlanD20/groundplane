@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 	"time"
@@ -104,9 +105,9 @@ func (service *BackupRunService) RetryBackupTask(
 		return etcd.IdempotencyTransactionResult{}, err
 	}
 	defer prepared.Publication.Clear()
-	steps := make([]etcd.TaskStepRecord, len(prepared.Run.Sources))
+	steps := make([]taskjournal.TaskStepRecord, len(prepared.Run.Sources))
 	for index := range steps {
-		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
+		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	task := etcd.TaskRecord{
 		ID:                retryTaskID,
@@ -115,13 +116,13 @@ func (service *BackupRunService) RetryBackupTask(
 		IdempotencyKey:    prepared.SourceTask.IdempotencyKey,
 		Owner:             prepared.Owner,
 		Actor:             etcd.TaskActorOperator,
-		Executor:          etcd.TaskExecutorAgent,
+		Executor:          taskjournal.TaskExecutorAgent,
 		PlanID:            planID,
-		Type:              etcd.TaskBackup,
+		Type:              taskjournal.TaskBackup,
 		Target:            prepared.Run.EnvironmentID,
 		Steps:             steps,
 		TimeoutSeconds:    backupRunTaskTimeoutSeconds,
-		Status:            etcd.TaskStatusPending,
+		Status:            taskjournal.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         marker.CreatedAt,
 		UpdatedAt:         marker.CreatedAt,
@@ -206,22 +207,22 @@ func (service *BackupRunService) runBackup(
 	}
 	defer prepared.Publication.Clear()
 
-	steps := make([]etcd.TaskStepRecord, len(prepared.Run.Sources))
+	steps := make([]taskjournal.TaskStepRecord, len(prepared.Run.Sources))
 	for index := range steps {
-		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
+		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	task := etcd.TaskRecord{
 		ID:                taskID,
 		OperationID:       operationID,
 		Owner:             prepared.Owner,
 		Actor:             etcd.TaskActorOperator,
-		Executor:          etcd.TaskExecutorAgent,
+		Executor:          taskjournal.TaskExecutorAgent,
 		PlanID:            planID,
-		Type:              etcd.TaskBackup,
+		Type:              taskjournal.TaskBackup,
 		Target:            environmentID,
 		Steps:             steps,
 		TimeoutSeconds:    6 * 60 * 60,
-		Status:            etcd.TaskStatusPending,
+		Status:            taskjournal.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         createdAt,
 		UpdatedAt:         createdAt,

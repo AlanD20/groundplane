@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,19 +14,19 @@ import (
 // receipt. It is created with source closure and deleted with Task completion.
 // Result is the original Agent report, before recovery normalization.
 type scriptClosingReport struct {
-	TaskID               string           `json:"task_id"`
-	OperationID          string           `json:"operation_id"`
-	PlanHash             string           `json:"plan_hash"`
-	AssignmentID         string           `json:"assignment_id"`
-	AgentID              string           `json:"agent_id"`
-	AgentGeneration      uint64           `json:"agent_generation"`
-	ExecutionEpoch       uint32           `json:"execution_epoch"`
-	RecoveryRecordSHA256 string           `json:"recovery_record_sha256,omitempty"`
-	TaskRevision         int64            `json:"task_revision"`
-	AssignmentRevision   int64            `json:"assignment_revision"`
-	Status               TaskStatus       `json:"status"`
-	Result               TaskResultRecord `json:"result"`
-	ObservedAt           time.Time        `json:"observed_at"`
+	TaskID               string                 `json:"task_id"`
+	OperationID          string                 `json:"operation_id"`
+	PlanHash             string                 `json:"plan_hash"`
+	AssignmentID         string                 `json:"assignment_id"`
+	AgentID              string                 `json:"agent_id"`
+	AgentGeneration      uint64                 `json:"agent_generation"`
+	ExecutionEpoch       uint32                 `json:"execution_epoch"`
+	RecoveryRecordSHA256 string                 `json:"recovery_record_sha256,omitempty"`
+	TaskRevision         int64                  `json:"task_revision"`
+	AssignmentRevision   int64                  `json:"assignment_revision"`
+	Status               taskjournal.TaskStatus `json:"status"`
+	Result               TaskResultRecord       `json:"result"`
+	ObservedAt           time.Time              `json:"observed_at"`
 }
 
 func blueprintClosingReportKey(taskID string) string {
@@ -37,31 +38,31 @@ func manualScriptClosingReportKey(taskID string) string {
 }
 
 func scriptClosingReportKey(task TaskRecord) string {
-	if task.Type == TaskScript {
+	if task.Type == taskjournal.TaskScript {
 		return manualScriptClosingReportKey(task.ID)
 	}
 	return blueprintClosingReportKey(task.ID)
 }
 
 func scriptClosingReportEnvelope(task TaskRecord) string {
-	if task.Type == TaskScript {
+	if task.Type == taskjournal.TaskScript {
 		return "manual-script-closing-report"
 	}
 	return "blueprint-closing-report"
 }
 
 func taskHasScriptClosingReport(task TaskRecord) bool {
-	return task.Type == TaskScript || (task.Type == TaskUpdate && task.Params[TaskReleasePublicationParam] != "")
+	return task.Type == taskjournal.TaskScript || (task.Type == taskjournal.TaskUpdate && task.Params[TaskReleasePublicationParam] != "")
 }
 
-func (report scriptClosingReport) matches(status TaskStatus, result TaskResultRecord) bool {
+func (report scriptClosingReport) matches(status taskjournal.TaskStatus, result TaskResultRecord) bool {
 	return report.Status == status && taskResultsEqual(report.Result, result) &&
 		report.ExecutionEpoch == result.ExecutionEpoch && report.RecoveryRecordSHA256 == result.ReleaseRecoveryRecordSHA256
 }
 
 func (report scriptClosingReport) validate(current TaskAssignment) error {
 	task, assignment := current.Task.Record, current.Assignment.Record
-	if !taskHasScriptClosingReport(task) || task.Status != TaskStatusRunning || task.Executor != TaskExecutorAgent ||
+	if !taskHasScriptClosingReport(task) || task.Status != taskjournal.TaskStatusRunning || task.Executor != taskjournal.TaskExecutorAgent ||
 		report.TaskID != task.ID ||
 		report.OperationID != task.OperationID || report.PlanHash != task.PlanHash ||
 		report.AssignmentID != assignment.AssignmentID || report.AgentID != assignment.AgentID ||
@@ -110,7 +111,7 @@ func (repository *TaskRepository) readScriptClosingReport(
 }
 
 func (repository *TaskRepository) prepareScriptClosingReport(
-	ctx context.Context, current TaskAssignment, status TaskStatus, result TaskResultRecord,
+	ctx context.Context, current TaskAssignment, status taskjournal.TaskStatus, result TaskResultRecord,
 	observedAt time.Time, starting bool,
 ) (scriptClosingReport, etcdstore.Condition, etcdstore.Mutation, error) {
 	report, value, err := repository.readScriptClosingReport(ctx, current)

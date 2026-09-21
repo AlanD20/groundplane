@@ -2,6 +2,7 @@ package controllertask
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	corebackup "github.com/AlanD20/groundplane/internal/core/backup"
@@ -29,11 +30,11 @@ func (dispatcher *Dispatcher) Execute(ctx context.Context, task etcd.TaskRecord)
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "Controller Task context is required")
 	}
-	if task.Type != etcd.TaskRotate {
+	if task.Type != taskjournal.TaskRotate {
 		return dispatcher.fallback.Execute(ctx, task)
 	}
-	if task.Executor != etcd.TaskExecutorController ||
-		task.Status != etcd.TaskStatusRunning ||
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Status != taskjournal.TaskStatusRunning ||
 		ids.Validate(ids.KindTask, task.ID) != nil ||
 		ids.Validate(ids.KindOperation, task.OperationID) != nil ||
 		ids.Validate(ids.KindPlan, task.PlanID) != nil ||

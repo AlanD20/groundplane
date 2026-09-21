@@ -1,5 +1,7 @@
 package etcd
 
+import taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+
 type platformResolverLiveLineage struct {
 	priorObservationModRevision    int64
 	priorObservationRevision       uint64
@@ -51,7 +53,7 @@ func platformResolverFinalLiveLineage(
 	predecessor TaskRecord,
 	input PlatformComponentTaskRenderInput,
 ) (platformResolverLiveLineage, bool) {
-	if predecessor.Result == nil || predecessor.Result.Kind != TaskResultCompose ||
+	if predecessor.Result == nil || predecessor.Result.Kind != taskjournal.TaskResultCompose ||
 		predecessor.Result.ReconciliationRequired {
 		return platformResolverLiveLineage{}, false
 	}
@@ -72,7 +74,7 @@ func platformResolverFinalLiveLineage(
 			expectedPreviousArtifactID:     evidence.ArtifactID,
 			expectedPreviousGeneration:     evidence.RenderGeneration,
 		}, true
-	case TaskStatusFailed, TaskStatusTimedOut, TaskStatusAborted:
+	case taskjournal.TaskStatusFailed, taskjournal.TaskStatusTimedOut, TaskStatusAborted:
 		evidence := result.DNSResolverRollbackObservation
 		if input.ExpectedPreviousArtifactSHA256 == "" {
 			if evidence != nil {

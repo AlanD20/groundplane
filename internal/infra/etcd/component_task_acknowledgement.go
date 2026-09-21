@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"reflect"
@@ -16,7 +17,7 @@ import (
 func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 	revision int64,
 ) (componentTaskChange, error) {
@@ -40,7 +41,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	if err := validateComponentTaskOwner(task, intent); err != nil {
 		return componentTaskChange{}, err
 	}
-	if intent.Status != TaskStatusPending {
+	if intent.Status != taskjournal.TaskStatusPending {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate is not pending")
 	}
 
@@ -182,7 +183,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		}
 		removed := next
 		removedPresent := nextPresent
-		if terminalStatus == TaskStatusCompleted {
+		if terminalStatus == taskjournal.TaskStatusCompleted {
 			removed = current
 			removedPresent = currentPresent
 		}
@@ -201,7 +202,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		changedRegistries[removed.zoneID] = struct{}{}
 	}
 
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		for _, candidate := range intent.Candidates {
 			promoted, promoteErr := componentrecord.SetRuntime(
 				candidate.Candidate,
@@ -225,7 +226,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		}
 		change.mutations = append(change.mutations, componentrecord.WriteFenceMutation(task.ID))
 	}
-	if terminalStatus == TaskStatusCompleted || task.Params[TaskReleasePublicationParam] == "" {
+	if terminalStatus == taskjournal.TaskStatusCompleted || task.Params[TaskReleasePublicationParam] == "" {
 		routeObservationChange, routeErr := repository.prepareComponentTaskRouteObservationAcknowledgement(
 			ctx, intent, terminalStatus, revision,
 		)
@@ -277,9 +278,9 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 
 func componentTaskAcknowledgementRequiresBlueprintRootCondition(
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	environmentID string,
 ) bool {
-	return terminalStatus != TaskStatusCompleted ||
+	return terminalStatus != taskjournal.TaskStatusCompleted ||
 		task.Params[TaskMaterializationEnvironmentParam] != environmentID
 }

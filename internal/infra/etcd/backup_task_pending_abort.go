@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -24,16 +25,16 @@ func (repository *TaskRepository) abortPendingBackupTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		if current.Record.Status == TaskStatusAborted {
+		if current.Record.Status == taskjournal.TaskStatusAborted {
 			if err := repository.validateBackupTaskTerminalReplay(
-				ctx, current, TaskStatusAborted, nil, nil,
+				ctx, current, taskjournal.TaskStatusAborted, nil, nil,
 			); err != nil {
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			return current, nil
 		}
-		if current.Record.Status != TaskStatusPending ||
-			(current.Record.Type != TaskBackup && current.Record.Type != TaskBackupPrune) {
+		if current.Record.Status != taskjournal.TaskStatusPending ||
+			(current.Record.Type != taskjournal.TaskBackup && current.Record.Type != taskjournal.TaskBackupPrune) {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"only a pending Backup Task can be aborted before assignment",
@@ -57,7 +58,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 			}
 			effectiveAt = backupTerminalTimestamp(effectiveAt, run.Record.UpdatedAt)
 			next, transitionErr := backupRunForTaskTerminal(
-				run.Record, TaskStatusAborted, effectiveAt,
+				run.Record, taskjournal.TaskStatusAborted, effectiveAt,
 			)
 			if transitionErr != nil {
 				return etcdstore.Versioned[TaskRecord]{}, transitionErr
@@ -157,20 +158,20 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 ) (backupTaskTerminalPlan, error) {
 	task := current.Record
 	if current.Revision <= 0 || current.ReadRevision <= 0 ||
-		(task.Type != TaskBackup && task.Type != TaskBackupPrune) ||
-		task.Executor != TaskExecutorAgent || task.Status != TaskStatusPending {
+		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune) ||
+		task.Executor != taskjournal.TaskExecutorAgent || task.Status != taskjournal.TaskStatusPending {
 		return backupTaskTerminalPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"pending Backup Task terminal identity is invalid",
 		)
 	}
-	terminal, err := transitionTaskStatus(task, TaskStatusPending, TaskStatusAborted, terminalAt)
+	terminal, err := transitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, terminalAt)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
 	terminalAt = *terminal.FinishedAt
 	transitionedMarker, markerKey, retentionKey, err := prepareTerminalTaskMarker(
-		task, TaskStatusAborted, terminalAt,
+		task, taskjournal.TaskStatusAborted, terminalAt,
 	)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err

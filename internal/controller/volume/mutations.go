@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"net/http"
 	"time"
@@ -447,10 +448,10 @@ func (service *MutationService) mutateOnce(
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: stableIDFromTask(ids.KindOperation, taskID),
 		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
+		Executor: taskjournal.TaskExecutorAgent, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
 		RenderGeneration: int32(generation), Type: volumeMutationTaskType(request.action), Target: request.volumeID,
 		Params: params, Steps: steps, TimeoutSeconds: volumeMutationTimeoutSeconds,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	response, err := volumeMutationResponse(request, environment.Record, taskID)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
 	"time"
 
@@ -146,7 +147,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		projection.RevisionID != revision.RevisionID ||
 		task.Params[EnvironmentDesiredRevisionParam] != revision.RevisionID ||
 		taskEnvironmentErr != nil || !ownsDesired || taskEnvironment != revision.EnvironmentID ||
-		task.Status != TaskStatusPending {
+		task.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Environment desired revision publication identity is invalid",
 		)

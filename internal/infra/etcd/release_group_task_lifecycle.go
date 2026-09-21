@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
@@ -68,7 +69,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 	if err != nil || !applies {
 		return releaseGroupTaskChange{}, err
 	}
-	if retry.Type != TaskRemove || retry.Target != source.Target ||
+	if retry.Type != taskjournal.TaskRemove || retry.Target != source.Target ||
 		retry.Params[TaskResourceKindParam] != TaskResourceReleaseGroup {
 		return releaseGroupTaskChange{}, errs.New(errs.KindInternal, "release group retry changed its durable target")
 	}
@@ -139,7 +140,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminal TaskStatus,
+	terminal taskjournal.TaskStatus,
 	revision int64,
 ) (releaseGroupTaskChange, error) {
 	applies, err := taskOwnsReleaseGroupRemoval(task)
@@ -215,7 +216,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID)},
 		},
 	}
-	if terminal == TaskStatusCompleted {
+	if terminal == taskjournal.TaskStatusCompleted {
 		collectionCondition, collectionMutation, collectionErr := loadReleaseGroupCollectionEpoch(
 			ctx,
 			repository.store,
@@ -251,7 +252,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 func (repository *TaskRepository) validateReleaseGroupTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminal TaskStatus,
+	terminal taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	applies, err := taskOwnsReleaseGroupRemoval(task)
@@ -267,20 +268,20 @@ func (repository *TaskRepository) validateReleaseGroupTaskAcknowledgementReplay(
 	if stored == nil || len(stored.Values) != 2 || stored.Values[1] != nil {
 		return errs.New(errs.KindStateConflict, "release group deletion terminal state does not match its task")
 	}
-	if terminal == TaskStatusCompleted && stored.Values[0] != nil {
+	if terminal == taskjournal.TaskStatusCompleted && stored.Values[0] != nil {
 		return errs.New(errs.KindStateConflict, "completed release group deletion retained its target")
 	}
-	if terminal != TaskStatusCompleted && stored.Values[0] == nil {
+	if terminal != taskjournal.TaskStatusCompleted && stored.Values[0] == nil {
 		return errs.New(errs.KindStateConflict, "failed release group deletion lost its target")
 	}
 	return nil
 }
 
 func taskOwnsReleaseGroupRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceReleaseGroup {
+	if task.Executor != taskjournal.TaskExecutorController || task.Params[TaskResourceKindParam] != TaskResourceReleaseGroup {
 		return false, nil
 	}
-	if task.Type != TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindReleaseGroup, task.Target) != nil {
+	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindReleaseGroup, task.Target) != nil {
 		return false, errs.New(errs.KindInternal, "release group deletion task has invalid durable input")
 	}
 	return true, nil

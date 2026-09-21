@@ -9,6 +9,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
@@ -154,9 +155,9 @@ func (service *serviceMutationService) removeServiceOnce(
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: serviceStableIDFromRevision(ids.KindOperation, taskID),
 		IdempotencyKey: idempotencyKey, Owner: owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: serviceStableIDFromRevision(ids.KindPlan, taskID),
-		Type: etcd.TaskRemove, Target: serviceID, TimeoutSeconds: serviceLifecycleAgentTimeoutSeconds,
-		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: serviceStableIDFromRevision(ids.KindPlan, taskID),
+		Type: taskjournal.TaskRemove, Target: serviceID, TimeoutSeconds: serviceLifecycleAgentTimeoutSeconds,
+		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	removalIntent, err := etcd.NewServiceRemovalIntent(
 		taskID, current, projection, expectedHeadRevision, claim, candidate, claim.CreatedAt,

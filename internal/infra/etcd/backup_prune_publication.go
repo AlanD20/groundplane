@@ -7,6 +7,7 @@ import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -170,7 +171,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		mutations:  mutations,
 		authority: &backupTaskPublicationAuthority{
 			taskID: dispatch.TaskID, operationID: dispatch.OperationID,
-			environmentID: dispatch.EnvironmentID, taskType: TaskBackupPrune,
+			environmentID: dispatch.EnvironmentID, taskType: taskjournal.TaskBackupPrune,
 			createdAt: dispatch.CreatedAt,
 			validatePlan: func(value *agentpb.ExecutionPlan) error {
 				return validateBackupPruneExecutionPlan(dispatch, planEvidence, value)

@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -119,7 +120,7 @@ func prepareComponentTaskSecretReferences(
 func componentTaskTerminalSecretMutations(
 	intent ComponentTaskIntent,
 	taskID string,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 ) ([]etcdstore.Mutation, error) {
 	mutations := make([]etcdstore.Mutation, 0, len(intent.Candidates)*3)
 	for _, candidate := range intent.Candidates {
@@ -137,7 +138,7 @@ func componentTaskTerminalSecretMutations(
 				Key:  componentCandidateSecretReferenceKey(nextID, taskID, candidate.Candidate.Desired.ID),
 			})
 		}
-		if terminalStatus != TaskStatusCompleted || equalSecretReferences(currentIDs, nextIDs) {
+		if terminalStatus != taskjournal.TaskStatusCompleted || equalSecretReferences(currentIDs, nextIDs) {
 			continue
 		}
 		for _, currentID := range currentIDs {

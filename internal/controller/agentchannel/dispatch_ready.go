@@ -1,6 +1,7 @@
 package agentchannel
 
 import (
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -170,7 +171,7 @@ func validateAgentDispatchClaim(
 	generation uint64,
 ) error {
 	record := assignment.Assignment.Record
-	if record.Executor != etcd.TaskExecutorAgent || record.AgentID != agentID ||
+	if record.Executor != taskjournal.TaskExecutorAgent || record.AgentID != agentID ||
 		record.AgentGeneration != generation || record.TaskID != assignment.Task.Record.ID ||
 		ids.Validate(ids.KindAssignment, record.AssignmentID) != nil {
 		return errs.New(
@@ -183,7 +184,7 @@ func validateAgentDispatchClaim(
 
 func controllerCompletedAssignment(assignment etcd.TaskAssignment) bool {
 	switch assignment.Task.Record.Status {
-	case etcd.TaskStatusCompleted, etcd.TaskStatusFailed, etcd.TaskStatusAborted:
+	case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted:
 		return true
 	default:
 		return false

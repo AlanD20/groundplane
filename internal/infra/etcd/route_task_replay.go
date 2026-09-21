@@ -4,13 +4,14 @@ import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	matched, err := repository.validateRouteMutationTaskAcknowledgementReplay(ctx, task, terminalStatus, revision)
@@ -27,7 +28,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 		return errs.New(errs.KindInternal, "Route removal replay read is incomplete")
 	}
 	if intentRead.Values[0] == nil {
-		if terminalStatus == TaskStatusCompleted {
+		if terminalStatus == taskjournal.TaskStatusCompleted {
 			return validateCompletedRouteHeadReplay(ctx, repository.store, task, revision)
 		}
 		return nil
@@ -59,7 +60,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	if intent.CandidateProjection == nil {
 		return errs.New(errs.KindStateConflict, "Route removal terminal projection is missing")
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		return errs.New(errs.KindStateConflict, "completed Route removal retained its active intent")
 	}
 	staging, err := prepareRouteHeadCandidate(ctx, repository.store, intent, revision)
@@ -80,7 +81,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (bool, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{

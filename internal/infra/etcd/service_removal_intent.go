@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
@@ -34,7 +35,7 @@ type ServiceRemovalIntent struct {
 	Claim                     EnvironmentBlueprintStageClaim                `json:"claim"`
 	CurrentProjection         projectionrecord.EnvironmentComposeProjection `json:"current_projection"`
 	CandidateProjection       projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
-	Status                    TaskStatus                                    `json:"status"`
+	Status                    taskjournal.TaskStatus                        `json:"status"`
 	CreatedAt                 time.Time                                     `json:"created_at"`
 	TerminalAt                *time.Time                                    `json:"terminal_at,omitempty"`
 }
@@ -56,7 +57,7 @@ func NewServiceRemovalIntent(
 		ExpectedHeadRevision:      expectedHeadRevision, Claim: claim,
 		CurrentProjection:   projectionrecord.CloneEnvironmentComposeProjection(projection.Record),
 		CandidateProjection: projectionrecord.CloneEnvironmentComposeProjection(candidate),
-		Status:              TaskStatusPending, CreatedAt: createdAt,
+		Status:              taskjournal.TaskStatusPending, CreatedAt: createdAt,
 	}
 	if err := validateServiceRemovalIntent(intent); err != nil {
 		return ServiceRemovalIntent{}, err
@@ -105,10 +106,10 @@ func (repository *ServiceRepository) GetServiceRemovalIntent(
 
 func terminalServiceRemovalIntent(
 	intent ServiceRemovalIntent,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	at time.Time,
 ) (ServiceRemovalIntent, error) {
-	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
 		return ServiceRemovalIntent{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
 	}
 	terminal := cloneServiceRemovalIntent(intent)
@@ -145,7 +146,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		recordcodec.ValidateTimestamp("Service removal created_at", intent.CreatedAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Service removal intent identity is invalid")
 	}
-	if intent.Status == TaskStatusPending {
+	if intent.Status == taskjournal.TaskStatusPending {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Service removal intent has terminal time")
 		}
@@ -465,7 +466,7 @@ func sameServiceRemovalEntrySource(left, right core.EntrySource) bool {
 }
 
 func validateServiceRemovalTaskOwner(task TaskRecord, intent ServiceRemovalIntent) error {
-	if task.ID != intent.TaskID || task.Executor != TaskExecutorAgent || task.Type != TaskRemove ||
+	if task.ID != intent.TaskID || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.ServiceID || !task.CreatedAt.Equal(intent.CreatedAt) || len(task.Params) != 4 ||
 		task.Params[TaskResourceKindParam] != TaskResourceService ||
 		task.Params[TaskServiceEnvironmentParam] != intent.EnvironmentID ||

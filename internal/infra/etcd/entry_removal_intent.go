@@ -6,6 +6,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -26,7 +27,7 @@ type EntryRemovalIntent struct {
 	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
 	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
 	Desired                   *EntryRemovalDesiredRevision                   `json:"desired,omitempty"`
-	Status                    TaskStatus                                     `json:"status"`
+	Status                    taskjournal.TaskStatus                         `json:"status"`
 	CreatedAt                 time.Time                                      `json:"created_at"`
 	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
 }
@@ -74,7 +75,7 @@ func NewEntryRemovalIntent(
 ) (EntryRemovalIntent, error) {
 	intent := EntryRemovalIntent{
 		TaskID: taskID, EnvironmentID: environmentID, EntryID: entryID,
-		EntryRevision: entryRevision, Status: TaskStatusPending, CreatedAt: createdAt,
+		EntryRevision: entryRevision, Status: taskjournal.TaskStatusPending, CreatedAt: createdAt,
 	}
 	if projection != nil {
 		candidate, changed, err := projectionrecord.RemoveEnvironmentEntry(projection.Record, entryID)
@@ -135,10 +136,10 @@ func (repository *HierarchyRepository) GetEntryRemovalIntent(
 
 func terminalEntryRemovalIntent(
 	intent EntryRemovalIntent,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (EntryRemovalIntent, error) {
-	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
 		return EntryRemovalIntent{}, errs.New(errs.KindStateConflict, "Entry removal intent is not pending")
 	}
 	terminal := cloneEntryRemovalIntent(intent)
@@ -185,7 +186,7 @@ func validateEntryRemovalIntent(intent EntryRemovalIntent) error {
 			return errs.New(errs.KindValidationFailed, "Entry removal desired revision is invalid")
 		}
 	}
-	if intent.Status == TaskStatusPending {
+	if intent.Status == taskjournal.TaskStatusPending {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Entry removal intent has a terminal timestamp")
 		}

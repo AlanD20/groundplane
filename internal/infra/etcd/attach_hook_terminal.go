@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,7 +24,7 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 	}
 	event := backinghook.Attach
 	definition := input.HookConfiguration.Attach
-	if task.Type == TaskDetach {
+	if task.Type == taskjournal.TaskDetach {
 		event = backinghook.Detach
 		definition = input.HookConfiguration.Detach
 	}

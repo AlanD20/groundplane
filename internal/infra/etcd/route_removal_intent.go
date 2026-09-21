@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -26,7 +27,7 @@ type RouteRemovalIntent struct {
 	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
 	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
 	Provider                  *RouteProviderPin                              `json:"provider,omitempty"`
-	Status                    TaskStatus                                     `json:"status"`
+	Status                    taskjournal.TaskStatus                         `json:"status"`
 	CreatedAt                 time.Time                                      `json:"created_at"`
 	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
 }
@@ -47,7 +48,7 @@ func NewRouteRemovalIntent(
 		EnvironmentID: environmentID,
 		RouteID:       routeID,
 		RouteRevision: routeRevision,
-		Status:        TaskStatusPending,
+		Status:        taskjournal.TaskStatusPending,
 		CreatedAt:     createdAt,
 	}
 	if projection != nil {
@@ -107,10 +108,10 @@ func (repository *HierarchyRepository) GetRouteRemovalIntent(
 
 func terminalRouteRemovalIntent(
 	intent RouteRemovalIntent,
-	status TaskStatus,
+	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (RouteRemovalIntent, error) {
-	if intent.Status != TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
 		return RouteRemovalIntent{}, errs.New(errs.KindStateConflict, "Route removal intent is not pending")
 	}
 	terminal := cloneRouteRemovalIntent(intent)
@@ -150,7 +151,7 @@ func validateRouteRemovalIntent(intent RouteRemovalIntent) error {
 	if err := recordcodec.ValidateTimestamp("Route removal intent created_at", intent.CreatedAt); err != nil {
 		return err
 	}
-	if intent.Status == TaskStatusPending {
+	if intent.Status == taskjournal.TaskStatusPending {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Route removal intent has a terminal timestamp")
 		}

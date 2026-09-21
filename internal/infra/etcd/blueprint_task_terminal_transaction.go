@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -61,8 +62,8 @@ func NewTaskRepository(store TaskRepositoryStore) (*TaskRepository, error) {
 }
 
 func isBlueprintCandidateTerminalTask(task TaskRecord) bool {
-	return task.Type == TaskUpdate && task.Executor == TaskExecutorAgent &&
-		(task.Status == TaskStatusCompleted || task.Status == TaskStatusFailed || task.Status == TaskStatusAborted) &&
+	return task.Type == taskjournal.TaskUpdate && task.Executor == taskjournal.TaskExecutorAgent &&
+		(task.Status == taskjournal.TaskStatusCompleted || task.Status == taskjournal.TaskStatusFailed || task.Status == taskjournal.TaskStatusAborted) &&
 		task.Params[TaskReleasePublicationParam] != ""
 }
 
@@ -209,7 +210,7 @@ func (repository *TaskRepository) transactTaskTerminal(
 	if isVolumeRemovalTerminalTask(task) {
 		return repository.transactVolumeRemovalTerminal(ctx, task, conditions, mutations)
 	}
-	if task.Type == TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
+	if task.Type == taskjournal.TaskRemove && task.Params[TaskResourceKindParam] == TaskResourceVolume {
 		return repository.transactVolumeRemovalAttemptTerminal(ctx, task, conditions, mutations)
 	}
 	if !isBlueprintCandidateTerminalTask(task) {

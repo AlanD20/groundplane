@@ -7,6 +7,7 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"math"
@@ -35,10 +36,10 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	task etcd.TaskRecord,
 	intent etcd.EntryRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
-	if resolver == nil || resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent ||
-		task.Type != etcd.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
+	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
 		task.ID != intent.TaskID || task.Target != intent.EntryID || !task.CreatedAt.Equal(intent.CreatedAt) ||
-		intent.Status != etcd.TaskStatusPending || intent.CurrentProjection == nil || intent.CandidateProjection == nil ||
+		intent.Status != taskjournal.TaskStatusPending || intent.CurrentProjection == nil || intent.CandidateProjection == nil ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 8 {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task shape is invalid")
 	}

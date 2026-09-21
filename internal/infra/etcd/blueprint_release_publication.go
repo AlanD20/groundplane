@@ -9,6 +9,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
 	"time"
@@ -27,7 +28,7 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 ) (ReleaseTaskRenderInput, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	if ctx == nil || ledger == nil || validatePublicationID(publicationID) != nil ||
-		task.Type != TaskUpdate || ids.Validate(ids.KindPlan, task.PlanID) != nil {
+		task.Type != taskjournal.TaskUpdate || ids.Validate(ids.KindPlan, task.PlanID) != nil {
 		return ReleaseTaskRenderInput{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Release render input request is invalid",

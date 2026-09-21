@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -44,7 +45,7 @@ func (repository *TaskRepository) prepareAttachTaskClaim(
 		return attachTaskChange{}, err
 	}
 	change.conditions = append(change.conditions, runtimeConditions...)
-	if task.Type == TaskDetach {
+	if task.Type == taskjournal.TaskDetach {
 		if current.Record.Status != core.AttachDetaching ||
 			current.Record.Operation != attachrecord.AttachOperationDetach ||
 			current.Record.TaskID != task.ID {
@@ -87,7 +88,7 @@ func (repository *TaskRepository) prepareAttachTaskRetry(
 	if err != nil {
 		return attachTaskChange{}, err
 	}
-	if source.Type == TaskDetach {
+	if source.Type == taskjournal.TaskDetach {
 		exclusionCondition, exclusionErr := requireAttachBackupSourceExclusionAbsent(
 			ctx, repository.store, source.Target, revision,
 		)
@@ -113,7 +114,7 @@ func (repository *TaskRepository) prepareAttachTaskRetry(
 func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (attachTaskChange, error) {
 	applies, err := taskOwnsAttachLifecycle(task)
@@ -124,11 +125,11 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 	if err != nil {
 		return attachTaskChange{}, err
 	}
-	succeeded := terminalStatus == TaskStatusCompleted
-	if task.Type == TaskAttach {
+	succeeded := terminalStatus == taskjournal.TaskStatusCompleted
+	if task.Type == taskjournal.TaskAttach {
 		var terminal attachrecord.Record
 		var completeErr error
-		if terminalStatus == TaskStatusAborted && current.Record.Status == core.AttachPending {
+		if terminalStatus == taskjournal.TaskStatusAborted && current.Record.Status == core.AttachPending {
 			terminal, completeErr = attachrecord.AbortPendingAttachProvisioning(current.Record, task.ID)
 		} else {
 			terminal, completeErr = attachrecord.CompleteAttachProvisioning(current.Record, task.ID, succeeded)
@@ -168,14 +169,14 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 func (repository *TaskRepository) validateAttachTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	applies, err := taskOwnsAttachLifecycle(task)
 	if err != nil || !applies {
 		return err
 	}
-	if task.Type == TaskDetach && terminalStatus == TaskStatusCompleted {
+	if task.Type == taskjournal.TaskDetach && terminalStatus == taskjournal.TaskStatusCompleted {
 		return repository.validateCompletedAttachDetachReplay(ctx, task, revision)
 	}
 	current, err := repository.readTaskAttach(ctx, task, revision)
@@ -184,12 +185,12 @@ func (repository *TaskRepository) validateAttachTaskAcknowledgementReplay(
 	}
 	expectedStatus := core.AttachFailed
 	expectedOperation := attachrecord.AttachOperationProvision
-	if task.Type == TaskAttach && terminalStatus == TaskStatusCompleted {
+	if task.Type == taskjournal.TaskAttach && terminalStatus == taskjournal.TaskStatusCompleted {
 		expectedStatus = core.AttachReady
 	}
-	if task.Type == TaskDetach {
+	if task.Type == taskjournal.TaskDetach {
 		expectedOperation = attachrecord.AttachOperationDetach
-		if terminalStatus == TaskStatusCompleted {
+		if terminalStatus == taskjournal.TaskStatusCompleted {
 			expectedStatus = core.AttachDetached
 		}
 	}
@@ -409,7 +410,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 }
 
 func taskOwnsAttachLifecycle(task TaskRecord) (bool, error) {
-	if task.Executor != TaskExecutorAgent || (task.Type != TaskAttach && task.Type != TaskDetach) {
+	if task.Executor != taskjournal.TaskExecutorAgent || (task.Type != taskjournal.TaskAttach && task.Type != taskjournal.TaskDetach) {
 		return false, nil
 	}
 	if recordcodec.ValidateID(ids.KindAttach, task.Target) != nil {

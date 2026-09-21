@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +20,7 @@ type HierarchyDeletionMembershipNode struct {
 }
 
 type HierarchyDeletionAgentInput struct {
-	TaskType       TaskType
+	TaskType       taskjournal.TaskType
 	TypedProcedure string
 	InputDigest    string
 	TimeoutSeconds int64

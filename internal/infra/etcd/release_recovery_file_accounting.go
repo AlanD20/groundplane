@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -156,7 +157,7 @@ func (repository *TaskRepository) releaseCandidateMutationEvidenceAtRevision(
 			evidence.StepID, evidence.Running = event.Identity.StepID, true
 		case TaskEventStateCompleted:
 			evidence.StepID, evidence.Running, evidence.Completed = event.Identity.StepID, true, true
-		case TaskEventStateFailed, TaskEventStateAborted, TaskEventStateTimedOut:
+		case taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, TaskEventStateTimedOut:
 			// A file write is applicable only after its durable Running event.
 			// Native forward evidence keeps its existing non-pending semantics.
 			if !configurationFile {

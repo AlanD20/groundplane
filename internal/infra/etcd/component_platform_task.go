@@ -8,6 +8,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -46,8 +47,8 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err := validatePlatformComponentRecord(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if task.Target != replacement.Desired.ID || task.Executor != TaskExecutorAgent ||
-		task.Type != TaskUpdate || task.Status != TaskStatusPending ||
+	if task.Target != replacement.Desired.ID || task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskUpdate || task.Status != taskjournal.TaskStatusPending ||
 		task.Owner != PlatformTaskOwner() || task.Actor != TaskActorOperator ||
 		task.Params[TaskResourceKindParam] != TaskResourceComponent {
 		return IdempotencyTransactionResult{}, errs.New(

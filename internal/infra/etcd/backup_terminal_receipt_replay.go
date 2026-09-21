@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -11,7 +12,7 @@ func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 	ctx context.Context,
 	task etcdstore.Versioned[TaskRecord],
 ) error {
-	if task.Revision <= 0 || (task.Record.Type != TaskBackup && task.Record.Type != TaskBackupPrune) ||
+	if task.Revision <= 0 || (task.Record.Type != taskjournal.TaskBackup && task.Record.Type != taskjournal.TaskBackupPrune) ||
 		!isTerminalTaskStatus(task.Record.Status) {
 		return errs.New(errs.KindInternal, "terminal backup Task is invalid")
 	}

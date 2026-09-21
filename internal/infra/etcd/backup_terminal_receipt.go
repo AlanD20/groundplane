@@ -3,6 +3,7 @@ package etcd
 import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 )
 
@@ -45,16 +46,16 @@ const (
 // fields that are not repeated in this projection.
 type BackupTerminalTaskEvidence struct {
 	TaskID             string                        `json:"task_id"`
-	TaskType           TaskType                      `json:"task_type"`
+	TaskType           taskjournal.TaskType          `json:"task_type"`
 	OperationID        string                        `json:"operation_id"`
 	RetryOf            string                        `json:"retry_of,omitempty"`
 	Owner              TaskOwner                     `json:"owner"`
 	Actor              TaskActor                     `json:"actor"`
-	Executor           TaskExecutor                  `json:"executor"`
+	Executor           taskjournal.TaskExecutor      `json:"executor"`
 	Target             string                        `json:"target"`
 	PlanID             string                        `json:"plan_id"`
 	PlanHash           string                        `json:"plan_hash"`
-	Status             TaskStatus                    `json:"status"`
+	Status             taskjournal.TaskStatus        `json:"status"`
 	ResultDigest       string                        `json:"result_digest"`
 	TerminalAssignment *TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	CreatedAt          time.Time                     `json:"created_at"`

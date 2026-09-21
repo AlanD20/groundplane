@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -87,8 +88,8 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 }
 
 func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, error) {
-	if task.Type != TaskDeploy && task.Type != TaskRollback &&
-		(task.Type != TaskUpdate || !blueprintScriptTaskShape(task)) {
+	if task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback &&
+		(task.Type != taskjournal.TaskUpdate || !blueprintScriptTaskShape(task)) {
 		return nil, errs.New(errs.KindValidationFailed, "release hook execution Task is invalid")
 	}
 	steps := make([]releaseHookExecutionStep, 0)

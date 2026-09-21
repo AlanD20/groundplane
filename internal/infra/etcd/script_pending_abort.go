@@ -8,6 +8,7 @@ import (
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
@@ -36,7 +37,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 	taskRevision int64,
 	revision int64,
 ) (ScriptSourceReleaseFragment, bool, error) {
-	if task.Type != TaskScript && !blueprintScriptTaskShape(task) {
+	if task.Type != taskjournal.TaskScript && !blueprintScriptTaskShape(task) {
 		return ScriptSourceReleaseFragment{}, true, nil
 	}
 	steps, err := preparedScriptExecutionSteps(task)
@@ -70,7 +71,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
 	}
 	change := ScriptSourceReleaseFragment{conditions: []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
-	if task.Type == TaskScript {
+	if task.Type == taskjournal.TaskScript {
 		execution, value, err := (&ScriptRepository{store: repository.store}).manualScriptExecutionAtRevision(
 			ctx,
 			task,
@@ -103,7 +104,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	task etcdstore.Versioned[TaskRecord],
 	requestedTerminalAt time.Time,
 ) (pendingScriptAbortChange, error) {
-	if task.Record.Type != TaskScript && !blueprintScriptTaskShape(task.Record) {
+	if task.Record.Type != taskjournal.TaskScript && !blueprintScriptTaskShape(task.Record) {
 		return pendingScriptAbortChange{}, nil
 	}
 	steps, err := preparedScriptExecutionSteps(task.Record)
@@ -134,7 +135,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
-	if task.Record.Type == TaskScript && (len(executions) != 1 || !manualScriptRootMatches(executions[0], root)) {
+	if task.Record.Type == taskjournal.TaskScript && (len(executions) != 1 || !manualScriptRootMatches(executions[0], root)) {
 		return pendingScriptAbortChange{}, errs.New(
 			errs.KindInternal,
 			"manual Script Abort source authority is corrupt",
@@ -200,7 +201,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	executions []ScriptExecutionRecord,
 	values []*etcdstore.KeyValue,
 ) (pendingScriptAbortChange, error) {
-	terminal, err := transitionTaskStatus(task.Record, TaskStatusPending, TaskStatusAborted, requestedTerminalAt)
+	terminal, err := transitionTaskStatus(task.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, requestedTerminalAt)
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
@@ -276,8 +277,8 @@ func abortScriptExecutionBeforeStart(
 	step releaseHookExecutionStep,
 	terminalAt time.Time,
 ) (ScriptExecutionRecord, error) {
-	if task.Status != TaskStatusPending ||
-		(task.Type != TaskScript && !blueprintScriptTaskShape(task)) ||
+	if task.Status != taskjournal.TaskStatusPending ||
+		(task.Type != taskjournal.TaskScript && !blueprintScriptTaskShape(task)) ||
 		!taskOwnsScriptExecution(task, record) ||
 		record.State != ScriptExecutionNotStarted || record.AssignmentID != "" || record.StartAuthorized ||
 		!record.ActiveReference ||
@@ -380,7 +381,7 @@ func (repository *TaskRepository) validatePendingScriptAbortReplay(
 	ctx context.Context,
 	task etcdstore.Versioned[TaskRecord],
 ) error {
-	if task.Record.Type != TaskScript && !blueprintScriptTaskShape(task.Record) {
+	if task.Record.Type != taskjournal.TaskScript && !blueprintScriptTaskShape(task.Record) {
 		return nil
 	}
 	steps, err := preparedScriptExecutionSteps(task.Record)

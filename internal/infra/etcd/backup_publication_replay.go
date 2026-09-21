@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // validateExistingBackupRunPublication validates the committed winner named by
@@ -41,8 +42,8 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	task, taskErr := decodeTaskRecord(read.Values[1].Value)
-	if taskErr != nil || task.ID != marker.TaskID || task.Type != TaskBackup ||
-		(task.Actor != TaskActorOperator && task.Actor != TaskActorSystem) || task.Executor != TaskExecutorAgent ||
+	if taskErr != nil || task.ID != marker.TaskID || task.Type != taskjournal.TaskBackup ||
+		(task.Actor != TaskActorOperator && task.Actor != TaskActorSystem) || task.Executor != taskjournal.TaskExecutorAgent ||
 		(task.RetryOf == "" && task.IdempotencyKey != marker.Locator.Key) ||
 		task.idempotencyMarker == nil ||
 		*task.idempotencyMarker != marker.Locator || task.Owner.EnvironmentID != marker.Locator.ScopeID {
@@ -168,8 +169,8 @@ func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 		task.FinishedAt == nil || task.RetainUntil == nil ||
 		!marker.TerminalAt.Equal(*task.FinishedAt) ||
 		!marker.RetainUntil.Equal(*task.RetainUntil) ||
-		(marker.State == idempotencyrecord.IdempotencyMarkerCompleted && task.Status != TaskStatusCompleted) ||
-		(marker.State == idempotencyrecord.IdempotencyMarkerFailed && task.Status == TaskStatusCompleted) ||
+		(marker.State == idempotencyrecord.IdempotencyMarkerCompleted && task.Status != taskjournal.TaskStatusCompleted) ||
+		(marker.State == idempotencyrecord.IdempotencyMarkerFailed && task.Status == taskjournal.TaskStatusCompleted) ||
 		(marker.State != idempotencyrecord.IdempotencyMarkerCompleted && marker.State != idempotencyrecord.IdempotencyMarkerFailed) {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}

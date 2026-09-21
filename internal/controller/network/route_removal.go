@@ -13,6 +13,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"net/http"
 	"time"
@@ -273,7 +274,7 @@ func (service *routeRemovalService) removeRouteOnce(
 	task := etcd.TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
 		Owner: taskOwner, Actor: etcd.TaskActorOperator, PlanID: ids.New(ids.KindPlan),
-		Type: etcd.TaskRemove, Target: routeID, Status: etcd.TaskStatusPending,
+		Type: taskjournal.TaskRemove, Target: routeID, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	intent, err := etcd.NewRouteRemovalIntent(
@@ -386,13 +387,13 @@ func prepareControllerRouteRemovalTask(
 			"route render generation exceeds Controller Task limits",
 		)
 	}
-	task.Executor = etcd.TaskExecutorController
+	task.Executor = taskjournal.TaskExecutorController
 	task.RenderGeneration = int32(renderGeneration)
 	task.Params = map[string]string{
 		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
 		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
-	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
+	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	task.TimeoutSeconds = routeRemovalControllerTimeoutSeconds
 	planHash, err := controllerRouteRemovalPlanHash(intent)
 	if err != nil {
@@ -411,7 +412,7 @@ func controllerRouteRemovalPlanHash(intent etcd.RouteRemovalIntent) (string, err
 		RouteRevision             int64  `json:"route_revision"`
 		CurrentProjectionRevision int64  `json:"current_projection_revision"`
 	}{
-		Version: 1, Type: string(etcd.TaskRemove), RouteID: intent.RouteID,
+		Version: 1, Type: string(taskjournal.TaskRemove), RouteID: intent.RouteID,
 		EnvironmentID: intent.EnvironmentID, RouteRevision: intent.RouteRevision,
 		CurrentProjectionRevision: intent.CurrentProjectionRevision,
 	})

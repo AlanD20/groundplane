@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"time"
@@ -28,18 +29,18 @@ type TaskEventIdentity struct {
 // JSON value; the Controller compacts it before hashing and persistence.
 type TaskEventInput struct {
 	Identity TaskEventIdentity
-	State    TaskEventState
+	State    taskjournal.TaskEventState
 	Payload  json.RawMessage
 }
 
 // TaskEventRecord is one Controller-sequenced durable activity item.
 type TaskEventRecord struct {
-	Sequence      uint64            `json:"sequence"`
-	Identity      TaskEventIdentity `json:"identity"`
-	State         TaskEventState    `json:"state"`
-	Payload       json.RawMessage   `json:"payload"`
-	PayloadSHA256 string            `json:"payload_sha256"`
-	ReceivedAt    time.Time         `json:"received_at"`
+	Sequence      uint64                     `json:"sequence"`
+	Identity      TaskEventIdentity          `json:"identity"`
+	State         taskjournal.TaskEventState `json:"state"`
+	Payload       json.RawMessage            `json:"payload"`
+	PayloadSHA256 string                     `json:"payload_sha256"`
+	ReceivedAt    time.Time                  `json:"received_at"`
 }
 
 // TaskEventDedupRecord makes Agent delivery idempotent across process restarts.
@@ -61,17 +62,17 @@ type PreparedTaskEvent struct {
 }
 
 type taskEventRecordData struct {
-	Sequence      uint64            `json:"sequence"`
-	Identity      TaskEventIdentity `json:"identity"`
-	State         TaskEventState    `json:"state"`
-	Payload       json.RawMessage   `json:"payload"`
-	PayloadSHA256 string            `json:"payload_sha256"`
-	ReceivedAt    string            `json:"received_at"`
+	Sequence      uint64                     `json:"sequence"`
+	Identity      TaskEventIdentity          `json:"identity"`
+	State         taskjournal.TaskEventState `json:"state"`
+	Payload       json.RawMessage            `json:"payload"`
+	PayloadSHA256 string                     `json:"payload_sha256"`
+	ReceivedAt    string                     `json:"received_at"`
 }
 
 type taskEventFingerprint struct {
-	State   TaskEventState  `json:"state"`
-	Payload json.RawMessage `json:"payload"`
+	State   taskjournal.TaskEventState `json:"state"`
+	Payload json.RawMessage            `json:"payload"`
 }
 
 func prepareTaskEvent(
@@ -214,17 +215,17 @@ func validateTaskEventDedupRecord(record TaskEventDedupRecord) error {
 	return nil
 }
 
-func validTaskEventState(state TaskEventState) bool {
+func validTaskEventState(state taskjournal.TaskEventState) bool {
 	switch state {
-	case TaskEventStatePending, TaskEventStateRunning, TaskEventStateCompleted,
-		TaskEventStateFailed, TaskEventStateAborted, TaskEventStateTimedOut:
+	case taskjournal.TaskEventStatePending, taskjournal.TaskEventStateRunning, taskjournal.TaskEventStateCompleted,
+		taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, TaskEventStateTimedOut:
 		return true
 	default:
 		return false
 	}
 }
 
-func canonicalTaskEventPayload(state TaskEventState, value json.RawMessage) (json.RawMessage, string, error) {
+func canonicalTaskEventPayload(state taskjournal.TaskEventState, value json.RawMessage) (json.RawMessage, string, error) {
 	if !validTaskEventState(state) {
 		return nil, "", errs.New(errs.KindValidationFailed, "task event status is invalid")
 	}

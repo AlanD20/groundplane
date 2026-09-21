@@ -5,6 +5,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
@@ -30,9 +31,9 @@ func validateRunnerCreateTask(desired runnerrecord.RunnerDesiredRecord, task Tas
 	if err != nil {
 		return err
 	}
-	if task.Executor != TaskExecutorController || task.Type != TaskCreate || task.Target != desired.ID ||
+	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCreate || task.Target != desired.ID ||
 		task.Owner != owner ||
-		task.Status != TaskStatusPending || task.IdempotencyKey == "" || len(task.Params) != 2 ||
+		task.Status != taskjournal.TaskStatusPending || task.IdempotencyKey == "" || len(task.Params) != 2 ||
 		task.Params[TaskResourceKindParam] != TaskResourceRunner ||
 		task.Params[RunnerRegistrationTokenPresentParam] != "true" {
 		return errs.New(errs.KindValidationFailed, "runner creation task has invalid durable input")

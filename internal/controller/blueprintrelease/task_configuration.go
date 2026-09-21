@@ -2,6 +2,7 @@ package blueprintrelease
 
 import (
 	"context"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -15,10 +16,10 @@ func (service *Service) prepareTaskConfiguration(ctx context.Context, input Prep
 	return service.ledger.PrepareTaskConfigurationAtRevision(ctx, input.Task, input.Environment.ReadRevision)
 }
 
-func taskStepRecords(steps []*agentpb.ExecutionStep) []etcd.TaskStepRecord {
-	result := make([]etcd.TaskStepRecord, len(steps))
+func taskStepRecords(steps []*agentpb.ExecutionStep) []taskjournal.TaskStepRecord {
+	result := make([]taskjournal.TaskStepRecord, len(steps))
 	for index, step := range steps {
-		result[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: step.StepId}
+		result[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: step.StepId}
 	}
 	return result
 }

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	ref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -21,7 +22,7 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 		err != nil {
 		return stop, err
 	}
-	if task.Type == TaskScript {
+	if task.Type == taskjournal.TaskScript {
 		return repository.prepareManualScriptExpiry(ctx, task, taskRevision, retentionEntry, readRevision, now)
 	}
 	if task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
@@ -41,7 +42,7 @@ func taskSourcePruneConditions(task TaskRecord) []etcdstore.Condition {
 	if task.Configuration != nil && task.Configuration.BackingHookInputs != nil {
 		pins = append(pins, etcdstore.Condition{Key: backingHookTaskInputKey(task.OperationID)})
 	}
-	if task.Type != TaskScript {
+	if task.Type != taskjournal.TaskScript {
 		return pins
 	}
 	return append(pins, []etcdstore.Condition{

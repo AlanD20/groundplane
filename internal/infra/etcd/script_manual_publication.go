@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -26,7 +27,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return result, err
 	}
-	if repository == nil || repository.store == nil || task.Type != TaskScript {
+	if repository == nil || repository.store == nil || task.Type != taskjournal.TaskScript {
 		return result, errs.New(errs.KindValidationFailed, "manual Script publication is invalid")
 	}
 	execution.ScriptSetGeneration = sources.Script.Record.ScriptSetGeneration

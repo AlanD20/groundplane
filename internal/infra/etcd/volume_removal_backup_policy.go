@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -187,7 +188,7 @@ func (prepared VolumeRemovalBackupPolicyPreparation) validateDesiredPublication(
 	state := prepared.state
 	if state == nil || claim.SourceKind != EnvironmentBlueprintSourceMutation ||
 		state.environmentID != claim.EnvironmentID || state.volumeID != removedVolumeID ||
-		task.Type != TaskRemove || task.Target != state.volumeID ||
+		task.Type != taskjournal.TaskRemove || task.Target != state.volumeID ||
 		task.Params[TaskResourceKindParam] != TaskResourceVolume ||
 		marker.Locator.Method != "DELETE" || marker.Locator.Route != "/volumes/{id}" ||
 		!equalEnvironmentBlueprintBackupPolicy(prepared.Projection(), projection.Backup) {

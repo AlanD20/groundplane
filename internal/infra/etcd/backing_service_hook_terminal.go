@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ func (repository *TaskRepository) prepareBackingServiceCreationHookAcknowledgeme
 	readRevision int64,
 ) (taskMaterializationProjectionChange, error) {
 	serviceID, hooked := task.Params[TaskBackingServiceAfterStartParam]
-	if !hooked || task.Status != TaskStatusCompleted {
+	if !hooked || task.Status != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}
 	if serviceID == "" || task.Params[TaskBackingServiceCreationParam] != serviceID || len(task.Steps) == 0 {

@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -108,7 +109,7 @@ func (s *Server) taskAssignmentMessage(
 	task := claim.Task.Record
 	record := claim.Assignment.Record
 	if ids.Validate(ids.KindAssignment, record.AssignmentID) != nil || record.TaskID != task.ID ||
-		record.Executor != etcd.TaskExecutorAgent {
+		record.Executor != taskjournal.TaskExecutorAgent {
 		return nil, errs.New(errs.KindInternal, "durable Agent Task assignment is invalid")
 	}
 	if s.plans == nil {
@@ -223,7 +224,7 @@ func clearScriptAssignmentArtifacts(artifacts *agentpb.ScriptAssignmentArtifacts
 	}
 }
 
-func stepSummariesMatch(steps []*agentpb.ExecutionStep, summaries []etcd.TaskStepRecord) bool {
+func stepSummariesMatch(steps []*agentpb.ExecutionStep, summaries []taskjournal.TaskStepRecord) bool {
 	if len(steps) != len(summaries) {
 		return false
 	}

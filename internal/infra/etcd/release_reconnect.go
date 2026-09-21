@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -52,7 +53,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 			}
 			if effect {
 				result := TaskResultRecord{
-					Kind: TaskResultCompose, Diagnostic: TaskResultDiagnosticNone,
+					Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 					ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
 				}
 				taskBytes, _ := encodeTaskRecord(task)
@@ -72,7 +73,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 						Value:       assignmentBytes,
 						ModRevision: current.Assignment.Revision,
 					},
-					TaskStatusFailed,
+					taskjournal.TaskStatusFailed,
 					result,
 					current.Task.ReadRevision,
 					evidenceConditions...,
@@ -122,6 +123,6 @@ type releaseRecoveryAcknowledgement struct {
 	record     releaseRecoveryRecord
 	value      *etcdstore.KeyValue
 	final      bool
-	status     TaskStatus
+	status     taskjournal.TaskStatus
 	result     TaskResultRecord
 }

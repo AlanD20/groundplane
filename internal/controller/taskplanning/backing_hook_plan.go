@@ -5,6 +5,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -23,7 +24,7 @@ func (resolver *TaskPlanResolver) resolveCustomAttachPlan(
 ) (*agentpb.ExecutionPlan, error) {
 	var event backinghook.Event
 	var definition *backinghook.Definition
-	if task.Type == etcd.TaskAttach {
+	if task.Type == taskjournal.TaskAttach {
 		event = backinghook.Attach
 		if renderInput.HookConfiguration != nil {
 			definition = renderInput.HookConfiguration.Attach
@@ -77,7 +78,7 @@ func (resolver *TaskPlanResolver) resolveCustomAttachPlan(
 }
 
 func backingHookStep(
-	step etcd.TaskStepRecord,
+	step taskjournal.TaskStepRecord,
 	definition backinghook.Definition,
 	input backinghook.Input,
 	schema []backinghook.FactDefinition,

@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 )
@@ -410,8 +411,8 @@ func validateAttachDetachTask(
 ) error {
 	validOwnership := detaching.Status == core.AttachDetaching && detaching.Operation == attachrecord.AttachOperationDetach &&
 		detaching.TaskID == task.ID && attachImmutableEqual(current, detaching)
-	validTaskShape := task.Type == TaskDetach && task.Target == current.ID && task.Executor == TaskExecutorAgent &&
-		task.Status == TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
+	validTaskShape := task.Type == taskjournal.TaskDetach && task.Target == current.ID && task.Executor == taskjournal.TaskExecutorAgent &&
+		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
 		task.Params[TaskMutationEnvironmentParam] == current.EnvironmentID
 	if !validOwnership || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach detach Task does not own its detaching Attach")

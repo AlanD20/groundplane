@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -127,8 +128,8 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 		validateBackupTerminalReceiptTaskBinding(task, receipt) != nil {
 		return backupRunRetrySource{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	if task.Status != TaskStatusFailed && task.Status != TaskStatusTimedOut &&
-		task.Status != TaskStatusAborted {
+	if task.Status != taskjournal.TaskStatusFailed && task.Status != taskjournal.TaskStatusTimedOut &&
+		task.Status != taskjournal.TaskStatusAborted {
 		return backupRunRetrySource{}, errs.Newf(
 			errs.KindTaskNotRetryable,
 			"task %s has status %s",

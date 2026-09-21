@@ -6,13 +6,14 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (repository *TaskRepository) validateRunnerTaskAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	applies, err := taskOwnsRunner(task)
@@ -22,7 +23,7 @@ func (repository *TaskRepository) validateRunnerTaskAcknowledgementReplay(
 	if task.Status != terminalStatus || !runnerTerminal(terminalStatus) {
 		return errs.New(errs.KindInternal, "runner terminal task has invalid durable input")
 	}
-	if task.Type == TaskCreate {
+	if task.Type == taskjournal.TaskCreate {
 		return repository.validateRunnerCreationAcknowledgementReplay(ctx, task, terminalStatus, revision)
 	}
 	return repository.validateRunnerRemovalAcknowledgementReplay(ctx, task, terminalStatus, revision)
@@ -31,7 +32,7 @@ func (repository *TaskRepository) validateRunnerTaskAcknowledgementReplay(
 func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -54,7 +55,7 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 		return errs.New(errs.KindStateConflict, "runner creation replay retained corrupt target state")
 	}
 	wantState := runnerrecord.RunnerProvisioningFailed
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		wantState = runnerrecord.RunnerProvisioningReady
 	}
 	if record.ProvisioningState != wantState {
@@ -67,7 +68,7 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 	ctx context.Context,
 	task TaskRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
 	evidence, err := decodeRunnerRemovalTaskEvidence(task)
@@ -109,7 +110,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 	if err != nil || system.Reservations == nil {
 		return corruptSystemPoolRegistry()
 	}
-	if terminalStatus == TaskStatusCompleted {
+	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if stored.Values[0] != nil || stored.Values[1] != nil || stored.Values[4] != nil || stored.Values[5] != nil ||
 			stored.Values[7] != nil || stored.Values[9] != nil {
 			return errs.New(errs.KindStateConflict, "completed runner removal retained target state")

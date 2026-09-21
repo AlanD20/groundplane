@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"slices"
@@ -133,10 +134,10 @@ func backupConnectorAddressing(pathStyle bool) string {
 func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error) {
 	task := input.Task
 	run := input.Run
-	if task.Type != etcd.TaskBackup {
+	if task.Type != taskjournal.TaskBackup {
 		return nil, errs.New(errs.KindValidationFailed, "backup run task type must be backup")
 	}
-	if task.Executor != etcd.TaskExecutorAgent {
+	if task.Executor != taskjournal.TaskExecutorAgent {
 		return nil, errs.New(
 			errs.KindValidationFailed,
 			"backup run task must be agent-executed",
@@ -161,7 +162,7 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 	default:
 		return nil, errs.New(errs.KindValidationFailed, "backup run initiator is invalid")
 	}
-	if task.Status != etcd.TaskStatusPending && task.Status != etcd.TaskStatusRunning {
+	if task.Status != taskjournal.TaskStatusPending && task.Status != taskjournal.TaskStatusRunning {
 		return nil, errs.New(errs.KindValidationFailed, "backup run task status must be pending or running")
 	}
 	if task.Target == "" || task.Target != run.EnvironmentID {
@@ -192,8 +193,8 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 			"backup run task params and materializations must be empty",
 		)
 	}
-	if !((task.Status == etcd.TaskStatusPending && run.State == backupruntime.BackupRunQueued) ||
-		(task.Status == etcd.TaskStatusRunning && run.State == backupruntime.BackupRunRunning)) ||
+	if !((task.Status == taskjournal.TaskStatusPending && run.State == backupruntime.BackupRunQueued) ||
+		(task.Status == taskjournal.TaskStatusRunning && run.State == backupruntime.BackupRunRunning)) ||
 		(run.Initiator != backupruntime.BackupRunInitiatorOperator && run.Initiator != backupruntime.BackupRunInitiatorSchedule) {
 		return nil, errs.New(
 			errs.KindValidationFailed,

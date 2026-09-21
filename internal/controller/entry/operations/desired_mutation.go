@@ -18,6 +18,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"time"
@@ -260,14 +261,14 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	task := etcd.TaskRecord{
 		ID: claim.TaskID, OperationID: allocator.Named(ids.KindOperation, "entry-operation"),
 		IdempotencyKey: request.idempotencyKey, Owner: owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: planID,
-		RenderGeneration: int32(generation), Type: etcd.TaskUpdate, Target: request.environmentID,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: planID,
+		RenderGeneration: int32(generation), Type: taskjournal.TaskUpdate, Target: request.environmentID,
 		Materializations: references,
-		TimeoutSeconds:   controllerrevision.TaskTimeoutSeconds, Status: etcd.TaskStatusPending,
+		TimeoutSeconds:   controllerrevision.TaskTimeoutSeconds, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	if request.action == entryDesiredMutationRemove {
-		task.Type, task.Target = etcd.TaskRemove, request.entryID
+		task.Type, task.Target = taskjournal.TaskRemove, request.entryID
 		task, err = service.removePlans.PrepareDesiredEntryRemoval(ctx, task, claim)
 	} else {
 		task, err = runtime.PrepareTask(service.volumeRoot, task, candidate,

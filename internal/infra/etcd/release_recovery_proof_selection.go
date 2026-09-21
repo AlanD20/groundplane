@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -219,7 +220,7 @@ func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 		if candidate.Target == ReleaseRestorationCandidateAbsence {
 			continue
 		}
-		if task.Type != TaskDeploy && task.Type != TaskRollback {
+		if task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback {
 			return nil, nil, nil, corruptReleaseRecord()
 		}
 		memberIndex := slices.IndexFunc(manifest.Members, func(member ReleaseStagedMemberRef) bool {
@@ -315,9 +316,9 @@ func ordinaryRecoveryIntentMatchesAttempt(task TaskRecord, intent domain.Intent,
 		return false
 	}
 	expectedKind := domain.OperationDeploy
-	if task.Type == TaskRollback {
+	if task.Type == taskjournal.TaskRollback {
 		expectedKind = domain.OperationRollback
-	} else if task.Type != TaskDeploy {
+	} else if task.Type != taskjournal.TaskDeploy {
 		return false
 	}
 	if intent.OperationKind != expectedKind {

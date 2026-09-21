@@ -10,6 +10,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"slices"
@@ -274,12 +275,12 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 		OperationID:       ids.New(ids.KindOperation),
 		Owner:             parent.Owner,
 		Actor:             etcd.TaskActorSystem,
-		Executor:          etcd.TaskExecutorAgent,
+		Executor:          taskjournal.TaskExecutorAgent,
 		PlanID:            parent.PlanID,
-		Type:              etcd.TaskRemove,
+		Type:              taskjournal.TaskRemove,
 		Target:            parent.Target,
 		TimeoutSeconds:    zoneDeletionTimeoutSeconds,
-		Status:            etcd.TaskStatusPending,
+		Status:            taskjournal.TaskStatusPending,
 		NextEventSequence: 1,
 		CreatedAt:         now,
 		UpdatedAt:         now,
@@ -366,9 +367,9 @@ func (service *backingZoneCascadeService) waitForTask(
 			return etcdstore.Versioned[etcd.TaskRecord]{}, err
 		}
 		switch current.Record.Status {
-		case etcd.TaskStatusCompleted, etcd.TaskStatusFailed, etcd.TaskStatusAborted, etcd.TaskStatusTimedOut:
+		case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
 			return current, nil
-		case etcd.TaskStatusPending, etcd.TaskStatusRunning:
+		case taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning:
 			if err := service.wait(ctx); err != nil {
 				return etcdstore.Versioned[etcd.TaskRecord]{}, err
 			}
@@ -450,7 +451,7 @@ func cascadeTaskID(response idempotencyrecord.IdempotencyResponse) (string, erro
 }
 
 func requireCascadeChildSuccess(task etcd.TaskRecord) error {
-	if task.Status == etcd.TaskStatusCompleted {
+	if task.Status == taskjournal.TaskStatusCompleted {
 		return nil
 	}
 	return errs.Newf(errs.KindStateConflict, "cascade child Task %s ended with status %s", task.ID, task.Status)
@@ -458,11 +459,11 @@ func requireCascadeChildSuccess(task etcd.TaskRecord) error {
 
 // isBackingZoneCascadeTask validates the closed Controller executor contract.
 func isBackingZoneCascadeTask(task etcd.TaskRecord) (bool, error) {
-	if task.Executor != etcd.TaskExecutorController ||
+	if task.Executor != taskjournal.TaskExecutorController ||
 		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceBackingZone {
 		return false, nil
 	}
-	if task.Type != etcd.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 3 ||
+	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 3 ||
 		ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskZoneEnvironmentParam]) != nil ||
 		len(task.Params[etcd.TaskZoneImpactTokenParam]) != sha256.Size*2 {
 		return false, errs.New(errs.KindValidationFailed, "backing Zone cascade Task parameters are invalid")

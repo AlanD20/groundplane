@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -355,38 +356,38 @@ func taskResponse(record etcd.TaskRecord, snapshot etcd.TaskEventSnapshot) (apiT
 	return response, nil
 }
 
-func taskAPIStatus(status etcd.TaskStatus) (apiTypes.TaskStatus, error) {
+func taskAPIStatus(status taskjournal.TaskStatus) (apiTypes.TaskStatus, error) {
 	switch status {
-	case etcd.TaskStatusPending:
+	case taskjournal.TaskStatusPending:
 		return apiTypes.TaskPending, nil
-	case etcd.TaskStatusRunning:
+	case taskjournal.TaskStatusRunning:
 		return apiTypes.TaskRunning, nil
-	case etcd.TaskStatusCompleted:
+	case taskjournal.TaskStatusCompleted:
 		return apiTypes.TaskCompleted, nil
-	case etcd.TaskStatusFailed:
+	case taskjournal.TaskStatusFailed:
 		return apiTypes.TaskFailed, nil
-	case etcd.TaskStatusAborted:
+	case taskjournal.TaskStatusAborted:
 		return apiTypes.TaskAborted, nil
-	case etcd.TaskStatusTimedOut:
+	case taskjournal.TaskStatusTimedOut:
 		return apiTypes.TaskTimedOut, nil
 	default:
 		return "", errs.New(errs.KindInternal, "Task has an invalid durable status")
 	}
 }
 
-func taskEventAPIStatus(status etcd.TaskEventState) (apiTypes.TaskStatus, error) {
+func taskEventAPIStatus(status taskjournal.TaskEventState) (apiTypes.TaskStatus, error) {
 	switch status {
-	case etcd.TaskEventStatePending:
+	case taskjournal.TaskEventStatePending:
 		return apiTypes.TaskPending, nil
-	case etcd.TaskEventStateRunning:
+	case taskjournal.TaskEventStateRunning:
 		return apiTypes.TaskRunning, nil
-	case etcd.TaskEventStateCompleted:
+	case taskjournal.TaskEventStateCompleted:
 		return apiTypes.TaskCompleted, nil
-	case etcd.TaskEventStateFailed:
+	case taskjournal.TaskEventStateFailed:
 		return apiTypes.TaskFailed, nil
-	case etcd.TaskEventStateAborted:
+	case taskjournal.TaskEventStateAborted:
 		return apiTypes.TaskAborted, nil
-	case etcd.TaskEventStateTimedOut:
+	case taskjournal.TaskEventStateTimedOut:
 		return apiTypes.TaskTimedOut, nil
 	default:
 		return "", errs.New(errs.KindInternal, "Task event has an invalid durable status")

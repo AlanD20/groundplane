@@ -9,6 +9,7 @@ import (
 	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"sort"
@@ -72,9 +73,9 @@ func (planner *EntryRemovalPlanner) PrepareEntryRemoval(
 		owner.TenantID = request.Identity.TenantID
 	}
 	task := etcd.TaskRecord{
-		ID: request.TaskID, PlanID: request.PlanID, Executor: etcd.TaskExecutorAgent,
-		Type: etcd.TaskRemove, Target: request.EntryID, TimeoutSeconds: 120,
-		Status: etcd.TaskStatusPending, CreatedAt: request.CreatedAt, Owner: owner,
+		ID: request.TaskID, PlanID: request.PlanID, Executor: taskjournal.TaskExecutorAgent,
+		Type: taskjournal.TaskRemove, Target: request.EntryID, TimeoutSeconds: 120,
+		Status: taskjournal.TaskStatusPending, CreatedAt: request.CreatedAt, Owner: owner,
 	}
 	prepared, err := planner.plans.prepareEntryRemovalTask(
 		ctx, task, intent, entryRemovalTaskProcedureIDs{ArtifactID: request.ArtifactID},
@@ -113,7 +114,7 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 		etcd.TaskEntryAuthorizedVolumeDirParam:   identity.AuthorizedVolumeDir,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
-	task.Steps = make([]etcd.TaskStepRecord, len(templates))
+	task.Steps = make([]taskjournal.TaskStepRecord, len(templates))
 	task.Materializations = make([]materializationrecord.Record, len(templates))
 	seenMaterializations := make(map[string]struct{}, len(templates))
 	seenSteps := make(map[string]struct{}, len(templates))
@@ -155,7 +156,7 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 		reference.Length = uint64(len(content))
 		reference.SHA256 = hex.EncodeToString(digest[:])
 		clear(content)
-		task.Steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID}
+		task.Steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID}
 		task.Materializations[index] = reference
 	}
 	sort.Slice(task.Materializations, func(left int, right int) bool {

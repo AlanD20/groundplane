@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -162,8 +163,8 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	hasDesiredAfterStart := creation.Service.Desired.Hooks != nil &&
 		creation.Service.Desired.Hooks.AfterStart != nil
 	if creation.Task.Owner != wantOwner || creation.Task.Actor != TaskActorOperator ||
-		creation.Task.Executor != TaskExecutorAgent || creation.Task.Type != TaskUpdate ||
-		creation.Task.Target != creation.Environment.ID || creation.Task.Status != TaskStatusPending ||
+		creation.Task.Executor != taskjournal.TaskExecutorAgent || creation.Task.Type != taskjournal.TaskUpdate ||
+		creation.Task.Target != creation.Environment.ID || creation.Task.Status != taskjournal.TaskStatusPending ||
 		creation.Task.RenderGeneration != 1 ||
 		creation.Task.Params[EnvironmentDesiredRevisionParam] != creation.Task.ID ||
 		creation.Task.Params[TaskMaterializationEnvironmentParam] != creation.Environment.ID ||

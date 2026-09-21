@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"sort"
 	"time"
@@ -443,29 +444,29 @@ func (prepared preparedBlueprintAttaches) procedureSteps(
 	taskID string,
 	timeout int64,
 	namedID func(ids.Kind, string) string,
-) ([]*agentpb.ExecutionStep, []etcd.TaskStepRecord, error) {
+) ([]*agentpb.ExecutionStep, []taskjournal.TaskStepRecord, error) {
 	steps := make([]*agentpb.ExecutionStep, 0)
-	records := make([]etcd.TaskStepRecord, 0)
+	records := make([]taskjournal.TaskStepRecord, 0)
 	for _, procedure := range prepared.procedures {
-		stepRecords := make([]etcd.TaskStepRecord, 0, len(procedure.record.GrantAttachIDs)+1)
+		stepRecords := make([]taskjournal.TaskStepRecord, 0, len(procedure.record.GrantAttachIDs)+1)
 		stepRecords = append(
 			stepRecords,
-			etcd.TaskStepRecord{
-				Kind: etcd.TaskStepOperation,
+			taskjournal.TaskStepRecord{
+				Kind: taskjournal.TaskStepOperation,
 				ID:   namedID(ids.KindStep, "attach:"+procedure.record.ID+":provision"),
 			},
 		)
 		for _, grantID := range procedure.record.GrantAttachIDs {
 			stepRecords = append(
 				stepRecords,
-				etcd.TaskStepRecord{
-					Kind: etcd.TaskStepOperation,
+				taskjournal.TaskStepRecord{
+					Kind: taskjournal.TaskStepOperation,
 					ID:   namedID(ids.KindStep, "attach:"+procedure.record.ID+":grant:"+grantID),
 				},
 			)
 		}
 		procedureTask := etcd.TaskRecord{
-			ID: taskID, Type: etcd.TaskAttach, Target: procedure.record.ID,
+			ID: taskID, Type: taskjournal.TaskAttach, Target: procedure.record.ID,
 			Steps: stepRecords, TimeoutSeconds: timeout,
 		}
 		built, err := taskplanning.BuildAttachProvisionSteps(

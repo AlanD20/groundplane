@@ -7,9 +7,10 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -40,7 +41,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 			intent := stored.Record
 			if found {
 				if intent.TaskID != reference.RouteTaskID || intent.EnvironmentID != environmentID ||
-					intent.Status != etcd.TaskStatusPending || intent.CandidateProjection == nil ||
+					intent.Status != taskjournal.TaskStatusPending || intent.CandidateProjection == nil ||
 					intent.CandidateProjection.RevisionID != reference.RevisionID || intent.Provider == nil {
 					return nil, taskmaterialization.CorruptSource()
 				}
@@ -57,7 +58,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 		}
 		intent := stored.Record
 		if !found || intent.TaskID != reference.RouteTaskID || intent.EnvironmentID != environmentID ||
-			intent.Status != etcd.TaskStatusPending || intent.CandidateProjection == nil ||
+			intent.Status != taskjournal.TaskStatusPending || intent.CandidateProjection == nil ||
 			intent.CandidateProjection.RevisionID != reference.RevisionID || intent.Provider == nil {
 			return nil, taskmaterialization.CorruptSource()
 		}

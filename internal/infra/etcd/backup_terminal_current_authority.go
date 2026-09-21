@@ -8,6 +8,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 )
@@ -28,7 +29,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 	}
 	runIndex, membershipIndex, exclusionsStart := -1, -1, -1
 	var exclusionKeys []string
-	if receipt.Task.TaskType == TaskBackup {
+	if receipt.Task.TaskType == taskjournal.TaskBackup {
 		membershipKey, err := backupruntime.BackupRunEnvironmentIndexKey(environmentID, receipt.Task.TaskID)
 		if err != nil {
 			return err
@@ -71,7 +72,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 	if err != nil {
 		return err
 	}
-	if receipt.Task.TaskType == TaskBackup {
+	if receipt.Task.TaskType == taskjournal.TaskBackup {
 		runValue, membershipValue := read.Values[runIndex], read.Values[membershipIndex]
 		exclusionValues := read.Values[exclusionsStart:authorityEnd]
 		if !ownerPresent {

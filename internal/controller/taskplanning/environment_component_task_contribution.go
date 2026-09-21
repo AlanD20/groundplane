@@ -6,11 +6,12 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -44,7 +45,7 @@ type EnvironmentComponentTaskContributionInput struct {
 // this controller capability module.
 func BuildEnvironmentComponentTaskContribution(
 	input EnvironmentComponentTaskContributionInput,
-) ([]*agentpb.ExecutionStep, []etcd.TaskStepRecord, error) {
+) ([]*agentpb.ExecutionStep, []taskjournal.TaskStepRecord, error) {
 	if input.AllocateStep == nil || input.TimeoutSeconds == 0 {
 		return nil, nil, errs.New(errs.KindInternal, "Blueprint managed-config task contribution input is invalid")
 	}
@@ -57,17 +58,17 @@ func BuildEnvironmentComponentTaskContribution(
 	if err != nil {
 		return nil, nil, err
 	}
-	return []*agentpb.ExecutionStep{step}, []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}, nil
+	return []*agentpb.ExecutionStep{step}, []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}, nil
 }
 
 // AppendEnvironmentComponentTaskContribution preserves the deploy invariant
 // that runtime reconciliation completes before managed configuration activates.
 func AppendEnvironmentComponentTaskContribution(
 	steps []*agentpb.ExecutionStep,
-	records []etcd.TaskStepRecord,
+	records []taskjournal.TaskStepRecord,
 	contribution []*agentpb.ExecutionStep,
-	contributionRecords []etcd.TaskStepRecord,
-) ([]*agentpb.ExecutionStep, []etcd.TaskStepRecord, error) {
+	contributionRecords []taskjournal.TaskStepRecord,
+) ([]*agentpb.ExecutionStep, []taskjournal.TaskStepRecord, error) {
 	if len(contribution) != len(contributionRecords) {
 		return nil, nil, errs.New(errs.KindInternal, "Component task contribution is inconsistent")
 	}

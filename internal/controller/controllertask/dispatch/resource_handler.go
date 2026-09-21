@@ -5,6 +5,7 @@ import (
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
@@ -68,7 +69,7 @@ func (handler *ResourceHandler) Execute(
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "Controller Task context is required")
 	}
-	if task.Executor != etcd.TaskExecutorController || ids.Validate(ids.KindTask, task.ID) != nil {
+	if task.Executor != taskjournal.TaskExecutorController || ids.Validate(ids.KindTask, task.ID) != nil {
 		return errs.New(errs.KindValidationFailed, "Controller Task identity is invalid")
 	}
 	switch task.Params[etcd.TaskResourceKindParam] {
@@ -77,12 +78,12 @@ func (handler *ResourceHandler) Execute(
 			return errs.New(errs.KindValidationFailed, "Controller Task Agent target is invalid")
 		}
 	case etcd.TaskResourceSecret:
-		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindSecret, task.Target) != nil || len(task.Params) != 1 {
+		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindSecret, task.Target) != nil || len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "Controller Task Secret removal is invalid")
 		}
 		return nil
 	case etcd.TaskResourceConnector:
-		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindConnector, task.Target) != nil ||
+		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindConnector, task.Target) != nil ||
 			len(task.Params) != 3 ||
 			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskConnectorEnvironmentParam]) != nil ||
 			task.Params[etcd.TaskConnectorNameParam] == "" {
@@ -90,33 +91,33 @@ func (handler *ResourceHandler) Execute(
 		}
 		return nil
 	case etcd.TaskResourceScript:
-		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindScript, task.Target) != nil || len(task.Params) != 1 {
+		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindScript, task.Target) != nil || len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "Controller Task Script removal is invalid")
 		}
 		return nil
 	case etcd.TaskResourceEntry:
-		if task.Type != etcd.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
+		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
 			len(task.Params) != 2 ||
 			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskEntryEnvironmentParam]) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Entry removal is invalid")
 		}
 		return nil
 	case etcd.TaskResourceRoute:
-		if (task.Type != etcd.TaskCreate && task.Type != etcd.TaskUpdate && task.Type != etcd.TaskRemove) ||
+		if (task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate && task.Type != taskjournal.TaskRemove) ||
 			ids.Validate(ids.KindRoute, task.Target) != nil || len(task.Params) != 2 ||
 			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskRouteEnvironmentParam]) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Route mutation is invalid")
 		}
 		return nil
 	case etcd.TaskResourceService:
-		if (task.Type != etcd.TaskStart && task.Type != etcd.TaskStop && task.Type != etcd.TaskDestroy) ||
+		if (task.Type != taskjournal.TaskStart && task.Type != taskjournal.TaskStop && task.Type != taskjournal.TaskDestroy) ||
 			ids.Validate(ids.KindService, task.Target) != nil || len(task.Params) != 2 ||
 			ids.Validate(ids.KindEnvironment, task.Params[etcd.TaskServiceEnvironmentParam]) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Service lifecycle is invalid")
 		}
 		return nil
 	case etcd.TaskResourceReleaseGroup:
-		if (task.Type != etcd.TaskCreate && task.Type != etcd.TaskUpdate && task.Type != etcd.TaskRemove) ||
+		if (task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate && task.Type != taskjournal.TaskRemove) ||
 			ids.Validate(ids.KindReleaseGroup, task.Target) != nil || len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "controller Task release group mutation is invalid")
 		}
@@ -124,13 +125,13 @@ func (handler *ResourceHandler) Execute(
 	case etcd.TaskResourceBackingZone:
 		return handler.backingZones.Execute(ctx, task)
 	case etcd.TaskResourceRunner:
-		if task.Type == etcd.TaskCreate {
+		if task.Type == taskjournal.TaskCreate {
 			if handler.runnerLifecycle == nil {
 				return errs.New(errs.KindInternal, "Controller Task Runner lifecycle is not configured")
 			}
 			return handler.runnerLifecycle.ExecuteCreate(ctx, task)
 		}
-		if task.Type == etcd.TaskRemove && handler.runnerLifecycle != nil {
+		if task.Type == taskjournal.TaskRemove && handler.runnerLifecycle != nil {
 			return handler.runnerLifecycle.ExecuteRemove(ctx, task)
 		}
 		return handler.executeRunnerRemoval(ctx, task)
@@ -138,11 +139,11 @@ func (handler *ResourceHandler) Execute(
 		return errs.New(errs.KindValidationFailed, "Controller Task resource kind is invalid")
 	}
 	switch task.Type {
-	case etcd.TaskCreate:
+	case taskjournal.TaskCreate:
 		return handler.executeEnrollment(ctx, task)
-	case etcd.TaskRemove:
+	case taskjournal.TaskRemove:
 		return handler.executeRemoval(ctx, task)
-	case etcd.TaskUpdate:
+	case taskjournal.TaskUpdate:
 		return errs.New(errs.KindInternal, "agent update requires the recovery-aware native executor")
 	default:
 		return errs.New(errs.KindValidationFailed, "Controller Task Agent mutation type is invalid")
@@ -150,7 +151,7 @@ func (handler *ResourceHandler) Execute(
 }
 
 func (handler *ResourceHandler) executeRunnerRemoval(ctx context.Context, task etcd.TaskRecord) error {
-	if task.Type != etcd.TaskRemove || ids.Validate(ids.KindRunner, task.Target) != nil || len(task.Params) != 6 {
+	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindRunner, task.Target) != nil || len(task.Params) != 6 {
 		return errs.New(errs.KindValidationFailed, "Controller Task Runner removal is invalid")
 	}
 	current, err := handler.runners.GetRunner(ctx, task.Target)

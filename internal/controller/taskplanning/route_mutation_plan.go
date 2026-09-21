@@ -14,6 +14,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -103,7 +104,7 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 		Path:        pin.Destination,
 		RouteTaskID: task.ID,
 	}
-	task.Executor = etcd.TaskExecutorAgent
+	task.Executor = taskjournal.TaskExecutorAgent
 	task.TimeoutSeconds = 120
 	task.RenderGeneration = int32(candidate.RenderGeneration)
 	task.Params = map[string]string{
@@ -113,10 +114,10 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 		etcd.EnvironmentDesiredRevisionParam:     candidate.RevisionID,
 		EnvironmentBlueprintArtifactParam:        procedure.ArtifactID,
 	}
-	task.Steps = []etcd.TaskStepRecord{
-		{Kind: etcd.TaskStepOperation, ID: procedure.MaterializeStepID},
-		{Kind: etcd.TaskStepOperation, ID: procedure.ApplyStepID},
-		{Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID},
+	task.Steps = []taskjournal.TaskStepRecord{
+		{Kind: taskjournal.TaskStepOperation, ID: procedure.MaterializeStepID},
+		{Kind: taskjournal.TaskStepOperation, ID: procedure.ApplyStepID},
+		{Kind: taskjournal.TaskStepOperation, ID: procedure.ActivateStepID},
 	}
 	materialization := materializationrecord.Record{
 		StepID:            procedure.MaterializeStepID,
@@ -150,14 +151,14 @@ func prepareNativeRouteMutation(
 	task etcd.TaskRecord,
 	intent etcd.RouteMutationIntent,
 ) (etcd.RouteMutationTaskPreparation, error) {
-	task.Executor = etcd.TaskExecutorController
+	task.Executor = taskjournal.TaskExecutorController
 	task.TimeoutSeconds = 30
 	task.RenderGeneration = int32(intent.Route.DesiredGeneration)
 	task.Params = map[string]string{
 		etcd.TaskResourceKindParam:     etcd.TaskResourceRoute,
 		etcd.TaskRouteEnvironmentParam: intent.EnvironmentID,
 	}
-	task.Steps = []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}}
+	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	value, err := json.Marshal(struct {
 		Version    int                    `json:"version"`
 		Kind       etcd.RouteMutationKind `json:"kind"`
@@ -196,11 +197,11 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	task etcd.TaskRecord,
 	intent etcd.RouteMutationIntent,
 ) (*agentpb.ExecutionPlan, error) {
-	if resolver == nil || resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent ||
-		(task.Type != etcd.TaskCreate && task.Type != etcd.TaskUpdate) ||
+	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
+		(task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate) ||
 		task.ID != intent.TaskID ||
 		task.Target != intent.RouteID ||
-		intent.Status != etcd.TaskStatusPending ||
+		intent.Status != taskjournal.TaskStatusPending ||
 		intent.Provider == nil ||
 		intent.CandidateProjection == nil ||
 		intent.CurrentProjection == nil ||

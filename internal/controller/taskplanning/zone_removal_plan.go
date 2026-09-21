@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -31,8 +32,8 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 	intent etcd.ZoneRemovalIntent,
 	procedure ZoneRemovalTaskProcedureIDs,
 ) (etcd.TaskRecord, error) {
-	if resolver == nil || ctx == nil || task.Executor != etcd.TaskExecutorAgent ||
-		task.Type != etcd.TaskRemove || task.Target != intent.ZoneID || task.PlanID == "" ||
+	if resolver == nil || ctx == nil || task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskRemove || task.Target != intent.ZoneID || task.PlanID == "" ||
 		ids.Validate(ids.KindConfig, procedure.ArtifactID) != nil ||
 		ids.Validate(ids.KindStep, procedure.NetworkStepID) != nil ||
 		len(procedure.ServiceStepIDs) != len(intent.AffectedServiceIDs) ||
@@ -47,16 +48,16 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 		etcd.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
 		etcd.TaskComposeArtifactParam:        procedure.ArtifactID,
 	}
-	prepared.Steps = make([]etcd.TaskStepRecord, 0, len(procedure.ServiceStepIDs)+1)
+	prepared.Steps = make([]taskjournal.TaskStepRecord, 0, len(procedure.ServiceStepIDs)+1)
 	for _, stepID := range procedure.ServiceStepIDs {
 		if ids.Validate(ids.KindStep, stepID) != nil {
 			return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Zone removal Service step id is invalid")
 		}
-		prepared.Steps = append(prepared.Steps, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID})
+		prepared.Steps = append(prepared.Steps, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID})
 	}
 	prepared.Steps = append(
 		prepared.Steps,
-		etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: procedure.NetworkStepID},
+		taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: procedure.NetworkStepID},
 	)
 	plan, err := resolver.buildZoneRemovalPlan(prepared, intent)
 	if err != nil {
@@ -89,8 +90,8 @@ func (resolver *TaskPlanResolver) buildZoneRemovalPlan(
 	task etcd.TaskRecord,
 	intent etcd.ZoneRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
-	if resolver == nil || task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskRemove ||
-		task.Target != intent.ZoneID || task.ID != intent.ActiveTaskID || intent.Status != etcd.TaskStatusPending ||
+	if resolver == nil || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
+		task.Target != intent.ZoneID || task.ID != intent.ActiveTaskID || intent.Status != taskjournal.TaskStatusPending ||
 		len(task.Params) != 4 || len(task.Materializations) != 0 ||
 		len(task.Steps) != len(intent.AffectedServiceIDs)+1 || task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 || uint64(task.RenderGeneration) != intent.CandidateProjection.RenderGeneration ||

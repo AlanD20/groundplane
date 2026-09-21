@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -316,7 +317,7 @@ func validateServiceLifecycleReplacement(current servicerecord.ServiceRecord, re
 		replacement.BackingNetworkID != current.BackingNetworkID ||
 		!sameServiceRemovalDesired(replacement.Desired, current.Desired) ||
 		replacement.Runtime.ServiceID != current.Runtime.ServiceID || task.Target != current.Desired.ID ||
-		task.Status != TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) < 1 || len(task.Steps) > 3 {
+		task.Status != taskjournal.TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) < 1 || len(task.Steps) > 3 {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle replacement is invalid")
 	}
 	want := core.ServiceRuntimeIntent("")
@@ -342,7 +343,7 @@ func validateServiceLifecycleProjection(
 	task TaskRecord,
 ) error {
 	if projection == nil && input == nil {
-		if task.Executor != TaskExecutorController || task.RenderGeneration != 1 ||
+		if task.Executor != taskjournal.TaskExecutorController || task.RenderGeneration != 1 ||
 			len(task.Params) != 2 || task.Params[TaskResourceKindParam] != TaskResourceService ||
 			task.Params[TaskServiceEnvironmentParam] == "" {
 			return errs.New(errs.KindValidationFailed, "unapplied Service lifecycle Task is invalid")
@@ -350,7 +351,7 @@ func validateServiceLifecycleProjection(
 		return nil
 	}
 	if projection == nil || input == nil || projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
-		task.Executor != TaskExecutorAgent || uint64(task.RenderGeneration) != projection.Record.RenderGeneration ||
+		task.Executor != taskjournal.TaskExecutorAgent || uint64(task.RenderGeneration) != projection.Record.RenderGeneration ||
 		input.PlanID != task.PlanID || input.ServiceID != task.Target ||
 		input.EnvironmentID != projection.Record.EnvironmentID ||
 		!sameRouteRemovalProjection(input.Projection, projection.Record) ||
@@ -373,19 +374,19 @@ func validateServiceLifecycleProjection(
 	return validateServiceLifecycleRenderInput(*input)
 }
 
-func serviceLifecycleHooks(configuration *backinghook.Configuration, taskType TaskType) *backinghook.Configuration {
+func serviceLifecycleHooks(configuration *backinghook.Configuration, taskType taskjournal.TaskType) *backinghook.Configuration {
 	if configuration == nil {
 		return nil
 	}
-	configured := taskType == TaskStart && configuration.AfterStart != nil ||
-		(taskType == TaskStop || taskType == TaskDestroy) && configuration.BeforeStop != nil
+	configured := taskType == taskjournal.TaskStart && configuration.AfterStart != nil ||
+		(taskType == taskjournal.TaskStop || taskType == taskjournal.TaskDestroy) && configuration.BeforeStop != nil
 	if !configured {
 		return nil
 	}
 	return configuration
 }
 
-func serviceLifecycleHookConfigured(input ServiceLifecycleRenderInput, taskType TaskType) bool {
+func serviceLifecycleHookConfigured(input ServiceLifecycleRenderInput, taskType taskjournal.TaskType) bool {
 	return serviceLifecycleHooks(input.HookConfiguration, taskType) != nil
 }
 

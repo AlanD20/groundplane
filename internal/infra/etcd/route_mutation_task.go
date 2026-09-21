@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -117,7 +118,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 
 	task = cloneTaskRecord(task)
 	if task.ID != intent.TaskID || task.OperationID != intent.OperationID ||
-		task.Target != record.Desired.ID || task.Status != TaskStatusPending {
+		task.Target != record.Desired.ID || task.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Route mutation Task does not match its intent",
 		)

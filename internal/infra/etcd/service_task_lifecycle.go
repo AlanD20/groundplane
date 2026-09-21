@@ -5,6 +5,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -63,7 +64,7 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 		},
 		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(source.Target), Value: reference}},
 	}
-	if source.Executor == TaskExecutorAgent {
+	if source.Executor == taskjournal.TaskExecutorAgent {
 		if values.Values[1] == nil {
 			return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input was not found")
 		}
@@ -121,11 +122,11 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 	ctx context.Context,
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
-	terminalStatus TaskStatus,
+	terminalStatus taskjournal.TaskStatus,
 	readRevision int64,
 ) (serviceTaskChange, error) {
 	change, err := repository.prepareServiceTaskAcknowledgement(ctx, task, readRevision)
-	if err != nil || !change.applies || terminalStatus != TaskStatusCompleted || task.Executor != TaskExecutorAgent {
+	if err != nil || !change.applies || terminalStatus != taskjournal.TaskStatusCompleted || task.Executor != taskjournal.TaskExecutorAgent {
 		return change, err
 	}
 	inputRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -148,11 +149,11 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 	}
 	event := backinghook.Event("")
 	stepID := ""
-	if task.Type == TaskStart && input.HookConfiguration != nil && input.HookConfiguration.AfterStart != nil {
+	if task.Type == taskjournal.TaskStart && input.HookConfiguration != nil && input.HookConfiguration.AfterStart != nil {
 		event = backinghook.AfterStart
 		stepID = task.Steps[len(task.Steps)-1].ID
 	}
-	if (task.Type == TaskStop || task.Type == TaskDestroy) && input.HookConfiguration != nil &&
+	if (task.Type == taskjournal.TaskStop || task.Type == taskjournal.TaskDestroy) && input.HookConfiguration != nil &&
 		input.HookConfiguration.BeforeStop != nil {
 		event = backinghook.BeforeStop
 		stepID = task.Steps[0].ID
@@ -179,14 +180,14 @@ func isServiceLifecycleTask(task TaskRecord) bool {
 		return false
 	}
 	switch task.Type {
-	case TaskStart, TaskStop, TaskDestroy:
+	case taskjournal.TaskStart, taskjournal.TaskStop, TaskDestroy:
 		return true
 	default:
 		return false
 	}
 }
 
-func serviceLifecycleIntent(taskType TaskType) core.ServiceRuntimeIntent {
+func serviceLifecycleIntent(taskType taskjournal.TaskType) core.ServiceRuntimeIntent {
 	switch taskType {
 	case TaskStart:
 		return core.ServiceRuntimeIntentRunning

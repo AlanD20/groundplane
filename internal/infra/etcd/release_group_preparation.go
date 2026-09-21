@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -36,7 +37,7 @@ func (repository *TaskRepository) PrepareReleaseGroupCreate(
 		return ReleaseGroupPreparedMutation{}, err
 	}
 	return newReleaseGroupPreparedMutation(
-		group.EnvironmentID, group.ID, 0, TaskCreate, evidence.conditions,
+		group.EnvironmentID, group.ID, 0, taskjournal.TaskCreate, evidence.conditions,
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: releaseGroupRecordKey(group.ID), Value: value},
 			{Type: etcdstore.MutationPut, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
@@ -93,7 +94,7 @@ func (repository *TaskRepository) PrepareReleaseGroupUpdate(
 		)
 	}
 	return newReleaseGroupPreparedMutation(
-		replacement.EnvironmentID, replacement.ID, currentRevision, TaskUpdate,
+		replacement.EnvironmentID, replacement.ID, currentRevision, taskjournal.TaskUpdate,
 		evidence.conditions, mutations,
 	), nil
 }
@@ -119,7 +120,7 @@ func (repository *TaskRepository) PrepareReleaseGroupRemove(
 		return ReleaseGroupPreparedMutation{}, err
 	}
 	return newReleaseGroupPreparedMutation(
-		current.EnvironmentID, current.ID, currentRevision, TaskRemove,
+		current.EnvironmentID, current.ID, currentRevision, taskjournal.TaskRemove,
 		evidence.conditions,
 		[]etcdstore.Mutation{evidence.epochMutation, evidence.collectionEpoch},
 	), nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
@@ -51,7 +52,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	}
 	if root.RetryExpiresAt == nil || task.RetainUntil == nil || !root.RetryExpiresAt.Equal(*task.RetainUntil) ||
 		now.Before(*root.RetryExpiresAt) || read.Values[2] != nil || read.Values[3] != nil || read.Values[4] != nil ||
-		(task.Status != TaskStatusFailed && task.Status != TaskStatusTimedOut) {
+		(task.Status != taskjournal.TaskStatusFailed && task.Status != taskjournal.TaskStatusTimedOut) {
 		return false, corruptTaskPruneIntent()
 	}
 	guards := []etcdstore.Condition{

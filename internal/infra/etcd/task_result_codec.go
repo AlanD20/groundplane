@@ -2,6 +2,7 @@ package etcd
 
 import (
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
@@ -11,10 +12,10 @@ import (
 type taskResultData struct {
 	ExecutionEpoch                  uint32                              `json:"execution_epoch,omitempty"`
 	ReleaseRecoveryRecordSHA256     string                              `json:"release_recovery_record_sha256,omitempty"`
-	Kind                            TaskResultKind                      `json:"kind"`
+	Kind                            taskjournal.TaskResultKind          `json:"kind"`
 	ExitCode                        int32                               `json:"exit_code"`
 	FailedStepID                    string                              `json:"failed_step_id,omitempty"`
-	Diagnostic                      TaskResultDiagnostic                `json:"diagnostic"`
+	Diagnostic                      taskjournal.TaskResultDiagnostic    `json:"diagnostic"`
 	ReconciliationRequired          bool                                `json:"reconciliation_required"`
 	Projects                        []taskObservedProjectSummaryData    `json:"projects,omitempty"`
 	ProxyEvidence                   []TaskProxyEvidence                 `json:"proxy_evidence,omitempty"`

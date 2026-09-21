@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"slices"
 	"time"
@@ -33,7 +34,7 @@ func newAttachMutationTask(
 	taskID string,
 	attachID string,
 	environmentID string,
-	taskType etcd.TaskType,
+	taskType taskjournal.TaskType,
 	renderGeneration uint64,
 	stepCount int,
 	idempotencyKey string,
@@ -48,17 +49,17 @@ func newAttachMutationTask(
 	if err != nil || environment.ID != environmentID {
 		return etcd.TaskRecord{}, "", errs.New(errs.KindValidationFailed, "attach task owner is invalid")
 	}
-	steps := make([]etcd.TaskStepRecord, stepCount)
+	steps := make([]taskjournal.TaskStepRecord, stepCount)
 	for index := range steps {
-		steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: ids.New(ids.KindStep)}
+		steps[index] = taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}
 	}
 	return etcd.TaskRecord{
 		ID: taskID, OperationID: ids.New(ids.KindOperation), IdempotencyKey: idempotencyKey,
 		Owner: owner, Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
+		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
 		RenderGeneration: int32(renderGeneration), Type: taskType, Target: attachID,
 		Params: map[string]string{etcd.TaskMutationEnvironmentParam: environmentID}, Steps: steps,
-		TimeoutSeconds: attachMutationTimeout, Status: etcd.TaskStatusPending,
+		TimeoutSeconds: attachMutationTimeout, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, ids.New(ids.KindConfig), nil
 }
@@ -139,7 +140,7 @@ func buildAttachTaskRenderInput(
 	excludedAttachID := ""
 	unionRecords := attaches
 	switch task.Type {
-	case etcd.TaskAttach:
+	case taskjournal.TaskAttach:
 		if record.Status != core.AttachPending || record.Operation != attachrecord.AttachOperationProvision ||
 			record.TaskID != task.ID {
 			return etcd.AttachTaskRenderInput{}, errs.New(
@@ -153,7 +154,7 @@ func buildAttachTaskRenderInput(
 				Record: record,
 			},
 		)
-	case etcd.TaskDetach:
+	case taskjournal.TaskDetach:
 		if record.Status != core.AttachDetaching || record.Operation != attachrecord.AttachOperationDetach ||
 			record.TaskID != task.ID {
 			return etcd.AttachTaskRenderInput{}, errs.New(
