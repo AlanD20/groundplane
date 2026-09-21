@@ -12,6 +12,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -38,7 +39,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			networkreservations.EnvironmentPoolRegistryKey,
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
-			releaseGroupCollectionEpochKey(task.Target),
+			groupstore.ReleaseGroupCollectionEpochKey(task.Target),
 		},
 		Revision: readRevision,
 	})
@@ -133,7 +134,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[3])},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
-		{Key: releaseGroupCollectionEpochKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[7])},
+		{Key: groupstore.ReleaseGroupCollectionEpochKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[7])},
 	}
 	conditions, err = environmentfence.AppendConditions(conditions, ownedFence)
 	if err != nil {
@@ -181,7 +182,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		mutations = append(
 			mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupCollectionEpochKey(environment.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: groupstore.ReleaseGroupCollectionEpochKey(environment.ID)},
 		)
 		nextPoolRegistry, err := poolRegistry.Release(environment.ID, environment.NetworkPool)
 		if err != nil {

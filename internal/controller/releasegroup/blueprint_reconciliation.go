@@ -2,6 +2,7 @@ package releasegroup
 
 import (
 	"context"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"sort"
 	"strings"
 	"unicode"
@@ -10,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -24,9 +25,9 @@ type releaseGroupBlueprintMutationPreparer interface {
 		context.Context,
 		string,
 		int64,
-		[]etcd.ReleaseGroupSnapshotEntry,
+		[]groupstore.ReleaseGroupSnapshotEntry,
 		[]domain.Group,
-	) (etcd.ReleaseGroupBlueprintPreparedMutation, error)
+	) (groupstore.ReleaseGroupBlueprintPreparedMutation, error)
 }
 
 // ReleaseGroupBlueprintPlanner owns Release Group desired-state orchestration.
@@ -55,19 +56,19 @@ func (planner *ReleaseGroupBlueprintPlanner) Prepare(
 	specs map[string]core.ReleaseGroupSpec,
 	services []core.Service,
 	allocate ReleaseGroupIDAllocator,
-) (etcd.ReleaseGroupBlueprintPreparedMutation, error) {
+) (groupstore.ReleaseGroupBlueprintPreparedMutation, error) {
 	current, readRevision, err := planner.snapshot(ctx, environmentID)
 	if err != nil {
-		return etcd.ReleaseGroupBlueprintPreparedMutation{}, err
+		return groupstore.ReleaseGroupBlueprintPreparedMutation{}, err
 	}
 	previous := make([]ReleaseGroupIdentity, len(current))
-	snapshot := make([]etcd.ReleaseGroupSnapshotEntry, len(current))
+	snapshot := make([]groupstore.ReleaseGroupSnapshotEntry, len(current))
 	for index, versioned := range current {
 		previous[index] = ReleaseGroupIdentity{
 			ID:   versioned.Group.ID,
 			Name: versioned.Group.Name,
 		}
-		snapshot[index] = etcd.ReleaseGroupSnapshotEntry{
+		snapshot[index] = groupstore.ReleaseGroupSnapshotEntry{
 			Group:        versioned.Group,
 			Revision:     versioned.Revision,
 			ReadRevision: versioned.ReadRevision,
@@ -81,7 +82,7 @@ func (planner *ReleaseGroupBlueprintPlanner) Prepare(
 		allocate,
 	)
 	if err != nil {
-		return etcd.ReleaseGroupBlueprintPreparedMutation{}, err
+		return groupstore.ReleaseGroupBlueprintPreparedMutation{}, err
 	}
 	return planner.mutations.PrepareReleaseGroupBlueprintMutation(
 		ctx,

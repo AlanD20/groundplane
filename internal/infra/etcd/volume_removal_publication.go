@@ -11,6 +11,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"net/netip"
@@ -51,7 +52,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemova
 		nil,
 		nil,
 		nil,
-		ReleaseGroupBlueprintPreparedMutation{},
+		groupstore.ReleaseGroupBlueprintPreparedMutation{},
 		ComponentTaskPreparation{},
 		BlueprintAttachTaskPreparation{},
 		BlueprintBackupPolicyPreparation{},

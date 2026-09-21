@@ -13,6 +13,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
@@ -55,8 +56,8 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		{
 			targetKind:    "release-group",
 			actionKind:    hierarchydeletion.HierarchyDeletionReleaseGroupRemove,
-			ownerPrefix:   func(owner string) string { return releaseGroupOwnerPrefix + owner + "/" },
-			primaryKey:    releaseGroupRecordKey,
+			ownerPrefix:   func(owner string) string { return groupstore.ReleaseGroupOwnerPrefix + owner + "/" },
+			primaryKey:    groupstore.ReleaseGroupRecordKey,
 			stableIDKind:  ids.KindReleaseGroup,
 			validateOwner: validateHierarchyDeletionReleaseGroupOwner,
 			controller:    true,

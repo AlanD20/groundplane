@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchymutations"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,6 +20,7 @@ type hierarchyStore interface {
 
 // HierarchyRepository owns durable Tenant, Project, and Environment persistence.
 type HierarchyRepository struct {
+	*groupstore.Preparer
 	*hierarchyrecord.Reader
 	*environmentqueries.ProjectionReader
 	*hierarchymutations.Repository
@@ -52,6 +54,7 @@ func newHierarchyRepository(store hierarchyStore) (*HierarchyRepository, error) 
 
 func composeHierarchyRepository(store hierarchyStore) *HierarchyRepository {
 	return &HierarchyRepository{
+		Preparer:         groupstore.NewPreparer(store),
 		Reader:           hierarchyrecord.NewReader(store),
 		ProjectionReader: environmentqueries.NewProjectionReader(store),
 		Repository:       hierarchymutations.NewRepository(store),

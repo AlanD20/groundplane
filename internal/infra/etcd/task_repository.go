@@ -9,6 +9,7 @@ import (
 	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math/rand/v2"
 	"time"
@@ -96,6 +97,7 @@ type taskCASRetryPolicy struct {
 // lifecycle, and event-journal mechanics. Retention metadata is persisted by
 // the journal codec; the daily Task pruning collector remains separate.
 type TaskRepository struct {
+	*groupstore.Preparer
 	store                        taskRepositoryStore
 	blueprintTerminalStore       blueprintTaskTerminalStore
 	retryPolicy                  taskCASRetryPolicy
@@ -142,7 +144,7 @@ func newTaskRepositoryWithRetryPolicy(
 	if err := validateTaskCASRetryPolicy(retryPolicy); err != nil {
 		return nil, err
 	}
-	return &TaskRepository{store: store, retryPolicy: retryPolicy}, nil
+	return &TaskRepository{Preparer: groupstore.NewPreparer(store), store: store, retryPolicy: retryPolicy}, nil
 }
 
 func (repository *TaskRepository) GetTask(

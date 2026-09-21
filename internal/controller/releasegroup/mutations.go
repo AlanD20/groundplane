@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"slices"
@@ -230,7 +231,7 @@ func (service *MutationService) apply(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	var prepared etcd.ReleaseGroupPreparedMutation
+	var prepared groupstore.ReleaseGroupPreparedMutation
 	if current == nil {
 		prepared, err = service.tasks.PrepareReleaseGroupCreate(ctx, desired)
 	} else if method == http.MethodPatch {

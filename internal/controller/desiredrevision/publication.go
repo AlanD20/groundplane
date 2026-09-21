@@ -10,6 +10,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"net/http"
 	"net/netip"
 	"sync"
@@ -47,7 +48,7 @@ type PublicationRepository interface {
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]blueprints.EnvironmentBlueprintServiceChange,
 		[]blueprints.EnvironmentBlueprintRouteChange,
-		etcd.ReleaseGroupBlueprintPreparedMutation,
+		groupstore.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.BlueprintBackupPolicyPreparation,
@@ -84,7 +85,7 @@ type Repository interface {
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]blueprints.EnvironmentBlueprintServiceChange,
 		[]blueprints.EnvironmentBlueprintRouteChange,
-		etcd.ReleaseGroupBlueprintPreparedMutation,
+		groupstore.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,
@@ -180,7 +181,7 @@ type PublishInput struct {
 	ZoneChanges             []blueprints.EnvironmentBlueprintZoneChange
 	ServiceChanges          []blueprints.EnvironmentBlueprintServiceChange
 	RouteChanges            []blueprints.EnvironmentBlueprintRouteChange
-	ReleaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation
+	ReleaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation
 	ComponentPreparation    etcd.ComponentTaskPreparation
 	AttachPreparation       etcd.BlueprintAttachTaskPreparation
 	BackupPreparation       etcd.BlueprintBackupPolicyPreparation

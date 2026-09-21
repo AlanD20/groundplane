@@ -1,4 +1,4 @@
-package etcd
+package releasegroups
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type releaseGroupCollectionEpochRecord struct {
 	EnvironmentID string `json:"environment_id"`
 }
 
-func releaseGroupCollectionEpochKey(environmentID string) string {
+func ReleaseGroupCollectionEpochKey(environmentID string) string {
 	return releaseGroupCollectionEpochPrefix + environmentID
 }
 
@@ -44,14 +44,14 @@ func validateReleaseGroupCollectionEpoch(value []byte, environmentID string) err
 	return nil
 }
 
-func loadReleaseGroupCollectionEpoch(
+func LoadReleaseGroupCollectionEpoch(
 	ctx context.Context,
 	store releaseGroupCollectionReader,
 	environmentID string,
 	revision int64,
 ) (etcdstore.Condition, etcdstore.Mutation, error) {
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{releaseGroupCollectionEpochKey(environmentID)},
+		Keys:     []string{ReleaseGroupCollectionEpochKey(environmentID)},
 		Revision: revision,
 	})
 	if err != nil {
@@ -61,7 +61,7 @@ func loadReleaseGroupCollectionEpoch(
 		(revision > 0 && result.ReadRevision != revision) {
 		return etcdstore.Condition{}, etcdstore.Mutation{}, recordcodec.CorruptRecord()
 	}
-	condition := etcdstore.Condition{Key: releaseGroupCollectionEpochKey(environmentID)}
+	condition := etcdstore.Condition{Key: ReleaseGroupCollectionEpochKey(environmentID)}
 	if result.Values[0] != nil {
 		if err := validateReleaseGroupCollectionEpoch(result.Values[0].Value, environmentID); err != nil {
 			return etcdstore.Condition{}, etcdstore.Mutation{}, err
@@ -74,7 +74,7 @@ func loadReleaseGroupCollectionEpoch(
 	}
 	return condition, etcdstore.Mutation{
 		Type:  etcdstore.MutationPut,
-		Key:   releaseGroupCollectionEpochKey(environmentID),
+		Key:   ReleaseGroupCollectionEpochKey(environmentID),
 		Value: value,
 	}, nil
 }

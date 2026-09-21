@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 	"net/http"
@@ -489,7 +490,7 @@ func (service *MutationService) mutateOnce(
 			nil,
 			nil,
 			nil,
-			etcd.ReleaseGroupBlueprintPreparedMutation{},
+			groupstore.ReleaseGroupBlueprintPreparedMutation{},
 			etcd.ComponentTaskPreparation{},
 			etcd.BlueprintAttachTaskPreparation{},
 			task,

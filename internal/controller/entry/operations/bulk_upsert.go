@@ -8,6 +8,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -297,7 +298,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	result, publicationErr := service.desired.repository.PublishEnvironmentDesiredRevisionWithTask(
 		ctx, project, environment, headRevision, claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.environmentID, RevisionID: claim.RevisionID},
-		candidate, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
+		candidate, nil, nil, nil, groupstore.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
 	)
 	if publicationErr != nil {

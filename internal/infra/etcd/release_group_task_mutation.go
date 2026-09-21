@@ -6,80 +6,27 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// ReleaseGroupPreparedMutation is an opaque, immutable transaction fragment.
-// Only the etcd Release Group adapter can prepare a non-zero value.
-type ReleaseGroupPreparedMutation struct {
-	environmentID string
-	groupID       string
-	groupRevision int64
-	taskType      taskjournal.TaskType
-	conditions    []etcdstore.Condition
-	mutations     []etcdstore.Mutation
-}
-
-// ReleaseGroupBlueprintPreparedMutation is an opaque, immutable Release Group
-// projection fragment for Environment desired-revision publication.
-type ReleaseGroupBlueprintPreparedMutation struct {
-	environmentID string
-	conditions    []etcdstore.Condition
-	mutations     []etcdstore.Mutation
-}
-
-func (prepared ReleaseGroupBlueprintPreparedMutation) isZero() bool {
-	return prepared.environmentID == "" && len(prepared.conditions) == 0 && len(prepared.mutations) == 0
-}
-
-func newReleaseGroupPreparedMutation(
-	environmentID string,
-	groupID string,
-	groupRevision int64,
-	taskType taskjournal.TaskType,
-	conditions []etcdstore.Condition,
-	mutations []etcdstore.Mutation,
-) ReleaseGroupPreparedMutation {
-	return ReleaseGroupPreparedMutation{
-		environmentID: environmentID,
-		groupID:       groupID,
-		groupRevision: groupRevision,
-		taskType:      taskType,
-		conditions:    cloneReleaseGroupConditions(conditions),
-		mutations:     cloneReleaseGroupMutations(mutations),
-	}
-}
-
-func newReleaseGroupBlueprintPreparedMutation(
-	environmentID string,
-	conditions []etcdstore.Condition,
-	mutations []etcdstore.Mutation,
-) ReleaseGroupBlueprintPreparedMutation {
-	return ReleaseGroupBlueprintPreparedMutation{
-		environmentID: environmentID,
-		conditions:    cloneReleaseGroupConditions(conditions),
-		mutations:     cloneReleaseGroupMutations(mutations),
-	}
-}
-
 func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
-	ctx context.Context, prepared ReleaseGroupPreparedMutation, marker idempotencyrecord.IdempotencyMarker,
+	ctx context.Context, prepared groupstore.ReleaseGroupPreparedMutation, marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if prepared.taskType != taskjournal.TaskCreate && prepared.taskType != taskjournal.TaskUpdate {
+	if prepared.TaskType() != taskjournal.TaskCreate && prepared.TaskType() != taskjournal.TaskUpdate {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"release group direct mutation type is invalid",
 		)
 	}
-	if ids.Validate(ids.KindEnvironment, prepared.environmentID) != nil ||
-		ids.Validate(ids.KindReleaseGroup, prepared.groupID) != nil {
+	if ids.Validate(ids.KindEnvironment, prepared.EnvironmentID()) != nil ||
+		ids.Validate(ids.KindReleaseGroup, prepared.GroupID()) != nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"release group direct mutation identity is invalid",
@@ -87,18 +34,18 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != prepared.environmentID {
+		marker.Locator.ScopeID != prepared.EnvironmentID() {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"release group direct marker is invalid",
 		)
 	}
-	if err := validateReleaseGroupPreparedFragment(prepared); err != nil {
+	if err := groupstore.ValidateReleaseGroupPreparedFragment(prepared); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := NewIdempotencyMutationPlan(
-		cloneReleaseGroupConditions(prepared.conditions),
-		cloneReleaseGroupMutations(prepared.mutations),
+		prepared.Conditions(),
+		prepared.Mutations(),
 		func(_ int64, _ []*etcdstore.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "release group mutation evidence changed")
 		},
@@ -117,7 +64,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	prepared ReleaseGroupPreparedMutation,
+	prepared groupstore.ReleaseGroupPreparedMutation,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -127,7 +74,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	if err := validateReleaseGroupPreparedMutation(prepared, task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if environment.Record.ID != prepared.environmentID || project.Record.ID != environment.Record.ProjectID {
+	if environment.Record.ID != prepared.EnvironmentID() || project.Record.ID != environment.Record.ProjectID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"release group mutation hierarchy is inconsistent",
@@ -163,24 +110,24 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	conditions := cloneReleaseGroupConditions(prepared.conditions)
+	conditions := prepared.Conditions()
 	conditions = append(conditions,
 		etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID)},
 		etcdstore.Condition{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 	)
-	mutations := cloneReleaseGroupMutations(prepared.mutations)
+	mutations := prepared.Mutations()
 	mutations = append(mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 	)
-	if prepared.taskType == taskjournal.TaskRemove {
+	if prepared.TaskType() == taskjournal.TaskRemove {
 		tombstone := deletionrecord.DeletionTombstoneRecord{
-			TargetKind: deletionrecord.DeletionTargetReleaseGroup, TargetID: prepared.groupID,
-			TargetRevision: prepared.groupRevision, TaskID: task.ID,
+			TargetKind: deletionrecord.DeletionTargetReleaseGroup, TargetID: prepared.GroupID(),
+			TargetRevision: prepared.GroupRevision(), TaskID: task.ID,
 			Phase: deletionrecord.DeletionPhaseFinalizing, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 		}
 		value, err := deletionrecord.EncodeDeletionTombstone(tombstone)
@@ -190,7 +137,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 		defer clear(value)
 		mutations = append(mutations, etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), prepared.groupID),
+			Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), prepared.GroupID()),
 			Value: value,
 		})
 	}
@@ -218,78 +165,20 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func validateReleaseGroupPreparedMutation(prepared ReleaseGroupPreparedMutation, task TaskRecord) error {
-	if ids.Validate(ids.KindEnvironment, prepared.environmentID) != nil ||
-		ids.Validate(ids.KindReleaseGroup, prepared.groupID) != nil || prepared.taskType != task.Type ||
-		task.Executor != taskjournal.TaskExecutorController || task.Target != prepared.groupID ||
+func validateReleaseGroupPreparedMutation(prepared groupstore.ReleaseGroupPreparedMutation, task TaskRecord) error {
+	if ids.Validate(ids.KindEnvironment, prepared.EnvironmentID()) != nil ||
+		ids.Validate(ids.KindReleaseGroup, prepared.GroupID()) != nil || prepared.TaskType() != task.Type ||
+		task.Executor != taskjournal.TaskExecutorController || task.Target != prepared.GroupID() ||
 		task.Status != taskjournal.TaskStatusPending || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceReleaseGroup ||
 		len(task.Params) != 1 ||
-		(prepared.taskType != taskjournal.TaskCreate && prepared.taskType != taskjournal.TaskUpdate && prepared.taskType != taskjournal.TaskRemove) {
+		(prepared.TaskType() != taskjournal.TaskCreate && prepared.TaskType() != taskjournal.TaskUpdate && prepared.TaskType() != taskjournal.TaskRemove) {
 		return errs.New(errs.KindValidationFailed, "release group prepared mutation is invalid")
 	}
-	if prepared.taskType == taskjournal.TaskRemove && prepared.groupRevision <= 0 {
+	if prepared.TaskType() == taskjournal.TaskRemove && prepared.GroupRevision() <= 0 {
 		return errs.New(errs.KindValidationFailed, "release group removal revision is invalid")
 	}
-	if err := validateReleaseGroupPreparedFragment(prepared); err != nil {
+	if err := groupstore.ValidateReleaseGroupPreparedFragment(prepared); err != nil {
 		return err
 	}
-	for _, mutation := range prepared.mutations {
-		if prepared.taskType == taskjournal.TaskRemove && strings.HasPrefix(mutation.Key, releaseGroupRecordPrefix) {
-			return errs.New(errs.KindInternal, "release group removal preparation contains a primary mutation")
-		}
-	}
-	return nil
-}
-
-func validateReleaseGroupPreparedFragment(prepared ReleaseGroupPreparedMutation) error {
-	if len(prepared.mutations) == 0 {
-		return errs.New(errs.KindInternal, "release group mutation handoff is empty")
-	}
-	for _, condition := range prepared.conditions {
-		if condition.Prefix {
-			return errs.New(errs.KindInternal, "release group mutation contains open-ended compare authority")
-		}
-	}
-	for _, mutation := range prepared.mutations {
-		if mutation.Prefix {
-			return errs.New(errs.KindInternal, "release group mutation contains open-ended write authority")
-		}
-	}
-	return nil
-}
-
-func validateReleaseGroupBlueprintPreparedMutation(
-	prepared ReleaseGroupBlueprintPreparedMutation,
-	environmentID string,
-) error {
-	if prepared.isZero() {
-		return nil
-	}
-	if prepared.environmentID != environmentID {
-		return errs.New(errs.KindInternal, "Blueprint Release Group mutation handoff scope is invalid")
-	}
-	for _, condition := range prepared.conditions {
-		if condition.Prefix {
-			return errs.New(errs.KindInternal, "Blueprint Release Group mutation contains open-ended compare authority")
-		}
-	}
-	for _, mutation := range prepared.mutations {
-		if mutation.Prefix {
-			return errs.New(errs.KindInternal, "Blueprint Release Group mutation contains open-ended write authority")
-		}
-	}
-	return nil
-}
-
-func cloneReleaseGroupConditions(conditions []etcdstore.Condition) []etcdstore.Condition {
-	return append([]etcdstore.Condition(nil), conditions...)
-}
-
-func cloneReleaseGroupMutations(mutations []etcdstore.Mutation) []etcdstore.Mutation {
-	cloned := make([]etcdstore.Mutation, len(mutations))
-	for index := range mutations {
-		cloned[index] = mutations[index]
-		cloned[index].Value = append([]byte(nil), mutations[index].Value...)
-	}
-	return cloned
+	return prepared.ValidateRemovalPrimaryMutations()
 }

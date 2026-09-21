@@ -13,6 +13,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -82,7 +83,7 @@ type environmentBlueprintRepository interface {
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]blueprints.EnvironmentBlueprintServiceChange,
 		[]blueprints.EnvironmentBlueprintRouteChange,
-		etcd.ReleaseGroupBlueprintPreparedMutation,
+		groupstore.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.BlueprintBackupPolicyPreparation,
@@ -291,7 +292,7 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
-	releaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation,
+	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation etcd.ComponentTaskPreparation,
 	attachPreparation etcd.BlueprintAttachTaskPreparation,
 	backupPreparation etcd.BlueprintBackupPolicyPreparation,

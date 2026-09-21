@@ -18,6 +18,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -324,7 +325,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	result, publicationErr := service.repository.PublishEnvironmentDesiredRevisionWithTask(
 		ctx, project, environment, expectedHeadRevision, claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
-		candidate, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
+		candidate, nil, nil, nil, groupstore.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
 	)
 	if publicationErr != nil {

@@ -1,4 +1,4 @@
-package etcd
+package releasegroups
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
+func (repository *Preparer) prepareReleaseGroupProjectEvidence(
 	ctx context.Context,
 	environment hierarchyrecord.EnvironmentRecord,
 ) ([]etcdstore.Condition, error) {
@@ -90,7 +90,7 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	return conditions, nil
 }
 
-func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
+func (repository *Preparer) prepareReleaseGroupMemberEvidence(
 	ctx context.Context,
 	group domain.Group,
 	projection projectionrecord.EnvironmentComposeProjection,

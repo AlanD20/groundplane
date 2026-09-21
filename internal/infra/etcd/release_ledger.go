@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"net/http"
 	"slices"
@@ -467,7 +468,7 @@ func releaseDesiredRecordKey(kind ReleaseDesiredKind, id string, environmentID s
 		}
 	case ReleaseDesiredGroup:
 		if ids.Validate(ids.KindReleaseGroup, id) == nil {
-			return releaseGroupRecordKey(id), nil
+			return groupstore.ReleaseGroupRecordKey(id), nil
 		}
 	}
 	return "", errs.New(errs.KindValidationFailed, "release publication desired identity is invalid")

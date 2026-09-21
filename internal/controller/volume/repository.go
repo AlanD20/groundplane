@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"math"
 	"time"
 
@@ -86,7 +87,7 @@ type MutationRepository interface {
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]blueprints.EnvironmentBlueprintServiceChange,
 		[]blueprints.EnvironmentBlueprintRouteChange,
-		etcd.ReleaseGroupBlueprintPreparedMutation,
+		groupstore.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,

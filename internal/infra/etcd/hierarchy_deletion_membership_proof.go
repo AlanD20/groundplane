@@ -7,6 +7,7 @@ import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -104,7 +105,7 @@ func validateHierarchyDeletionServiceOwner(value []byte, id, owner string) error
 }
 
 func validateHierarchyDeletionReleaseGroupOwner(value []byte, id, owner string) error {
-	record, err := decodeReleaseGroupStored(value)
+	record, err := groupstore.DecodeReleaseGroupStored(value)
 	if err != nil || record.ID != id || record.EnvironmentID != owner {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}

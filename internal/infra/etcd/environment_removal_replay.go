@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -28,7 +29,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			networkreservations.EnvironmentPoolRegistryKey,
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
 			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
-			releaseGroupCollectionEpochKey(task.Target),
+			groupstore.ReleaseGroupCollectionEpochKey(task.Target),
 		},
 		Revision: readRevision,
 	})

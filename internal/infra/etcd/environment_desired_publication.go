@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
 	"time"
@@ -33,7 +34,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
-	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
+	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	task TaskRecord,
@@ -70,7 +71,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
-	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
+	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	backupPreparation BlueprintBackupPolicyPreparation,
@@ -108,7 +109,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
-	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
+	releaseGroupPreparation groupstore.ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	backupPreparation BlueprintBackupPolicyPreparation,
@@ -162,7 +163,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			errs.KindValidationFailed, "Environment desired revision marker does not match its Task",
 		)
 	}
-	if err := validateReleaseGroupBlueprintPreparedMutation(releaseGroupPreparation, environment.Record.ID); err != nil {
+	if err := groupstore.ValidateReleaseGroupBlueprintPreparedMutation(releaseGroupPreparation, environment.Record.ID); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := scriptPublication.validate(environment.Record.ID, claim.SourceKind); err != nil {
@@ -277,7 +278,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		}
 		defer clearPreparedBlueprintBackupPolicyPublication(backupPublication)
 	} else if len(zoneChanges) != 0 || len(serviceChanges) != 0 || len(routeChanges) != 0 ||
-		!releaseGroupPreparation.isZero() ||
+		!releaseGroupPreparation.IsZero() ||
 		!componentTaskPreparationIsZero(componentPreparation) ||
 		!blueprintAttachTaskPreparationIsZero(attachPreparation) ||
 		!backupPreparation.IsZero() ||
@@ -500,11 +501,10 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		mutations = append(mutations, backupPublication.mutations...)
 		classified = classifyEnvironmentBlueprintBackupPolicyPublication(classified, backupPublication)
 		releaseGroupBaseConditionCount := len(conditions)
-		conditions = append(conditions, releaseGroupPreparation.conditions...)
-		mutations = append(mutations, releaseGroupPreparation.mutations...)
+		conditions, mutations = releaseGroupPreparation.AppendTo(conditions, mutations)
 		previousClassifier := classified
 		classified = func(revision int64, values []*etcdstore.KeyValue) error {
-			if len(values) != releaseGroupBaseConditionCount+len(releaseGroupPreparation.conditions) {
+			if len(values) != releaseGroupBaseConditionCount+releaseGroupPreparation.ConditionCount() {
 				return errs.New(errs.KindInternal, "Blueprint Release Group compare evidence is incomplete")
 			}
 			return previousClassifier(revision, values[:releaseGroupBaseConditionCount])
