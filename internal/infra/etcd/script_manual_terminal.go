@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -36,7 +37,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			scriptSourceRootKey(task.OperationID),
+			scriptsourceevidence.ScriptSourceRootKey(task.OperationID),
 			taskjournal.TaskActiveOperationKey(task.OperationID),
 		}, Revision: revision,
 	})
@@ -48,7 +49,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		assignmentValue == nil || assignmentIndexValue == nil || terminalAt == nil {
 		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
-	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
+	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || !manualScriptRootMatches(execution, root) {
 		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
@@ -63,7 +64,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		return change, false, err
 	}
 	preparedAbort := false
-	if root.Phase == ScriptOperationSourceActive && execution.State == scriptexecutions.ScriptExecutionNotStarted &&
+	if root.Phase == scriptsourceevidence.ScriptOperationSourceActive && execution.State == scriptexecutions.ScriptExecutionNotStarted &&
 		status == taskjournal.TaskStatusAborted && !result.ReconciliationRequired {
 		execution, err = abortAssignedManualScriptBeforeStart(execution, *terminalAt)
 		if err != nil {
@@ -90,7 +91,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 	}
 	report, reportCondition, reportMutation, err := repository.prepareScriptClosingReport(ctx,
-		current, status, result, *terminalAt, root.Phase == ScriptOperationSourceActive)
+		current, status, result, *terminalAt, root.Phase == scriptsourceevidence.ScriptOperationSourceActive)
 	if err != nil {
 		return scriptTerminalSourceRelease{}, false, err
 	}
@@ -116,9 +117,9 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	if status == taskjournal.TaskStatusAborted {
 		disposition = sourceref.RetryDispositionAbandoned
 	}
-	if root.Phase == ScriptOperationSourceActive {
+	if root.Phase == scriptsourceevidence.ScriptOperationSourceActive {
 		if (!preparedAbort && (!execution.ActiveReference || !terminalAt.After(execution.UpdatedAt))) ||
-			root.ReleasePath != ScriptSourceReleaseAbsent ||
+			root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
 			(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
 			return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 		}
@@ -146,7 +147,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		etcdstore.ClearValues(transaction.FailureReads)
 		return scriptTerminalSourceRelease{}, true, nil
 	}
-	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
 		root.RetryDisposition != disposition || execution.ActiveReference || !execution.UpdatedAt.Equal(*terminalAt) {
 		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}

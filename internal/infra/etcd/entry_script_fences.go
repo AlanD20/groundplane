@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -26,13 +27,13 @@ func classifyEntryScriptReferences(entryID string, values []*etcdstore.KeyValue)
 	if values[0] == nil {
 		return nil
 	}
-	count, err := decodeScriptSourceCount(values[0].Value)
+	count, err := scriptsourceevidence.DecodeScriptSourceCount(values[0].Value)
 	if err != nil || count.Source.Kind != sourceref.SourceEntryValue || count.Source.EntryID != entryID ||
-		values[0].Key != scriptSourceCountKey(count.Source) || count.ReferencedExecutionCount == 0 {
+		values[0].Key != scriptsourceevidence.ScriptSourceCountKey(count.Source) || count.ReferencedExecutionCount == 0 {
 		return errs.New(errs.KindInternal, "Entry Script reference count is corrupt")
 	}
 	reference, err := recordcodec.Decode[sourceref.Reference](values[1].Value, "script-source-reference")
-	if err != nil || reference.Source != count.Source || scriptSourceForwardReferenceKey(reference) != values[1].Key {
+	if err != nil || reference.Source != count.Source || scriptsourceevidence.ScriptSourceForwardReferenceKey(reference) != values[1].Key {
 		return errs.New(errs.KindInternal, "Entry Script source membership is corrupt")
 	}
 	return errs.New(errs.KindResourceInUse, "Entry is referenced by a Script")

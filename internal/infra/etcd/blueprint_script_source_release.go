@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -80,7 +81,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	if environmentID == "" || environmentID != task.Owner.EnvironmentID {
 		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
-	rootKey := scriptSourceRootKey(task.OperationID)
+	rootKey := scriptsourceevidence.ScriptSourceRootKey(task.OperationID)
 	keys := []string{
 		rootKey,
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
@@ -107,7 +108,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 	}
-	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
+	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.OperationID {
 		return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 	}
@@ -131,7 +132,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 		executions[index] = record
-		if root.Phase == ScriptOperationSourceActive && terminalStatus == taskjournal.TaskStatusCompleted &&
+		if root.Phase == scriptsourceevidence.ScriptOperationSourceActive && terminalStatus == taskjournal.TaskStatusCompleted &&
 			(record.State != scriptexecutions.ScriptExecutionCleanupProven || record.AssignmentID != assignment.AssignmentID || record.ReconciliationRequired) {
 			return scriptTerminalSourceRelease{}, false, errs.New(
 				errs.KindStateConflict,
@@ -181,7 +182,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 		}
 		report, condition, mutation, reportErr := repository.prepareScriptClosingReport(
-			ctx, current, submittedStatus, submittedResult, *terminalAt, root.Phase == ScriptOperationSourceActive,
+			ctx, current, submittedStatus, submittedResult, *terminalAt, root.Phase == scriptsourceevidence.ScriptOperationSourceActive,
 		)
 		if reportErr != nil {
 			return scriptTerminalSourceRelease{}, false, reportErr
@@ -193,8 +194,8 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		defer clear(closingMutation.Value)
 		guards = append(guards, closingCondition)
 	}
-	if root.Phase == ScriptOperationSourceActive {
-		if root.ReleasePath != ScriptSourceReleaseAbsent ||
+	if root.Phase == scriptsourceevidence.ScriptOperationSourceActive {
+		if root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
 			(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
 			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
@@ -222,7 +223,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		etcdstore.ClearValues(transaction.FailureReads)
 		return scriptTerminalSourceRelease{}, true, nil
 	}
-	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
 		root.RetryDisposition != sourceref.RetryDispositionForbidden {
 		return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 	}

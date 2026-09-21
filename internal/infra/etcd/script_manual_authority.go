@@ -5,6 +5,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
@@ -54,16 +55,16 @@ func (repository *ScriptRepository) manualScriptExecutionAuthority(
 		execution.EnvironmentID != task.Owner.EnvironmentID || execution.PlanHash != task.PlanHash || !execution.ActiveReference {
 		return nil, errs.New(errs.KindStateConflict, "manual Script execution does not own its Task")
 	}
-	key := scriptSourceRootKey(task.OperationID)
+	key := scriptsourceevidence.ScriptSourceRootKey(task.OperationID)
 	value, err := scriptExecutionValueAt(ctx, repository.store, key, revision)
 	if err != nil {
 		return nil, err
 	}
-	root, err := decodeScriptOperationSourceRoot(value.Value)
+	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(value.Value)
 	if err != nil || !manualScriptRootMatches(execution, root) {
 		return nil, errs.New(errs.KindInternal, "manual Script source root does not match its sealed plan")
 	}
-	if root.Phase != ScriptOperationSourceActive || root.ReleasePath != ScriptSourceReleaseAbsent ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceActive || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
 		(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
 		return nil, errs.New(errs.KindStateConflict, "manual Script source authority is closed to execution")
 	}

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -47,7 +48,7 @@ func taskSourcePruneConditions(task TaskRecord) []etcdstore.Condition {
 		return pins
 	}
 	return append(pins, []etcdstore.Condition{
-		{Key: scriptSourceRootKey(task.OperationID)},
+		{Key: scriptsourceevidence.ScriptSourceRootKey(task.OperationID)},
 		{Key: ref.ReversePrefix(task.OperationID), Prefix: true},
 	}...)
 }

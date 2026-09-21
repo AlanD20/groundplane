@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -49,7 +50,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 	if len(steps) == 0 {
 		return ScriptSourceReleaseFragment{}, true, nil
 	}
-	key := scriptSourceRootKey(task.OperationID)
+	key := scriptsourceevidence.ScriptSourceRootKey(task.OperationID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return ScriptSourceReleaseFragment{}, false, err
@@ -57,16 +58,16 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		return ScriptSourceReleaseFragment{}, false, releases.CorruptReleaseRecord()
 	}
-	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
+	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.OperationID {
 		return ScriptSourceReleaseFragment{}, false, releases.CorruptReleaseRecord()
 	}
-	if root.Phase == ScriptOperationSourceReleasing && root.ReleasePath == ScriptSourceReleaseNormal &&
+	if root.Phase == scriptsourceevidence.ScriptOperationSourceReleasing && root.ReleasePath == scriptsourceevidence.ScriptSourceReleaseNormal &&
 		(root.RetryDisposition == sourceref.RetryDispositionAbandoned ||
 			root.RetryDisposition == sourceref.RetryDispositionForbidden) {
 		return ScriptSourceReleaseFragment{}, false, nil
 	}
-	if root.Phase != ScriptOperationSourceActive || root.ReleasePath != ScriptSourceReleaseAbsent ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceActive || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
 		(root.RetryDisposition != sourceref.RetryDispositionUndecided &&
 			root.RetryDisposition != sourceref.RetryDispositionTransferred) ||
 		read.Values[0].ModRevision != taskRevision {
@@ -117,7 +118,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 		return pendingScriptAbortChange{}, nil
 	}
 	keys := make([]string, 1, len(steps)+1)
-	keys[0] = scriptSourceRootKey(task.Record.OperationID)
+	keys[0] = scriptsourceevidence.ScriptSourceRootKey(task.Record.OperationID)
 	for _, step := range steps {
 		keys = append(keys, scriptexecutions.ScriptExecutionKey(step.executionID))
 	}
@@ -129,7 +130,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 		read.Values[0] == nil {
 		return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 	}
-	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
+	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || root.OperationID != task.Record.OperationID {
 		return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 	}
@@ -143,8 +144,8 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 			"manual Script Abort source authority is corrupt",
 		)
 	}
-	if root.Phase == ScriptOperationSourceActive {
-		if root.ReleasePath != ScriptSourceReleaseAbsent ||
+	if root.Phase == scriptsourceevidence.ScriptOperationSourceActive {
+		if root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
 			(root.RetryDisposition != sourceref.RetryDispositionUndecided &&
 				root.RetryDisposition != sourceref.RetryDispositionTransferred) ||
 			read.Values[0].ModRevision != task.Revision {
@@ -152,7 +153,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 		}
 		return repository.beginPendingScriptAbort(ctx, task, requestedTerminalAt, steps, executions, read.Values)
 	}
-	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
 		root.RetryDisposition != sourceref.RetryDispositionAbandoned {
 		return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 	}
@@ -391,7 +392,7 @@ func (repository *TaskRepository) validatePendingScriptAbortReplay(
 		return err
 	}
 	keys := make([]string, 1, len(steps)+1)
-	keys[0] = scriptSourceRootKey(task.Record.OperationID)
+	keys[0] = scriptsourceevidence.ScriptSourceRootKey(task.Record.OperationID)
 	for _, step := range steps {
 		keys = append(keys, scriptexecutions.ScriptExecutionKey(step.executionID))
 	}

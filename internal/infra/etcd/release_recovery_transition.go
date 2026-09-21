@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
@@ -324,7 +325,7 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 		return status, nil, true, stepsErr
 	}
 	if len(steps) != 0 {
-		keys = append(keys, scriptSourceRootKey(task.OperationID))
+		keys = append(keys, scriptsourceevidence.ScriptSourceRootKey(task.OperationID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil || read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {

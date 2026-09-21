@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -221,7 +222,7 @@ type BlueprintReleasePublicationEvidence struct {
 	Hooks                      []ReleaseHookExecutionPublication
 	PublishedAt                time.Time
 	SourcePrepared             PreparedSourceSet
-	SourceMembers              []ScriptSourcePreparationMember
+	SourceMembers              []scriptsourceevidence.ScriptSourcePreparationMember
 	HookPrepared               PreparedBlueprintReleaseHooks
 }
 

@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -555,7 +556,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		return releaseTaskRetryChange{}, err
 	}
 	if len(steps) != 0 {
-		rootKey := scriptSourceRootKey(source.OperationID)
+		rootKey := scriptsourceevidence.ScriptSourceRootKey(source.OperationID)
 		rootRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{rootKey}, Revision: revision})
 		if readErr != nil {
 			return releaseTaskRetryChange{}, readErr
@@ -566,7 +567,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 				"Blueprint Script source authority is unknown",
 			)
 		}
-		root, decodeErr := decodeScriptOperationSourceRoot(rootRead.Values[0].Value)
+		root, decodeErr := scriptsourceevidence.DecodeScriptOperationSourceRoot(rootRead.Values[0].Value)
 		if decodeErr != nil || root.OperationID != source.OperationID || root.Phase != "active" ||
 			root.ReleasePath != "absent" || root.MembershipCount == 0 || root.MembershipSHA256 == "" {
 			return releaseTaskRetryChange{}, errs.New(

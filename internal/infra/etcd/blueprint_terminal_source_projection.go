@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
@@ -42,7 +43,7 @@ func (advance *blueprintTerminalSourceAdvance) execute(ctx context.Context, repo
 func (advance *blueprintTerminalSourceAdvance) projection(
 	executionGuards []etcdstore.Condition,
 ) scriptTerminalSourceRelease {
-	rootKey, reportKey := scriptSourceRootKey(advance.task.OperationID), blueprintClosingReportKey(advance.task.ID)
+	rootKey, reportKey := scriptsourceevidence.ScriptSourceRootKey(advance.task.OperationID), blueprintClosingReportKey(advance.task.ID)
 	conditions := []etcdstore.Condition{
 		{Key: rootKey, ModRevision: math.MaxInt64},
 		{Key: ref.ReversePrefix(advance.task.OperationID), Prefix: true},

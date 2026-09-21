@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -79,7 +80,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	}
 	defer clear(retentionValue)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{scriptSourceRootKey(source.OperationID), retentionKey}, Revision: revision,
+		Keys: []string{scriptsourceevidence.ScriptSourceRootKey(source.OperationID), retentionKey}, Revision: revision,
 	})
 	if err != nil {
 		return scriptTaskChange{}, err
@@ -88,7 +89,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		read.Values[1] == nil || !bytes.Equal(read.Values[1].Value, retentionValue) {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script retry retention authority is unavailable")
 	}
-	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
+	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || !manualScriptRootMatches(execution, root) ||
 		root.RetryDisposition != sourceref.RetryDispositionAvailable ||
 		root.RetryExpiresAt == nil ||

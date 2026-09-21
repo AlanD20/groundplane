@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
@@ -118,7 +119,7 @@ type BlueprintReleasePublication struct {
 	mutations     []etcdstore.Mutation
 	sources       ScriptSourcePublicationFragment
 	authority     *ScriptSourceReferenceAuthority
-	members       []ScriptSourcePreparationMember
+	members       []scriptsourceevidence.ScriptSourcePreparationMember
 	retained      *blueprintRuntimeRetention
 }
 
@@ -129,7 +130,7 @@ type blueprintReleasePublicationInput struct {
 	Mutations       []etcdstore.Mutation
 	SourceFragment  ScriptSourcePublicationFragment
 	SourceAuthority *ScriptSourceReferenceAuthority
-	SourceMembers   []ScriptSourcePreparationMember
+	SourceMembers   []scriptsourceevidence.ScriptSourcePreparationMember
 }
 
 func newBlueprintReleasePublication(input blueprintReleasePublicationInput) (BlueprintReleasePublication, error) {
@@ -366,15 +367,15 @@ func (prepared PreparedBlueprintReleaseHooks) SnapshotRevision(id string) int64 
 }
 
 type blueprintStagedMember struct {
-	Evidence  ScriptSourceEvidence
+	Evidence  scriptsourceevidence.ScriptSourceEvidence
 	Reference sourceref.Reference
 }
 
 func (member blueprintStagedMember) withReference(
 	reference sourceref.Reference,
-) ScriptSourcePreparationMember {
+) scriptsourceevidence.ScriptSourcePreparationMember {
 	reference.SourceModRevision = 0
-	return ScriptSourcePreparationMember{
+	return scriptsourceevidence.ScriptSourcePreparationMember{
 		Reference: reference,
 		Evidence:  member.Evidence,
 	}
@@ -417,10 +418,10 @@ func blueprintStagedSourceEvidenceFromStage(
 	}
 	var canonical [sha256.Size]byte
 	copy(canonical[:], authority.CanonicalValueSha256)
-	return blueprintStagedMember{Evidence: ScriptSourceEvidence{
-		Staged: &ScriptStagedSourceEvidence{
+	return blueprintStagedMember{Evidence: scriptsourceevidence.ScriptSourceEvidence{
+		Staged: &scriptsourceevidence.ScriptStagedSourceEvidence{
 			SourceKey: key,
-			Stage: ScriptCandidateSourceStage{
+			Stage: scriptsourceevidence.ScriptCandidateSourceStage{
 				EnvironmentID:        authority.EnvironmentId,
 				RevisionID:           authority.RevisionId,
 				RenderGeneration:     authority.RenderGeneration,
@@ -476,7 +477,7 @@ func prepareBlueprintReleaseHookPublicationFragment(
 }
 
 func encodeBlueprintReleaseHookSnapshot(execution scriptexecutions.ScriptExecutionRecord) ([]byte, error) {
-	return recordcodec.Encode("script-runner-snapshot", storedScriptRunnerSnapshot{
+	return recordcodec.Encode("script-runner-snapshot", scriptsourceevidence.StoredScriptRunnerSnapshot{
 		ExecutionID: execution.ID, SnapshotID: execution.SnapshotID,
 		SHA256: execution.SnapshotSHA256, Payload: execution.Snapshot,
 	})
@@ -491,8 +492,8 @@ func cloneBlueprintReleaseMutations(values []etcdstore.Mutation) []etcdstore.Mut
 	return result
 }
 
-func cloneScriptSourcePreparationMembers(values []ScriptSourcePreparationMember) []ScriptSourcePreparationMember {
-	result := make([]ScriptSourcePreparationMember, len(values))
+func cloneScriptSourcePreparationMembers(values []scriptsourceevidence.ScriptSourcePreparationMember) []scriptsourceevidence.ScriptSourcePreparationMember {
+	result := make([]scriptsourceevidence.ScriptSourcePreparationMember, len(values))
 	for index, value := range values {
 		result[index] = value
 		if value.Evidence.Existing != nil {
@@ -508,7 +509,7 @@ func cloneScriptSourcePreparationMembers(values []ScriptSourcePreparationMember)
 	return result
 }
 
-func clearScriptSourcePreparationMembers(values []ScriptSourcePreparationMember) {
+func clearScriptSourcePreparationMembers(values []scriptsourceevidence.ScriptSourcePreparationMember) {
 	for index := range values {
 		if values[index].Evidence.Staged != nil {
 			clear(values[index].Evidence.Staged.Value)

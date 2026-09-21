@@ -5,6 +5,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -20,7 +21,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	revision int64, now time.Time,
 ) (bool, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		scriptSourceRootKey(task.OperationID), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
+		scriptsourceevidence.ScriptSourceRootKey(task.OperationID), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
 		taskjournal.TaskActiveOperationKey(
 			task.OperationID,
 		), taskjournal.TaskAssignmentIndexKey(task.ID), manualScriptClosingReportKey(task.ID),
@@ -43,11 +44,11 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		}
 		return false, nil
 	}
-	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
+	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || !manualScriptRootMatches(execution, root) {
 		return false, corruptTaskPruneIntent()
 	}
-	if execution.CurrentTaskID != task.ID || (root.Phase == ScriptOperationSourceActive &&
+	if execution.CurrentTaskID != task.ID || (root.Phase == scriptsourceevidence.ScriptOperationSourceActive &&
 		(root.RetryDisposition == sourceref.RetryDispositionUndecided || root.RetryDisposition == sourceref.RetryDispositionTransferred)) {
 		return true, nil
 	}
@@ -67,7 +68,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	if err != nil {
 		return false, err
 	}
-	if root.Phase == ScriptOperationSourceActive && root.RetryDisposition == sourceref.RetryDispositionAvailable {
+	if root.Phase == scriptsourceevidence.ScriptOperationSourceActive && root.RetryDisposition == sourceref.RetryDispositionAvailable {
 		next, err := expireManualScriptExecution(execution, now)
 		if err != nil {
 			return false, err
@@ -94,7 +95,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 			return false, errs.New(errs.KindStateConflict, "manual Script expiry authority changed")
 		}
 		guards[len(guards)-1].ModRevision = transaction.Revision
-	} else if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseRetryExpiry ||
+	} else if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseRetryExpiry ||
 		root.RetryDisposition != sourceref.RetryDispositionExpired || !manualScriptExpiryExecutionMatches(execution, *root.RetryExpiresAt) {
 		return false, corruptTaskPruneIntent()
 	}

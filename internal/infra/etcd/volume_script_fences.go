@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,8 +17,8 @@ func volumeScriptSource(volumeID string) sourceref.SourceIdentity {
 func volumeScriptAbsenceConditions(volumeID string) []etcdstore.Condition {
 	source := volumeScriptSource(volumeID)
 	return []etcdstore.Condition{
-		{Key: scriptSourceCountKey(source)},
-		{Key: sourceref.ForwardReferencePrefix + scriptSourceSuffix(source) + "/", Prefix: true},
+		{Key: scriptsourceevidence.ScriptSourceCountKey(source)},
+		{Key: sourceref.ForwardReferencePrefix + scriptsourceevidence.ScriptSourceSuffix(source) + "/", Prefix: true},
 	}
 }
 
@@ -29,13 +30,13 @@ func classifyVolumeScriptReferences(volumeID string, values []*etcdstore.KeyValu
 		return nil
 	}
 	source := volumeScriptSource(volumeID)
-	count, err := decodeScriptSourceCount(values[0].Value)
-	if err != nil || values[0].Key != scriptSourceCountKey(source) || count.Source != source ||
+	count, err := scriptsourceevidence.DecodeScriptSourceCount(values[0].Value)
+	if err != nil || values[0].Key != scriptsourceevidence.ScriptSourceCountKey(source) || count.Source != source ||
 		count.ReferencedExecutionCount == 0 {
 		return errs.New(errs.KindInternal, "Volume Script reference count is corrupt")
 	}
 	reference, err := recordcodec.Decode[sourceref.Reference](values[1].Value, "script-source-reference")
-	if err != nil || reference.Source != source || scriptSourceForwardReferenceKey(reference) != values[1].Key {
+	if err != nil || reference.Source != source || scriptsourceevidence.ScriptSourceForwardReferenceKey(reference) != values[1].Key {
 		return errs.New(errs.KindInternal, "Volume Script source membership is corrupt")
 	}
 	return errs.New(errs.KindResourceInUse, "Volume is referenced by a Script")

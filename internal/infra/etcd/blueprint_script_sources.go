@@ -8,6 +8,7 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -25,11 +26,11 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 	ctx context.Context,
 	manifest VersionedReleaseManifest,
 	hooks []ReleaseHookExecutionPublication,
-) ([]ScriptSourcePreparationMember, error) {
+) ([]scriptsourceevidence.ScriptSourcePreparationMember, error) {
 	if ctx == nil || ledger == nil || manifest.ReadRevision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "Blueprint Script source evidence is invalid")
 	}
-	members := make([]ScriptSourcePreparationMember, 0, len(hooks)*8)
+	members := make([]scriptsourceevidence.ScriptSourcePreparationMember, 0, len(hooks)*8)
 	for _, hook := range hooks {
 		sources, execution := hook.Sources, hook.Execution
 		if sources.Revision != manifest.ReadRevision ||
@@ -68,9 +69,9 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 		body.SourceModRevision = sources.BodyGeneration.Revision
 		body.SourceDigest = execution.BodySHA256
-		members = append(members, ScriptSourcePreparationMember{
+		members = append(members, scriptsourceevidence.ScriptSourcePreparationMember{
 			Reference: body,
-			Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+			Evidence: scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
 				SourceKey: scriptrecord.ScriptSetBodyGenerationKey(
 					execution.EnvironmentID,
 					body.Source.ScriptSetGeneration,
@@ -122,9 +123,9 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 		release.SourceModRevision = releaseValue.ModRevision
 		release.SourceDigest = hex.EncodeToString(releaseDigest[:])
-		members = append(members, ScriptSourcePreparationMember{
+		members = append(members, scriptsourceevidence.ScriptSourcePreparationMember{
 			Reference: release,
-			Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+			Evidence: scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
 				SourceKey: releaseKey,
 			}},
 		})
@@ -146,10 +147,10 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 		members = append(
 			members,
-			ScriptSourcePreparationMember{
+			scriptsourceevidence.ScriptSourcePreparationMember{
 				Reference: snapshotReference,
-				Evidence: ScriptSourceEvidence{
-					Existing: &ScriptExistingSourceEvidence{SourceKey: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)},
+				Evidence: scriptsourceevidence.ScriptSourceEvidence{
+					Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{SourceKey: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)},
 				},
 			},
 		)
@@ -175,9 +176,9 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			}
 			reference.SourceModRevision = hook.SnapshotRevision
 			reference.SourceDigest = execution.SnapshotSHA256
-			members = append(members, ScriptSourcePreparationMember{
+			members = append(members, scriptsourceevidence.ScriptSourcePreparationMember{
 				Reference: reference,
-				Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+				Evidence: scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
 					SourceKey: snapshotKey,
 				}},
 			})
@@ -201,9 +202,9 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			}
 			reference.SourceModRevision = hook.SnapshotRevision
 			reference.SourceDigest = execution.SnapshotSHA256
-			members = append(members, ScriptSourcePreparationMember{
+			members = append(members, scriptsourceevidence.ScriptSourcePreparationMember{
 				Reference: reference,
-				Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+				Evidence: scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
 					SourceKey: snapshotKey,
 				}},
 			})
@@ -253,9 +254,9 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			}
 			reference.SourceModRevision = value.ModRevision
 			reference.SourceDigest = sourceDigest
-			members = append(members, ScriptSourcePreparationMember{
+			members = append(members, scriptsourceevidence.ScriptSourcePreparationMember{
 				Reference: reference,
-				Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+				Evidence: scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
 					SourceKey: key,
 				}},
 			})
@@ -280,9 +281,9 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			reference.SourceOwnerID = secret.OwnerId
 			reference.SourceModRevision = value.ModRevision
 			reference.SourceDigest = hex.EncodeToString(secret.Digest)
-			members = append(members, ScriptSourcePreparationMember{
+			members = append(members, scriptsourceevidence.ScriptSourcePreparationMember{
 				Reference: reference,
-				Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
+				Evidence: scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{
 					SourceKey: key,
 				}},
 			})

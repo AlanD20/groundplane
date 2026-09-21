@@ -9,6 +9,7 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
@@ -27,7 +28,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 	sources ScriptExecutionSources,
 	execution scriptexecutions.ScriptExecutionRecord,
 	snapshotRevision int64,
-) ([]ScriptSourcePreparationMember, error) {
+) ([]scriptsourceevidence.ScriptSourcePreparationMember, error) {
 	if ctx == nil || repository == nil || repository.store == nil || sources.Revision <= 0 || snapshotRevision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "manual Script source preparation is invalid")
 	}
@@ -50,7 +51,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 		ScriptID:            execution.ScriptID, BodyGeneration: execution.ScriptGeneration,
 	}
 	body.SourceModRevision, body.SourceDigest = sources.BodyGeneration.Revision, execution.BodySHA256
-	members := []ScriptSourcePreparationMember{manualScriptExistingMember(body, scriptrecord.ScriptSetBodyGenerationKey(
+	members := []scriptsourceevidence.ScriptSourcePreparationMember{manualScriptExistingMember(body, scriptrecord.ScriptSetBodyGenerationKey(
 		execution.EnvironmentID, body.Source.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
 	))}
 	snapshotKey := scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)
@@ -109,7 +110,7 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 	sources ScriptExecutionSources,
 	base sourceref.Reference,
 	bindings []*agentpb.ScriptRunnerEntryBinding,
-) ([]ScriptSourcePreparationMember, error) {
+) ([]scriptsourceevidence.ScriptSourcePreparationMember, error) {
 	execution := sources.Script.Record.Desired.Execution
 	if execution != nil {
 		if err := execution.Validate(); err != nil {
@@ -139,7 +140,7 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 	if len(bindings) != len(selected) || explicit && len(selected) != len(execution.EntryIDs) {
 		return nil, errs.New(errs.KindValidationFailed, "manual Script Entry binding coverage is incomplete")
 	}
-	members := make([]ScriptSourcePreparationMember, 0, len(bindings))
+	members := make([]scriptsourceevidence.ScriptSourcePreparationMember, 0, len(bindings))
 	secrets := make(map[string]struct{})
 	for _, binding := range bindings {
 		if binding == nil {
@@ -202,24 +203,24 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	sources ScriptExecutionSources,
 	base sourceref.Reference,
 	reference string,
-) (ScriptSourcePreparationMember, error) {
+) (scriptsourceevidence.ScriptSourcePreparationMember, error) {
 	secrets, err := newSecretRepository(repository.store)
 	if err != nil {
-		return ScriptSourcePreparationMember{}, err
+		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
 	resolved, err := secrets.resolveSecretAtRevision(ctx, sources.Project.Record.ID, reference, sources.Revision)
 	if err != nil {
-		return ScriptSourcePreparationMember{}, err
+		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
 	record := resolved.Record
 	secretID := record.Secret.ID
 	value, err := scriptExecutionValueAt(ctx, repository.store, secretrecord.ValueKey(secretID), sources.Revision)
 	if err != nil {
-		return ScriptSourcePreparationMember{}, err
+		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
 	secret, err := secretrecord.DecodeEncryptedValue(value.Value)
 	if err != nil {
-		return ScriptSourcePreparationMember{}, err
+		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
 	defer clear(secret.Ciphertext)
 	member := base
@@ -228,7 +229,7 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 		SecretID:          secretID,
 		ValueGenerationID: secretID,
 	}
-	member.SourceOwnerID = scriptSourcePlatformOwner
+	member.SourceOwnerID = scriptsourceevidence.ScriptSourcePlatformOwner
 	if record.Secret.ProjectID != "" {
 		member.SourceOwnerID = record.Secret.ProjectID
 	}
@@ -236,9 +237,9 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	return manualScriptExistingMember(member, secretrecord.ValueKey(secretID)), nil
 }
 
-func manualScriptExistingMember(reference sourceref.Reference, key string) ScriptSourcePreparationMember {
-	return ScriptSourcePreparationMember{
+func manualScriptExistingMember(reference sourceref.Reference, key string) scriptsourceevidence.ScriptSourcePreparationMember {
+	return scriptsourceevidence.ScriptSourcePreparationMember{
 		Reference: reference,
-		Evidence:  ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: key}},
+		Evidence:  scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{SourceKey: key}},
 	}
 }

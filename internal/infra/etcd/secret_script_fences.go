@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
@@ -21,8 +22,8 @@ func secretScriptSource(secretID string) sourceref.SourceIdentity {
 func secretScriptAbsenceConditions(secretID string) []etcdstore.Condition {
 	source := secretScriptSource(secretID)
 	return []etcdstore.Condition{
-		{Key: scriptSourceCountKey(source)},
-		{Key: sourceref.ForwardReferencePrefix + scriptSourceSuffix(source) + "/", Prefix: true},
+		{Key: scriptsourceevidence.ScriptSourceCountKey(source)},
+		{Key: sourceref.ForwardReferencePrefix + scriptsourceevidence.ScriptSourceSuffix(source) + "/", Prefix: true},
 		{Key: tasksecretpinrecord.SecretPrefix(secretID), Prefix: true},
 	}
 }
@@ -33,8 +34,8 @@ func classifySecretScriptReferences(secretID string, values []*etcdstore.KeyValu
 	}
 	if values[0] != nil {
 		source := secretScriptSource(secretID)
-		count, err := decodeScriptSourceCount(values[0].Value)
-		if err != nil || values[0].Key != scriptSourceCountKey(source) || count.Source != source ||
+		count, err := scriptsourceevidence.DecodeScriptSourceCount(values[0].Value)
+		if err != nil || values[0].Key != scriptsourceevidence.ScriptSourceCountKey(source) || count.Source != source ||
 			count.ReferencedExecutionCount == 0 {
 			return errs.New(errs.KindInternal, "Secret Script reference count is corrupt")
 		}
@@ -43,7 +44,7 @@ func classifySecretScriptReferences(secretID string, values []*etcdstore.KeyValu
 			"script-source-reference",
 		)
 		if err != nil || reference.Source != source ||
-			scriptSourceForwardReferenceKey(reference) != values[1].Key {
+			scriptsourceevidence.ScriptSourceForwardReferenceKey(reference) != values[1].Key {
 			return errs.New(errs.KindInternal, "Secret Script source membership is corrupt")
 		}
 	}

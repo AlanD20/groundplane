@@ -3,58 +3,15 @@ package etcd
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	ref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-const (
-	scriptSourcePlatformOwner         = "platform/-"
-	scriptSourceMaterializationPrefix = "/v1/records/materialization-proofs/"
-)
-
-const (
-	ScriptOperationSourceActive    = "active"
-	ScriptOperationSourceReleasing = "releasing"
-	ScriptSourceReleaseAbsent      = "absent"
-	ScriptSourceReleaseNormal      = "normal_completion"
-	ScriptSourceReleaseRetryExpiry = "retry_expiry"
-)
-
-type ScriptExistingSourceEvidence struct{ SourceKey string }
-
-type ScriptCandidateSourceStage struct {
-	EnvironmentID        string
-	RevisionID           string
-	RenderGeneration     uint64
-	FixedReadRevision    int64
-	CanonicalValueSHA256 [sha256.Size]byte
-}
-
-type ScriptStagedSourceEvidence struct {
-	SourceKey string
-	Stage     ScriptCandidateSourceStage
-	Value     []byte
-}
-
-// ScriptSourceEvidence is a closed existing-vs-staged union. Only exact candidate
-// Blueprint mutations admitted by scriptSourceKindMayBeBlueprintStaged may be staged.
-type ScriptSourceEvidence struct {
-	Existing *ScriptExistingSourceEvidence
-	Staged   *ScriptStagedSourceEvidence
-}
-
-type ScriptSourcePreparationMember struct {
-	Reference ref.Reference
-	Evidence  ScriptSourceEvidence
-}
 
 type PreparedSourceSet struct {
 	prepared           ref.Prepared
@@ -70,7 +27,7 @@ type ScriptStagedSourceRequirement struct {
 	SourceKey     string
 	SourceOwnerID string
 	SourceDigest  string
-	Stage         ScriptCandidateSourceStage
+	Stage         scriptsourceevidence.ScriptCandidateSourceStage
 	value         []byte
 }
 
@@ -178,7 +135,7 @@ func NewScriptSourceReferenceAuthority(store etcdstore.Store) (*ScriptSourceRefe
 func (authority *ScriptSourceReferenceAuthority) Prepare(
 	ctx context.Context,
 	operationID string,
-	members []ScriptSourcePreparationMember,
+	members []scriptsourceevidence.ScriptSourcePreparationMember,
 ) (PreparedSourceSet, error) {
 	converted, err := authority.validateMembers(ctx, operationID, members, true)
 	if err != nil {
@@ -199,7 +156,7 @@ func (authority *ScriptSourceReferenceAuthority) Prepare(
 func (authority *ScriptSourceReferenceAuthority) Abandon(
 	ctx context.Context,
 	operationID string,
-	members []ScriptSourcePreparationMember,
+	members []scriptsourceevidence.ScriptSourcePreparationMember,
 ) error {
 	converted, err := authority.validateMembers(ctx, operationID, members, false)
 	if err != nil {
@@ -234,7 +191,7 @@ func (authority *ScriptSourceReferenceAuthority) FinalPublicationFragment(
 		result.staged[index] = ScriptStagedSourceRequirement{
 			Source: requirement.Source, SourceKey: requirement.SourceKey,
 			SourceOwnerID: requirement.SourceOwnerID, SourceDigest: requirement.SourceDigest,
-			Stage: scriptCandidateSourceStageFromReference(requirement.Stage),
+			Stage: scriptsourceevidence.ScriptCandidateSourceStageFromReference(requirement.Stage),
 			value: append([]byte(nil), requirement.Value...),
 		}
 	}
@@ -378,7 +335,7 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryExpiryFinalization(
 func (authority *ScriptSourceReferenceAuthority) validateMembers(
 	ctx context.Context,
 	operationID string,
-	members []ScriptSourcePreparationMember,
+	members []scriptsourceevidence.ScriptSourcePreparationMember,
 	readRecords bool,
 ) ([]ref.Member, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -388,10 +345,10 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 		return nil, errs.New(errs.KindValidationFailed, "Script source preparation is invalid")
 	}
 	converted := make([]ref.Member, len(members))
-	var candidateStage *ScriptCandidateSourceStage
+	var candidateStage *scriptsourceevidence.ScriptCandidateSourceStage
 	stagedPredecessors := make(map[string]int64)
 	for index, member := range members {
-		if member.Reference.OperationID != operationID || validateScriptSourceReference(member.Reference) != nil {
+		if member.Reference.OperationID != operationID || scriptsourceevidence.ValidateScriptSourceReference(member.Reference) != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Script source preparation member is invalid")
 		}
 		existing, staged := member.Evidence.Existing, member.Evidence.Staged
@@ -412,25 +369,25 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 			continue
 		}
 		converted[index].SourceKey, converted[index].Mode = staged.SourceKey, ref.EvidenceStaged
-		converted[index].Stage = scriptCandidateSourceStageToReference(staged.Stage)
+		converted[index].Stage = scriptsourceevidence.ScriptCandidateSourceStageToReference(staged.Stage)
 		converted[index].StagedValue = append([]byte(nil), staged.Value...)
 		if member.Reference.SourceModRevision != 0 ||
-			!scriptSourceKindMayBeBlueprintStaged(member.Reference.Source.Kind) {
+			!scriptsourceevidence.ScriptSourceKindMayBeBlueprintStaged(member.Reference.Source.Kind) {
 			return nil, errs.New(errs.KindValidationFailed, "staged Script source kind is invalid")
 		}
-		if err := validateScriptCandidateSourceStage(
+		if err := scriptsourceevidence.ValidateScriptCandidateSourceStage(
 			staged.Stage,
 			staged.Value,
 			member.Reference.SourceOwnerID,
 		); err != nil {
 			return nil, err
 		}
-		if candidateStage != nil && !sameScriptCandidateStage(*candidateStage, staged.Stage) {
+		if candidateStage != nil && !scriptsourceevidence.SameScriptCandidateStage(*candidateStage, staged.Stage) {
 			return nil, errs.New(errs.KindValidationFailed, "staged Script source candidate identity conflicts")
 		}
 		stageCopy := staged.Stage
 		candidateStage = &stageCopy
-		if err := validateScriptSourceRecord(staged.SourceKey, staged.Value, member.Reference); err != nil {
+		if err := scriptsourceevidence.ValidateScriptSourceRecord(staged.SourceKey, staged.Value, member.Reference); err != nil {
 			return nil, err
 		}
 		if readRecords {
@@ -457,55 +414,6 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 	return converted, nil
 }
 
-func sameScriptCandidateStage(left, right ScriptCandidateSourceStage) bool {
-	return left.EnvironmentID == right.EnvironmentID && left.RevisionID == right.RevisionID &&
-		left.RenderGeneration == right.RenderGeneration && left.FixedReadRevision == right.FixedReadRevision
-}
-
-func scriptSourceKindMayBeBlueprintStaged(kind ref.SourceKind) bool {
-	switch kind {
-	case ref.SourceRunnerSnapshot, ref.SourceService, ref.SourceRelease,
-		ref.SourceEntryValue:
-		return true
-	default:
-		return false
-	}
-}
-
-func validateScriptCandidateSourceStage(
-	stage ScriptCandidateSourceStage,
-	value []byte,
-	ownerID string,
-) error {
-	digest := sha256.Sum256(value)
-	if ids.Validate(ids.KindEnvironment, stage.EnvironmentID) != nil ||
-		ids.Validate(ids.KindTask, stage.RevisionID) != nil || stage.EnvironmentID != ownerID ||
-		stage.RenderGeneration == 0 || stage.FixedReadRevision <= 0 ||
-		!bytes.Equal(stage.CanonicalValueSHA256[:], digest[:]) {
-		return errs.New(errs.KindValidationFailed, "staged Script source authority is invalid")
-	}
-	return nil
-}
-
-func scriptCandidateSourceStageToReference(stage ScriptCandidateSourceStage) ref.StageIdentity {
-	return ref.StageIdentity{
-		EnvironmentID: stage.EnvironmentID, RevisionID: stage.RevisionID,
-		RenderGeneration: stage.RenderGeneration, FixedReadRevision: stage.FixedReadRevision,
-		CanonicalValueSHA256: hex.EncodeToString(stage.CanonicalValueSHA256[:]),
-	}
-}
-
-func scriptCandidateSourceStageFromReference(stage ref.StageIdentity) ScriptCandidateSourceStage {
-	result := ScriptCandidateSourceStage{
-		EnvironmentID: stage.EnvironmentID, RevisionID: stage.RevisionID,
-		RenderGeneration: stage.RenderGeneration, FixedReadRevision: stage.FixedReadRevision,
-	}
-	decoded, _ := hex.DecodeString(stage.CanonicalValueSHA256)
-	copy(result.CanonicalValueSHA256[:], decoded)
-	clear(decoded)
-	return result
-}
-
 func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx context.Context, member ref.Member) error {
 	read, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{member.SourceKey}, Revision: member.Reference.SourceModRevision,
@@ -517,7 +425,7 @@ func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx cont
 		read.Values[0].ModRevision != member.Reference.SourceModRevision {
 		return errs.New(errs.KindStateConflict, "existing Script source revision is unavailable")
 	}
-	if err := validateScriptSourceRecord(member.SourceKey, read.Values[0].Value, member.Reference); err != nil {
+	if err := scriptsourceevidence.ValidateScriptSourceRecord(member.SourceKey, read.Values[0].Value, member.Reference); err != nil {
 		return err
 	}
 	if member.Reference.Source.Kind != ref.SourceSecretValue {
@@ -536,7 +444,7 @@ func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx cont
 	if err != nil {
 		return errs.New(errs.KindValidationFailed, "Script Secret source owner evidence is invalid")
 	}
-	ownerID := scriptSourcePlatformOwner
+	ownerID := scriptsourceevidence.ScriptSourcePlatformOwner
 	if record.Secret.ProjectID != "" {
 		ownerID = record.Secret.ProjectID
 	}

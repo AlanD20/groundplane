@@ -5,6 +5,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
@@ -70,7 +71,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		return false, nil
 	}
 	sources, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		scriptSourceRootKey(task.OperationID), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
+		scriptsourceevidence.ScriptSourceRootKey(task.OperationID), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
 	}, Revision: revision})
 	if err != nil {
 		return false, err
@@ -85,7 +86,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	if sources.Values[1] == nil {
 		return false, corruptTaskPruneIntent()
 	}
-	root, err := decodeScriptOperationSourceRoot(sources.Values[0].Value)
+	root, err := scriptsourceevidence.DecodeScriptOperationSourceRoot(sources.Values[0].Value)
 	if err != nil {
 		return false, err
 	}
@@ -97,6 +98,6 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		) || execution.PlanHash != task.PlanHash || execution.OperationID != task.OperationID {
 		return false, corruptTaskPruneIntent()
 	}
-	return execution.CurrentTaskID != task.ID || (root.Phase == ScriptOperationSourceActive &&
+	return execution.CurrentTaskID != task.ID || (root.Phase == scriptsourceevidence.ScriptOperationSourceActive &&
 		(root.RetryDisposition == sourceref.RetryDispositionUndecided || root.RetryDisposition == sourceref.RetryDispositionTransferred)), nil
 }

@@ -9,6 +9,7 @@ import (
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -171,7 +172,7 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 	ctx context.Context,
 	execution scriptexecutions.ScriptExecutionRecord,
 ) (int64, error) {
-	value, err := recordcodec.Encode("script-runner-snapshot", storedScriptRunnerSnapshot{
+	value, err := recordcodec.Encode("script-runner-snapshot", scriptsourceevidence.StoredScriptRunnerSnapshot{
 		ExecutionID: execution.ID, SnapshotID: execution.SnapshotID, SHA256: execution.SnapshotSHA256, Payload: execution.Snapshot,
 	})
 	if err != nil {

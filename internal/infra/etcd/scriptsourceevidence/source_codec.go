@@ -1,4 +1,4 @@
-package etcd
+package scriptsourceevidence
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func validateScriptSourceReference(reference ref.Reference) error {
+func ValidateScriptSourceReference(reference ref.Reference) error {
 	if ids.Validate(ids.KindOperation, reference.OperationID) != nil ||
 		!scriptexecutions.ValidRawScriptExecutionID(reference.ScriptExecutionID) ||
 		validateScriptSourceIdentity(reference.Source) != nil ||
@@ -35,7 +35,7 @@ func validateScriptSourceReference(reference ref.Reference) error {
 		return errs.New(errs.KindValidationFailed, "Script source reference is invalid")
 	}
 	if reference.Source.Kind == ref.SourceSecretValue {
-		if reference.SourceOwnerID != scriptSourcePlatformOwner &&
+		if reference.SourceOwnerID != ScriptSourcePlatformOwner &&
 			ids.Validate(ids.KindProject, reference.SourceOwnerID) != nil {
 			return errs.New(errs.KindValidationFailed, "Script Secret source owner is invalid")
 		}
@@ -102,14 +102,14 @@ func validateScriptSourceIdentity(source ref.SourceIdentity) error {
 	return nil
 }
 
-type storedScriptRunnerSnapshot struct {
+type StoredScriptRunnerSnapshot struct {
 	ExecutionID string `json:"script_execution_id"`
 	SnapshotID  string `json:"snapshot_id"`
 	SHA256      string `json:"sha256"`
 	Payload     []byte `json:"payload"`
 }
 
-func validateScriptSourceRecord(key string, value []byte, reference ref.Reference) error {
+func ValidateScriptSourceRecord(key string, value []byte, reference ref.Reference) error {
 	source := reference.Source
 	switch source.Kind {
 	case ref.SourceBody:
@@ -209,7 +209,7 @@ func decodeScriptRunnerSnapshotSource(
 	value []byte,
 	reference ref.Reference,
 ) (*agentpb.ResolvedRunnerSnapshot, string, error) {
-	snapshot, err := recordcodec.Decode[storedScriptRunnerSnapshot](value, "script-runner-snapshot")
+	snapshot, err := recordcodec.Decode[StoredScriptRunnerSnapshot](value, "script-runner-snapshot")
 	digest := sha256.Sum256(snapshot.Payload)
 	var payload agentpb.ResolvedRunnerSnapshot
 	if err != nil || snapshot.SnapshotID == "" || key != scriptexecutions.ScriptRunnerSnapshotKey(snapshot.SnapshotID) ||
@@ -318,26 +318,26 @@ func decodeScriptMaterializationProof(encoded []byte) (coreproof.Proof, error) {
 }
 
 func scriptSourcePreparationKey(operationID string) string { return ref.PreparationKey(operationID) }
-func scriptSourceRootKey(operationID string) string        { return ref.RootKey(operationID) }
-func scriptSourceForwardReferenceKey(reference ref.Reference) string {
+func ScriptSourceRootKey(operationID string) string        { return ref.RootKey(operationID) }
+func ScriptSourceForwardReferenceKey(reference ref.Reference) string {
 	return ref.ForwardKey(reference)
 }
 func scriptSourceReverseReferenceKey(reference ref.Reference) string {
 	return ref.ReverseKey(reference)
 }
-func scriptSourceCountKey(source ref.SourceIdentity) string { return ref.CountKey(source) }
-func scriptSourceSuffix(source ref.SourceIdentity) string   { return ref.SourceSuffix(source) }
+func ScriptSourceCountKey(source ref.SourceIdentity) string { return ref.CountKey(source) }
+func ScriptSourceSuffix(source ref.SourceIdentity) string   { return ref.SourceSuffix(source) }
 func scriptSourceMaterializationRecordKey(environmentID string, renderGeneration uint64) string {
 	return scriptSourceMaterializationPrefix + environmentID + "/" + fmt.Sprint(renderGeneration)
 }
 
-func decodeScriptSourceCount(value []byte) (ref.Count, error) {
+func DecodeScriptSourceCount(value []byte) (ref.Count, error) {
 	return recordcodec.Decode[ref.Count](value, "script-source-count")
 }
 func decodeScriptSourcePreparation(value []byte) (ref.Preparation, error) {
 	return recordcodec.Decode[ref.Preparation](value, "script-source-preparation")
 }
-func decodeScriptOperationSourceRoot(value []byte) (ref.OperationSourceRoot, error) {
+func DecodeScriptOperationSourceRoot(value []byte) (ref.OperationSourceRoot, error) {
 	root, err := recordcodec.Decode[ref.OperationSourceRoot](value, "script-operation-source-root")
 	if err != nil || ids.Validate(ids.KindOperation, root.OperationID) != nil || root.MembershipCount == 0 ||
 		!scriptexecutions.ValidLowerSHA256(root.MembershipSHA256) || root.ReleaseCursor > root.MembershipCount {
