@@ -71,7 +71,7 @@ func bindHierarchyDeletionAction(
 		ProcedureKind:        planned.ProcedureInput.Kind,
 	}
 	switch planned.ProcedureInput.Kind {
-	case HierarchyDeletionProcedureAgent:
+	case hierarchydeletion.HierarchyDeletionProcedureAgent:
 		input := planned.ProcedureInput.AgentChild
 		if input == nil || planned.ProcedureInput.ControllerFinalizer != nil {
 			return hierarchydeletion.HierarchyDeletionAction{}, errs.New(
@@ -84,7 +84,7 @@ func bindHierarchyDeletionAction(
 			TaskType:         input.TaskType, TypedProcedure: input.TypedProcedure,
 			InputDigest: input.InputDigest, TimeoutSeconds: input.TimeoutSeconds,
 		}
-	case HierarchyDeletionProcedureController:
+	case hierarchydeletion.HierarchyDeletionProcedureController:
 		input := planned.ProcedureInput.ControllerFinalizer
 		if input == nil || planned.ProcedureInput.AgentChild != nil || input.TargetKind != planned.TargetKind ||
 			input.TargetID != planned.TargetID || input.FixedInputRevision != planned.TargetRevision ||

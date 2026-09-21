@@ -16,7 +16,7 @@ func (repository *HierarchyDeletionRepository) requireHierarchyDeletionDescendan
 	targetID string,
 ) error {
 	switch targetKind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		projects, err := repository.hierarchyDeletionIndexedTargets(
 			ctx,
 			revision,
@@ -45,9 +45,9 @@ func (repository *HierarchyDeletionRepository) requireHierarchyDeletionDescendan
 			}
 		}
 		return nil
-	case hierarchydeletion.HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetProject, hierarchydeletion.HierarchyDeletionTargetBacking:
 		return repository.requireProjectDeletionDescendantsAvailable(ctx, revision, targetID)
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		return nil
 	default:
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion target kind is invalid")

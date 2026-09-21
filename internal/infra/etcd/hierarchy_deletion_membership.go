@@ -96,13 +96,13 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 	}
 	rootFinalizer := ""
 	switch current.Tombstone.OperationKind {
-	case HierarchyDeletionOperationTenant:
+	case hierarchydeletion.HierarchyDeletionOperationTenant:
 		rootFinalizer = "tenant.finalize"
-	case HierarchyDeletionOperationProject:
+	case hierarchydeletion.HierarchyDeletionOperationProject:
 		rootFinalizer = "project.finalize"
-	case HierarchyDeletionOperationEnvironment:
+	case hierarchydeletion.HierarchyDeletionOperationEnvironment:
 		rootFinalizer = "environment.finalize"
-	case HierarchyDeletionOperationBacking:
+	case hierarchydeletion.HierarchyDeletionOperationBacking:
 		rootFinalizer = "backing.finalize"
 		frozen.RootTargetKind = hierarchydeletion.HierarchyDeletionActionTargetKind("backing-service")
 	default:
@@ -120,19 +120,19 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 		frozen.RootRevision, rootDigest,
 	)
 	switch current.Tombstone.TargetKind {
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		frozen.Nodes, err = repository.freezeEnvironmentMembership(
 			ctx, current, current.Tombstone.TargetID, current.Tombstone.TargetRevision, rootDigest,
 		)
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		frozen.Nodes, err = repository.freezeProjectMembership(
 			ctx, current, current.Tombstone.TargetID, true,
 		)
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		frozen.Nodes, err = repository.freezeProjectMembership(
 			ctx, current, current.Tombstone.TargetID, true,
 		)
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		frozen.Nodes, err = repository.freezeTenantMembership(ctx, current)
 	default:
 		err = hierarchydeletion.CorruptHierarchyDeletion()

@@ -18,11 +18,11 @@ func (repository *HierarchyDeletionRepository) requireHierarchyVolumeRemovalAbse
 	ctx context.Context, revision int64, kind hierarchydeletion.HierarchyDeletionTargetKind, targetID string,
 ) error {
 	switch kind {
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		return repository.requireEnvironmentVolumeRemovalAbsent(ctx, revision, targetID)
-	case hierarchydeletion.HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetProject, hierarchydeletion.HierarchyDeletionTargetBacking:
 		return repository.requireProjectVolumeRemovalAbsent(ctx, revision, targetID)
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		projects, err := repository.hierarchyDeletionIndexedTargets(ctx, revision,
 			hierarchyrecord.ProjectTenantOwnerPrefix(targetID), hierarchyrecord.ProjectKey, ids.KindProject,
 			func(value []byte, id, owner string) error {

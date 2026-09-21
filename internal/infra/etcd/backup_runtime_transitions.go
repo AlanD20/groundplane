@@ -170,10 +170,10 @@ func validBackupRunStateTransition(current backupruntime.BackupRunState, next ba
 		return current == backupruntime.BackupRunQueued || current == backupruntime.BackupRunRunning
 	}
 	switch current {
-	case BackupRunQueued:
+	case backupruntime.BackupRunQueued:
 		return next == backupruntime.BackupRunRunning || next == backupruntime.BackupRunFailed || next == backupruntime.BackupRunAborted ||
 			next == backupruntime.BackupRunTimedOut
-	case BackupRunRunning:
+	case backupruntime.BackupRunRunning:
 		return next == backupruntime.BackupRunFailed || next == backupruntime.BackupRunCompleted || next == backupruntime.BackupRunAborted ||
 			next == backupruntime.BackupRunTimedOut
 	default:
@@ -226,29 +226,29 @@ func validBackupSourceTransition(
 			current.State != backupruntime.BackupSourceAttemptOrphaned && next.Phase == current.Phase
 	}
 	switch current.State {
-	case BackupSourceAttemptPending:
+	case backupruntime.BackupSourceAttemptPending:
 		return current.Phase == backupruntime.BackupSourcePhaseCapture &&
 			next.State == backupruntime.BackupSourceAttemptCapturing && next.Phase == current.Phase
-	case BackupSourceAttemptCapturing:
+	case backupruntime.BackupSourceAttemptCapturing:
 		return current.Phase == backupruntime.BackupSourcePhaseCapture &&
 			next.State == backupruntime.BackupSourceAttemptReady && next.Phase == backupruntime.BackupSourcePhaseStaging
-	case BackupSourceAttemptReady:
+	case backupruntime.BackupSourceAttemptReady:
 		return current.Phase == backupruntime.BackupSourcePhaseStaging &&
 			next.State == backupruntime.BackupSourceAttemptStaged && next.Phase == backupruntime.BackupSourcePhaseUpload
-	case BackupSourceAttemptStaged:
+	case backupruntime.BackupSourceAttemptStaged:
 		return next.State == current.State &&
 			((current.Phase == backupruntime.BackupSourcePhaseUpload && next.Phase == backupruntime.BackupSourcePhaseHeadVerification) ||
 				(current.Phase == backupruntime.BackupSourcePhaseHeadVerification && next.Phase == backupruntime.BackupSourcePhasePointCommit))
-	case BackupSourceAttemptOrphaned:
+	case backupruntime.BackupSourceAttemptOrphaned:
 		return next.State == current.State &&
 			((current.Phase == backupruntime.BackupSourcePhaseUpload &&
 				next.Phase == backupruntime.BackupSourcePhaseHeadVerification) ||
 				(current.Phase == backupruntime.BackupSourcePhaseHeadVerification &&
 					next.Phase == backupruntime.BackupSourcePhasePointCommit))
-	case BackupSourceAttemptPointCommitted:
+	case backupruntime.BackupSourceAttemptPointCommitted:
 		return next.State == current.State && next.Phase == current.Phase &&
 			next.FailureCode == backupruntime.BackupFailureRetention
-	case BackupSourceAttemptCleanupPending:
+	case backupruntime.BackupSourceAttemptCleanupPending:
 		return next.Phase == current.Phase && (next.State == backupruntime.BackupSourceAttemptSucceeded ||
 			(next.State == current.State && next.FailureCode == backupruntime.BackupFailureCleanup))
 	default:

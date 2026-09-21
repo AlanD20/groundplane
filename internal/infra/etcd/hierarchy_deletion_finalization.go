@@ -102,13 +102,13 @@ func hierarchyDeletionRootFinalizerMatches(
 	action hierarchydeletion.HierarchyDeletionActionKind,
 ) bool {
 	switch target {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		return action == hierarchydeletion.HierarchyDeletionTenantFinalize
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		return action == hierarchydeletion.HierarchyDeletionProjectFinalize
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		return action == hierarchydeletion.HierarchyDeletionEnvironmentFinalize
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		return action == hierarchydeletion.HierarchyDeletionBackingServiceFinalize
 	default:
 		return false

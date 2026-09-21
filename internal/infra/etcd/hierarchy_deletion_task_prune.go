@@ -219,26 +219,26 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 
 func hierarchyDeletionPrunePrefixes(operationID string, phase hierarchydeletion.HierarchyDeletionPrunePhase) ([]string, error) {
 	switch phase {
-	case HierarchyDeletionPruneReceipts:
+	case hierarchydeletion.HierarchyDeletionPruneReceipts:
 		receipts, err := hierarchydeletion.HierarchyDeletionReceiptPrefix(operationID)
 		if err != nil {
 			return nil, err
 		}
 		successors, err := hierarchydeletion.HierarchyDeletionSuccessorPrefix(operationID)
 		return []string{receipts, successors}, err
-	case HierarchyDeletionPruneProgress:
+	case hierarchydeletion.HierarchyDeletionPruneProgress:
 		prefix, err := hierarchydeletion.HierarchyDeletionProgressPrefix(operationID)
 		return []string{prefix}, err
-	case HierarchyDeletionPruneChildren:
+	case hierarchydeletion.HierarchyDeletionPruneChildren:
 		prefix, err := hierarchydeletion.HierarchyDeletionChildPrefix(operationID)
 		return []string{prefix}, err
-	case HierarchyDeletionPruneActions:
+	case hierarchydeletion.HierarchyDeletionPruneActions:
 		prefix, err := hierarchydeletion.HierarchyDeletionActionPrefix(operationID)
 		return []string{prefix}, err
-	case HierarchyDeletionPruneCompletions:
+	case hierarchydeletion.HierarchyDeletionPruneCompletions:
 		prefix, err := hierarchydeletion.HierarchyDeletionCompletionPrefix(operationID)
 		return []string{prefix}, err
-	case HierarchyDeletionPruneFinal:
+	case hierarchydeletion.HierarchyDeletionPruneFinal:
 		return nil, nil
 	default:
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
@@ -247,15 +247,15 @@ func hierarchyDeletionPrunePrefixes(operationID string, phase hierarchydeletion.
 
 func nextHierarchyDeletionPrunePhase(phase hierarchydeletion.HierarchyDeletionPrunePhase) hierarchydeletion.HierarchyDeletionPrunePhase {
 	switch phase {
-	case HierarchyDeletionPruneReceipts:
+	case hierarchydeletion.HierarchyDeletionPruneReceipts:
 		return hierarchydeletion.HierarchyDeletionPruneProgress
-	case HierarchyDeletionPruneProgress:
+	case hierarchydeletion.HierarchyDeletionPruneProgress:
 		return hierarchydeletion.HierarchyDeletionPruneChildren
-	case HierarchyDeletionPruneChildren:
+	case hierarchydeletion.HierarchyDeletionPruneChildren:
 		return hierarchydeletion.HierarchyDeletionPruneActions
-	case HierarchyDeletionPruneActions:
+	case hierarchydeletion.HierarchyDeletionPruneActions:
 		return hierarchydeletion.HierarchyDeletionPruneCompletions
-	case HierarchyDeletionPruneCompletions:
+	case hierarchydeletion.HierarchyDeletionPruneCompletions:
 		return hierarchydeletion.HierarchyDeletionPruneFinal
 	default:
 		return ""

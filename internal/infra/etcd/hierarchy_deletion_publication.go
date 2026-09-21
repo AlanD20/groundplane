@@ -36,7 +36,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 	}
 	root.targetValue = append([]byte(nil), result.Entry.Value...)
 	switch targetKind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		tenant, decodeErr := hierarchyrecord.DecodeTenant(result.Entry.Value)
 		if decodeErr != nil || tenant.ID != targetID || tenant.DeletionTaskID != "" {
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
@@ -45,7 +45,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "tenant", TenantID: tenant.ID}
 		root.owner, err = taskjournal.TenantTaskOwner(tenant.ID)
 		root.coordinationKeys = []string{hierarchydeletion.HierarchyCoordinationKey(string(targetKind), targetID)}
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		project, decodeErr := hierarchyrecord.DecodeProject(result.Entry.Value)
 		if decodeErr != nil || project.ID != targetID || project.DeletionTaskID != "" {
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
@@ -61,7 +61,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		if project.TenantID != "" {
 			root, err = repository.readProjectParentAtRevision(ctx, result.ReadRevision, project, root)
 		}
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		project, decodeErr := hierarchyrecord.DecodeProject(result.Entry.Value)
 		if decodeErr != nil || project.ID != targetID || project.Kind != hierarchyrecord.ProjectKindBacking ||
 			project.TenantID != "" || project.DeletionTaskID != "" {
@@ -71,7 +71,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "platform"}
 		root.owner, err = taskjournal.ProjectTaskOwner(project)
 		root.coordinationKeys = []string{hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), targetID)}
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		environment, decodeErr := hierarchyrecord.DecodeEnvironment(result.Entry.Value)
 		if decodeErr != nil || environment.ID != targetID || environment.DeletionTaskID != "" {
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
@@ -361,28 +361,28 @@ func hierarchyDeletionRootValue(
 	taskID string,
 ) ([]byte, error) {
 	switch targetKind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		record, err := hierarchyrecord.DecodeTenant(value)
 		if err != nil || record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
 		}
 		record.DeletionTaskID = taskID
 		return hierarchyrecord.EncodeTenant(record)
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
 		}
 		record.DeletionTaskID = taskID
 		return hierarchyrecord.EncodeProject(record)
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.Kind != hierarchyrecord.ProjectKindBacking || record.TenantID != "" || record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
 		}
 		record.DeletionTaskID = taskID
 		return hierarchyrecord.EncodeProject(record)
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		record, err := hierarchyrecord.DecodeEnvironment(value)
 		if err != nil || record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
@@ -396,13 +396,13 @@ func hierarchyDeletionRootValue(
 
 func hierarchyDeletionPrimaryKey(kind hierarchydeletion.HierarchyDeletionTargetKind, id string) string {
 	switch kind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		return hierarchyrecord.TenantKey(id)
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		return hierarchyrecord.ProjectKey(id)
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		return hierarchyrecord.ProjectKey(id)
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		return hierarchyrecord.EnvironmentKey(id)
 	default:
 		return ""
@@ -411,13 +411,13 @@ func hierarchyDeletionPrimaryKey(kind hierarchydeletion.HierarchyDeletionTargetK
 
 func hierarchyDeletionNotFound(kind hierarchydeletion.HierarchyDeletionTargetKind) error {
 	switch kind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		return errs.New(errs.KindTenantNotFound, "Tenant was not found")
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		return errs.New(errs.KindProjectNotFound, "Project was not found")
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		return errs.New(errs.KindBackingServiceNotFound, "Backing service was not found")
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		return errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
 	default:
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion target kind is invalid")
@@ -431,13 +431,13 @@ func hierarchyDeletionUnavailable(kind hierarchydeletion.HierarchyDeletionTarget
 func hierarchyDeletionStableID(kind hierarchydeletion.HierarchyDeletionTargetKind, value string) bool {
 	var expected ids.Kind
 	switch kind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		expected = ids.KindTenant
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		expected = ids.KindProject
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		expected = ids.KindProject
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		expected = ids.KindEnvironment
 	}
 	return expected != "" && ids.Validate(expected, value) == nil

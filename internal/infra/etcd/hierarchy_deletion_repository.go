@@ -92,7 +92,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		return HierarchyDeletionTargetResolution{}, err
 	}
 	switch requested {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		if err := recordcodec.ValidateID(ids.KindTenant, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
@@ -101,7 +101,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			ScopeKind:  idempotencyrecord.IdempotencyScopeTenant,
 			ScopeID:    targetID,
 		}, nil
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		project, err := getRecord(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
 			hierarchyrecord.DecodeProject, func(record hierarchyrecord.ProjectRecord) string { return record.ID })
 		if err != nil {
@@ -124,7 +124,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			ScopeKind:  idempotencyrecord.IdempotencyScopeTenant,
 			ScopeID:    project.Record.TenantID,
 		}, nil
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		if err := recordcodec.ValidateID(ids.KindProject, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
@@ -144,7 +144,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			ScopeKind:  idempotencyrecord.IdempotencyScopePlatform,
 			ScopeID:    "-",
 		}, nil
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		if err := recordcodec.ValidateID(ids.KindEnvironment, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}

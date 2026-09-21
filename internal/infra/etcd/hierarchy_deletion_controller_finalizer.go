@@ -109,35 +109,35 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionControlle
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	switch action.ActionKind {
-	case HierarchyDeletionReleaseGroupRemove:
+	case hierarchydeletion.HierarchyDeletionReleaseGroupRemove:
 		return repository.prepareHierarchyDeletionReleaseGroupFinalizer(ctx, action)
-	case HierarchyDeletionServiceRemove:
+	case hierarchydeletion.HierarchyDeletionServiceRemove:
 		return repository.prepareHierarchyDeletionServiceFinalizer(ctx, action)
-	case HierarchyDeletionEntryRemove:
+	case hierarchydeletion.HierarchyDeletionEntryRemove:
 		return repository.prepareHierarchyDeletionEntryFinalizer(ctx, action)
-	case HierarchyDeletionRouteRemove:
+	case hierarchydeletion.HierarchyDeletionRouteRemove:
 		return repository.prepareHierarchyDeletionRouteFinalizer(ctx, action)
-	case HierarchyDeletionComponentRemove:
+	case hierarchydeletion.HierarchyDeletionComponentRemove:
 		return repository.prepareHierarchyDeletionComponentFinalizer(ctx, action)
-	case HierarchyDeletionScriptRemove:
+	case hierarchydeletion.HierarchyDeletionScriptRemove:
 		return repository.prepareHierarchyDeletionScriptFinalizer(ctx, action)
-	case HierarchyDeletionZoneRemove:
+	case hierarchydeletion.HierarchyDeletionZoneRemove:
 		return repository.prepareHierarchyDeletionZoneFinalizer(ctx, operation, action)
-	case HierarchyDeletionConnectorFinalize:
+	case hierarchydeletion.HierarchyDeletionConnectorFinalize:
 		return repository.prepareHierarchyDeletionConnectorFinalizer(ctx, action)
-	case HierarchyDeletionProjectSecretRemove:
+	case hierarchydeletion.HierarchyDeletionProjectSecretRemove:
 		return repository.prepareHierarchyDeletionSecretFinalizer(ctx, action)
-	case HierarchyDeletionReservationRelease:
+	case hierarchydeletion.HierarchyDeletionReservationRelease:
 		return repository.prepareHierarchyDeletionReservationFinalizer(ctx, action)
-	case HierarchyDeletionRunnerLocalRemove:
+	case hierarchydeletion.HierarchyDeletionRunnerLocalRemove:
 		return repository.prepareHierarchyDeletionRunnerFinalizer(ctx, action)
-	case HierarchyDeletionEnvironmentFinalize:
+	case hierarchydeletion.HierarchyDeletionEnvironmentFinalize:
 		return repository.prepareHierarchyDeletionEnvironmentFinalizer(ctx, operation, action)
-	case HierarchyDeletionProjectFinalize:
+	case hierarchydeletion.HierarchyDeletionProjectFinalize:
 		return repository.prepareHierarchyDeletionProjectFinalizer(ctx, action)
-	case HierarchyDeletionTenantFinalize:
+	case hierarchydeletion.HierarchyDeletionTenantFinalize:
 		return repository.prepareHierarchyDeletionTenantFinalizer(ctx, action)
-	case HierarchyDeletionBackingServiceFinalize:
+	case hierarchydeletion.HierarchyDeletionBackingServiceFinalize:
 		return repository.prepareHierarchyDeletionProjectFinalizer(ctx, action)
 	default:
 		return hierarchyDeletionControllerEffects{}, errs.Newf(

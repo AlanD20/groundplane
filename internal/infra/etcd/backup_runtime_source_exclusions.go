@@ -35,11 +35,11 @@ func backupRunExclusionRecords(
 	}
 	for _, source := range run.Sources {
 		switch source.Kind {
-		case BackupRuntimeSourceAttach:
+		case backupruntime.BackupRuntimeSourceAttach:
 			if err := add(backupruntime.BackupSourceTargetAttach, source.TargetID); err != nil {
 				return nil, err
 			}
-		case BackupRuntimeSourceVolume:
+		case backupruntime.BackupRuntimeSourceVolume:
 			if err := add(backupruntime.BackupSourceTargetVolume, source.TargetID); err != nil {
 				return nil, err
 			}

@@ -244,11 +244,11 @@ func backupTerminalExclusionKeys(
 	for _, source := range sources {
 		var kind backupruntime.BackupSourceTargetKind
 		switch source.Kind {
-		case BackupRuntimeSourceAttach:
+		case backupruntime.BackupRuntimeSourceAttach:
 			kind = backupruntime.BackupSourceTargetAttach
-		case BackupRuntimeSourceVolume:
+		case backupruntime.BackupRuntimeSourceVolume:
 			kind = backupruntime.BackupSourceTargetVolume
-		case BackupRuntimeSourceConfig:
+		case backupruntime.BackupRuntimeSourceConfig:
 			continue
 		default:
 			return nil, errs.New(errs.KindInternal, "backup terminal source kind is invalid")

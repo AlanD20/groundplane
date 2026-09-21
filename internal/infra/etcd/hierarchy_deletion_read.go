@@ -44,25 +44,25 @@ func (repository *HierarchyDeletionRepository) GetDeletionTaskIDAtRevision(
 	}
 	var taskID string
 	switch targetKind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		record, decodeErr := hierarchyrecord.DecodeTenant(stored.Values[0].Value)
 		if decodeErr != nil || record.ID != targetID {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		taskID = record.DeletionTaskID
-	case HierarchyDeletionTargetProject:
+	case hierarchydeletion.HierarchyDeletionTargetProject:
 		record, decodeErr := hierarchyrecord.DecodeProject(stored.Values[0].Value)
 		if decodeErr != nil || record.ID != targetID {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		taskID = record.DeletionTaskID
-	case HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		record, decodeErr := hierarchyrecord.DecodeProject(stored.Values[0].Value)
 		if decodeErr != nil || record.ID != targetID || record.Kind != hierarchyrecord.ProjectKindBacking || record.TenantID != "" {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		taskID = record.DeletionTaskID
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		record, decodeErr := hierarchyrecord.DecodeEnvironment(stored.Values[0].Value)
 		if decodeErr != nil || record.ID != targetID {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()

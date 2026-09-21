@@ -143,7 +143,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			return nil, nil, err
 		}
 		switch source.Kind {
-		case BackupRuntimeSourceAttach:
+		case backupruntime.BackupRuntimeSourceAttach:
 			snapshot := source.Snapshot.Postgres
 			read, readErr := repository.readFixedKeys(ctx, []string{
 				attachrecord.AttachKey(source.TargetID),
@@ -183,7 +183,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 					return nil, nil, err
 				}
 			}
-		case BackupRuntimeSourceVolume:
+		case backupruntime.BackupRuntimeSourceVolume:
 			snapshot := source.Snapshot.Volume
 			keys := []string{
 				hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID),
@@ -232,7 +232,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 					return nil, nil, err
 				}
 			}
-		case BackupRuntimeSourceConfig:
+		case backupruntime.BackupRuntimeSourceConfig:
 			snapshot := source.Snapshot.Config
 			if retrySource != nil {
 				configConditions, configMutations, retryErr := repository.prepareBackupRetryConfigReferences(

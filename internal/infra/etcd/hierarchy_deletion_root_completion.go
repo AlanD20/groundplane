@@ -152,19 +152,19 @@ func (repository *HierarchyDeletionRepository) validateHierarchyDeletionRootProj
 	defer clear(read.Entry.Value)
 	deletionTaskID := ""
 	switch operation.Tombstone.TargetKind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		record, decodeErr := hierarchyrecord.DecodeTenant(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
 			return hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		deletionTaskID = record.DeletionTaskID
-	case hierarchydeletion.HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetProject, hierarchydeletion.HierarchyDeletionTargetBacking:
 		record, decodeErr := hierarchyrecord.DecodeProject(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
 			return hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		deletionTaskID = record.DeletionTaskID
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		record, decodeErr := hierarchyrecord.DecodeEnvironment(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
 			return hierarchydeletion.CorruptHierarchyDeletion()

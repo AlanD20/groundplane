@@ -41,7 +41,7 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt source is invalid")
 			}
 			switch source.Kind {
-			case backupruntime.BackupRuntimeSourceAttach, backupruntime.BackupRuntimeSourceVolume, BackupRuntimeSourceConfig:
+			case backupruntime.BackupRuntimeSourceAttach, backupruntime.BackupRuntimeSourceVolume, backupruntime.BackupRuntimeSourceConfig:
 			default:
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt source kind is invalid")
 			}

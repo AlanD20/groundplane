@@ -68,18 +68,18 @@ func backupRunSourcePlanSnapshotEqual(
 	capture *agentpb.BackupSourceCapture,
 ) bool {
 	switch source.Kind {
-	case BackupRuntimeSourceAttach:
+	case backupruntime.BackupRuntimeSourceAttach:
 		snapshot := source.Snapshot.Postgres
 		attach := capture.GetAttach()
 		return snapshot != nil && attach != nil &&
 			attach.BackingServiceId == snapshot.BackingServiceID &&
 			attach.BackingServiceRevision == uint64(snapshot.BackingServiceRevision) &&
 			attach.Database == snapshot.Database && attach.Role == snapshot.Role
-	case BackupRuntimeSourceConfig:
+	case backupruntime.BackupRuntimeSourceConfig:
 		snapshot := source.Snapshot.Config
 		config := capture.GetConfig()
 		return snapshot != nil && config != nil && config.SnapshotRevision == uint64(snapshot.ReadRevision)
-	case BackupRuntimeSourceVolume:
+	case backupruntime.BackupRuntimeSourceVolume:
 		snapshot := source.Snapshot.Volume
 		volume := capture.GetVolume()
 		if snapshot == nil || volume == nil || len(volume.Services) != len(snapshot.Services) {
@@ -101,11 +101,11 @@ func backupRunSourcePlanSnapshotEqual(
 
 func backupPlanSourceFormat(value backupruntime.BackupRuntimeFormat) agentpb.BackupSourceFormat {
 	switch value {
-	case BackupRuntimeFormatPostgres:
+	case backupruntime.BackupRuntimeFormatPostgres:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1
-	case BackupRuntimeFormatConfig:
+	case backupruntime.BackupRuntimeFormatConfig:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1
-	case BackupRuntimeFormatVolume:
+	case backupruntime.BackupRuntimeFormatVolume:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1
 	default:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_UNSPECIFIED
@@ -114,9 +114,9 @@ func backupPlanSourceFormat(value backupruntime.BackupRuntimeFormat) agentpb.Bac
 
 func backupPlanEncryption(value backupruntime.BackupRuntimeEncryption) agentpb.BackupEncryption {
 	switch value {
-	case BackupRuntimeEncryptionNone:
+	case backupruntime.BackupRuntimeEncryptionNone:
 		return agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE
-	case BackupRuntimeEncryptionAge:
+	case backupruntime.BackupRuntimeEncryptionAge:
 		return agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE
 	default:
 		return agentpb.BackupEncryption_BACKUP_ENCRYPTION_UNSPECIFIED
@@ -125,11 +125,11 @@ func backupPlanEncryption(value backupruntime.BackupRuntimeEncryption) agentpb.B
 
 func backupPlanServiceIntent(value backupruntime.BackupServiceRuntimeIntent) agentpb.BackupServiceRuntimeIntent {
 	switch value {
-	case BackupServiceIntentRunning:
+	case backupruntime.BackupServiceIntentRunning:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING
-	case BackupServiceIntentStopped:
+	case backupruntime.BackupServiceIntentStopped:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_STOPPED
-	case BackupServiceIntentAbsent:
+	case backupruntime.BackupServiceIntentAbsent:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_ABSENT
 	default:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_UNSPECIFIED

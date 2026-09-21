@@ -386,19 +386,19 @@ func validateBackupPruneTaskBinding(
 
 func backupFailureCodeForPhase(phase backupruntime.BackupSourceAttemptPhase) (backupruntime.BackupFailureCode, error) {
 	switch phase {
-	case BackupSourcePhaseCapture:
+	case backupruntime.BackupSourcePhaseCapture:
 		return backupruntime.BackupFailureCapture, nil
-	case BackupSourcePhaseStaging:
+	case backupruntime.BackupSourcePhaseStaging:
 		return backupruntime.BackupFailureStaging, nil
-	case BackupSourcePhaseUpload:
+	case backupruntime.BackupSourcePhaseUpload:
 		return backupruntime.BackupFailureUpload, nil
-	case BackupSourcePhaseHeadVerification:
+	case backupruntime.BackupSourcePhaseHeadVerification:
 		return backupruntime.BackupFailureHeadVerification, nil
-	case BackupSourcePhasePointCommit:
+	case backupruntime.BackupSourcePhasePointCommit:
 		return backupruntime.BackupFailurePointCommit, nil
-	case BackupSourcePhaseCleanup:
+	case backupruntime.BackupSourcePhaseCleanup:
 		return backupruntime.BackupFailureCleanup, nil
-	case BackupSourcePhaseRetention:
+	case backupruntime.BackupSourcePhaseRetention:
 		return backupruntime.BackupFailureRetention, nil
 	default:
 		return "", errs.New(errs.KindInternal, "backup source phase is corrupt")

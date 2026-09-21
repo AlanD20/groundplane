@@ -391,7 +391,7 @@ func validateEnvironmentMutationFenceOwner(owner environmentMutationFenceOwner) 
 		backupruntime.BackupOperationRestore,
 		backupruntime.BackupOperationRotation,
 		backupruntime.BackupOperationPrune,
-		BackupOperationDeletion:
+		backupruntime.BackupOperationDeletion:
 	default:
 		return errs.New(
 			errs.KindValidationFailed,

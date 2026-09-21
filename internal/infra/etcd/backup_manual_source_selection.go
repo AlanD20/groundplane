@@ -36,7 +36,7 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 		Phase:                  backupruntime.BackupSourcePhaseCapture,
 	}
 	switch attempt.Kind {
-	case BackupRuntimeSourceAttach:
+	case backupruntime.BackupRuntimeSourceAttach:
 		return repository.prepareManualPostgresSource(
 			ctx,
 			attempt,
@@ -44,9 +44,9 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 			fixedRevision,
 			resolvePostgres,
 		)
-	case BackupRuntimeSourceVolume:
+	case backupruntime.BackupRuntimeSourceVolume:
 		return repository.prepareManualVolumeSource(ctx, attempt, run.EnvironmentID, fixedRevision)
-	case BackupRuntimeSourceConfig:
+	case backupruntime.BackupRuntimeSourceConfig:
 		if run.Encryption != backupruntime.BackupRuntimeEncryptionAge || source.TargetID != run.EnvironmentID {
 			return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 				errs.KindStateConflict, "config backup source requires age encryption",

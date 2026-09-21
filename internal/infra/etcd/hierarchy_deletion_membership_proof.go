@@ -61,29 +61,29 @@ func terminalHierarchyDeletionNodes(nodes []HierarchyDeletionMembershipNode) []s
 
 func hierarchyDeletionAgentProcedure(action hierarchydeletion.HierarchyDeletionActionKind) string {
 	return map[hierarchydeletion.HierarchyDeletionActionKind]string{
-		HierarchyDeletionAttachGrantRevoke: "attach.grant-revoke", HierarchyDeletionAttachDetach: "attach.detach",
-		HierarchyDeletionEnvironmentAgentCleanup: "environment.cleanup",
-		HierarchyDeletionMaterializationRemove:   "materialization.remove",
-		HierarchyDeletionNetworkRemove:           "network.remove", HierarchyDeletionRecoveryPointRemove: "recovery-point.remove",
-		HierarchyDeletionOrphanObjectRemove:        "orphan-object.remove",
-		HierarchyDeletionBackingRuntimeReconstruct: "backing.runtime-reconstruct",
+		hierarchydeletion.HierarchyDeletionAttachGrantRevoke: "attach.grant-revoke", hierarchydeletion.HierarchyDeletionAttachDetach: "attach.detach",
+		hierarchydeletion.HierarchyDeletionEnvironmentAgentCleanup: "environment.cleanup",
+		hierarchydeletion.HierarchyDeletionMaterializationRemove:   "materialization.remove",
+		hierarchydeletion.HierarchyDeletionNetworkRemove:           "network.remove", hierarchydeletion.HierarchyDeletionRecoveryPointRemove: "recovery-point.remove",
+		hierarchydeletion.HierarchyDeletionOrphanObjectRemove:        "orphan-object.remove",
+		hierarchydeletion.HierarchyDeletionBackingRuntimeReconstruct: "backing.runtime-reconstruct",
 	}[action]
 }
 
 func hierarchyDeletionControllerFinalizer(action hierarchydeletion.HierarchyDeletionActionKind) string {
 	return map[hierarchydeletion.HierarchyDeletionActionKind]string{
-		HierarchyDeletionServiceRemove:   "service.remove",
-		HierarchyDeletionEntryRemove:     "entry.remove",
-		HierarchyDeletionRouteRemove:     "route.remove",
-		HierarchyDeletionComponentRemove: "component.remove",
-		HierarchyDeletionScriptRemove:    "script.remove", HierarchyDeletionReleaseGroupRemove: "release-group.remove",
-		HierarchyDeletionReleaseFinalize: "release.finalize", HierarchyDeletionBackupPolicyFinalize: "backup-policy.finalize",
-		HierarchyDeletionKeyMaterialRemove:  "key-material.remove",
-		HierarchyDeletionZoneRemove:         "zone.remove",
-		HierarchyDeletionReservationRelease: "reservation.release", HierarchyDeletionConnectorFinalize: "connector.finalize",
-		HierarchyDeletionEnvironmentFinalize: "environment.finalize", HierarchyDeletionRunnerLocalRemove: "runner.remove",
-		HierarchyDeletionProjectSecretRemove: "secret.remove", HierarchyDeletionBackingServiceFinalize: "backing.finalize",
-		HierarchyDeletionProjectFinalize: "project.finalize", HierarchyDeletionTenantFinalize: "tenant.finalize",
+		hierarchydeletion.HierarchyDeletionServiceRemove:   "service.remove",
+		hierarchydeletion.HierarchyDeletionEntryRemove:     "entry.remove",
+		hierarchydeletion.HierarchyDeletionRouteRemove:     "route.remove",
+		hierarchydeletion.HierarchyDeletionComponentRemove: "component.remove",
+		hierarchydeletion.HierarchyDeletionScriptRemove:    "script.remove", hierarchydeletion.HierarchyDeletionReleaseGroupRemove: "release-group.remove",
+		hierarchydeletion.HierarchyDeletionReleaseFinalize: "release.finalize", hierarchydeletion.HierarchyDeletionBackupPolicyFinalize: "backup-policy.finalize",
+		hierarchydeletion.HierarchyDeletionKeyMaterialRemove:  "key-material.remove",
+		hierarchydeletion.HierarchyDeletionZoneRemove:         "zone.remove",
+		hierarchydeletion.HierarchyDeletionReservationRelease: "reservation.release", hierarchydeletion.HierarchyDeletionConnectorFinalize: "connector.finalize",
+		hierarchydeletion.HierarchyDeletionEnvironmentFinalize: "environment.finalize", hierarchydeletion.HierarchyDeletionRunnerLocalRemove: "runner.remove",
+		hierarchydeletion.HierarchyDeletionProjectSecretRemove: "secret.remove", hierarchydeletion.HierarchyDeletionBackingServiceFinalize: "backing.finalize",
+		hierarchydeletion.HierarchyDeletionProjectFinalize: "project.finalize", hierarchydeletion.HierarchyDeletionTenantFinalize: "tenant.finalize",
 	}[action]
 }
 

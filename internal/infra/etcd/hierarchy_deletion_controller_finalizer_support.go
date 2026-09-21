@@ -40,21 +40,21 @@ func (repository *HierarchyDeletionRepository) readHierarchyDeletionPrimary(
 
 func hierarchyDeletionOriginalRootValue(action hierarchydeletion.HierarchyDeletionAction, value []byte) ([]byte, error) {
 	switch action.ActionKind {
-	case HierarchyDeletionTenantFinalize:
+	case hierarchydeletion.HierarchyDeletionTenantFinalize:
 		record, err := hierarchyrecord.DecodeTenant(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = ""
 		return hierarchyrecord.EncodeTenant(record)
-	case hierarchydeletion.HierarchyDeletionProjectFinalize, HierarchyDeletionBackingServiceFinalize:
+	case hierarchydeletion.HierarchyDeletionProjectFinalize, hierarchydeletion.HierarchyDeletionBackingServiceFinalize:
 		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = ""
 		return hierarchyrecord.EncodeProject(record)
-	case HierarchyDeletionEnvironmentFinalize:
+	case hierarchydeletion.HierarchyDeletionEnvironmentFinalize:
 		record, err := hierarchyrecord.DecodeEnvironment(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()

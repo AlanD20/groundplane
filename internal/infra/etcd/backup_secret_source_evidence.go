@@ -55,7 +55,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 	step *agentpb.BackupSourceCapture,
 ) error {
 	switch source.Kind {
-	case BackupRuntimeSourceAttach:
+	case backupruntime.BackupRuntimeSourceAttach:
 		snapshot := source.Snapshot.Postgres
 		if snapshot == nil {
 			return errs.New(errs.KindInternal, "postgres backup source snapshot is corrupt")
@@ -68,7 +68,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.BackingEnvironmentID)]],
 		}
 		return validateBackupPostgresPublicationEvidence(keys, source, *snapshot)
-	case BackupRuntimeSourceVolume:
+	case backupruntime.BackupRuntimeSourceVolume:
 		snapshot := source.Snapshot.Volume
 		if snapshot == nil {
 			return errs.New(errs.KindInternal, "volume backup source snapshot is corrupt")
@@ -84,7 +84,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			keys = append(keys, result.Values[dynamic.index[servicerecord.ServiceRuntimeKey(service.ServiceID)]])
 		}
 		return validateBackupVolumePublicationEvidence(keys, source, *snapshot)
-	case BackupRuntimeSourceConfig:
+	case backupruntime.BackupRuntimeSourceConfig:
 		snapshot := source.Snapshot.Config
 		config := step.GetConfig()
 		if snapshot == nil || config == nil || snapshot.ConfigSnapshotID != run.TaskID ||

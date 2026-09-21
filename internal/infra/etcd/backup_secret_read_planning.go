@@ -116,7 +116,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 	if evidence.Run != nil {
 		source := evidence.Run.Sources[stepIndex]
 		switch source.Kind {
-		case BackupRuntimeSourceAttach:
+		case backupruntime.BackupRuntimeSourceAttach:
 			snapshot := source.Snapshot.Postgres
 			if snapshot == nil {
 				return "", nil, nil, errs.New(errs.KindInternal, "postgres backup source snapshot is corrupt")
@@ -126,7 +126,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			dynamic.add(hierarchyrecord.ProjectKey(snapshot.BackingProjectID))
 			dynamic.add(hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID))
 			dynamic.add(environmentBlueprintHeadKey(snapshot.BackingEnvironmentID))
-		case BackupRuntimeSourceVolume:
+		case backupruntime.BackupRuntimeSourceVolume:
 			snapshot := source.Snapshot.Volume
 			if snapshot == nil {
 				return "", nil, nil, errs.New(errs.KindInternal, "volume backup source snapshot is corrupt")
@@ -136,7 +136,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			for _, service := range snapshot.Services {
 				dynamic.add(servicerecord.ServiceRuntimeKey(service.ServiceID))
 			}
-		case BackupRuntimeSourceConfig:
+		case backupruntime.BackupRuntimeSourceConfig:
 			if source.Snapshot.Config == nil {
 				return "", nil, nil, errs.New(errs.KindInternal, "config backup source snapshot is corrupt")
 			}

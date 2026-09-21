@@ -232,21 +232,21 @@ func hierarchyDeletionRetryTargetValue(
 	retryTaskID string,
 ) ([]byte, error) {
 	switch kind {
-	case HierarchyDeletionTargetTenant:
+	case hierarchydeletion.HierarchyDeletionTargetTenant:
 		record, err := hierarchyrecord.DecodeTenant(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = retryTaskID
 		return hierarchyrecord.EncodeTenant(record)
-	case hierarchydeletion.HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
+	case hierarchydeletion.HierarchyDeletionTargetProject, hierarchydeletion.HierarchyDeletionTargetBacking:
 		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = retryTaskID
 		return hierarchyrecord.EncodeProject(record)
-	case HierarchyDeletionTargetEnvironment:
+	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		record, err := hierarchyrecord.DecodeEnvironment(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()

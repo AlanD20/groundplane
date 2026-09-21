@@ -352,11 +352,11 @@ func validateHierarchyDeletionAgentTerminal(
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion Agent terminal proof is invalid")
 	}
 	switch proof.Terminal {
-	case HierarchyDeletionAgentCompleted:
+	case hierarchydeletion.HierarchyDeletionAgentCompleted:
 		if !hierarchydeletion.ValidHierarchyDeletionDigest(proof.ResultDigest) || proof.ErrorDigest != "" {
 			return errs.New(errs.KindValidationFailed, "completed hierarchy deletion proof is invalid")
 		}
-	case hierarchydeletion.HierarchyDeletionAgentFailed, hierarchydeletion.HierarchyDeletionAgentAborted, HierarchyDeletionAgentTimedOut:
+	case hierarchydeletion.HierarchyDeletionAgentFailed, hierarchydeletion.HierarchyDeletionAgentAborted, hierarchydeletion.HierarchyDeletionAgentTimedOut:
 		if !hierarchydeletion.ValidHierarchyDeletionDigest(proof.ErrorDigest) || proof.ResultDigest != "" {
 			return errs.New(errs.KindValidationFailed, "failed hierarchy deletion proof is invalid")
 		}
