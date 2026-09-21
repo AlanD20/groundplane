@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -86,7 +87,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	if err := validateZoneRemovalTaskOwner(retry, retryIntent); err != nil {
 		return backingZoneTaskChange{}, err
 	}
-	hierarchy := &HierarchyRepository{store: repository.store}
+	hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx,
 		retryIntent.Claim,

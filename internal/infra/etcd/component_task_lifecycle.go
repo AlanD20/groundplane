@@ -48,7 +48,7 @@ func componentTaskDesiredProjectionZones(
 	if ids.Validate(ids.KindTask, desiredRevisionID) != nil {
 		return "", nil, errs.New(errs.KindStateConflict, "Component Task desired revision is invalid")
 	}
-	hierarchy := &HierarchyRepository{store: store}
+	hierarchy := &HierarchyRepository{store: store, ProjectionReader: environmentqueries.NewProjectionReader(store)}
 	projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(
 		ctx, intent.EnvironmentID, desiredRevisionID,
 	)

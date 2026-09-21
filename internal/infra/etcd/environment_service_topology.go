@@ -33,7 +33,7 @@ func (repository *ServiceRepository) GetServiceRevision(
 	revisionID string,
 	serviceID string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
-	hierarchy := &HierarchyRepository{store: repository.store}
+	hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 	projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 	if err != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,6 +23,7 @@ type hierarchyStore interface {
 
 // HierarchyRepository owns durable Tenant, Project, and Environment persistence.
 type HierarchyRepository struct {
+	*environmentqueries.ProjectionReader
 	store hierarchyStore
 }
 
@@ -47,7 +49,7 @@ func newHierarchyRepository(store hierarchyStore) (*HierarchyRepository, error) 
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "hierarchy store is required")
 	}
-	return &HierarchyRepository{store: store}, nil
+	return &HierarchyRepository{store: store, ProjectionReader: environmentqueries.NewProjectionReader(store)}, nil
 }
 
 func newEnvironmentBlueprintRepository(

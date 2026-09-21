@@ -1,4 +1,4 @@
-package etcd
+package environmentqueries
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-func (repository *HierarchyRepository) ListEnvironmentAppliedComposeProjections(
+func (repository *ProjectionReader) ListEnvironmentAppliedComposeProjections(
 	ctx context.Context,
 ) ([]etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -67,7 +67,7 @@ func (repository *HierarchyRepository) ListEnvironmentAppliedComposeProjections(
 // GetEnvironmentAppliedComposeProjection returns the mutable projection last
 // acknowledged by the runtime. It is distinct from the immutable desired
 // Blueprint head returned by GetEnvironmentComposeProjection.
-func (repository *HierarchyRepository) GetEnvironmentAppliedComposeProjection(
+func (repository *ProjectionReader) GetEnvironmentAppliedComposeProjection(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {

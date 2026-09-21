@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -143,7 +144,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		return routeTaskChange{}, err
 	}
 	change.conditions = append(change.conditions, scriptConditions...)
-	hierarchy := &HierarchyRepository{store: repository.store}
+	hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx,
 		intent.Claim,

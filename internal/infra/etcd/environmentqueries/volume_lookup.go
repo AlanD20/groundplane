@@ -1,4 +1,4 @@
-package etcd
+package environmentqueries
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // FindEnvironmentVolume resolves a stable Volume id from the sole published
 // desired-state authority. The MVP deliberately prefers a bounded sequential
 // head scan over a second synchronously writable identity authority.
-func (repository *HierarchyRepository) FindEnvironmentVolume(
+func (repository *ProjectionReader) FindEnvironmentVolume(
 	ctx context.Context,
 	volumeID string,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], projectionrecord.EnvironmentVolumeIdentity, error) {

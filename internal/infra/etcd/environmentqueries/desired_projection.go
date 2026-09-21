@@ -1,4 +1,4 @@
-package etcd
+package environmentqueries
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 // GetEnvironmentZoneRemovalAuthorities reads both authorities required to
 // fence a Zone removal. Each returned revision belongs to its own etcd key.
-func (repository *HierarchyRepository) GetEnvironmentZoneRemovalAuthorities(
+func (repository *ProjectionReader) GetEnvironmentZoneRemovalAuthorities(
 	ctx context.Context,
 	environmentID string,
 ) (environmentchanges.EnvironmentZoneRemovalAuthorities, bool, error) {
@@ -35,7 +35,7 @@ func (repository *HierarchyRepository) GetEnvironmentZoneRemovalAuthorities(
 	return environmentchanges.EnvironmentZoneRemovalAuthorities{Desired: desired, Applied: applied}, true, nil
 }
 
-func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
+func (repository *ProjectionReader) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
@@ -90,7 +90,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 // GetEnvironmentComposeProjectionRevision resolves one immutable published
 // revision directly. Task execution uses this method and never substitutes the
 // Environment's newer current head as render input.
-func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
+func (repository *ProjectionReader) GetEnvironmentComposeProjectionRevision(
 	ctx context.Context,
 	environmentID string,
 	revisionID string,

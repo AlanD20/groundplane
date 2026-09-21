@@ -108,7 +108,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 			{Type: etcdstore.MutationDelete, Key: keys[6]},
 		}, nil
 	}
-	hierarchy := &HierarchyRepository{store: repository.store}
+	hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx, intent.Claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},

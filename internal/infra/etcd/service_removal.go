@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -183,7 +184,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		indexes.Values[1].ModRevision != projection.Revision {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Service removal baseline changed")
 	}
-	hierarchy := &HierarchyRepository{store: repository.store}
+	hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx, intent.Claim,
 		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},

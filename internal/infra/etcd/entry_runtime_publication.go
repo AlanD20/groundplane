@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -172,7 +173,7 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 		return taskMaterializationProjectionChange{}, err
 	}
 	revisionID := terminal.Params[blueprints.EnvironmentDesiredRevisionParam]
-	hierarchy := &HierarchyRepository{store: repository.store}
+	hierarchy := &HierarchyRepository{store: repository.store, ProjectionReader: environmentqueries.NewProjectionReader(repository.store)}
 	candidate, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(ctx, terminal.Target, revisionID)
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
