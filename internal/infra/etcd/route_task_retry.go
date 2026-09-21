@@ -5,6 +5,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -70,7 +71,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 			"Route desired projection is unavailable for removal retry",
 		)
 	}
-	route, err := routeAtProjection(
+	route, err := environmentqueries.RouteAtProjection(
 		ctx,
 		repository.store,
 		*intent.CurrentProjection,
@@ -207,7 +208,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	intent environmentchanges.RouteRemovalIntent,
 	revision int64,
 ) (*etcdstore.GetManyResult, []string, error) {
-	service, err := findServiceAtRevision(ctx, repository.store, route.Desired.TargetServiceID, revision)
+	service, err := environmentqueries.FindServiceAtRevision(ctx, repository.store, route.Desired.TargetServiceID, revision)
 	if err != nil || service.Record.EnvironmentID != route.EnvironmentID {
 		return nil, nil, errs.New(errs.KindResourceInUse, "Route retry target Service is unavailable")
 	}

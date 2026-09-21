@@ -1,4 +1,4 @@
-package etcd
+package environmentqueries
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func findRouteAtRevision(
+func FindRouteAtRevision(
 	ctx context.Context,
-	store hierarchyStore,
+	store snapshotReader,
 	routeID string,
 	revision int64,
 ) (etcdstore.Versioned[routerecord.Record], error) {
@@ -26,7 +26,7 @@ func findRouteAtRevision(
 	var matched *etcdstore.Versioned[routerecord.Record]
 	for {
 		page, err := store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start,
+			Prefix: EnvironmentDesiredHeadScanPrefix, StartExclusive: start,
 			Limit: 200, Revision: fixedRevision,
 		})
 		if err != nil {
@@ -45,7 +45,7 @@ func findRouteAtRevision(
 				continue
 			}
 			environmentID := strings.TrimSuffix(
-				strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix),
+				strings.TrimPrefix(value.Key, EnvironmentDesiredHeadScanPrefix),
 				"/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
@@ -93,9 +93,9 @@ func findRouteAtRevision(
 	return *matched, nil
 }
 
-func listRoutesFromDesiredHead(
+func ListRoutes(
 	ctx context.Context,
-	store hierarchyStore,
+	store snapshotReader,
 	environmentID string,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[routerecord.Record], error) {
@@ -143,9 +143,9 @@ func listRoutesFromDesiredHead(
 	return etcdstore.Page[routerecord.Record]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
 }
 
-func routeAtProjection(
+func RouteAtProjection(
 	ctx context.Context,
-	store hierarchyStore,
+	store snapshotReader,
 	projection projectionrecord.EnvironmentComposeProjection,
 	projectionRevision int64,
 	readRevision int64,

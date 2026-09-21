@@ -7,6 +7,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -297,7 +298,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 	if err != nil || tenant.ID != project.TenantID || tenant.DeletionTaskID != "" {
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script Tenant is not runnable")
 	}
-	service, err := findServiceAtRevision(ctx, repository.store, metadata.ServiceID, revision)
+	service, err := environmentqueries.FindServiceAtRevision(ctx, repository.store, metadata.ServiceID, revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
@@ -468,7 +469,7 @@ func resolveScriptExecutionNetworks(
 ) ([]etcdstore.Versioned[zonerecord.Record], error) {
 	networks := make([]etcdstore.Versioned[zonerecord.Record], len(projection.Record.DesiredZones))
 	for index, desired := range projection.Record.DesiredZones {
-		joined, err := joinEnvironmentZone(projection, desired)
+		joined, err := environmentqueries.JoinZone(projection, desired)
 		if err != nil {
 			return nil, errs.New(errs.KindStateConflict, "Script network source changed")
 		}

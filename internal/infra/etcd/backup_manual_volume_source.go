@@ -5,6 +5,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -77,7 +78,7 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 	sort.Strings(serviceIDs)
 	result := make([]backupruntime.BackupVolumeServiceSnapshot, 0)
 	for _, serviceID := range serviceIDs {
-		service, serviceErr := findServiceAtRevision(ctx, repository.store, serviceID, fixedRevision)
+		service, serviceErr := environmentqueries.FindServiceAtRevision(ctx, repository.store, serviceID, fixedRevision)
 		if serviceErr != nil || service.Record.EnvironmentID != environmentID {
 			return nil, errs.New(errs.KindStateConflict, "Volume consumer Service evidence changed")
 		}

@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -81,7 +82,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		!environmentchanges.SameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected projection changed")
 	}
-	if _, err := routeAtProjection(ctx, repository.store, projection.Record, projection.Revision, revision, intent.RouteID); err != nil {
+	if _, err := environmentqueries.RouteAtProjection(ctx, repository.store, projection.Record, projection.Revision, revision, intent.RouteID); err != nil {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected Route changed")
 	}
 

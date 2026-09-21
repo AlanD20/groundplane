@@ -6,6 +6,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -177,7 +178,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	if found {
 		selectedZones = make(map[string]etcdstore.Versioned[zonerecord.Record], len(selected.Record.DesiredZones))
 		for _, desired := range selected.Record.DesiredZones {
-			zone, joinErr := joinEnvironmentZone(selected, desired)
+			zone, joinErr := environmentqueries.JoinZone(selected, desired)
 			if joinErr != nil {
 				return ComponentTaskPreparation{}, joinErr
 			}
@@ -194,7 +195,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	}
 	desiredZones := make(map[string]etcdstore.Versioned[zonerecord.Record], len(desired.Record.DesiredZones))
 	for _, item := range desired.Record.DesiredZones {
-		zone, joinErr := joinEnvironmentZone(desired, item)
+		zone, joinErr := environmentqueries.JoinZone(desired, item)
 		if joinErr != nil {
 			return ComponentTaskPreparation{}, joinErr
 		}

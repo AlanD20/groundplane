@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -53,7 +54,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		return scriptTaskChange{}, errs.New(errs.KindStateConflict, "Script is not available for deletion retry")
 	}
 	record := storage.Script.Record
-	service, err := findServiceAtRevision(ctx, repository.store, record.ServiceID, revision)
+	service, err := environmentqueries.FindServiceAtRevision(ctx, repository.store, record.ServiceID, revision)
 	if err != nil || service.Record.EnvironmentID != record.EnvironmentID {
 		return scriptTaskChange{}, errs.New(errs.KindResourceInUse, "Script target Service is unavailable")
 	}

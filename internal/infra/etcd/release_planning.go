@@ -8,6 +8,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -223,7 +224,7 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 		if loaded.Values[base] != nil {
 			return nil, errs.New(errs.KindResourceInUse, "release service ownership changed or is deleting")
 		}
-		service, serviceErr := findServiceAtRevision(ctx, ledger.store, serviceID, scope.ReadRevision)
+		service, serviceErr := environmentqueries.FindServiceAtRevision(ctx, ledger.store, serviceID, scope.ReadRevision)
 		if serviceErr != nil {
 			return nil, serviceErr
 		}

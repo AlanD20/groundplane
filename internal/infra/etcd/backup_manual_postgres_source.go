@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -60,7 +61,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	}
 	project, projectErr := hierarchyrecord.DecodeProject(backingRead.Values[0].Value)
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(backingRead.Values[1].Value)
-	service, serviceErr := findServiceAtRevision(ctx, repository.store, attach.BackingServiceID, fixedRevision)
+	service, serviceErr := environmentqueries.FindServiceAtRevision(ctx, repository.store, attach.BackingServiceID, fixedRevision)
 	if projectErr != nil || environmentErr != nil || serviceErr != nil || project.Kind != hierarchyrecord.ProjectKindBacking ||
 		environment.ProjectID != project.ID ||
 		environment.ID != attach.BackingEnvironmentID ||

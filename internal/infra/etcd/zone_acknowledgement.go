@@ -6,6 +6,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -248,7 +249,7 @@ func projectedZoneRemovalTarget(intent environmentchanges.ZoneRemovalIntent, rea
 		if matched != nil {
 			return zonerecord.Record{}, errs.New(errs.KindInternal, "Zone removal projection has duplicate target")
 		}
-		joined, err := joinEnvironmentZone(projection, desired)
+		joined, err := environmentqueries.JoinZone(projection, desired)
 		if err != nil {
 			return zonerecord.Record{}, err
 		}

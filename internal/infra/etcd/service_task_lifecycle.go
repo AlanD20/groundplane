@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -29,7 +30,7 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	if !isServiceLifecycleTask(source) {
 		return serviceTaskChange{}, nil
 	}
-	service, err := findServiceAtRevision(ctx, repository.store, source.Target, readRevision)
+	service, err := environmentqueries.FindServiceAtRevision(ctx, repository.store, source.Target, readRevision)
 	if err != nil {
 		return serviceTaskChange{}, err
 	}

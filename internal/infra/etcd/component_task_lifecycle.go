@@ -7,6 +7,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -64,7 +65,7 @@ func componentTaskDesiredProjectionZones(
 	}
 	projected := make(map[string]zonerecord.Record, len(projection.Record.DesiredZones))
 	for _, desired := range projection.Record.DesiredZones {
-		zone, joinErr := joinEnvironmentZone(projection, desired)
+		zone, joinErr := environmentqueries.JoinZone(projection, desired)
 		if joinErr != nil {
 			return "", nil, joinErr
 		}

@@ -1,4 +1,4 @@
-package etcd
+package environmentqueries
 
 import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -6,7 +6,7 @@ import (
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 )
 
-func joinEnvironmentZone(
+func JoinZone(
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	desired projectionrecord.EnvironmentZoneProjection,
 ) (etcdstore.Versioned[zonerecord.Record], error) {

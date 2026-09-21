@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -98,7 +99,7 @@ func resolveScriptAttachNetworks(
 			if zone.Desired.ID != attach.BackingNetworkID {
 				continue
 			}
-			network, err := joinEnvironmentZone(projection, zone)
+			network, err := environmentqueries.JoinZone(projection, zone)
 			if err != nil {
 				return ScriptAttachSources{}, err
 			}

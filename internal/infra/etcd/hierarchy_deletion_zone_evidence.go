@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -73,7 +74,7 @@ func hierarchyDeletionZoneEvidenceAtRevision(
 	var matched *hierarchyDeletionZoneEvidence
 	for {
 		page, err := store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start,
+			Prefix: environmentqueries.EnvironmentDesiredHeadScanPrefix, StartExclusive: start,
 			Limit: 200, Revision: snapshotRevision,
 		})
 		if err != nil {
@@ -89,7 +90,7 @@ func hierarchyDeletionZoneEvidenceAtRevision(
 				continue
 			}
 			environmentID := strings.TrimSuffix(
-				strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix), "/current",
+				strings.TrimPrefix(value.Key, environmentqueries.EnvironmentDesiredHeadScanPrefix), "/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 				return hierarchyDeletionZoneEvidence{}, nil, hierarchydeletion.CorruptHierarchyDeletion()

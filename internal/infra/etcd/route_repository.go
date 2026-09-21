@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -95,7 +96,7 @@ func (repository *RouteRepository) GetRoute(ctx context.Context, id string) (etc
 	if err := recordcodec.ValidateID(ids.KindRoute, id); err != nil {
 		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
-	return findRouteAtRevision(ctx, repository.store, id, 0)
+	return environmentqueries.FindRouteAtRevision(ctx, repository.store, id, 0)
 }
 
 func (repository *RouteRepository) ListRoutes(
@@ -106,7 +107,7 @@ func (repository *RouteRepository) ListRoutes(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return etcdstore.Page[routerecord.Record]{}, err
 	}
-	return listRoutesFromDesiredHead(ctx, repository.store, environmentID, request)
+	return environmentqueries.ListRoutes(ctx, repository.store, environmentID, request)
 }
 
 // SnapshotRevision returns one truthful MVCC view for a multi-collection
