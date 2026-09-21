@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -160,7 +161,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	}
 	routes := make([]HierarchyDeletionMembershipNode, 0, len(projection.Record.DesiredRoutes))
 	if projection.Revision != 0 {
-		digest, digestErr := EnvironmentBlueprintDependencyDigest(projection.Record)
+		digest, digestErr := blueprints.EnvironmentBlueprintDependencyDigest(projection.Record)
 		if digestErr != nil {
 			return nil, digestErr
 		}

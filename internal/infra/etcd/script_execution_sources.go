@@ -426,20 +426,20 @@ func loadScriptExecutionDesiredProjection(
 		selectedRevisionID = headRevisionID
 	}
 	rootValue, err := scriptExecutionValueAt(
-		ctx, store, environmentBlueprintRootKey(environmentID, selectedRevisionID), revision,
+		ctx, store, blueprints.EnvironmentBlueprintRootKey(environmentID, selectedRevisionID), revision,
 	)
 	if err != nil {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, err
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(rootValue.Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(rootValue.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != selectedRevisionID {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{},
 			projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	keys := make([]string, int(seal.ProjectionChunks))
 	for index := range keys {
-		keys[index] = environmentBlueprintChunkKeyFor(
-			environmentID, selectedRevisionID, EnvironmentBlueprintChunkProjection, uint32(index),
+		keys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(
+			environmentID, selectedRevisionID, blueprints.EnvironmentBlueprintChunkProjection, uint32(index),
 		)
 	}
 	stream, readRevision, err := (&HierarchyRepository{store: store}).readEnvironmentBlueprintStreamAtRevision(

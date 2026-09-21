@@ -8,6 +8,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -111,7 +112,7 @@ func (service *serviceMutationService) createServiceOnce(
 		ctx, environment, project, nil,
 		servicerecord.ServiceRecord{EnvironmentID: input.EnvironmentID, Desired: desired},
 		etcd.ServiceMutationReferences{},
-		serviceMutationAuditFromCreate(input), etcd.EnvironmentServiceMutationCreate,
+		serviceMutationAuditFromCreate(input), blueprints.EnvironmentServiceMutationCreate,
 		http.StatusCreated, locator, evidence,
 	)
 }
@@ -196,7 +197,7 @@ func (service *serviceMutationService) editServiceOnce(
 	}
 	return service.publishServiceDesiredMutation(
 		ctx, environment, project, &current, replacement, references,
-		serviceMutationAuditFromEdit(input), etcd.EnvironmentServiceMutationEdit,
+		serviceMutationAuditFromEdit(input), blueprints.EnvironmentServiceMutationEdit,
 		http.StatusOK, locator, evidence,
 	)
 }

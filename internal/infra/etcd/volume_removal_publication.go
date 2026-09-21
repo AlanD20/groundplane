@@ -33,7 +33,7 @@ type volumeRemovalInitialPublication struct {
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemovalWithTask(
 	ctx context.Context,
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord], environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	expectedHeadRevision int64, claim EnvironmentBlueprintStageClaim,
+	expectedHeadRevision int64, claim blueprints.EnvironmentBlueprintStageClaim,
 	projection projectionrecord.EnvironmentComposeProjection, policy VolumeRemovalBackupPolicyPreparation,
 	initial removalrecord.InitialPublication, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -45,7 +45,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemova
 		environment,
 		expectedHeadRevision,
 		claim,
-		EnvironmentDesiredRevisionIdentity{EnvironmentID: claim.EnvironmentID, RevisionID: claim.RevisionID},
+		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: claim.EnvironmentID, RevisionID: claim.RevisionID},
 		projection,
 		nil,
 		nil,
@@ -68,7 +68,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemova
 func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 	ctx context.Context,
 	initial removalrecord.InitialPublication,
-	claim EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -79,7 +79,7 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 	if err != nil {
 		return volumeRemovalInitialPublication{}, err
 	}
-	if claim.SourceKind != EnvironmentBlueprintSourceMutation || runtime.VolumeID != removedVolumeID ||
+	if claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || runtime.VolumeID != removedVolumeID ||
 		runtime.EnvironmentID != projection.EnvironmentID || runtime.DesiredRevisionID != projection.RevisionID ||
 		runtime.DesiredGeneration != uint64(projection.RenderGeneration) {
 		return volumeRemovalInitialPublication{}, errs.New(

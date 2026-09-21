@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -262,7 +263,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
-			Key:         environmentBlueprintRootKey(current.Record.EnvironmentID, renderInput.DesiredRevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(current.Record.EnvironmentID, renderInput.DesiredRevisionID),
 			ModRevision: scope.ComposeProjection.Revision,
 		},
 	}

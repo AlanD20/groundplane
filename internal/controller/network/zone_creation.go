@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -37,12 +38,12 @@ type zoneCreationRepository interface {
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
-		etcd.EnvironmentBlueprintStageClaimRequest,
-	) (etcd.EnvironmentBlueprintStageClaim, error)
+		blueprints.EnvironmentBlueprintStageClaimRequest,
+	) (blueprints.EnvironmentBlueprintStageClaim, error)
 	StageEnvironmentBlueprintRevision(
 		context.Context,
-		etcd.EnvironmentBlueprintStageRequest,
-	) (etcd.EnvironmentBlueprintSeal, error)
+		blueprints.EnvironmentBlueprintStageRequest,
+	) (blueprints.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentZoneDesiredRevisionDirect(
 		context.Context,
 		etcd.EnvironmentZoneDesiredPublication,
@@ -287,7 +288,7 @@ func (service *zoneCreationService) createZoneOnce(
 			return service.idempotency.MatchesStaged(matchContext, evidence, existing)
 		},
 		BaselineHeadRevision: projection.Revision,
-		SourceKind:           etcd.EnvironmentBlueprintSourceMutation,
+		SourceKind:           blueprints.EnvironmentBlueprintSourceMutation,
 		RenderGeneration:     projection.Record.RenderGeneration + 1,
 		CreatedAt:            createdAt,
 	})
@@ -321,12 +322,12 @@ func (service *zoneCreationService) createZoneOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
-		Mutation: &etcd.EnvironmentDesiredMutationAudit{Zone: &etcd.EnvironmentZoneMutationAudit{
-			Action: etcd.EnvironmentZoneMutationCreate, BaseRevisionID: projection.Record.RevisionID,
+		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Zone: &blueprints.EnvironmentZoneMutationAudit{
+			Action: blueprints.EnvironmentZoneMutationCreate, BaseRevisionID: projection.Record.RevisionID,
 			ZoneID: record.Desired.ID,
-			Request: &etcd.EnvironmentZoneMutationRequest{
+			Request: &blueprints.EnvironmentZoneMutationRequest{
 				EnvironmentID: input.EnvironmentID, Name: input.Name, Subnet: input.Subnet, Internal: input.Internal,
 			},
 		}},
@@ -358,7 +359,7 @@ func (service *zoneCreationService) createZoneOnce(
 		etcd.EnvironmentZoneDesiredPublication{
 			Project: project, Environment: environment, ExpectedHeadRevision: projection.Revision,
 			Claim: claim,
-			Revision: etcd.EnvironmentDesiredRevisionIdentity{
+			Revision: blueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: environment.Record.ID, RevisionID: claim.RevisionID,
 			},
 			Projection: candidate, Zone: record, Marker: marker,

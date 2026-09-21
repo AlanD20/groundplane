@@ -131,7 +131,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	hierarchy := &HierarchyRepository{store: repository.store}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx, intent.Claim,
-		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
 		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.DesiredHeadRevision,
@@ -179,7 +179,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		{
-			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
@@ -428,7 +428,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	hierarchy := &HierarchyRepository{store: repository.store}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx, intent.Claim,
-		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
 		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.DesiredHeadRevision,
@@ -492,7 +492,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), intent.EnvironmentID)},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), zone.Record.Desired.OwnerID)},
 		{
-			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},

@@ -301,7 +301,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	keys := []string{
 		releases.ReleasePublicationKey(publicationID),
 		releases.ReleaseManifestStagingKey(publicationID),
-		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
+		blueprints.EnvironmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -322,9 +322,9 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	if _, err := validateReleaseCandidateMarker(task, marker, manifest); err != nil {
 		return releases.CorruptReleaseRecord()
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(read.Values[2].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(read.Values[2].Value)
 	if err != nil || seal.EnvironmentID != task.Owner.EnvironmentID ||
-		seal.RevisionID != desiredRevisionID || seal.SourceKind != EnvironmentBlueprintSourceApply ||
+		seal.RevisionID != desiredRevisionID || seal.SourceKind != blueprints.EnvironmentBlueprintSourceApply ||
 		seal.RenderGeneration != uint64(task.RenderGeneration) {
 		return releases.CorruptReleaseRecord()
 	}
@@ -505,7 +505,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	}
 	desiredRevisionID := source.Params[blueprints.EnvironmentDesiredRevisionParam]
 	rootRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{environmentBlueprintRootKey(source.Owner.EnvironmentID, desiredRevisionID)},
+		Keys:     []string{blueprints.EnvironmentBlueprintRootKey(source.Owner.EnvironmentID, desiredRevisionID)},
 		Revision: revision,
 	})
 	if err != nil || rootRead == nil || len(rootRead.Values) != 1 || rootRead.Values[0] == nil {
@@ -514,7 +514,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		}
 		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}

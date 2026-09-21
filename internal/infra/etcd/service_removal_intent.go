@@ -33,7 +33,7 @@ type ServiceRemovalIntent struct {
 	RuntimeRevision           int64                                         `json:"runtime_revision"`
 	CurrentProjectionRevision int64                                         `json:"current_projection_revision"`
 	ExpectedHeadRevision      int64                                         `json:"expected_head_revision"`
-	Claim                     EnvironmentBlueprintStageClaim                `json:"claim"`
+	Claim                     blueprints.EnvironmentBlueprintStageClaim     `json:"claim"`
 	CurrentProjection         projectionrecord.EnvironmentComposeProjection `json:"current_projection"`
 	CandidateProjection       projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
 	Status                    taskjournal.TaskStatus                        `json:"status"`
@@ -46,7 +46,7 @@ func NewServiceRemovalIntent(
 	service etcdstore.Versioned[servicerecord.ServiceRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	expectedHeadRevision int64,
-	claim EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 	candidate projectionrecord.EnvironmentComposeProjection,
 	createdAt time.Time,
 ) (ServiceRemovalIntent, error) {
@@ -131,11 +131,11 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		intent.RuntimeRevision < 0 ||
 		intent.CurrentProjectionRevision <= 0 ||
 		intent.ExpectedHeadRevision <= 0 ||
-		validateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
+		blueprints.ValidateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
 		intent.Claim.EnvironmentID != intent.EnvironmentID ||
 		intent.Claim.RevisionID != intent.Claim.TaskID ||
 		intent.Claim.BaselineHeadRevision != intent.ExpectedHeadRevision ||
-		intent.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+		intent.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CurrentProjection.RevisionID == intent.CandidateProjection.RevisionID ||

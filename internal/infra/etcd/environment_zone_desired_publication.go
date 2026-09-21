@@ -25,8 +25,8 @@ type EnvironmentZoneDesiredPublication struct {
 	Project              etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	Environment          etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	ExpectedHeadRevision int64
-	Claim                EnvironmentBlueprintStageClaim
-	Revision             EnvironmentDesiredRevisionIdentity
+	Claim                blueprints.EnvironmentBlueprintStageClaim
+	Revision             blueprints.EnvironmentDesiredRevisionIdentity
 	Projection           projectionrecord.EnvironmentComposeProjection
 	Zone                 zonerecord.Record
 	Marker               idempotencyrecord.IdempotencyMarker
@@ -108,7 +108,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 
 	conditions := []etcdstore.Condition{
 		{
-			Key:         environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
@@ -181,7 +181,7 @@ func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPubli
 		input.Environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		input.Environment.Record.ProjectID != input.Project.Record.ID ||
 		input.Zone.EnvironmentID != input.Environment.Record.ID || input.ExpectedHeadRevision <= 0 ||
-		input.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+		input.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		input.Revision.EnvironmentID != input.Environment.Record.ID ||
 		input.Revision.RevisionID != input.Claim.RevisionID || input.Claim.TaskID != input.Claim.RevisionID ||
 		input.Projection.EnvironmentID != input.Revision.EnvironmentID ||

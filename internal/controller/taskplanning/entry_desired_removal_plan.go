@@ -36,7 +36,7 @@ func NewEntryRemovalPlanner(
 // PrepareDesiredEntryRemoval pins cleanup from applied state while binding its
 // terminal metadata change to the already claimed desired revision.
 func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
-	ctx context.Context, task etcd.TaskRecord, claim etcd.EnvironmentBlueprintStageClaim,
+	ctx context.Context, task etcd.TaskRecord, claim blueprints.EnvironmentBlueprintStageClaim,
 ) (etcd.TaskRecord, error) {
 	if planner == nil || planner.hierarchy == nil || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindEnvEntry, task.Target) != nil || task.ID != claim.TaskID ||

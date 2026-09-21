@@ -133,7 +133,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 				return "", nil, nil, errs.New(errs.KindInternal, "volume backup source snapshot is corrupt")
 			}
 			dynamic.add(blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID))
-			dynamic.add(environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID))
+			dynamic.add(blueprints.EnvironmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID))
 			for _, service := range snapshot.Services {
 				dynamic.add(servicerecord.ServiceRuntimeKey(service.ServiceID))
 			}

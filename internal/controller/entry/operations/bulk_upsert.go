@@ -6,6 +6,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -167,7 +168,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 				return service.idempotency.MatchesStaged(ctx, evidence, existing)
 			},
 			BaselineHeadRevision: headRevision,
-			SourceKind:           etcd.EnvironmentBlueprintSourceMutation,
+			SourceKind:           blueprints.EnvironmentBlueprintSourceMutation,
 			RenderGeneration:     generation,
 			CreatedAt:            now,
 		},
@@ -268,26 +269,26 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	audits := make([]etcd.EnvironmentEntryMutationAudit, len(candidateRecords.changes))
+	audits := make([]blueprints.EnvironmentEntryMutationAudit, len(candidateRecords.changes))
 	for index, change := range candidateRecords.changes {
-		action := etcd.EnvironmentEntryMutationCreate
+		action := blueprints.EnvironmentEntryMutationCreate
 		if change.previous != nil {
-			action = etcd.EnvironmentEntryMutationEdit
+			action = blueprints.EnvironmentEntryMutationEdit
 		}
 		record := change.record
 		if record.Entry.Source.Kind == core.SourceLiteral {
 			record.Entry.Source.Literal = ""
 		}
-		audits[index] = etcd.EnvironmentEntryMutationAudit{
+		audits[index] = blueprints.EnvironmentEntryMutationAudit{
 			Action:         action,
 			BaseRevisionID: current.Record.RevisionID,
 			EntryID:        record.Entry.ID,
 			Record:         &record,
 		}
 	}
-	if _, err := service.desired.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	if _, err := service.desired.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim:            claim,
-		Mutation:         &etcd.EnvironmentDesiredMutationAudit{Entries: audits},
+		Mutation:         &blueprints.EnvironmentDesiredMutationAudit{Entries: audits},
 		Projection:       candidate,
 		DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
@@ -295,7 +296,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	}
 	result, publicationErr := service.desired.repository.PublishEnvironmentDesiredRevisionWithTask(
 		ctx, project, environment, headRevision, claim,
-		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.environmentID, RevisionID: claim.RevisionID},
+		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: input.environmentID, RevisionID: claim.RevisionID},
 		candidate, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
 	)

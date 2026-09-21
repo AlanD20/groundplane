@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -163,7 +164,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
-			Key:         environmentBlueprintRootKey(record.EnvironmentID, renderInput.DesiredRevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(record.EnvironmentID, renderInput.DesiredRevisionID),
 			ModRevision: scope.ComposeProjection.Revision,
 		},
 	}

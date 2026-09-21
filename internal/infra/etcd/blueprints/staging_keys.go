@@ -1,4 +1,4 @@
-package etcd
+package blueprints
 
 import (
 	"crypto/sha256"
@@ -10,22 +10,22 @@ import (
 	"strings"
 )
 
-func environmentBlueprintDescriptorKeyByID(descriptorID string) string {
+func EnvironmentBlueprintDescriptorKeyByID(descriptorID string) string {
 	return EnvironmentBlueprintDescriptorPrefix + recordcodec.EncodeKeySegment(descriptorID)
 }
 
-func environmentBlueprintRootKey(environmentID string, revisionID string) string {
-	return environmentBlueprintRevisionPrefixFinal(environmentID, revisionID) + "root"
+func EnvironmentBlueprintRootKey(environmentID string, revisionID string) string {
+	return EnvironmentBlueprintRevisionPrefixFinal(environmentID, revisionID) + "root"
 }
 
-func environmentBlueprintChunkKeyFor(environmentID, revisionID string, family uint8, index uint32) string {
+func EnvironmentBlueprintChunkKeyFor(environmentID, revisionID string, family uint8, index uint32) string {
 	familyName := "audit"
 	if family == EnvironmentBlueprintChunkProjection {
 		familyName = "projection"
 	}
 	sequence := make([]byte, 4)
 	binary.BigEndian.PutUint32(sequence, index)
-	return environmentBlueprintRevisionPrefixFinal(environmentID, revisionID) +
+	return EnvironmentBlueprintRevisionPrefixFinal(environmentID, revisionID) +
 		"chunks/" + familyName + "/" + encodeBlueprintDynamicBytes(sequence)
 }
 
@@ -34,15 +34,15 @@ func environmentBlueprintChunkKey(environmentID, revisionID, family string, inde
 	if family == "projection" {
 		familyID = EnvironmentBlueprintChunkProjection
 	}
-	return environmentBlueprintChunkKeyFor(environmentID, revisionID, familyID, uint32(index))
+	return EnvironmentBlueprintChunkKeyFor(environmentID, revisionID, familyID, uint32(index))
 }
 
-func environmentBlueprintRevisionPrefixFinal(environmentID, revisionID string) string {
+func EnvironmentBlueprintRevisionPrefixFinal(environmentID, revisionID string) string {
 	return environmentBlueprintRevisionRoot + recordcodec.EncodeKeySegment(environmentID) + "/" +
 		recordcodec.EncodeKeySegment(revisionID) + "/"
 }
 
-func environmentBlueprintLocatorKey(locator idempotencyrecord.IdempotencyLocator) (string, [sha256.Size]byte, error) {
+func EnvironmentBlueprintLocatorKey(locator idempotencyrecord.IdempotencyLocator) (string, [sha256.Size]byte, error) {
 	if _, err := idempotencyrecord.IdempotencyMarkerKey(locator); err != nil {
 		return "", [sha256.Size]byte{}, err
 	}
@@ -79,13 +79,13 @@ func encodeBlueprintDynamicBytes(value []byte) string {
 	return "~" + base64.RawURLEncoding.EncodeToString(value)
 }
 
-func decodeBlueprintDynamicBytes(segment string) ([]byte, error) {
+func DecodeBlueprintDynamicBytes(segment string) ([]byte, error) {
 	if !strings.HasPrefix(segment, "~") || len(segment) == 1 {
-		return nil, corruptEnvironmentBlueprintStage()
+		return nil, CorruptEnvironmentBlueprintStage()
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(segment[1:])
 	if err != nil || encodeBlueprintDynamicBytes(decoded) != segment {
-		return nil, corruptEnvironmentBlueprintStage()
+		return nil, CorruptEnvironmentBlueprintStage()
 	}
 	return decoded, nil
 }

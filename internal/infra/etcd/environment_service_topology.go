@@ -45,7 +45,7 @@ func (repository *ServiceRepository) GetServiceRevision(
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 	}
 	return servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, serviceID,
-		environmentBlueprintRootKey(environmentID, revisionID))
+		blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID))
 }
 
 func (repository *ServiceRepository) GetServiceByName(

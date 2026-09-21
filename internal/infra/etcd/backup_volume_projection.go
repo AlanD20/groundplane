@@ -298,7 +298,7 @@ func loadBackupVolumeProjectionEvidence(
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	fixedRevision = headRead.ReadRevision
-	rootKey := environmentBlueprintRootKey(environmentID, revisionID)
+	rootKey := blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID)
 	rootRead, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{rootKey}, Revision: fixedRevision})
 	if err != nil {
 		return backupVolumeProjectionEvidence{}, err
@@ -308,7 +308,7 @@ func loadBackupVolumeProjectionEvidence(
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	defer clearKeyValues(rootRead.Values)
-	seal, err := decodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
@@ -324,11 +324,11 @@ func loadBackupVolumeProjectionEvidence(
 		projection.Record.RenderGeneration != seal.RenderGeneration {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
-	projectionDigest, _, err := EnvironmentBlueprintProjectionEvidence(projection.Record)
+	projectionDigest, _, err := blueprints.EnvironmentBlueprintProjectionEvidence(projection.Record)
 	if err != nil || projectionDigest != seal.ProjectionSHA256 {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
-	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection.Record)
+	dependencyDigest, err := blueprints.EnvironmentBlueprintDependencyDigest(projection.Record)
 	if err != nil || dependencyDigest != seal.DependencyDigest {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}

@@ -29,12 +29,12 @@ type serviceMutationRepository interface {
 	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
-		etcd.EnvironmentBlueprintStageClaimRequest,
-	) (etcd.EnvironmentBlueprintStageClaim, error)
+		blueprints.EnvironmentBlueprintStageClaimRequest,
+	) (blueprints.EnvironmentBlueprintStageClaim, error)
 	StageEnvironmentBlueprintRevision(
 		context.Context,
-		etcd.EnvironmentBlueprintStageRequest,
-	) (etcd.EnvironmentBlueprintSeal, error)
+		blueprints.EnvironmentBlueprintStageRequest,
+	) (blueprints.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentServiceDesiredRevisionDirect(
 		context.Context,
 		etcd.EnvironmentServiceDesiredPublication,
@@ -131,15 +131,15 @@ func (repository *MutationRepository) ListZones(
 
 func (repository *MutationRepository) ClaimEnvironmentBlueprintStage(
 	ctx context.Context,
-	request etcd.EnvironmentBlueprintStageClaimRequest,
-) (etcd.EnvironmentBlueprintStageClaim, error) {
+	request blueprints.EnvironmentBlueprintStageClaimRequest,
+) (blueprints.EnvironmentBlueprintStageClaim, error) {
 	return repository.desired.ClaimEnvironmentBlueprintStage(ctx, request)
 }
 
 func (repository *MutationRepository) StageEnvironmentBlueprintRevision(
 	ctx context.Context,
-	request etcd.EnvironmentBlueprintStageRequest,
-) (etcd.EnvironmentBlueprintSeal, error) {
+	request blueprints.EnvironmentBlueprintStageRequest,
+) (blueprints.EnvironmentBlueprintSeal, error) {
 	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
 }
 

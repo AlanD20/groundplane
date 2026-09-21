@@ -30,13 +30,13 @@ func desiredRevisionTaskEnvironment(task TaskRecord) (string, bool, error) {
 }
 
 func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
-	ctx context.Context, claim EnvironmentBlueprintStageClaim, candidate projectionrecord.EnvironmentComposeProjection,
+	ctx context.Context, claim blueprints.EnvironmentBlueprintStageClaim, candidate projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord, removed preparedDesiredScriptRemoval, revision int64,
 ) (entryDesiredRemovalPublication, error) {
 	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil {
 		return entryDesiredRemovalPublication{}, nil
 	}
-	if claim.SourceKind != EnvironmentBlueprintSourceMutation || len(removed.entryIDs) != 1 ||
+	if claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || len(removed.entryIDs) != 1 ||
 		removed.entryIDs[0] != task.Target || removed.volumeID != "" {
 		return entryDesiredRemovalPublication{}, errs.New(
 			errs.KindValidationFailed,
@@ -65,7 +65,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 	keys := []string{projectionrecord.EnvironmentComposeProjectionStorageKey(claim.EnvironmentID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), task.Target), entryRemovalIntentKey(task.ID),
 		componentTaskActiveEnvironmentKey(claim.EnvironmentID), taskjournal.TaskMaterializationWriterKey(claim.EnvironmentID),
-		environmentBlueprintDescriptorKeyByID(claim.DescriptorID)}
+		blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return entryDesiredRemovalPublication{}, err
@@ -129,23 +129,23 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 	if read.Values[5] == nil {
 		clear(tombstone)
 		clear(intentValue)
-		return entryDesiredRemovalPublication{}, corruptEnvironmentBlueprintStage()
+		return entryDesiredRemovalPublication{}, blueprints.CorruptEnvironmentBlueprintStage()
 	}
-	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(read.Values[5].Value)
-	if err != nil || descriptor.State != EnvironmentBlueprintStageSealed ||
-		!sameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) {
+	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(read.Values[5].Value)
+	if err != nil || descriptor.State != blueprints.EnvironmentBlueprintStageSealed ||
+		!blueprints.SameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) {
 		clear(tombstone)
 		clear(intentValue)
-		return entryDesiredRemovalPublication{}, corruptEnvironmentBlueprintStage()
+		return entryDesiredRemovalPublication{}, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	descriptor.UpdatedAt = nextBlueprintProgressTime(descriptor.UpdatedAt)
-	descriptorValue, err := encodeEnvironmentBlueprintStageDescriptor(descriptor)
+	descriptorValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)
 	if err != nil {
 		clear(tombstone)
 		clear(intentValue)
 		return entryDesiredRemovalPublication{}, err
 	}
-	locatorKey, _, err := environmentBlueprintLocatorKey(claim.Locator)
+	locatorKey, _, err := blueprints.EnvironmentBlueprintLocatorKey(claim.Locator)
 	if err != nil {
 		clear(tombstone)
 		clear(intentValue)
@@ -165,7 +165,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 			{Type: etcdstore.MutationPut, Key: keys[3], Value: []byte(task.ID)},
 			{Type: etcdstore.MutationPut, Key: keys[5], Value: descriptorValue}}, writer...),
 		deferred: map[string]bool{blueprints.EnvironmentBlueprintHeadKey(claim.EnvironmentID): true,
-			environmentBlueprintDescriptorKeyByID(claim.DescriptorID): true, locatorKey: true}}, nil
+			blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID): true, locatorKey: true}}, nil
 }
 
 func entryRemovalControllerWriter(task TaskRecord) ([]etcdstore.Mutation, error) {

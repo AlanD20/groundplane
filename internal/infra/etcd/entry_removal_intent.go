@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -42,10 +43,10 @@ type EntryRemovalDesiredRevision struct {
 }
 
 func NewDesiredEntryRemovalIntent(
-	entryID, baseRevisionID string, claim EnvironmentBlueprintStageClaim,
+	entryID, baseRevisionID string, claim blueprints.EnvironmentBlueprintStageClaim,
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 ) (EntryRemovalIntent, error) {
-	if err := validateEnvironmentBlueprintStageClaim(claim); err != nil {
+	if err := blueprints.ValidateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return EntryRemovalIntent{}, err
 	}
 	intent, err := NewEntryRemovalIntent(claim.TaskID, claim.EnvironmentID, entryID,

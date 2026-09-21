@@ -189,7 +189,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			keys := []string{
 				hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID),
 				blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID),
-				environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
+				blueprints.EnvironmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
 			}
 			for _, service := range snapshot.Services {
 				keys = append(keys, servicerecord.ServiceRuntimeKey(service.ServiceID))
@@ -218,7 +218,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				return nil, nil, err
 			}
 			if err := addCondition(
-				environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
+				blueprints.EnvironmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
 				snapshot.ProjectionRoot,
 			); err != nil {
 				clearBackupRuntimeMutations(mutations)
@@ -376,7 +376,7 @@ func validateBackupVolumePublicationEvidence(
 	}
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(values[0].Value)
 	revisionID, headErr := idempotencyrecord.DecodeTaskReference(values[1].Value)
-	seal, sealErr := decodeEnvironmentBlueprintSeal(values[2].Value)
+	seal, sealErr := blueprints.DecodeEnvironmentBlueprintSeal(values[2].Value)
 	if environmentErr != nil || headErr != nil || sealErr != nil {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}

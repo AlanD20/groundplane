@@ -7,6 +7,7 @@ package network
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -52,10 +53,10 @@ func (repository *Repository) EnableDesiredRevisions(desired *desiredrevisionsto
 
 func (repository *Repository) ClaimEnvironmentBlueprintStage(
 	ctx context.Context,
-	request etcd.EnvironmentBlueprintStageClaimRequest,
-) (etcd.EnvironmentBlueprintStageClaim, error) {
+	request blueprints.EnvironmentBlueprintStageClaimRequest,
+) (blueprints.EnvironmentBlueprintStageClaim, error) {
 	if repository.desired == nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindInternal,
 			"Network desired revision persistence is not configured",
 		)
@@ -65,10 +66,10 @@ func (repository *Repository) ClaimEnvironmentBlueprintStage(
 
 func (repository *Repository) StageEnvironmentBlueprintRevision(
 	ctx context.Context,
-	request etcd.EnvironmentBlueprintStageRequest,
-) (etcd.EnvironmentBlueprintSeal, error) {
+	request blueprints.EnvironmentBlueprintStageRequest,
+) (blueprints.EnvironmentBlueprintSeal, error) {
 	if repository.desired == nil {
-		return etcd.EnvironmentBlueprintSeal{}, errs.New(
+		return blueprints.EnvironmentBlueprintSeal{}, errs.New(
 			errs.KindInternal,
 			"Network desired revision persistence is not configured",
 		)

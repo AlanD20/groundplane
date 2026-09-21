@@ -1,4 +1,4 @@
-package etcd
+package blueprints
 
 import (
 	"bytes"
@@ -14,11 +14,11 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 		binary.BigEndian.Uint16(value[4:6]) != environmentBlueprintRecordSchema ||
 		value[6] < 1 || value[6] > 6 ||
 		int(binary.BigEndian.Uint32(value[8:12])) != len(value)-12 {
-		return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentDesiredMutationAudit{}, CorruptEnvironmentBlueprintStage()
 	}
 	reader := blueprintRecordReader{value: value[12:]}
 	if reader.uint16() != environmentBlueprintRecordSchema {
-		return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentDesiredMutationAudit{}, CorruptEnvironmentBlueprintStage()
 	}
 	result := EnvironmentDesiredMutationAudit{}
 	if value[6] == 1 {
@@ -28,7 +28,7 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 		}
 		keySupplied := reader.uint8()
 		if keySupplied > 1 {
-			return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+			return EnvironmentDesiredMutationAudit{}, CorruptEnvironmentBlueprintStage()
 		}
 		volume.KeySupplied = keySupplied == 1
 		volume.PreconditionDigest = reader.digest()
@@ -59,7 +59,7 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 	} else if value[6] == 4 {
 		count := reader.uint16()
 		if count == 0 || count > core.MaximumBulkEntryCount {
-			return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+			return EnvironmentDesiredMutationAudit{}, CorruptEnvironmentBlueprintStage()
 		}
 		result.Entries = make([]EnvironmentEntryMutationAudit, int(count))
 		for index := range result.Entries {
@@ -98,8 +98,8 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 		}
 		result.Route = route
 	}
-	if reader.done() != nil || validateEnvironmentDesiredMutationAudit(result) != nil {
-		return EnvironmentDesiredMutationAudit{}, corruptEnvironmentBlueprintStage()
+	if reader.done() != nil || ValidateEnvironmentDesiredMutationAudit(result) != nil {
+		return EnvironmentDesiredMutationAudit{}, CorruptEnvironmentBlueprintStage()
 	}
 	return result, nil
 }
@@ -123,12 +123,12 @@ func decodeEnvironmentMutationRequest[T any](reader *blueprintRecordReader) (*T,
 	}
 	var result T
 	if json.Unmarshal(encoded, &result) != nil {
-		return nil, corruptEnvironmentBlueprintStage()
+		return nil, CorruptEnvironmentBlueprintStage()
 	}
 	canonical, err := json.Marshal(&result)
 	defer clear(canonical)
 	if err != nil || !bytes.Equal(canonical, encoded) {
-		return nil, corruptEnvironmentBlueprintStage()
+		return nil, CorruptEnvironmentBlueprintStage()
 	}
 	return &result, nil
 }

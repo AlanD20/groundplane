@@ -184,7 +184,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	hierarchy := &HierarchyRepository{store: repository.store}
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx, intent.Claim,
-		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
 		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.ExpectedHeadRevision,
@@ -232,7 +232,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 		{
-			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},

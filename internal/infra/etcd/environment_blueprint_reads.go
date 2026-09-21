@@ -55,7 +55,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	if err := recordcodec.ValidateID(ids.KindTask, revisionID); err != nil {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{}, false, err
 	}
-	rootResult, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
+	rootResult, err := repository.store.Get(ctx, blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID))
 	if err != nil {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{}, false, err
 	}
@@ -64,11 +64,11 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 			ReadRevision: rootResult.ReadRevision,
 		}, false, nil
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(rootResult.Entry.Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(rootResult.Entry.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{}, false, err
 	}
-	if seal.SourceKind == EnvironmentBlueprintSourceMutation {
+	if seal.SourceKind == blueprints.EnvironmentBlueprintSourceMutation {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{ReadRevision: rootResult.ReadRevision}, false, nil
 	}
 	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "audit")
@@ -76,7 +76,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{}, false, err
 	}
 	defer clear(stream)
-	revision, err := decodeEnvironmentBlueprintAuditStream(stream)
+	revision, err := blueprints.DecodeEnvironmentBlueprintAuditStream(stream)
 	if err != nil || revision.EnvironmentID != environmentID || revision.RevisionID != revisionID {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{}, false, blueprints.CorruptEnvironmentBlueprint()
 	}

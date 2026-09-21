@@ -75,7 +75,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		keys,
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
+		blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
 	for _, candidate := range intent.Candidates {
 		keys = append(keys, componentrecord.RecordKey(candidate.Current.Desired.ID))
@@ -110,7 +110,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	}
 	if componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
 		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key: environmentBlueprintRootKey(
+			Key: blueprints.EnvironmentBlueprintRootKey(
 				intent.EnvironmentID,
 				desiredRevisionID,
 			), ModRevision: state.Values[2].ModRevision,

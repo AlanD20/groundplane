@@ -147,7 +147,7 @@ func prepareBackupPolicyReplacement(
 			plan.compare(
 				backupPolicyCompareVolumeRoot,
 				source.Volume.Volume.ID,
-				environmentBlueprintRootKey(
+				blueprints.EnvironmentBlueprintRootKey(
 					source.Source.Record.EnvironmentID,
 					source.Volume.Projection.Record.RevisionID,
 				),

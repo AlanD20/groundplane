@@ -171,7 +171,7 @@ func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []etcds
 			ModRevision: sources.DesiredHead.Revision,
 		},
 		{
-			Key: environmentBlueprintRootKey(
+			Key: blueprints.EnvironmentBlueprintRootKey(
 				sources.Environment.Record.ID, sources.DesiredProjection.Record.RevisionID,
 			),
 			ModRevision: sources.DesiredProjection.Revision,

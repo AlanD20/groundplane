@@ -53,7 +53,7 @@ type MutationRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
-		etcd.EnvironmentBlueprintStageClaim,
+		blueprints.EnvironmentBlueprintStageClaim,
 		projectionrecord.EnvironmentComposeProjection,
 		etcd.VolumeRemovalBackupPolicyPreparation,
 		removal.InitialPublication,
@@ -68,19 +68,19 @@ type MutationRepository interface {
 	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
-		etcd.EnvironmentBlueprintStageClaimRequest,
-	) (etcd.EnvironmentBlueprintStageClaim, error)
+		blueprints.EnvironmentBlueprintStageClaimRequest,
+	) (blueprints.EnvironmentBlueprintStageClaim, error)
 	StageEnvironmentBlueprintRevision(
 		context.Context,
-		etcd.EnvironmentBlueprintStageRequest,
-	) (etcd.EnvironmentBlueprintSeal, error)
+		blueprints.EnvironmentBlueprintStageRequest,
+	) (blueprints.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentDesiredRevisionWithTask(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
-		etcd.EnvironmentBlueprintStageClaim,
-		etcd.EnvironmentDesiredRevisionIdentity,
+		blueprints.EnvironmentBlueprintStageClaim,
+		blueprints.EnvironmentDesiredRevisionIdentity,
 		projectionrecord.EnvironmentComposeProjection,
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]blueprints.EnvironmentBlueprintServiceChange,

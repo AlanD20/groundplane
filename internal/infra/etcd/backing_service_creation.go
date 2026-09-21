@@ -38,8 +38,8 @@ type BackingServiceCreation struct {
 	SecretValues []secretrecord.EncryptedValue
 	Entries      []entryrecord.Record
 	EntryValues  []EntryValueGeneration
-	Claim        EnvironmentBlueprintStageClaim
-	Revision     EnvironmentDesiredRevisionIdentity
+	Claim        blueprints.EnvironmentBlueprintStageClaim
+	Revision     blueprints.EnvironmentDesiredRevisionIdentity
 	Projection   projectionrecord.EnvironmentComposeProjection
 	Task         TaskRecord
 	HookInputs   *taskconfiguration.BackingHookEncryptedInputs

@@ -31,7 +31,7 @@ func prepareRouteHeadPublication(
 	marker idempotencyrecord.IdempotencyMarker,
 	current *projectionrecord.EnvironmentComposeProjection,
 	candidate projectionrecord.EnvironmentComposeProjection,
-	audit EnvironmentDesiredMutationAudit,
+	audit blueprints.EnvironmentDesiredMutationAudit,
 	expectedHeadRevision int64,
 ) (routeHeadPublication, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -47,7 +47,7 @@ func prepareRouteHeadPublication(
 	if err := projectionrecord.ValidateEnvironmentComposeProjection(candidate); err != nil {
 		return routeHeadPublication{}, err
 	}
-	if err := validateEnvironmentDesiredMutationAudit(audit); err != nil {
+	if err := blueprints.ValidateEnvironmentDesiredMutationAudit(audit); err != nil {
 		return routeHeadPublication{}, err
 	}
 	if marker.Intent.EnvelopeVersion == 0 || task.ID == "" {
@@ -66,22 +66,22 @@ func prepareRouteHeadPublication(
 			"Route desired candidate audit base is invalid",
 		)
 	}
-	digest, err := EnvironmentBlueprintDependencyDigest(candidate)
+	digest, err := blueprints.EnvironmentBlueprintDependencyDigest(candidate)
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
-	claim := EnvironmentBlueprintStageClaim{
+	claim := blueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID:  strings.TrimPrefix(task.ID, string(ids.KindTask)+"_"),
 		EnvironmentID: candidate.EnvironmentID, RevisionID: task.ID, TaskID: task.ID,
 		Locator: marker.Locator, Intent: marker.Intent,
-		BaselineHeadRevision: expectedHeadRevision, SourceKind: EnvironmentBlueprintSourceMutation,
-		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: EnvironmentDesiredProjectionSchema,
+		BaselineHeadRevision: expectedHeadRevision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
+		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema,
 		CreatedAt: task.CreatedAt,
 	}
-	if err := validateEnvironmentBlueprintStageClaim(claim); err != nil {
+	if err := blueprints.ValidateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return routeHeadPublication{}, err
 	}
-	streams, err := BuildDesiredRevisionStreams(EnvironmentBlueprintStageRequest{
+	streams, err := BuildDesiredRevisionStreams(blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim, Mutation: &audit, Projection: candidate, DependencyDigest: digest,
 	})
 	if err != nil {
@@ -90,7 +90,7 @@ func prepareRouteHeadPublication(
 	defer clear(streams.Audit)
 	defer clear(streams.Projection)
 	descriptor := streams.Descriptor
-	publishHead := audit.Route.Action != EnvironmentRouteMutationRemove
+	publishHead := audit.Route.Action != blueprints.EnvironmentRouteMutationRemove
 	if publishHead {
 		previous := projectionrecord.EnvironmentComposeProjection{}
 		if current != nil {
@@ -101,41 +101,41 @@ func prepareRouteHeadPublication(
 		}
 	}
 	if publishHead {
-		descriptor.State = EnvironmentBlueprintStagePublished
+		descriptor.State = blueprints.EnvironmentBlueprintStagePublished
 	} else {
-		descriptor.State = EnvironmentBlueprintStageSealed
+		descriptor.State = blueprints.EnvironmentBlueprintStageSealed
 	}
 	descriptor.NextAuditChunk = descriptor.AuditChunks
 	descriptor.NextProjectionChunk = descriptor.ProjectionChunks
-	descriptorValue, err := encodeEnvironmentBlueprintStageDescriptor(descriptor)
+	descriptorValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
 	publication := routeHeadPublication{
 		conditions: []etcdstore.Condition{
-			{Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID)},
-			{Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID)},
+			{Key: blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID)},
+			{Key: blueprints.EnvironmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID)},
 			{Key: blueprints.EnvironmentBlueprintHeadKey(claim.EnvironmentID), ModRevision: expectedHeadRevision},
 			{Key: removalrecord.EnvironmentLockKey(claim.EnvironmentID)},
 		},
 		mutations: []etcdstore.Mutation{{
-			Type: etcdstore.MutationPut, Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue,
+			Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue,
 		}},
 	}
 	publication.values = append(publication.values, descriptorValue)
 	for family, stream := range map[uint8][]byte{
-		EnvironmentBlueprintChunkAudit:      streams.Audit,
-		EnvironmentBlueprintChunkProjection: streams.Projection,
+		blueprints.EnvironmentBlueprintChunkAudit:      streams.Audit,
+		blueprints.EnvironmentBlueprintChunkProjection: streams.Projection,
 	} {
-		chunks := chunkCount32(len(stream))
+		chunks := blueprints.ChunkCount32(len(stream))
 		for index := uint32(0); index < chunks; index++ {
-			from := int(index) * EnvironmentBlueprintChunkBytes
-			to := from + EnvironmentBlueprintChunkBytes
+			from := int(index) * blueprints.EnvironmentBlueprintChunkBytes
+			to := from + blueprints.EnvironmentBlueprintChunkBytes
 			if to > len(stream) {
 				to = len(stream)
 			}
 			data := stream[from:to]
-			value, encodeErr := encodeEnvironmentBlueprintChunk(EnvironmentBlueprintChunk{
+			value, encodeErr := blueprints.EncodeEnvironmentBlueprintChunk(blueprints.EnvironmentBlueprintChunk{
 				Family: family, Sequence: index, LogicalOffset: uint64(from),
 				LogicalLength: uint32(len(data)), Digest: sha256.Sum256(data), Data: data,
 			})
@@ -143,21 +143,21 @@ func prepareRouteHeadPublication(
 				clearRouteHeadPublication(publication)
 				return routeHeadPublication{}, encodeErr
 			}
-			key := environmentBlueprintChunkKeyFor(claim.EnvironmentID, claim.RevisionID, family, index)
+			key := blueprints.EnvironmentBlueprintChunkKeyFor(claim.EnvironmentID, claim.RevisionID, family, index)
 			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: key})
 			publication.mutations = append(publication.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 			publication.values = append(publication.values, value)
 		}
 	}
 	seal := environmentBlueprintSealFromDescriptor(descriptor)
-	rootValue, err := encodeEnvironmentBlueprintSeal(seal)
+	rootValue, err := blueprints.EncodeEnvironmentBlueprintSeal(seal)
 	if err != nil {
 		clearRouteHeadPublication(publication)
 		return routeHeadPublication{}, err
 	}
 	publication.values = append(publication.values, rootValue)
 	publication.mutations = append(publication.mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID), Value: rootValue,
+		Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID), Value: rootValue,
 	})
 	if publishHead {
 		reference, referenceErr := idempotencyrecord.EncodeTaskReference(task.ID)
@@ -208,10 +208,10 @@ func prepareRouteHeadCandidate(
 		return routeHeadPublication{}, errs.New(errs.KindStateConflict, "Route desired candidate is unavailable")
 	}
 	candidate := *intent.CandidateProjection
-	descriptorKey := environmentBlueprintDescriptorKeyByID(
+	descriptorKey := blueprints.EnvironmentBlueprintDescriptorKeyByID(
 		strings.TrimPrefix(candidate.RevisionID, string(ids.KindTask)+"_"),
 	)
-	rootKey := environmentBlueprintRootKey(intent.EnvironmentID, candidate.RevisionID)
+	rootKey := blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, candidate.RevisionID)
 	headKey := blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID)
 	state, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{descriptorKey, rootKey, headKey}, Revision: revision,
@@ -223,11 +223,11 @@ func prepareRouteHeadCandidate(
 		state.Values[2] == nil || state.Values[2].ModRevision != intent.CurrentProjectionRevision {
 		return routeHeadPublication{}, errs.New(errs.KindStateConflict, "Route desired staging evidence is unavailable")
 	}
-	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(state.Values[0].Value)
+	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(state.Values[0].Value)
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(state.Values[1].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(state.Values[1].Value)
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
@@ -235,15 +235,15 @@ func prepareRouteHeadCandidate(
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
-	digest, err := EnvironmentBlueprintDependencyDigest(candidate)
+	digest, err := blueprints.EnvironmentBlueprintDependencyDigest(candidate)
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
-	audit := EnvironmentDesiredMutationAudit{Route: &EnvironmentRouteMutationAudit{
-		Action: EnvironmentRouteMutationRemove, BaseRevisionID: intent.CurrentProjection.RevisionID,
+	audit := blueprints.EnvironmentDesiredMutationAudit{Route: &blueprints.EnvironmentRouteMutationAudit{
+		Action: blueprints.EnvironmentRouteMutationRemove, BaseRevisionID: intent.CurrentProjection.RevisionID,
 		RouteID: intent.RouteID,
 	}}
-	streams, err := BuildDesiredRevisionStreams(EnvironmentBlueprintStageRequest{
+	streams, err := BuildDesiredRevisionStreams(blueprints.EnvironmentBlueprintStageRequest{
 		Claim: descriptor.Claim, Mutation: &audit, Projection: candidate, DependencyDigest: digest,
 	})
 	if err != nil {
@@ -251,12 +251,12 @@ func prepareRouteHeadCandidate(
 	}
 	defer clear(streams.Audit)
 	defer clear(streams.Projection)
-	if descriptor.State != EnvironmentBlueprintStageSealed ||
+	if descriptor.State != blueprints.EnvironmentBlueprintStageSealed ||
 		descriptor.Claim.EnvironmentID != intent.EnvironmentID ||
 		descriptor.Claim.RevisionID != candidate.RevisionID ||
 		descriptor.Claim.TaskID != candidate.RevisionID ||
 		descriptor.Claim.BaselineHeadRevision != intent.CurrentProjectionRevision ||
-		descriptor.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		descriptor.Claim.RenderGeneration != candidate.RenderGeneration ||
 		!sameEnvironmentBlueprintStageStreams(descriptor, streams.Descriptor) ||
 		seal != environmentBlueprintSealFromDescriptor(
@@ -265,9 +265,9 @@ func prepareRouteHeadCandidate(
 		return routeHeadPublication{}, errs.New(errs.KindStateConflict, "Route desired staging evidence changed")
 	}
 	published := descriptor
-	published.State = EnvironmentBlueprintStagePublished
+	published.State = blueprints.EnvironmentBlueprintStagePublished
 	published.UpdatedAt = nextBlueprintProgressTime(descriptor.UpdatedAt)
-	descriptorValue, err := encodeEnvironmentBlueprintStageDescriptor(published)
+	descriptorValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(published)
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
@@ -320,12 +320,12 @@ func validateCompletedRouteHeadReplay(
 		}
 		candidateRevisionID = intent.CandidateProjection.RevisionID
 	}
-	descriptorKey := environmentBlueprintDescriptorKeyByID(
+	descriptorKey := blueprints.EnvironmentBlueprintDescriptorKeyByID(
 		strings.TrimPrefix(candidateRevisionID, string(ids.KindTask)+"_"),
 	)
 	keys := []string{
 		descriptorKey,
-		environmentBlueprintRootKey(environmentID, candidateRevisionID),
+		blueprints.EnvironmentBlueprintRootKey(environmentID, candidateRevisionID),
 		blueprints.EnvironmentBlueprintHeadKey(environmentID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), task.Target),
 		componentTaskActiveEnvironmentKey(environmentID),
@@ -340,11 +340,11 @@ func validateCompletedRouteHeadReplay(
 		state.Values[3] != nil || state.Values[4] != nil || state.Values[5] != nil {
 		return errs.New(errs.KindStateConflict, "Route removal completed replay state is incomplete")
 	}
-	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(state.Values[0].Value)
+	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(state.Values[0].Value)
 	if err != nil {
 		return err
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(state.Values[1].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(state.Values[1].Value)
 	if err != nil {
 		return err
 	}
@@ -363,15 +363,15 @@ func validateCompletedRouteHeadReplay(
 	}
 	defer clear(encoded)
 	projectionDigest := sha256.Sum256(encoded)
-	dependencyDigest, err := EnvironmentBlueprintDependencyDigest(projection)
+	dependencyDigest, err := blueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		return err
 	}
-	if descriptor.State != EnvironmentBlueprintStagePublished ||
+	if descriptor.State != blueprints.EnvironmentBlueprintStagePublished ||
 		descriptor.Claim.EnvironmentID != environmentID ||
 		descriptor.Claim.RevisionID != candidateRevisionID ||
 		descriptor.Claim.TaskID != candidateRevisionID ||
-		descriptor.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		seal != environmentBlueprintSealFromDescriptor(descriptor) || headRevisionID != candidateRevisionID ||
 		selected.Revision != state.Values[2].ModRevision || projection.EnvironmentID != environmentID || projection.RevisionID != candidateRevisionID ||
 		uint64(len(encoded)) != descriptor.ProjectionBytes || projectionDigest != descriptor.ProjectionSHA256 ||

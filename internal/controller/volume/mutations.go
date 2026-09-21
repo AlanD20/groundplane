@@ -369,7 +369,7 @@ func (service *MutationService) mutateOnce(
 		ctx, service.repository, candidateProjection, desiredrevision.ClaimInput{
 			EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
 			Locator: locator, Intent: evidence.durable, BaselineHeadRevision: expectedHeadRevision,
-			SourceKind: etcd.EnvironmentBlueprintSourceMutation,
+			SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
 			MatchExistingIntent: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 				return service.idempotency.MatchesStaged(ctx, evidence, existing)
 			},
@@ -410,20 +410,20 @@ func (service *MutationService) mutateOnce(
 	dependencyDigest := projectionEvidence.DependencyDigest
 	var precondition [sha256.Size]byte
 	if request.action == volumeMutationActionRemove && hasCurrent {
-		precondition, err = etcd.EnvironmentBlueprintDependencyDigest(current.Record)
+		precondition, err = blueprints.EnvironmentBlueprintDependencyDigest(current.Record)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	action := etcd.EnvironmentVolumeMutationAdd
+	action := blueprints.EnvironmentVolumeMutationAdd
 	if request.action == volumeMutationActionEdit {
-		action = etcd.EnvironmentVolumeMutationEdit
+		action = blueprints.EnvironmentVolumeMutationEdit
 	} else if request.action == volumeMutationActionRemove {
-		action = etcd.EnvironmentVolumeMutationRemove
+		action = blueprints.EnvironmentVolumeMutationRemove
 	}
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
-		Mutation: &etcd.EnvironmentDesiredMutationAudit{Volume: &etcd.EnvironmentVolumeMutationAudit{
+		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Volume: &blueprints.EnvironmentVolumeMutationAudit{
 			Action: action, VolumeID: request.volumeID, Slug: request.slug, Key: request.key,
 			KeySupplied: request.keySupplied, PreconditionDigest: precondition,
 		}},
@@ -484,7 +484,7 @@ func (service *MutationService) mutateOnce(
 			environment,
 			expectedHeadRevision,
 			claim,
-			etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
+			blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
 			candidate,
 			nil,
 			nil,

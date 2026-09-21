@@ -68,14 +68,14 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
-	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
+	root, err := repository.store.Get(ctx, blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID))
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
 	if root == nil || root.Entry == nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(root.Entry.Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(root.Entry.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
@@ -110,7 +110,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
 	if err := recordcodec.ValidateID(ids.KindTask, revisionID); err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
-	root, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
+	root, err := repository.store.Get(ctx, blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID))
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
@@ -121,7 +121,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
 		}
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: readRevision}, false, nil
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(root.Entry.Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(root.Entry.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}

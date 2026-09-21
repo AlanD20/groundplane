@@ -24,16 +24,16 @@ import (
 type ClaimRepository interface {
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
-		etcd.EnvironmentBlueprintStageClaimRequest,
-	) (etcd.EnvironmentBlueprintStageClaim, error)
+		blueprints.EnvironmentBlueprintStageClaimRequest,
+	) (blueprints.EnvironmentBlueprintStageClaim, error)
 }
 
 type PublicationRepository interface {
 	StageEnvironmentBlueprintRevision(
 		context.Context,
-		etcd.EnvironmentBlueprintStageRequest,
-	) (etcd.EnvironmentBlueprintSeal, error)
-	AbandonEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaim) error
+		blueprints.EnvironmentBlueprintStageRequest,
+	) (blueprints.EnvironmentBlueprintSeal, error)
+	AbandonEnvironmentBlueprintStage(context.Context, blueprints.EnvironmentBlueprintStageClaim) error
 	PublishEnvironmentBlueprintDesiredRevision(
 		context.Context,
 		netip.Prefix,
@@ -41,8 +41,8 @@ type PublicationRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
-		etcd.EnvironmentBlueprintStageClaim,
-		etcd.EnvironmentDesiredRevisionIdentity,
+		blueprints.EnvironmentBlueprintStageClaim,
+		blueprints.EnvironmentDesiredRevisionIdentity,
 		projectionrecord.EnvironmentComposeProjection,
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]blueprints.EnvironmentBlueprintServiceChange,
@@ -71,15 +71,15 @@ type Repository interface {
 	ClaimRepository
 	StageEnvironmentBlueprintRevision(
 		context.Context,
-		etcd.EnvironmentBlueprintStageRequest,
-	) (etcd.EnvironmentBlueprintSeal, error)
+		blueprints.EnvironmentBlueprintStageRequest,
+	) (blueprints.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentDesiredRevisionWithTask(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
-		etcd.EnvironmentBlueprintStageClaim,
-		etcd.EnvironmentDesiredRevisionIdentity,
+		blueprints.EnvironmentBlueprintStageClaim,
+		blueprints.EnvironmentDesiredRevisionIdentity,
 		projectionrecord.EnvironmentComposeProjection,
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]blueprints.EnvironmentBlueprintServiceChange,
@@ -99,7 +99,7 @@ type ClaimInput struct {
 	Intent               idempotencyrecord.ProtectedIntentRecord
 	MatchExistingIntent  func(context.Context, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	BaselineHeadRevision int64
-	SourceKind           etcd.EnvironmentBlueprintSourceKind
+	SourceKind           blueprints.EnvironmentBlueprintSourceKind
 	RenderGeneration     uint64
 	CreatedAt            time.Time
 }
@@ -108,15 +108,15 @@ func Claim(
 	ctx context.Context,
 	repository ClaimRepository,
 	input ClaimInput,
-) (etcd.EnvironmentBlueprintStageClaim, error) {
-	if input.SourceKind != etcd.EnvironmentBlueprintSourceApply &&
-		input.SourceKind != etcd.EnvironmentBlueprintSourceMutation {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+) (blueprints.EnvironmentBlueprintStageClaim, error) {
+	if input.SourceKind != blueprints.EnvironmentBlueprintSourceApply &&
+		input.SourceKind != blueprints.EnvironmentBlueprintSourceMutation {
+		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindInternal,
 			"Environment desired revision source kind is invalid",
 		)
 	}
-	claim, err := repository.ClaimEnvironmentBlueprintStage(ctx, etcd.EnvironmentBlueprintStageClaimRequest{
+	claim, err := repository.ClaimEnvironmentBlueprintStage(ctx, blueprints.EnvironmentBlueprintStageClaimRequest{
 		EnvironmentID:        input.EnvironmentID,
 		CandidateRevisionID:  input.CandidateTaskID,
 		CandidateTaskID:      input.CandidateTaskID,
@@ -125,31 +125,31 @@ func Claim(
 		BaselineHeadRevision: input.BaselineHeadRevision,
 		SourceKind:           input.SourceKind,
 		RenderGeneration:     input.RenderGeneration,
-		ProjectionSchema:     etcd.EnvironmentDesiredProjectionSchema,
+		ProjectionSchema:     blueprints.EnvironmentDesiredProjectionSchema,
 		CreatedAt:            input.CreatedAt,
 	})
 	if err != nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, err
+		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
 	if claim.RevisionID != claim.TaskID {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindInternal,
 			"Blueprint staged revision and Task identity diverged",
 		)
 	}
 	if claim.Existing {
 		if input.MatchExistingIntent == nil {
-			return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+			return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 				errs.KindInternal,
 				"Environment desired revision replay matcher is not configured",
 			)
 		}
 		matched, matchErr := input.MatchExistingIntent(ctx, claim.Intent)
 		if matchErr != nil {
-			return etcd.EnvironmentBlueprintStageClaim{}, matchErr
+			return blueprints.EnvironmentBlueprintStageClaim{}, matchErr
 		}
 		if !matched {
-			return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+			return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 				errs.KindIdempotencyMismatch,
 				"idempotency key was used for a different desired-state request",
 			)
@@ -159,8 +159,8 @@ func Claim(
 		claim.BaselineHeadRevision != input.BaselineHeadRevision ||
 		claim.RenderGeneration != input.RenderGeneration ||
 		claim.SourceKind != input.SourceKind ||
-		claim.ProjectionSchema != etcd.EnvironmentDesiredProjectionSchema {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+		claim.ProjectionSchema != blueprints.EnvironmentDesiredProjectionSchema {
+		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint staged baseline changed",
 		)
@@ -208,13 +208,13 @@ type stagedPublicationState struct {
 	mu         sync.Mutex
 	consumed   bool
 	locator    idempotencyrecord.IdempotencyLocator
-	claim      etcd.EnvironmentBlueprintStageClaim
-	seal       etcd.EnvironmentBlueprintSeal
+	claim      blueprints.EnvironmentBlueprintStageClaim
+	seal       blueprints.EnvironmentBlueprintSeal
 	projection projectionrecord.EnvironmentComposeProjection
 }
 
 type StageInput struct {
-	Claim      etcd.EnvironmentBlueprintStageClaim
+	Claim      blueprints.EnvironmentBlueprintStageClaim
 	Blueprint  blueprints.EnvironmentBlueprintRevision
 	Projection projectionrecord.EnvironmentComposeProjection
 }
@@ -251,7 +251,7 @@ func Stage(
 	if err != nil {
 		return StagedPublication{}, err
 	}
-	seal, err := repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	seal, err := repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: input.Claim, Blueprint: &input.Blueprint,
 		Projection: input.Projection, DependencyDigest: evidence.DependencyDigest,
 	})
@@ -279,12 +279,12 @@ func Stage(
 }
 
 func (publication StagedPublication) consume(environmentID, taskID string, locator idempotencyrecord.IdempotencyLocator) (
-	etcd.EnvironmentBlueprintStageClaim,
+	blueprints.EnvironmentBlueprintStageClaim,
 	projectionrecord.EnvironmentComposeProjection,
 	error,
 ) {
 	if publication.state == nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, projectionrecord.EnvironmentComposeProjection{}, errs.New(
+		return blueprints.EnvironmentBlueprintStageClaim{}, projectionrecord.EnvironmentComposeProjection{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment desired staged publication is invalid",
 		)
@@ -292,7 +292,7 @@ func (publication StagedPublication) consume(environmentID, taskID string, locat
 	publication.state.mu.Lock()
 	defer publication.state.mu.Unlock()
 	if publication.state.consumed {
-		return etcd.EnvironmentBlueprintStageClaim{}, projectionrecord.EnvironmentComposeProjection{}, errs.New(
+		return blueprints.EnvironmentBlueprintStageClaim{}, projectionrecord.EnvironmentComposeProjection{}, errs.New(
 			errs.KindStateConflict,
 			"Environment desired staged publication was already consumed",
 		)
@@ -329,9 +329,9 @@ func (publication StagedPublication) consume(environmentID, taskID string, locat
 	return claim, projection, nil
 }
 
-func (publication StagedPublication) reserveAbandonment() (etcd.EnvironmentBlueprintStageClaim, error) {
+func (publication StagedPublication) reserveAbandonment() (blueprints.EnvironmentBlueprintStageClaim, error) {
 	if publication.state == nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment desired staged publication is invalid",
 		)
@@ -339,7 +339,7 @@ func (publication StagedPublication) reserveAbandonment() (etcd.EnvironmentBluep
 	publication.state.mu.Lock()
 	defer publication.state.mu.Unlock()
 	if publication.state.consumed {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindStateConflict,
 			"Environment desired staged publication was already consumed",
 		)
@@ -351,7 +351,7 @@ func (publication StagedPublication) reserveAbandonment() (etcd.EnvironmentBluep
 func abandonKnownFailure(
 	ctx context.Context,
 	repository PublicationRepository,
-	claim etcd.EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 	cause error,
 ) error {
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stagedPublicationAbandonTimeout)
@@ -380,7 +380,7 @@ func Abandon(
 }
 
 func PreflightProjection(projection projectionrecord.EnvironmentComposeProjection) (ProjectionEvidence, error) {
-	digest, normalizedBytes, err := etcd.EnvironmentBlueprintProjectionEvidence(projection)
+	digest, normalizedBytes, err := blueprints.EnvironmentBlueprintProjectionEvidence(projection)
 	if err != nil {
 		return ProjectionEvidence{}, err
 	}
@@ -392,14 +392,14 @@ func PreflightAndClaim(
 	repository ClaimRepository,
 	projection projectionrecord.EnvironmentComposeProjection,
 	input ClaimInput,
-) (etcd.EnvironmentBlueprintStageClaim, ProjectionEvidence, error) {
+) (blueprints.EnvironmentBlueprintStageClaim, ProjectionEvidence, error) {
 	evidence, err := PreflightProjection(projection)
 	if err != nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, ProjectionEvidence{}, err
+		return blueprints.EnvironmentBlueprintStageClaim{}, ProjectionEvidence{}, err
 	}
 	claim, err := Claim(ctx, repository, input)
 	if err != nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, ProjectionEvidence{}, err
+		return blueprints.EnvironmentBlueprintStageClaim{}, ProjectionEvidence{}, err
 	}
 	return claim, evidence, nil
 }
@@ -444,7 +444,7 @@ func Publish(
 		Locator: input.Locator, Intent: claim.Intent, Response: response,
 		TaskID: input.Task.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	identity := etcd.EnvironmentDesiredRevisionIdentity{
+	identity := blueprints.EnvironmentDesiredRevisionIdentity{
 		EnvironmentID: input.Environment.Record.ID,
 		RevisionID:    input.Task.ID,
 	}
@@ -482,7 +482,7 @@ func Publish(
 func abandonBlueprintKnownFailure(
 	ctx context.Context,
 	repository PublicationRepository,
-	claim etcd.EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 	release etcd.BlueprintReleasePublication,
 	cause error,
 ) error {

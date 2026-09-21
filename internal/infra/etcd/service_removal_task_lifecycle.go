@@ -146,7 +146,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx,
 		intent.Claim,
-		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
 		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.ExpectedHeadRevision,
@@ -172,7 +172,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	change.conditions = append(
 		change.conditions,
 		etcdstore.Condition{
-			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
 		},
 		etcdstore.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},

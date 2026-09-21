@@ -23,8 +23,8 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 		), componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(
 			intent.EnvironmentID,
-		), environmentBlueprintDescriptorKeyByID(desired.DescriptorID),
-		environmentBlueprintRootKey(
+		), blueprints.EnvironmentBlueprintDescriptorKeyByID(desired.DescriptorID),
+		blueprints.EnvironmentBlueprintRootKey(
 			intent.EnvironmentID,
 			desired.RevisionID,
 		), blueprintEntryEnvironmentPrefix + intent.EntryID,
@@ -43,16 +43,16 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 	if err != nil || baseID != desired.BaseRevisionID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal retry desired head changed")
 	}
-	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(read.Values[4].Value)
+	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(read.Values[4].Value)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(read.Values[5].Value)
-	if err != nil || descriptor.State != EnvironmentBlueprintStageSealed ||
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(read.Values[5].Value)
+	if err != nil || descriptor.State != blueprints.EnvironmentBlueprintStageSealed ||
 		descriptor.Claim.DescriptorID != desired.DescriptorID || descriptor.Claim.EnvironmentID != intent.EnvironmentID ||
 		descriptor.Claim.RevisionID != desired.RevisionID || descriptor.Claim.TaskID != desired.RevisionID ||
 		descriptor.Claim.BaselineHeadRevision != intent.EntryRevision || descriptor.Claim.RenderGeneration != desired.RenderGeneration ||
-		descriptor.Claim.SourceKind != EnvironmentBlueprintSourceMutation || seal != environmentBlueprintSealFromDescriptor(descriptor) {
+		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || seal != environmentBlueprintSealFromDescriptor(descriptor) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal retry staged candidate changed")
 	}
 	if intent.CurrentProjection != nil &&

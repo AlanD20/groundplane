@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -36,7 +37,7 @@ func validateBackingServiceProjection(creation BackingServiceCreation) error {
 	if creation.Revision.EnvironmentID != creation.Environment.ID || creation.Revision.RevisionID != creation.Task.ID ||
 		creation.Claim.EnvironmentID != creation.Environment.ID || creation.Claim.RevisionID != creation.Task.ID ||
 		creation.Claim.TaskID != creation.Task.ID || creation.Claim.BaselineHeadRevision != 0 ||
-		creation.Claim.SourceKind != EnvironmentBlueprintSourceApply || creation.Claim.RenderGeneration != 1 ||
+		creation.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceApply || creation.Claim.RenderGeneration != 1 ||
 		projection.EnvironmentID != creation.Environment.ID || projection.RevisionID != creation.Task.ID ||
 		projection.RenderGeneration != 1 || len(projection.ComposeArtifact) == 0 ||
 		volumeCount != expectedVolumeCount ||

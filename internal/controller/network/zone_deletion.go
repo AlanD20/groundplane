@@ -42,12 +42,12 @@ type zoneDeletionRepository interface {
 	GetEnvironmentZoneRemovalAuthorities(context.Context, string) (etcd.EnvironmentZoneRemovalAuthorities, bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
-		etcd.EnvironmentBlueprintStageClaimRequest,
-	) (etcd.EnvironmentBlueprintStageClaim, error)
+		blueprints.EnvironmentBlueprintStageClaimRequest,
+	) (blueprints.EnvironmentBlueprintStageClaim, error)
 	StageEnvironmentBlueprintRevision(
 		context.Context,
-		etcd.EnvironmentBlueprintStageRequest,
-	) (etcd.EnvironmentBlueprintSeal, error)
+		blueprints.EnvironmentBlueprintStageRequest,
+	) (blueprints.EnvironmentBlueprintSeal, error)
 	BeginZoneDeletionWithTask(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
@@ -377,11 +377,11 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	claim, err := service.repository.ClaimEnvironmentBlueprintStage(ctx, etcd.EnvironmentBlueprintStageClaimRequest{
+	claim, err := service.repository.ClaimEnvironmentBlueprintStage(ctx, blueprints.EnvironmentBlueprintStageClaimRequest{
 		EnvironmentID: environment.Record.ID, CandidateRevisionID: candidateRevisionID,
 		CandidateTaskID: candidateRevisionID, Locator: locator, Intent: evidence.durable,
-		BaselineHeadRevision: projection.Revision, SourceKind: etcd.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: etcd.EnvironmentDesiredProjectionSchema,
+		BaselineHeadRevision: projection.Revision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
+		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema,
 		CreatedAt: now,
 	})
 	if err != nil {
@@ -413,9 +413,9 @@ func (service *zoneDeletionService) removeZoneOnce(
 	}
 	if claim.EnvironmentID != environment.Record.ID || claim.RevisionID != claim.TaskID ||
 		claim.Locator != locator || claim.BaselineHeadRevision != projection.Revision ||
-		claim.SourceKind != etcd.EnvironmentBlueprintSourceMutation ||
+		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		claim.RenderGeneration != candidate.RenderGeneration ||
-		claim.ProjectionSchema != etcd.EnvironmentDesiredProjectionSchema {
+		claim.ProjectionSchema != blueprints.EnvironmentDesiredProjectionSchema {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone staged baseline changed")
 	}
 	task := etcd.TaskRecord{
@@ -467,10 +467,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 			"Zone render generation exceeds Task limits",
 		)
 	}
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
-		Mutation: &etcd.EnvironmentDesiredMutationAudit{Zone: &etcd.EnvironmentZoneMutationAudit{
-			Action: etcd.EnvironmentZoneMutationRemove, BaseRevisionID: projection.Record.RevisionID,
+		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Zone: &blueprints.EnvironmentZoneMutationAudit{
+			Action: blueprints.EnvironmentZoneMutationRemove, BaseRevisionID: projection.Record.RevisionID,
 			ZoneID: zone.Record.Desired.ID,
 		}},
 		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,

@@ -20,7 +20,7 @@ import (
 // compare failure.
 func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	ctx context.Context,
-	claim etcd.EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 ) error {
 	if err := etcd.ValidateCapabilityContext(ctx); err != nil {
 		return err
@@ -52,10 +52,10 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	if err != nil || !etcd.SameDesiredRevisionClaim(descriptor.Claim, claim) {
 		return etcd.CorruptDesiredRevisionStage()
 	}
-	if descriptor.State == etcd.EnvironmentBlueprintStageAbandoned {
+	if descriptor.State == blueprints.EnvironmentBlueprintStageAbandoned {
 		return nil
 	}
-	if descriptor.State == etcd.EnvironmentBlueprintStagePublished || evidence.Values[1] == nil ||
+	if descriptor.State == blueprints.EnvironmentBlueprintStagePublished || evidence.Values[1] == nil ||
 		evidence.Values[2] != nil || evidence.Values[3] != nil {
 		return errs.New(errs.KindStateConflict, "Blueprint staging claim cannot be abandoned")
 	}
@@ -64,7 +64,7 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 		return etcd.CorruptDesiredRevisionStage()
 	}
 	abandoned := descriptor
-	abandoned.State = etcd.EnvironmentBlueprintStageAbandoned
+	abandoned.State = blueprints.EnvironmentBlueprintStageAbandoned
 	abandoned.UpdatedAt = etcd.NextDesiredRevisionProgressTime(descriptor.UpdatedAt)
 	value, err := etcd.EncodeDesiredRevisionDescriptor(abandoned)
 	if err != nil {
@@ -80,7 +80,7 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value},
 		{Type: etcdstore.MutationDelete, Key: locatorKey},
 	}
-	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 5, etcd.EnvironmentBlueprintGCTransactionBytes); err != nil {
+	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 5, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -108,7 +108,7 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 		return 0, errs.New(errs.KindValidationFailed, "Blueprint staging cleanup request is invalid")
 	}
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: etcd.EnvironmentBlueprintDescriptorPrefix,
+		Prefix: blueprints.EnvironmentBlueprintDescriptorPrefix,
 		Limit:  int64(limit),
 	})
 	if err != nil {
@@ -130,8 +130,8 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 			return processed, etcd.CorruptDesiredRevisionStage()
 		}
 		switch descriptor.State {
-		case etcd.EnvironmentBlueprintStageOpen, etcd.EnvironmentBlueprintStageSealed:
-			if descriptor.UpdatedAt.After(now.Add(-etcd.EnvironmentBlueprintStageExpiry)) {
+		case blueprints.EnvironmentBlueprintStageOpen, blueprints.EnvironmentBlueprintStageSealed:
+			if descriptor.UpdatedAt.After(now.Add(-blueprints.EnvironmentBlueprintStageExpiry)) {
 				continue
 			}
 			transitioned, transitionErr := repository.expireEnvironmentBlueprintStage(
@@ -147,9 +147,9 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 			if !transitioned {
 				continue
 			}
-			descriptor.State = etcd.EnvironmentBlueprintStageAbandoned
-		case etcd.EnvironmentBlueprintStageAbandoned:
-		case etcd.EnvironmentBlueprintStagePublished:
+			descriptor.State = blueprints.EnvironmentBlueprintStageAbandoned
+		case blueprints.EnvironmentBlueprintStageAbandoned:
+		case blueprints.EnvironmentBlueprintStagePublished:
 			deleted, cleanupErr := repository.cleanupPublishedEnvironmentBlueprintDescriptor(ctx, descriptor)
 			if cleanupErr != nil {
 				return processed, cleanupErr
@@ -174,7 +174,7 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 
 func (repository *Repository) expireEnvironmentBlueprintStage(
 	ctx context.Context,
-	descriptor etcd.EnvironmentBlueprintStageDescriptor,
+	descriptor blueprints.EnvironmentBlueprintStageDescriptor,
 	descriptorRevision int64,
 	revision int64,
 	now time.Time,
@@ -214,7 +214,7 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 		return false, etcd.CorruptDesiredRevisionStage()
 	}
 	abandoned := descriptor
-	abandoned.State = etcd.EnvironmentBlueprintStageAbandoned
+	abandoned.State = blueprints.EnvironmentBlueprintStageAbandoned
 	abandoned.UpdatedAt = now
 	if !abandoned.UpdatedAt.After(descriptor.UpdatedAt) {
 		abandoned.UpdatedAt = descriptor.UpdatedAt.Add(time.Nanosecond)
@@ -233,7 +233,7 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value},
 		{Type: etcdstore.MutationDelete, Key: locatorKey},
 	}
-	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 5, etcd.EnvironmentBlueprintGCTransactionBytes); err != nil {
+	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 5, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -245,7 +245,7 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 
 func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 	ctx context.Context,
-	descriptor etcd.EnvironmentBlueprintStageDescriptor,
+	descriptor blueprints.EnvironmentBlueprintStageDescriptor,
 	now time.Time,
 ) (bool, error) {
 	chunkPrefix := etcd.DesiredRevisionPrefix(
@@ -280,7 +280,7 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 	}
 	defer clearKeyValues(evidence.Values)
 	stored, err := etcd.DecodeDesiredRevisionDescriptor(evidence.Values[0].Value)
-	if err != nil || stored.State != etcd.EnvironmentBlueprintStageAbandoned ||
+	if err != nil || stored.State != blueprints.EnvironmentBlueprintStageAbandoned ||
 		!etcd.SameDesiredRevisionClaim(stored.Claim, descriptor.Claim) {
 		return false, etcd.CorruptDesiredRevisionStage()
 	}
@@ -326,7 +326,7 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		defer clear(value)
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value})
 	}
-	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 66, etcd.EnvironmentBlueprintGCTransactionBytes); err != nil {
+	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 66, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -338,7 +338,7 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 
 func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	ctx context.Context,
-	descriptor etcd.EnvironmentBlueprintStageDescriptor,
+	descriptor blueprints.EnvironmentBlueprintStageDescriptor,
 ) (bool, error) {
 	descriptorKey := etcd.DesiredRevisionDescriptorKey(descriptor.Claim.DescriptorID)
 	locatorKey, _, err := etcd.DesiredRevisionLocatorKey(descriptor.Claim.Locator)
@@ -363,7 +363,7 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	}
 	defer clearKeyValues(evidence.Values)
 	stored, err := etcd.DecodeDesiredRevisionDescriptor(evidence.Values[0].Value)
-	if err != nil || stored.State != etcd.EnvironmentBlueprintStagePublished ||
+	if err != nil || stored.State != blueprints.EnvironmentBlueprintStagePublished ||
 		!etcd.SameDesiredRevisionClaim(stored.Claim, descriptor.Claim) {
 		return false, etcd.CorruptDesiredRevisionStage()
 	}
@@ -388,7 +388,7 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	}
 	conditions := []etcdstore.Condition{{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision}}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: descriptorKey}}
-	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 2, etcd.EnvironmentBlueprintGCTransactionBytes); err != nil {
+	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 2, blueprints.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -400,7 +400,7 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 
 func environmentBlueprintLocatorOwnedBy(
 	value []byte,
-	descriptor etcd.EnvironmentBlueprintStageDescriptor,
+	descriptor blueprints.EnvironmentBlueprintStageDescriptor,
 ) (bool, error) {
 	descriptorID, digest, err := etcd.DecodeDesiredRevisionLocator(value)
 	if err != nil {
@@ -415,7 +415,7 @@ func environmentBlueprintLocatorOwnedBy(
 
 func environmentBlueprintMarkerOwnedBy(
 	value []byte,
-	descriptor etcd.EnvironmentBlueprintStageDescriptor,
+	descriptor blueprints.EnvironmentBlueprintStageDescriptor,
 ) (bool, error) {
 	marker, err := etcd.DecodeCapabilityIdempotencyMarker(value, descriptor.Claim.Locator)
 	if err != nil {
@@ -428,7 +428,7 @@ func environmentBlueprintMarkerOwnedBy(
 }
 
 func parseEnvironmentBlueprintDescriptorKey(key string) (string, error) {
-	segment := strings.TrimPrefix(key, etcd.EnvironmentBlueprintDescriptorPrefix)
+	segment := strings.TrimPrefix(key, blueprints.EnvironmentBlueprintDescriptorPrefix)
 	if segment == key || strings.Contains(segment, "/") {
 		return "", etcd.CorruptDesiredRevisionStage()
 	}
@@ -438,7 +438,7 @@ func parseEnvironmentBlueprintDescriptorKey(key string) (string, error) {
 	}
 	descriptorID := string(decoded)
 	if ids.Validate(ids.KindTask, "task_"+descriptorID) != nil ||
-		etcd.EnvironmentBlueprintDescriptorPrefix+recordcodec.EncodeKeySegment(descriptorID) != key {
+		blueprints.EnvironmentBlueprintDescriptorPrefix+recordcodec.EncodeKeySegment(descriptorID) != key {
 		return "", etcd.CorruptDesiredRevisionStage()
 	}
 	return descriptorID, nil

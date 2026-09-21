@@ -28,7 +28,7 @@ func backingServiceCreationConditions(
 		{Key: taskjournal.TaskActiveOperationKey(creation.Task.OperationID)},
 		{Key: taskjournal.TaskQueueKey(creation.Task.Executor, creation.Task.ID)},
 		{
-			Key:         environmentBlueprintRootKey(creation.Environment.ID, creation.Task.ID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(creation.Environment.ID, creation.Task.ID),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},

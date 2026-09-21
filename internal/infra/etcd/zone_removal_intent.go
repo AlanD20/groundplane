@@ -31,7 +31,7 @@ type ZoneRemovalIntent struct {
 	ZoneRevision              int64                                         `json:"zone_revision"`
 	DesiredHeadRevision       int64                                         `json:"desired_head_revision"`
 	AppliedProjectionRevision int64                                         `json:"applied_projection_revision"`
-	Claim                     EnvironmentBlueprintStageClaim                `json:"claim"`
+	Claim                     blueprints.EnvironmentBlueprintStageClaim     `json:"claim"`
 	DesiredProjection         projectionrecord.EnvironmentComposeProjection `json:"desired_projection"`
 	AppliedProjection         projectionrecord.EnvironmentComposeProjection `json:"applied_projection"`
 	CandidateProjection       projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
@@ -47,7 +47,7 @@ func NewZoneRemovalIntent(
 	taskID string,
 	zone etcdstore.Versioned[zonerecord.Record],
 	authorities EnvironmentZoneRemovalAuthorities,
-	claim EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 	candidate projectionrecord.EnvironmentComposeProjection,
 	affected []string,
 	createdAt time.Time,
@@ -58,7 +58,7 @@ func NewZoneRemovalIntent(
 		ZoneName: zone.Record.Desired.Name, ZoneRevision: zone.Revision,
 		DesiredHeadRevision:       authorities.Desired.Revision,
 		AppliedProjectionRevision: authorities.Applied.Revision,
-		Claim:                     cloneEnvironmentBlueprintStageClaim(claim),
+		Claim:                     blueprints.CloneEnvironmentBlueprintStageClaim(claim),
 		DesiredProjection:         projectionrecord.CloneEnvironmentComposeProjection(authorities.Desired.Record),
 		AppliedProjection:         projectionrecord.CloneEnvironmentComposeProjection(authorities.Applied.Record),
 		CandidateProjection:       projectionrecord.CloneEnvironmentComposeProjection(candidate),
@@ -150,11 +150,11 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		intent.ZoneRevision <= 0 ||
 		intent.DesiredHeadRevision <= 0 ||
 		intent.AppliedProjectionRevision <= 0 ||
-		validateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
+		blueprints.ValidateEnvironmentBlueprintStageClaim(intent.Claim) != nil ||
 		intent.Claim.EnvironmentID != intent.EnvironmentID ||
 		intent.Claim.RevisionID != intent.Claim.TaskID ||
 		intent.Claim.BaselineHeadRevision != intent.DesiredHeadRevision ||
-		intent.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+		intent.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		intent.DesiredProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.AppliedProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID ||
@@ -285,7 +285,7 @@ func decodeZoneRemovalIntent(value []byte) (ZoneRemovalIntent, error) {
 
 func cloneZoneRemovalIntent(intent ZoneRemovalIntent) ZoneRemovalIntent {
 	clone := intent
-	clone.Claim = cloneEnvironmentBlueprintStageClaim(intent.Claim)
+	clone.Claim = blueprints.CloneEnvironmentBlueprintStageClaim(intent.Claim)
 	clone.DesiredProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.DesiredProjection)
 	clone.AppliedProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.AppliedProjection)
 	clone.CandidateProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.CandidateProjection)

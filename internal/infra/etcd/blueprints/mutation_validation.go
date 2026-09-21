@@ -1,4 +1,4 @@
-package etcd
+package blueprints
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit) error {
+func ValidateEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit) error {
 	kinds := 0
 	if value.Volume != nil {
 		kinds++

@@ -1,4 +1,4 @@
-package etcd
+package blueprints
 
 import (
 	"crypto/sha256"
@@ -13,7 +13,7 @@ type EnvironmentDesiredRevisionIdentity struct {
 	RevisionID    string
 }
 
-func validateEnvironmentDesiredRevisionIdentity(value EnvironmentDesiredRevisionIdentity) error {
+func ValidateEnvironmentDesiredRevisionIdentity(value EnvironmentDesiredRevisionIdentity) error {
 	if ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, value.RevisionID) != nil {
 		return errs.New(errs.KindValidationFailed, "Environment desired revision identity is invalid")

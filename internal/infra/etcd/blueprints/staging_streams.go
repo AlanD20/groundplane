@@ -1,4 +1,4 @@
-package etcd
+package blueprints
 
 import (
 	"crypto/sha256"
@@ -6,9 +6,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func buildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) (EnvironmentBlueprintStreams, error) {
+func BuildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) (EnvironmentBlueprintStreams, error) {
 	claim := request.Claim
-	if err := validateEnvironmentBlueprintStageClaim(claim); err != nil {
+	if err := ValidateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return EnvironmentBlueprintStreams{}, err
 	}
 	if request.Projection.EnvironmentID != claim.EnvironmentID ||
@@ -65,8 +65,8 @@ func buildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 		len(request.Projection.Entries)
 	descriptor := EnvironmentBlueprintStageDescriptor{
 		Claim: claim, State: EnvironmentBlueprintStageOpen, Bound: true,
-		AuditChunks: chunkCount32(len(audit)), AuditBytes: uint64(len(audit)), AuditSHA256: auditDigest,
-		ProjectionChunks: chunkCount32(len(projection)), ProjectionBytes: uint64(len(projection)),
+		AuditChunks: ChunkCount32(len(audit)), AuditBytes: uint64(len(audit)), AuditSHA256: auditDigest,
+		ProjectionChunks: ChunkCount32(len(projection)), ProjectionBytes: uint64(len(projection)),
 		ProjectionSHA256: projectionDigest, ProjectionResources: uint32(projectionResources),
 		DependencyDigest: request.DependencyDigest, UpdatedAt: claim.CreatedAt,
 	}

@@ -198,7 +198,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 			EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
 			Locator: request.locator, Intent: request.evidence.durable,
 			MatchExistingIntent:  request.evidence.matchesStaged,
-			BaselineHeadRevision: expectedHeadRevision, SourceKind: etcd.EnvironmentBlueprintSourceMutation,
+			BaselineHeadRevision: expectedHeadRevision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
 			RenderGeneration: generation, CreatedAt: now,
 		},
 	)
@@ -298,11 +298,11 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	var auditRecord *entryrecord.Record
-	action := etcd.EnvironmentEntryMutationCreate
+	action := blueprints.EnvironmentEntryMutationCreate
 	if request.action == entryDesiredMutationEdit {
-		action = etcd.EnvironmentEntryMutationEdit
+		action = blueprints.EnvironmentEntryMutationEdit
 	} else if request.action == entryDesiredMutationRemove {
-		action = etcd.EnvironmentEntryMutationRemove
+		action = blueprints.EnvironmentEntryMutationRemove
 	}
 	if candidateRecord != nil {
 		value := *candidateRecord
@@ -311,9 +311,9 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		}
 		auditRecord = &value
 	}
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
-		Mutation: &etcd.EnvironmentDesiredMutationAudit{Entry: &etcd.EnvironmentEntryMutationAudit{
+		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Entry: &blueprints.EnvironmentEntryMutationAudit{
 			Action: action, BaseRevisionID: current.Record.RevisionID,
 			EntryID: targetEntryID, Record: auditRecord,
 		}},
@@ -323,7 +323,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	}
 	result, publicationErr := service.repository.PublishEnvironmentDesiredRevisionWithTask(
 		ctx, project, environment, expectedHeadRevision, claim,
-		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
+		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
 		candidate, nil, nil, nil, etcd.ReleaseGroupBlueprintPreparedMutation{},
 		etcd.ComponentTaskPreparation{}, etcd.BlueprintAttachTaskPreparation{}, task, marker,
 	)

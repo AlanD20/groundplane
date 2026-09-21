@@ -31,8 +31,8 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	current *etcdstore.Versioned[servicerecord.ServiceRecord],
 	record servicerecord.ServiceRecord,
 	references etcd.ServiceMutationReferences,
-	request etcd.EnvironmentServiceMutationRequest,
-	action etcd.EnvironmentServiceMutationAction,
+	request blueprints.EnvironmentServiceMutationRequest,
+	action blueprints.EnvironmentServiceMutationAction,
 	status int,
 	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceMutationEvidence,
@@ -110,12 +110,12 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	audit := &etcd.EnvironmentServiceMutationAudit{
+	audit := &blueprints.EnvironmentServiceMutationAudit{
 		Action: action, BaseRevisionID: projection.Record.RevisionID,
 		ServiceID: record.Desired.ID, Request: &request,
 	}
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
-		Claim: claim, Mutation: &etcd.EnvironmentDesiredMutationAudit{Service: audit},
+	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
+		Claim: claim, Mutation: &blueprints.EnvironmentDesiredMutationAudit{Service: audit},
 		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -137,7 +137,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 		ctx, etcd.EnvironmentServiceDesiredPublication{
 			Project: project, Environment: environment, ExpectedHeadRevision: expectedHeadRevision,
 			Claim: claim,
-			Revision: etcd.EnvironmentDesiredRevisionIdentity{
+			Revision: blueprints.EnvironmentDesiredRevisionIdentity{
 				EnvironmentID: environment.Record.ID, RevisionID: claim.RevisionID,
 			},
 			Projection: candidate, Change: change, References: references, Marker: marker,
@@ -154,37 +154,37 @@ func (service *serviceMutationService) claimServiceDesiredRevision(
 	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceMutationEvidence,
 	createdAt time.Time,
-) (etcd.EnvironmentBlueprintStageClaim, error) {
+) (blueprints.EnvironmentBlueprintStageClaim, error) {
 	if _, err := controllerrevision.PreflightProjection(projection); err != nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, err
+		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
-	claim, err := service.repository.ClaimEnvironmentBlueprintStage(ctx, etcd.EnvironmentBlueprintStageClaimRequest{
+	claim, err := service.repository.ClaimEnvironmentBlueprintStage(ctx, blueprints.EnvironmentBlueprintStageClaimRequest{
 		EnvironmentID: projection.EnvironmentID, CandidateRevisionID: candidateRevisionID,
 		CandidateTaskID: candidateRevisionID, Locator: locator, Intent: evidence.durable,
-		BaselineHeadRevision: expectedHeadRevision, SourceKind: etcd.EnvironmentBlueprintSourceMutation,
+		BaselineHeadRevision: expectedHeadRevision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
 		RenderGeneration: projection.RenderGeneration,
-		ProjectionSchema: etcd.EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
+		ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
 	})
 	if err != nil {
-		return etcd.EnvironmentBlueprintStageClaim{}, err
+		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
 	if claim.Existing {
 		matched, matchErr := service.idempotency.MatchesStaged(ctx, evidence, claim.Intent)
 		if matchErr != nil {
-			return etcd.EnvironmentBlueprintStageClaim{}, matchErr
+			return blueprints.EnvironmentBlueprintStageClaim{}, matchErr
 		}
 		if !matched {
-			return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+			return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 				errs.KindIdempotencyMismatch, "idempotency key was used for a different Service mutation",
 			)
 		}
 	}
 	if claim.EnvironmentID != projection.EnvironmentID || claim.RevisionID != claim.TaskID ||
 		claim.Locator != locator || claim.BaselineHeadRevision != expectedHeadRevision ||
-		claim.SourceKind != etcd.EnvironmentBlueprintSourceMutation ||
+		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		claim.RenderGeneration != projection.RenderGeneration ||
-		claim.ProjectionSchema != etcd.EnvironmentDesiredProjectionSchema {
-		return etcd.EnvironmentBlueprintStageClaim{}, errs.New(
+		claim.ProjectionSchema != blueprints.EnvironmentDesiredProjectionSchema {
+		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindStateConflict,
 			"Service staged baseline changed",
 		)
@@ -417,8 +417,8 @@ func serviceStableIDFromRevision(kind ids.Kind, revisionID string) string {
 	return string(kind) + "_" + strings.TrimPrefix(revisionID, "task_")
 }
 
-func serviceMutationAuditFromCreate(input apiTypes.ServiceCreate) etcd.EnvironmentServiceMutationRequest {
-	return etcd.EnvironmentServiceMutationRequest{
+func serviceMutationAuditFromCreate(input apiTypes.ServiceCreate) blueprints.EnvironmentServiceMutationRequest {
+	return blueprints.EnvironmentServiceMutationRequest{
 		EnvironmentID: input.EnvironmentID, Name: input.Name, Image: input.Image,
 		Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
 		OnFailure: core.OnFailure(input.OnFailure), Healthcheck: serviceHealthcheckToCore(input.Healthcheck),
@@ -427,8 +427,8 @@ func serviceMutationAuditFromCreate(input apiTypes.ServiceCreate) etcd.Environme
 	}
 }
 
-func serviceMutationAuditFromEdit(input apiTypes.ServiceEdit) etcd.EnvironmentServiceMutationRequest {
-	return etcd.EnvironmentServiceMutationRequest{
+func serviceMutationAuditFromEdit(input apiTypes.ServiceEdit) blueprints.EnvironmentServiceMutationRequest {
+	return blueprints.EnvironmentServiceMutationRequest{
 		Image: input.Image, Zones: append([]string(nil), input.Zones...), Strategy: core.Strategy(input.Strategy),
 		OnFailure: core.OnFailure(input.OnFailure), Healthcheck: serviceHealthcheckToCore(input.Healthcheck),
 		Resources: core.Resources{Mem: input.Resources.Mem, CPUs: input.Resources.CPUs},

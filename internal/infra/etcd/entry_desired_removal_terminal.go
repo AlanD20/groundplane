@@ -91,8 +91,8 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 ) (routeTaskChange, error) {
 	desired := intent.Desired
 	keys := []string{blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-		environmentBlueprintDescriptorKeyByID(desired.DescriptorID),
-		environmentBlueprintRootKey(intent.EnvironmentID, desired.RevisionID),
+		blueprints.EnvironmentBlueprintDescriptorKeyByID(desired.DescriptorID),
+		blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desired.RevisionID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), blueprintEntryEnvironmentPrefix + intent.EntryID}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -110,24 +110,24 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	if err != nil || baseID != desired.BaseRevisionID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal baseline head changed")
 	}
-	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(read.Values[1].Value)
+	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(read.Values[1].Value)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(read.Values[2].Value)
-	if err != nil || descriptor.State != EnvironmentBlueprintStageSealed ||
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(read.Values[2].Value)
+	if err != nil || descriptor.State != blueprints.EnvironmentBlueprintStageSealed ||
 		descriptor.Claim.DescriptorID != desired.DescriptorID || descriptor.Claim.EnvironmentID != intent.EnvironmentID ||
 		descriptor.Claim.RevisionID != desired.RevisionID || descriptor.Claim.TaskID != desired.RevisionID ||
 		descriptor.Claim.RenderGeneration != desired.RenderGeneration ||
 		descriptor.Claim.BaselineHeadRevision != intent.EntryRevision ||
-		descriptor.Claim.SourceKind != EnvironmentBlueprintSourceMutation || seal != environmentBlueprintSealFromDescriptor(descriptor) {
+		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || seal != environmentBlueprintSealFromDescriptor(descriptor) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal staged revision changed")
 	}
 	hierarchy := &HierarchyRepository{store: repository.store}
 	chunkKeys := make([]string, seal.ProjectionChunks)
 	for index := range chunkKeys {
-		chunkKeys[index] = environmentBlueprintChunkKeyFor(intent.EnvironmentID, desired.RevisionID,
-			EnvironmentBlueprintChunkProjection, uint32(index))
+		chunkKeys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(intent.EnvironmentID, desired.RevisionID,
+			blueprints.EnvironmentBlueprintChunkProjection, uint32(index))
 	}
 	projectionValue, _, err := hierarchy.readEnvironmentBlueprintStreamAtRevision(
 		ctx,
@@ -154,14 +154,14 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	locatorKey, _, err := environmentBlueprintLocatorKey(descriptor.Claim.Locator)
+	locatorKey, _, err := blueprints.EnvironmentBlueprintLocatorKey(descriptor.Claim.Locator)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	descriptor.State, descriptor.UpdatedAt = EnvironmentBlueprintStagePublished, nextBlueprintProgressTime(
+	descriptor.State, descriptor.UpdatedAt = blueprints.EnvironmentBlueprintStagePublished, nextBlueprintProgressTime(
 		descriptor.UpdatedAt,
 	)
-	descriptorValue, err := encodeEnvironmentBlueprintStageDescriptor(descriptor)
+	descriptorValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)
 	if err != nil {
 		return routeTaskChange{}, err
 	}

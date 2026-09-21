@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -25,12 +26,12 @@ type BlueprintScriptPublication struct {
 
 func (publication BlueprintScriptPublication) validate(
 	environmentID string,
-	source EnvironmentBlueprintSourceKind,
+	source blueprints.EnvironmentBlueprintSourceKind,
 ) error {
 	if publication.IsZero() {
 		return nil
 	}
-	if source != EnvironmentBlueprintSourceApply || publication.environmentID != environmentID ||
+	if source != blueprints.EnvironmentBlueprintSourceApply || publication.environmentID != environmentID ||
 		len(publication.conditions) != 1 || len(publication.mutations) != 1 {
 		return errs.New(errs.KindValidationFailed, "Blueprint Script publication is invalid")
 	}

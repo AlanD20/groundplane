@@ -138,7 +138,7 @@ func validateBlueprintCandidateCompensation(
 func validateBlueprintCandidateAttempts(
 	record blueprintCandidateAttemptAuthorityRecord,
 	task TaskRecord,
-	seal EnvironmentBlueprintSeal,
+	seal blueprints.EnvironmentBlueprintSeal,
 ) error {
 	if seal.EnvironmentID != task.Owner.EnvironmentID ||
 		seal.RevisionID != task.Params[blueprints.EnvironmentDesiredRevisionParam] ||
@@ -390,7 +390,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 		releases.ReleaseManifestStagingKey(publicationID),
 		hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(task.Owner.EnvironmentID),
-		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
+		blueprints.EnvironmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -421,9 +421,9 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 			"blueprint mutation epoch is invalid",
 		)
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(read.Values[4].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(read.Values[4].Value)
 	if err != nil || seal.EnvironmentID != task.Owner.EnvironmentID ||
-		seal.RevisionID != desiredRevisionID || seal.SourceKind != EnvironmentBlueprintSourceApply ||
+		seal.RevisionID != desiredRevisionID || seal.SourceKind != blueprints.EnvironmentBlueprintSourceApply ||
 		seal.RenderGeneration != uint64(task.RenderGeneration) {
 		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
@@ -449,7 +449,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 func (repository *TaskRepository) blueprintCandidateAttempts(
 	ctx context.Context,
 	task TaskRecord,
-	seal EnvironmentBlueprintSeal,
+	seal blueprints.EnvironmentBlueprintSeal,
 	revision int64,
 ) ([]domain.Attempt, []etcdstore.Condition, error) {
 	if task.RetryOf == "" {

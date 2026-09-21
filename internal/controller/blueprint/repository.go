@@ -62,13 +62,13 @@ type environmentBlueprintRepository interface {
 	) (etcd.ComponentTaskPreparation, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
-		etcd.EnvironmentBlueprintStageClaimRequest,
-	) (etcd.EnvironmentBlueprintStageClaim, error)
+		blueprints.EnvironmentBlueprintStageClaimRequest,
+	) (blueprints.EnvironmentBlueprintStageClaim, error)
 	StageEnvironmentBlueprintRevision(
 		context.Context,
-		etcd.EnvironmentBlueprintStageRequest,
-	) (etcd.EnvironmentBlueprintSeal, error)
-	AbandonEnvironmentBlueprintStage(context.Context, etcd.EnvironmentBlueprintStageClaim) error
+		blueprints.EnvironmentBlueprintStageRequest,
+	) (blueprints.EnvironmentBlueprintSeal, error)
+	AbandonEnvironmentBlueprintStage(context.Context, blueprints.EnvironmentBlueprintStageClaim) error
 	PublishEnvironmentBlueprintDesiredRevision(
 		context.Context,
 		netip.Prefix,
@@ -76,8 +76,8 @@ type environmentBlueprintRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
-		etcd.EnvironmentBlueprintStageClaim,
-		etcd.EnvironmentDesiredRevisionIdentity,
+		blueprints.EnvironmentBlueprintStageClaim,
+		blueprints.EnvironmentDesiredRevisionIdentity,
 		projectionrecord.EnvironmentComposeProjection,
 		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]blueprints.EnvironmentBlueprintServiceChange,
@@ -195,19 +195,19 @@ func (repository *durableRepository) ResolveBlueprintEntryEnvironment(
 }
 func (repository *durableRepository) ClaimEnvironmentBlueprintStage(
 	ctx context.Context,
-	request etcd.EnvironmentBlueprintStageClaimRequest,
-) (etcd.EnvironmentBlueprintStageClaim, error) {
+	request blueprints.EnvironmentBlueprintStageClaimRequest,
+) (blueprints.EnvironmentBlueprintStageClaim, error) {
 	return repository.desired.ClaimEnvironmentBlueprintStage(ctx, request)
 }
 func (repository *durableRepository) StageEnvironmentBlueprintRevision(
 	ctx context.Context,
-	request etcd.EnvironmentBlueprintStageRequest,
-) (etcd.EnvironmentBlueprintSeal, error) {
+	request blueprints.EnvironmentBlueprintStageRequest,
+) (blueprints.EnvironmentBlueprintSeal, error) {
 	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
 }
 func (repository *durableRepository) AbandonEnvironmentBlueprintStage(
 	ctx context.Context,
-	claim etcd.EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 ) error {
 	return repository.desired.AbandonEnvironmentBlueprintStage(ctx, claim)
 }
@@ -285,8 +285,8 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
-	claim etcd.EnvironmentBlueprintStageClaim,
-	revision etcd.EnvironmentDesiredRevisionIdentity,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	revision blueprints.EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,

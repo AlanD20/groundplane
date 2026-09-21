@@ -269,7 +269,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		)
 	}
 
-	rootKey := environmentBlueprintRootKey(environmentID, revisionID)
+	rootKey := blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID)
 	projectionKey := projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID)
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{rootKey, projectionKey}, Revision: readRevision,
@@ -299,16 +299,16 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		}
 		return taskMaterializationProjectionChange{}, nil
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(state.Values[0].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(state.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return taskMaterializationProjectionChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	chunkKeys := make([]string, seal.ProjectionChunks)
 	for index := range chunkKeys {
-		chunkKeys[index] = environmentBlueprintChunkKeyFor(
+		chunkKeys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(
 			environmentID,
 			revisionID,
-			EnvironmentBlueprintChunkProjection,
+			blueprints.EnvironmentBlueprintChunkProjection,
 			uint32(index),
 		)
 	}

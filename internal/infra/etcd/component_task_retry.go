@@ -110,7 +110,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
+		blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
 	for _, candidate := range intent.Candidates {
 		keys = append(keys, componentrecord.RecordKey(candidate.Current.Desired.ID))
@@ -185,7 +185,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			},
 			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
 			{
-				Key:         environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
+				Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 				ModRevision: state.Values[3].ModRevision,
 			},
 		},

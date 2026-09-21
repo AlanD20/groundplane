@@ -20,24 +20,24 @@ type blueprintTransactionSizer interface {
 
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	ctx context.Context,
-	claim EnvironmentBlueprintStageClaim,
-	revision EnvironmentDesiredRevisionIdentity,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	revision blueprints.EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	expectedHeadRevision int64,
 ) (environmentBlueprintPublicationEvidence, error) {
-	digest, err := EnvironmentBlueprintDependencyDigest(projection)
+	digest, err := blueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	if err := validateEnvironmentBlueprintStageClaim(claim); err != nil {
+	if err := blueprints.ValidateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	if err := validateEnvironmentDesiredRevisionIdentity(revision); err != nil {
+	if err := blueprints.ValidateEnvironmentDesiredRevisionIdentity(revision); err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	descriptorKey := environmentBlueprintDescriptorKeyByID(claim.DescriptorID)
+	descriptorKey := blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID)
 	descriptorRead, err := repository.store.Get(ctx, descriptorKey)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
@@ -49,15 +49,15 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 		)
 	}
 	defer clear(descriptorRead.Entry.Value)
-	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
+	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	locatorKey, _, err := environmentBlueprintLocatorKey(descriptor.Claim.Locator)
+	locatorKey, _, err := blueprints.EnvironmentBlueprintLocatorKey(descriptor.Claim.Locator)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	rootKey := environmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID)
+	rootKey := blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID)
 	keys := []string{rootKey, descriptorKey, locatorKey}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: descriptorRead.ReadRevision})
 	if err != nil {
@@ -71,20 +71,20 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 		)
 	}
 	defer clearKeyValues(result.Values)
-	seal, err := decodeEnvironmentBlueprintSeal(result.Values[0].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(result.Values[0].Value)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	descriptor, err = decodeEnvironmentBlueprintStageDescriptor(result.Values[1].Value)
+	descriptor, err = blueprints.DecodeEnvironmentBlueprintStageDescriptor(result.Values[1].Value)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	descriptorID, locatorDigest, err := decodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
+	descriptorID, locatorDigest, err := blueprints.DecodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
 	protectedDigest, digestErr := protectedBlueprintIntentDigest(descriptor.Claim.Intent)
 	taskEnvironmentID, materializes, taskEnvironmentErr := desiredRevisionTaskEnvironment(task)
-	if err != nil || digestErr != nil || !sameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
+	if err != nil || digestErr != nil || !blueprints.SameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
 		descriptorID != descriptor.Claim.DescriptorID || locatorDigest != protectedDigest ||
-		descriptor.State != EnvironmentBlueprintStageSealed || seal != environmentBlueprintSealFromDescriptor(descriptor) ||
+		descriptor.State != blueprints.EnvironmentBlueprintStageSealed || seal != environmentBlueprintSealFromDescriptor(descriptor) ||
 		seal.EnvironmentID != revision.EnvironmentID || seal.RevisionID != revision.RevisionID ||
 		seal.BaselineHeadRevision != expectedHeadRevision || seal.DependencyDigest != digest ||
 		descriptor.Claim.TaskID != task.ID || taskEnvironmentErr != nil || !materializes ||
@@ -98,9 +98,9 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 		)
 	}
 	published := descriptor
-	published.State = EnvironmentBlueprintStagePublished
+	published.State = blueprints.EnvironmentBlueprintStagePublished
 	published.UpdatedAt = nextBlueprintProgressTime(descriptor.UpdatedAt)
-	publishedValue, err := encodeEnvironmentBlueprintStageDescriptor(published)
+	publishedValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(published)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
@@ -118,45 +118,45 @@ func sameBlueprintProtectedIntent(left, right idempotencyrecord.ProtectedIntentR
 		bytes.Equal(left.Ciphertext, right.Ciphertext)
 }
 
-func environmentBlueprintChunkKeys(descriptor EnvironmentBlueprintStageDescriptor) []string {
+func environmentBlueprintChunkKeys(descriptor blueprints.EnvironmentBlueprintStageDescriptor) []string {
 	keys := make([]string, 0, int(descriptor.AuditChunks+descriptor.ProjectionChunks))
 	for index := uint32(0); index < descriptor.AuditChunks; index++ {
-		keys = append(keys, environmentBlueprintChunkKeyFor(
-			descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID, EnvironmentBlueprintChunkAudit, index,
+		keys = append(keys, blueprints.EnvironmentBlueprintChunkKeyFor(
+			descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID, blueprints.EnvironmentBlueprintChunkAudit, index,
 		))
 	}
 	for index := uint32(0); index < descriptor.ProjectionChunks; index++ {
-		keys = append(keys, environmentBlueprintChunkKeyFor(
-			descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID, EnvironmentBlueprintChunkProjection, index,
+		keys = append(keys, blueprints.EnvironmentBlueprintChunkKeyFor(
+			descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID, blueprints.EnvironmentBlueprintChunkProjection, index,
 		))
 	}
 	return keys
 }
 
-func verifyEnvironmentBlueprintChunks(descriptor EnvironmentBlueprintStageDescriptor, values []*etcdstore.KeyValue) error {
+func verifyEnvironmentBlueprintChunks(descriptor blueprints.EnvironmentBlueprintStageDescriptor, values []*etcdstore.KeyValue) error {
 	if len(values) != int(descriptor.AuditChunks+descriptor.ProjectionChunks) {
-		return corruptEnvironmentBlueprintStage()
+		return blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	auditHasher := sha256.New()
 	projectionHasher := sha256.New()
 	var auditBytes, projectionBytes uint64
 	for index, entry := range values {
-		chunk, err := decodeEnvironmentBlueprintChunk(entry.Value)
+		chunk, err := blueprints.DecodeEnvironmentBlueprintChunk(entry.Value)
 		if err != nil {
 			return err
 		}
 		if index < int(descriptor.AuditChunks) {
-			if chunk.Family != EnvironmentBlueprintChunkAudit || chunk.Sequence != uint32(index) {
+			if chunk.Family != blueprints.EnvironmentBlueprintChunkAudit || chunk.Sequence != uint32(index) {
 				clear(chunk.Data)
-				return corruptEnvironmentBlueprintStage()
+				return blueprints.CorruptEnvironmentBlueprintStage()
 			}
 			_, _ = auditHasher.Write(chunk.Data)
 			auditBytes += uint64(len(chunk.Data))
 		} else {
 			sequence := uint32(index) - descriptor.AuditChunks
-			if chunk.Family != EnvironmentBlueprintChunkProjection || chunk.Sequence != sequence {
+			if chunk.Family != blueprints.EnvironmentBlueprintChunkProjection || chunk.Sequence != sequence {
 				clear(chunk.Data)
-				return corruptEnvironmentBlueprintStage()
+				return blueprints.CorruptEnvironmentBlueprintStage()
 			}
 			_, _ = projectionHasher.Write(chunk.Data)
 			projectionBytes += uint64(len(chunk.Data))
@@ -168,13 +168,13 @@ func verifyEnvironmentBlueprintChunks(descriptor EnvironmentBlueprintStageDescri
 	copy(projectionDigest[:], projectionHasher.Sum(nil))
 	if auditBytes != descriptor.AuditBytes || projectionBytes != descriptor.ProjectionBytes ||
 		auditDigest != descriptor.AuditSHA256 || projectionDigest != descriptor.ProjectionSHA256 {
-		return corruptEnvironmentBlueprintStage()
+		return blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	return nil
 }
 
-func environmentBlueprintSealFromDescriptor(descriptor EnvironmentBlueprintStageDescriptor) EnvironmentBlueprintSeal {
-	return EnvironmentBlueprintSeal{
+func environmentBlueprintSealFromDescriptor(descriptor blueprints.EnvironmentBlueprintStageDescriptor) blueprints.EnvironmentBlueprintSeal {
+	return blueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: descriptor.Claim.EnvironmentID, RevisionID: descriptor.Claim.RevisionID,
 		SourceKind: descriptor.Claim.SourceKind, RenderGeneration: descriptor.Claim.RenderGeneration,
 		ProjectionSchema: descriptor.Claim.ProjectionSchema,
@@ -187,32 +187,32 @@ func environmentBlueprintSealFromDescriptor(descriptor EnvironmentBlueprintStage
 
 func (repository *HierarchyRepository) readEnvironmentBlueprintStream(
 	ctx context.Context,
-	seal EnvironmentBlueprintSeal,
+	seal blueprints.EnvironmentBlueprintSeal,
 	family string,
 ) ([]byte, int64, error) {
-	count, familyID := seal.AuditChunks, EnvironmentBlueprintChunkAudit
+	count, familyID := seal.AuditChunks, blueprints.EnvironmentBlueprintChunkAudit
 	if family == "projection" {
-		count, familyID = seal.ProjectionChunks, EnvironmentBlueprintChunkProjection
+		count, familyID = seal.ProjectionChunks, blueprints.EnvironmentBlueprintChunkProjection
 	} else if family != "audit" {
 		return nil, 0, errs.New(errs.KindInternal, "Blueprint stream family is invalid")
 	}
 	keys := make([]string, int(count))
 	for index := range keys {
-		keys[index] = environmentBlueprintChunkKeyFor(seal.EnvironmentID, seal.RevisionID, familyID, uint32(index))
+		keys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(seal.EnvironmentID, seal.RevisionID, familyID, uint32(index))
 	}
 	return repository.readEnvironmentBlueprintStreamAtRevision(ctx, seal, family, keys, 0)
 }
 
 func (repository *HierarchyRepository) readEnvironmentBlueprintStreamAtRevision(
 	ctx context.Context,
-	seal EnvironmentBlueprintSeal,
+	seal blueprints.EnvironmentBlueprintSeal,
 	family string,
 	keys []string,
 	revision int64,
 ) ([]byte, int64, error) {
-	length, digest, familyID := seal.AuditBytes, seal.AuditSHA256, EnvironmentBlueprintChunkAudit
+	length, digest, familyID := seal.AuditBytes, seal.AuditSHA256, blueprints.EnvironmentBlueprintChunkAudit
 	if family == "projection" {
-		length, digest, familyID = seal.ProjectionBytes, seal.ProjectionSHA256, EnvironmentBlueprintChunkProjection
+		length, digest, familyID = seal.ProjectionBytes, seal.ProjectionSHA256, blueprints.EnvironmentBlueprintChunkProjection
 	} else if family != "audit" {
 		return nil, 0, errs.New(errs.KindInternal, "Blueprint stream family is invalid")
 	}
@@ -221,20 +221,20 @@ func (repository *HierarchyRepository) readEnvironmentBlueprintStreamAtRevision(
 		return nil, 0, err
 	}
 	if result == nil || len(result.Values) != len(keys) {
-		return nil, 0, corruptEnvironmentBlueprintStage()
+		return nil, 0, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	defer clearKeyValues(result.Values)
 	stream := make([]byte, 0, int(length))
 	for index, entry := range result.Values {
 		if entry == nil || entry.Key != keys[index] {
 			clear(stream)
-			return nil, 0, corruptEnvironmentBlueprintStage()
+			return nil, 0, blueprints.CorruptEnvironmentBlueprintStage()
 		}
-		chunk, err := decodeEnvironmentBlueprintChunk(entry.Value)
+		chunk, err := blueprints.DecodeEnvironmentBlueprintChunk(entry.Value)
 		if err != nil || chunk.Family != familyID || chunk.Sequence != uint32(index) {
 			clear(chunk.Data)
 			clear(stream)
-			return nil, 0, corruptEnvironmentBlueprintStage()
+			return nil, 0, blueprints.CorruptEnvironmentBlueprintStage()
 		}
 		stream = append(stream, chunk.Data...)
 		clear(chunk.Data)
@@ -242,7 +242,7 @@ func (repository *HierarchyRepository) readEnvironmentBlueprintStreamAtRevision(
 	computed := sha256.Sum256(stream)
 	if uint64(len(stream)) != length || computed != digest {
 		clear(stream)
-		return nil, 0, corruptEnvironmentBlueprintStage()
+		return nil, 0, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	return stream, result.ReadRevision, nil
 }
@@ -269,7 +269,7 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	rootResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentBlueprintRootKey(environmentID, revisionID)}, Revision: headResult.ReadRevision,
+		Keys: []string{blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID)}, Revision: headResult.ReadRevision,
 	})
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
@@ -277,14 +277,14 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 	if rootResult == nil || len(rootResult.Values) != 1 || rootResult.Values[0] == nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(rootResult.Values[0].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(rootResult.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	keys := make([]string, int(seal.ProjectionChunks))
 	for index := range keys {
-		keys[index] = environmentBlueprintChunkKeyFor(
-			environmentID, revisionID, EnvironmentBlueprintChunkProjection, uint32(index),
+		keys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(
+			environmentID, revisionID, blueprints.EnvironmentBlueprintChunkProjection, uint32(index),
 		)
 	}
 	stream, readRevision, err := repository.readEnvironmentBlueprintStreamAtRevision(
@@ -316,19 +316,19 @@ func validateBlueprintTransaction(
 	}
 	valueBytes := 0
 	for _, condition := range conditions {
-		if len(condition.Key) == 0 || len(condition.Key) > EnvironmentBlueprintKeyMaxBytes {
+		if len(condition.Key) == 0 || len(condition.Key) > blueprints.EnvironmentBlueprintKeyMaxBytes {
 			return errs.New(errs.KindInternal, "Blueprint transaction key exceeds 2 KiB")
 		}
 	}
 	for _, mutation := range mutations {
-		if len(mutation.Key) == 0 || len(mutation.Key) > EnvironmentBlueprintKeyMaxBytes {
+		if len(mutation.Key) == 0 || len(mutation.Key) > blueprints.EnvironmentBlueprintKeyMaxBytes {
 			return errs.New(errs.KindInternal, "Blueprint transaction key exceeds 2 KiB")
 		}
 		if mutation.Type == etcdstore.MutationPut {
 			valueBytes += len(mutation.Value)
 		}
 	}
-	conservative := valueBytes + operations*EnvironmentBlueprintKeyMaxBytes + operations*64 + 128
+	conservative := valueBytes + operations*blueprints.EnvironmentBlueprintKeyMaxBytes + operations*64 + 128
 	if conservative > maximumBytes {
 		return errs.New(errs.KindInternal, "Blueprint transaction conservative byte budget exceeded")
 	}
@@ -350,7 +350,7 @@ func protectedBlueprintIntentDigest(intent idempotencyrecord.ProtectedIntentReco
 	}
 	decoded, err := hex.DecodeString(intent.CiphertextDigest)
 	if err != nil || len(decoded) != sha256.Size {
-		return [sha256.Size]byte{}, corruptEnvironmentBlueprintStage()
+		return [sha256.Size]byte{}, blueprints.CorruptEnvironmentBlueprintStage()
 	}
 	var result [sha256.Size]byte
 	copy(result[:], decoded)
@@ -358,18 +358,18 @@ func protectedBlueprintIntentDigest(intent idempotencyrecord.ProtectedIntentReco
 }
 
 func matchingEnvironmentBlueprintChunk(
-	chunk EnvironmentBlueprintChunk,
+	chunk blueprints.EnvironmentBlueprintChunk,
 	family uint8,
 	sequence uint32,
 	data []byte,
 ) bool {
 	return chunk.Family == family && chunk.Sequence == sequence &&
-		chunk.LogicalOffset == uint64(sequence)*EnvironmentBlueprintChunkBytes &&
+		chunk.LogicalOffset == uint64(sequence)*blueprints.EnvironmentBlueprintChunkBytes &&
 		chunk.LogicalLength == uint32(len(data)) && chunk.Digest == sha256.Sum256(data) &&
 		string(chunk.Data) == string(data)
 }
 
-func sameEnvironmentBlueprintStageStreams(left, right EnvironmentBlueprintStageDescriptor) bool {
+func sameEnvironmentBlueprintStageStreams(left, right blueprints.EnvironmentBlueprintStageDescriptor) bool {
 	return left.Bound == right.Bound && left.AuditChunks == right.AuditChunks && left.AuditBytes == right.AuditBytes &&
 		left.AuditSHA256 == right.AuditSHA256 && left.ProjectionChunks == right.ProjectionChunks &&
 		left.ProjectionBytes == right.ProjectionBytes && left.ProjectionSHA256 == right.ProjectionSHA256 &&

@@ -135,7 +135,7 @@ func scriptAttachSourceConditions(sources ScriptAttachSources) []etcdstore.Condi
 			if network.Record.EnvironmentID != head.Record.EnvironmentID {
 				continue
 			}
-			root := environmentBlueprintRootKey(head.Record.EnvironmentID, head.Record.RevisionID)
+			root := blueprints.EnvironmentBlueprintRootKey(head.Record.EnvironmentID, head.Record.RevisionID)
 			byKey[root] = etcdstore.Condition{Key: root, ModRevision: network.Revision}
 			deleted := deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), network.Record.Desired.ID)
 			byKey[deleted] = etcdstore.Condition{Key: deleted}

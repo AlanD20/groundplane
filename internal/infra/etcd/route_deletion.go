@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -76,8 +77,8 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if projection == nil || intent.CurrentProjection == nil || intent.CandidateProjection == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
 	}
-	audit := EnvironmentDesiredMutationAudit{Route: &EnvironmentRouteMutationAudit{
-		Action: EnvironmentRouteMutationRemove, BaseRevisionID: intent.CurrentProjection.RevisionID,
+	audit := blueprints.EnvironmentDesiredMutationAudit{Route: &blueprints.EnvironmentRouteMutationAudit{
+		Action: blueprints.EnvironmentRouteMutationRemove, BaseRevisionID: intent.CurrentProjection.RevisionID,
 		RouteID: route.Record.Desired.ID,
 	}}
 	publication, err := prepareRouteHeadPublication(

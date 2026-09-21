@@ -9,6 +9,7 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -207,7 +208,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		MatchExistingIntent: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 			return service.idempotency.MatchesStaged(ctx, evidence, existing)
 		},
-		BaselineHeadRevision: 0, SourceKind: etcd.EnvironmentBlueprintSourceApply,
+		BaselineHeadRevision: 0, SourceKind: blueprints.EnvironmentBlueprintSourceApply,
 		RenderGeneration: 1, CreatedAt: stage.Record.CreatedAt,
 	})
 	if err != nil {
@@ -433,7 +434,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	revision := desiredrevision.BlueprintRevision(environment.ID, task.ID, stage.Record.CreatedAt, bundle)
-	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
+	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim, Blueprint: &revision, Projection: projection,
 		DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
@@ -465,7 +466,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		Project: project, Environment: environment, Components: nil,
 		Zone: zone, Service: serviceRecord, Secrets: secrets, SecretValues: secretValues,
 		Entries: entries, EntryValues: generations, Claim: claim,
-		Revision:   etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: environment.ID, RevisionID: task.ID},
+		Revision:   blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: environment.ID, RevisionID: task.ID},
 		Projection: projection, Task: task, HookInputs: hookInputs, Marker: marker,
 	})
 	if publishErr != nil {

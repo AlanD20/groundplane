@@ -89,7 +89,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx,
 		retryIntent.Claim,
-		EnvironmentDesiredRevisionIdentity{
+		blueprints.EnvironmentDesiredRevisionIdentity{
 			EnvironmentID: retryIntent.EnvironmentID,
 			RevisionID:    retryIntent.Claim.RevisionID,
 		},
@@ -126,7 +126,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 			{Key: keys[3], ModRevision: state.Values[3].ModRevision},
 			{Key: keys[4]},
 			{
-				Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
+				Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 				ModRevision: publication.rootRevision,
 			},
 			{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},

@@ -79,7 +79,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			keys,
 			result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID)]],
 			result.Values[dynamic.index[blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID)]],
-			result.Values[dynamic.index[environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID)]],
+			result.Values[dynamic.index[blueprints.EnvironmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID)]],
 		)
 		for _, service := range snapshot.Services {
 			keys = append(keys, result.Values[dynamic.index[servicerecord.ServiceRuntimeKey(service.ServiceID)]])

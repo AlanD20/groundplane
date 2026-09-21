@@ -47,7 +47,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		return false, releases.CorruptReleaseRecord()
 	}
 	rootRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentBlueprintRootKey(
+		Keys: []string{blueprints.EnvironmentBlueprintRootKey(
 			task.Owner.EnvironmentID, task.Params[blueprints.EnvironmentDesiredRevisionParam],
 		)},
 		Revision: readRevision,
@@ -58,7 +58,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		}
 		return false, releases.CorruptReleaseRecord()
 	}
-	seal, err := decodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
 	if err != nil {
 		return false, err
 	}

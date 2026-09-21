@@ -3,56 +3,57 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 )
 
-func BuildDesiredRevisionStreams(request EnvironmentBlueprintStageRequest) (EnvironmentBlueprintStreams, error) {
-	return buildEnvironmentBlueprintStreams(request)
+func BuildDesiredRevisionStreams(request blueprints.EnvironmentBlueprintStageRequest) (blueprints.EnvironmentBlueprintStreams, error) {
+	return blueprints.BuildEnvironmentBlueprintStreams(request)
 }
 
-func CloneDesiredRevisionClaim(claim EnvironmentBlueprintStageClaim) EnvironmentBlueprintStageClaim {
-	return cloneEnvironmentBlueprintStageClaim(claim)
+func CloneDesiredRevisionClaim(claim blueprints.EnvironmentBlueprintStageClaim) blueprints.EnvironmentBlueprintStageClaim {
+	return blueprints.CloneEnvironmentBlueprintStageClaim(claim)
 }
 
-func CorruptDesiredRevisionStage() error { return corruptEnvironmentBlueprintStage() }
+func CorruptDesiredRevisionStage() error { return blueprints.CorruptEnvironmentBlueprintStage() }
 
 func DecodeDesiredRevisionKeySegment(segment string) ([]byte, error) {
-	return decodeBlueprintDynamicBytes(segment)
+	return blueprints.DecodeBlueprintDynamicBytes(segment)
 }
 
-func DecodeDesiredRevisionChunk(value []byte) (EnvironmentBlueprintChunk, error) {
-	return decodeEnvironmentBlueprintChunk(value)
+func DecodeDesiredRevisionChunk(value []byte) (blueprints.EnvironmentBlueprintChunk, error) {
+	return blueprints.DecodeEnvironmentBlueprintChunk(value)
 }
 
-func EncodeDesiredRevisionChunk(value EnvironmentBlueprintChunk) ([]byte, error) {
-	return encodeEnvironmentBlueprintChunk(value)
+func EncodeDesiredRevisionChunk(value blueprints.EnvironmentBlueprintChunk) ([]byte, error) {
+	return blueprints.EncodeEnvironmentBlueprintChunk(value)
 }
 
-func DecodeDesiredRevisionSeal(value []byte) (EnvironmentBlueprintSeal, error) {
-	return decodeEnvironmentBlueprintSeal(value)
+func DecodeDesiredRevisionSeal(value []byte) (blueprints.EnvironmentBlueprintSeal, error) {
+	return blueprints.DecodeEnvironmentBlueprintSeal(value)
 }
 
-func EncodeDesiredRevisionSeal(value EnvironmentBlueprintSeal) ([]byte, error) {
-	return encodeEnvironmentBlueprintSeal(value)
+func EncodeDesiredRevisionSeal(value blueprints.EnvironmentBlueprintSeal) ([]byte, error) {
+	return blueprints.EncodeEnvironmentBlueprintSeal(value)
 }
 
-func DecodeDesiredRevisionDescriptor(value []byte) (EnvironmentBlueprintStageDescriptor, error) {
-	return decodeEnvironmentBlueprintStageDescriptor(value)
+func DecodeDesiredRevisionDescriptor(value []byte) (blueprints.EnvironmentBlueprintStageDescriptor, error) {
+	return blueprints.DecodeEnvironmentBlueprintStageDescriptor(value)
 }
 
-func EncodeDesiredRevisionDescriptor(value EnvironmentBlueprintStageDescriptor) ([]byte, error) {
-	return encodeEnvironmentBlueprintStageDescriptor(value)
+func EncodeDesiredRevisionDescriptor(value blueprints.EnvironmentBlueprintStageDescriptor) ([]byte, error) {
+	return blueprints.EncodeEnvironmentBlueprintStageDescriptor(value)
 }
 
 func DecodeDesiredRevisionLocator(value []byte) (string, [sha256.Size]byte, error) {
-	return decodeEnvironmentBlueprintStageLocator(value)
+	return blueprints.DecodeEnvironmentBlueprintStageLocator(value)
 }
 
 func EncodeDesiredRevisionLocator(descriptorID string, digest [sha256.Size]byte) ([]byte, error) {
-	return encodeEnvironmentBlueprintStageLocator(descriptorID, digest)
+	return blueprints.EncodeEnvironmentBlueprintStageLocator(descriptorID, digest)
 }
 
 func DecodeDesiredRevisionProjection(value []byte) (projectionrecord.EnvironmentComposeProjection, error) {
@@ -60,33 +61,35 @@ func DecodeDesiredRevisionProjection(value []byte) (projectionrecord.Environment
 }
 
 func DesiredRevisionChunkKey(environmentID, revisionID string, family uint8, index uint32) string {
-	return environmentBlueprintChunkKeyFor(environmentID, revisionID, family, index)
+	return blueprints.EnvironmentBlueprintChunkKeyFor(environmentID, revisionID, family, index)
 }
 
 func DesiredRevisionDescriptorKey(descriptorID string) string {
-	return environmentBlueprintDescriptorKeyByID(descriptorID)
+	return blueprints.EnvironmentBlueprintDescriptorKeyByID(descriptorID)
 }
 
 func DesiredRevisionLocatorKey(locator idempotencyrecord.IdempotencyLocator) (string, [sha256.Size]byte, error) {
-	return environmentBlueprintLocatorKey(locator)
+	return blueprints.EnvironmentBlueprintLocatorKey(locator)
 }
 
 func DesiredRevisionPrefix(environmentID, revisionID string) string {
-	return environmentBlueprintRevisionPrefixFinal(environmentID, revisionID)
+	return blueprints.EnvironmentBlueprintRevisionPrefixFinal(environmentID, revisionID)
 }
 
 func DesiredRevisionRootKey(environmentID, revisionID string) string {
-	return environmentBlueprintRootKey(environmentID, revisionID)
+	return blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID)
 }
 
-func SameDesiredRevisionClaim(left, right EnvironmentBlueprintStageClaim) bool {
-	return sameEnvironmentBlueprintStageClaim(left, right)
+func SameDesiredRevisionClaim(left, right blueprints.EnvironmentBlueprintStageClaim) bool {
+	return blueprints.SameEnvironmentBlueprintStageClaim(left, right)
 }
 
-func ValidDesiredRevisionTime(value time.Time) bool { return validBlueprintRecordTime(value) }
+func ValidDesiredRevisionTime(value time.Time) bool {
+	return blueprints.ValidBlueprintRecordTime(value)
+}
 
-func ValidateDesiredRevisionClaim(claim EnvironmentBlueprintStageClaim) error {
-	return validateEnvironmentBlueprintStageClaim(claim)
+func ValidateDesiredRevisionClaim(claim blueprints.EnvironmentBlueprintStageClaim) error {
+	return blueprints.ValidateEnvironmentBlueprintStageClaim(claim)
 }
 
 func ValidateDesiredRevisionTransaction(
@@ -113,20 +116,20 @@ func ProtectedDesiredRevisionIntentDigest(intent idempotencyrecord.ProtectedInte
 	return protectedBlueprintIntentDigest(intent)
 }
 
-func DesiredRevisionSealFromDescriptor(descriptor EnvironmentBlueprintStageDescriptor) EnvironmentBlueprintSeal {
+func DesiredRevisionSealFromDescriptor(descriptor blueprints.EnvironmentBlueprintStageDescriptor) blueprints.EnvironmentBlueprintSeal {
 	return environmentBlueprintSealFromDescriptor(descriptor)
 }
 
-func DesiredRevisionChunkKeys(descriptor EnvironmentBlueprintStageDescriptor) []string {
+func DesiredRevisionChunkKeys(descriptor blueprints.EnvironmentBlueprintStageDescriptor) []string {
 	return environmentBlueprintChunkKeys(descriptor)
 }
 
-func VerifyDesiredRevisionChunks(descriptor EnvironmentBlueprintStageDescriptor, values []*etcdstore.KeyValue) error {
+func VerifyDesiredRevisionChunks(descriptor blueprints.EnvironmentBlueprintStageDescriptor, values []*etcdstore.KeyValue) error {
 	return verifyEnvironmentBlueprintChunks(descriptor, values)
 }
 
 func MatchingDesiredRevisionChunk(
-	chunk EnvironmentBlueprintChunk,
+	chunk blueprints.EnvironmentBlueprintChunk,
 	family uint8,
 	sequence uint32,
 	data []byte,
@@ -134,6 +137,6 @@ func MatchingDesiredRevisionChunk(
 	return matchingEnvironmentBlueprintChunk(chunk, family, sequence, data)
 }
 
-func SameDesiredRevisionStreams(left, right EnvironmentBlueprintStageDescriptor) bool {
+func SameDesiredRevisionStreams(left, right blueprints.EnvironmentBlueprintStageDescriptor) bool {
 	return sameEnvironmentBlueprintStageStreams(left, right)
 }

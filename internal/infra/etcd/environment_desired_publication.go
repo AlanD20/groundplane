@@ -26,8 +26,8 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
-	claim EnvironmentBlueprintStageClaim,
-	revision EnvironmentDesiredRevisionIdentity,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	revision blueprints.EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
@@ -38,7 +38,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if claim.SourceKind != EnvironmentBlueprintSourceMutation {
+	if claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"direct Environment desired publication requires mutation source authority",
@@ -63,8 +63,8 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
-	claim EnvironmentBlueprintStageClaim,
-	revision EnvironmentDesiredRevisionIdentity,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	revision blueprints.EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
@@ -79,7 +79,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if claim.SourceKind != EnvironmentBlueprintSourceApply {
+	if claim.SourceKind != blueprints.EnvironmentBlueprintSourceApply {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment Blueprint publication requires apply source authority",
@@ -101,8 +101,8 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
-	claim EnvironmentBlueprintStageClaim,
-	revision EnvironmentDesiredRevisionIdentity,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	revision blueprints.EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
 	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
@@ -173,7 +173,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	// Apply assembles independently captured Release sources. Direct Entry
 	// capture uses the Environment epoch below; other direct mutations retain
 	// their sealed desired baseline. None can publish Blueprint Release changes.
-	if claim.SourceKind == EnvironmentBlueprintSourceApply {
+	if claim.SourceKind == blueprints.EnvironmentBlueprintSourceApply {
 		if err := releasePublication.validateRetainedRuntime(task, projection); err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
@@ -197,7 +197,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if claim.SourceKind == EnvironmentBlueprintSourceMutation {
+	if claim.SourceKind == blueprints.EnvironmentBlueprintSourceMutation {
 		if err := validateEntryRuntimePublication(task, fence); err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
@@ -239,7 +239,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(zonePool.value)
-	publishDomain := claim.SourceKind == EnvironmentBlueprintSourceApply
+	publishDomain := claim.SourceKind == blueprints.EnvironmentBlueprintSourceApply
 	requirementPublication, err := prepareBlueprintRequirementGatePublication(
 		requirementGate,
 		task,
@@ -373,7 +373,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{
-			Key:         environmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},

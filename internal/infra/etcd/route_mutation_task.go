@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -83,17 +84,17 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	} else if publicationCurrent == nil || publicationCandidate == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
 	}
-	action := EnvironmentRouteMutationEdit
-	request := &EnvironmentRouteMutationRequest{Exposure: record.Desired.Exposure}
+	action := blueprints.EnvironmentRouteMutationEdit
+	request := &blueprints.EnvironmentRouteMutationRequest{Exposure: record.Desired.Exposure}
 	if intent.Kind == RouteMutationCreate {
-		action = EnvironmentRouteMutationCreate
-		request = &EnvironmentRouteMutationRequest{
+		action = blueprints.EnvironmentRouteMutationCreate
+		request = &blueprints.EnvironmentRouteMutationRequest{
 			EnvironmentID: record.EnvironmentID, Host: record.Desired.Host, Path: record.Desired.Path,
 			Exposure: record.Desired.Exposure, TargetServiceID: record.Desired.TargetServiceID,
 			TargetPort: record.Desired.TargetPort,
 		}
 	}
-	audit := EnvironmentDesiredMutationAudit{Route: &EnvironmentRouteMutationAudit{
+	audit := blueprints.EnvironmentDesiredMutationAudit{Route: &blueprints.EnvironmentRouteMutationAudit{
 		Action: action, BaseRevisionID: publicationCurrent.RevisionID,
 		RouteID: record.Desired.ID, Request: request,
 	}}

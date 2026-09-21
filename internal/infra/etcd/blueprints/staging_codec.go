@@ -1,4 +1,4 @@
-package etcd
+package blueprints
 
 import (
 	"crypto/sha256"
@@ -76,7 +76,7 @@ func (writer *blueprintRecordWriter) string(value string) {
 }
 
 func (writer *blueprintRecordWriter) timestamp(value time.Time) {
-	if !validBlueprintRecordTime(value) {
+	if !ValidBlueprintRecordTime(value) {
 		writer.err = errs.New(errs.KindValidationFailed, "Blueprint durable timestamp is invalid")
 		return
 	}
@@ -91,7 +91,7 @@ type blueprintRecordReader struct {
 
 func (reader *blueprintRecordReader) take(length int) []byte {
 	if reader.err != nil || length < 0 || reader.offset > len(reader.value)-length {
-		reader.err = corruptEnvironmentBlueprintStage()
+		reader.err = CorruptEnvironmentBlueprintStage()
 		return nil
 	}
 	result := reader.value[reader.offset : reader.offset+length]
@@ -140,7 +140,7 @@ func (reader *blueprintRecordReader) digest() [sha256.Size]byte {
 func (reader *blueprintRecordReader) bytes(maximum int) []byte {
 	length := reader.uint32()
 	if reader.err != nil || uint64(length) > uint64(maximum) {
-		reader.err = corruptEnvironmentBlueprintStage()
+		reader.err = CorruptEnvironmentBlueprintStage()
 		return nil
 	}
 	return append([]byte(nil), reader.take(int(length))...)
@@ -149,7 +149,7 @@ func (reader *blueprintRecordReader) bytes(maximum int) []byte {
 func (reader *blueprintRecordReader) string(maximum int) string {
 	value := reader.bytes(maximum)
 	if reader.err != nil || !utf8.Valid(value) {
-		reader.err = corruptEnvironmentBlueprintStage()
+		reader.err = CorruptEnvironmentBlueprintStage()
 		return ""
 	}
 	return string(value)
@@ -158,7 +158,7 @@ func (reader *blueprintRecordReader) string(maximum int) string {
 func (reader *blueprintRecordReader) timestamp() time.Time {
 	nanoseconds := reader.uint64()
 	if nanoseconds > math.MaxInt64 {
-		reader.err = corruptEnvironmentBlueprintStage()
+		reader.err = CorruptEnvironmentBlueprintStage()
 		return time.Time{}
 	}
 	return time.Unix(0, int64(nanoseconds)).UTC()
@@ -166,13 +166,13 @@ func (reader *blueprintRecordReader) timestamp() time.Time {
 
 func (reader *blueprintRecordReader) done() error {
 	if reader.err != nil || reader.offset != len(reader.value) {
-		return corruptEnvironmentBlueprintStage()
+		return CorruptEnvironmentBlueprintStage()
 	}
 	return nil
 }
 
 func encodeEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit) ([]byte, error) {
-	if err := validateEnvironmentDesiredMutationAudit(value); err != nil {
+	if err := ValidateEnvironmentDesiredMutationAudit(value); err != nil {
 		return nil, err
 	}
 	body := blueprintRecordWriter{}
@@ -260,7 +260,7 @@ func encodeEnvironmentDesiredMutationAudit(value EnvironmentDesiredMutationAudit
 	return stream, nil
 }
 
-func chunkCount32(length int) uint32 {
+func ChunkCount32(length int) uint32 {
 	if length == 0 {
 		return 0
 	}
@@ -283,7 +283,7 @@ func EnvironmentBlueprintProjectionEvidence(
 	return sha256.Sum256(value), uint64(len(value)), nil
 }
 
-func encodeEnvironmentBlueprintStageDescriptor(value EnvironmentBlueprintStageDescriptor) ([]byte, error) {
+func EncodeEnvironmentBlueprintStageDescriptor(value EnvironmentBlueprintStageDescriptor) ([]byte, error) {
 	if err := validateEnvironmentBlueprintStageDescriptor(value); err != nil {
 		return nil, err
 	}
@@ -323,25 +323,25 @@ func encodeEnvironmentBlueprintStageDescriptor(value EnvironmentBlueprintStageDe
 	return encoded, nil
 }
 
-func decodeEnvironmentBlueprintStageDescriptor(value []byte) (EnvironmentBlueprintStageDescriptor, error) {
+func DecodeEnvironmentBlueprintStageDescriptor(value []byte) (EnvironmentBlueprintStageDescriptor, error) {
 	payload, err := recordcodec.Decode(
 		value,
 		environmentBlueprintDescriptorRecord,
 		environmentBlueprintDescriptorMaxBytes-recordcodec.HeaderBytes,
 	)
 	if err != nil {
-		return EnvironmentBlueprintStageDescriptor{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintStageDescriptor{}, CorruptEnvironmentBlueprintStage()
 	}
 	defer clear(payload)
 	reader := blueprintRecordReader{value: payload}
 	if reader.uint16() != environmentBlueprintRecordSchema {
-		return EnvironmentBlueprintStageDescriptor{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintStageDescriptor{}, CorruptEnvironmentBlueprintStage()
 	}
 	descriptor := EnvironmentBlueprintStageDescriptor{Claim: decodeEnvironmentBlueprintClaim(&reader)}
 	descriptor.State = EnvironmentBlueprintStageState(reader.uint8())
 	bound := reader.uint8()
 	if bound > 1 {
-		return EnvironmentBlueprintStageDescriptor{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintStageDescriptor{}, CorruptEnvironmentBlueprintStage()
 	}
 	descriptor.Bound = bound == 1
 	descriptor.AuditChunks = reader.uint32()
@@ -357,7 +357,7 @@ func decodeEnvironmentBlueprintStageDescriptor(value []byte) (EnvironmentBluepri
 	descriptor.UpdatedAt = reader.timestamp()
 	if reader.done() != nil || validateEnvironmentBlueprintStageDescriptor(descriptor) != nil {
 		clear(descriptor.Claim.Intent.Ciphertext)
-		return EnvironmentBlueprintStageDescriptor{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintStageDescriptor{}, CorruptEnvironmentBlueprintStage()
 	}
 	return descriptor, nil
 }
@@ -410,7 +410,7 @@ func decodeEnvironmentBlueprintClaim(reader *blueprintRecordReader) EnvironmentB
 	claim.Intent.Ciphertext = reader.bytes(idempotencyrecord.MaximumIntentCiphertext)
 	baseline := reader.uint64()
 	if baseline > math.MaxInt64 {
-		reader.err = corruptEnvironmentBlueprintStage()
+		reader.err = CorruptEnvironmentBlueprintStage()
 	} else {
 		claim.BaselineHeadRevision = int64(baseline)
 	}
@@ -421,7 +421,7 @@ func decodeEnvironmentBlueprintClaim(reader *blueprintRecordReader) EnvironmentB
 	return claim
 }
 
-func encodeEnvironmentBlueprintStageLocator(descriptorID string, digest [sha256.Size]byte) ([]byte, error) {
+func EncodeEnvironmentBlueprintStageLocator(descriptorID string, digest [sha256.Size]byte) ([]byte, error) {
 	if !validBlueprintString(descriptorID, 128) || zeroDigest(digest) {
 		return nil, errs.New(errs.KindValidationFailed, "Blueprint staging locator is invalid")
 	}
@@ -433,22 +433,22 @@ func encodeEnvironmentBlueprintStageLocator(descriptorID string, digest [sha256.
 	return encoded, err
 }
 
-func decodeEnvironmentBlueprintStageLocator(value []byte) (string, [sha256.Size]byte, error) {
+func DecodeEnvironmentBlueprintStageLocator(value []byte) (string, [sha256.Size]byte, error) {
 	payload, err := recordcodec.Decode(value, environmentBlueprintLocatorRecord, 256)
 	if err != nil {
-		return "", [sha256.Size]byte{}, corruptEnvironmentBlueprintStage()
+		return "", [sha256.Size]byte{}, CorruptEnvironmentBlueprintStage()
 	}
 	defer clear(payload)
 	reader := blueprintRecordReader{value: payload}
 	descriptorID := reader.string(128)
 	digest := reader.digest()
 	if reader.done() != nil || !validBlueprintString(descriptorID, 128) || zeroDigest(digest) {
-		return "", [sha256.Size]byte{}, corruptEnvironmentBlueprintStage()
+		return "", [sha256.Size]byte{}, CorruptEnvironmentBlueprintStage()
 	}
 	return descriptorID, digest, nil
 }
 
-func encodeEnvironmentBlueprintChunk(value EnvironmentBlueprintChunk) ([]byte, error) {
+func EncodeEnvironmentBlueprintChunk(value EnvironmentBlueprintChunk) ([]byte, error) {
 	if err := validateEnvironmentBlueprintChunk(value); err != nil {
 		return nil, err
 	}
@@ -475,10 +475,10 @@ func encodeEnvironmentBlueprintChunk(value EnvironmentBlueprintChunk) ([]byte, e
 	return encoded, nil
 }
 
-func decodeEnvironmentBlueprintChunk(value []byte) (EnvironmentBlueprintChunk, error) {
+func DecodeEnvironmentBlueprintChunk(value []byte) (EnvironmentBlueprintChunk, error) {
 	payload, err := recordcodec.Decode(value, environmentBlueprintChunkRecord, 53+EnvironmentBlueprintChunkBytes)
 	if err != nil {
-		return EnvironmentBlueprintChunk{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintChunk{}, CorruptEnvironmentBlueprintStage()
 	}
 	defer clear(payload)
 	reader := blueprintRecordReader{value: payload}
@@ -489,7 +489,7 @@ func decodeEnvironmentBlueprintChunk(value []byte) (EnvironmentBlueprintChunk, e
 	chunk.Data = reader.bytes(EnvironmentBlueprintChunkBytes)
 	if reader.done() != nil || validateEnvironmentBlueprintChunk(chunk) != nil {
 		clear(chunk.Data)
-		return EnvironmentBlueprintChunk{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintChunk{}, CorruptEnvironmentBlueprintStage()
 	}
 	return chunk, nil
 }
@@ -507,7 +507,7 @@ func validateEnvironmentBlueprintChunk(value EnvironmentBlueprintChunk) error {
 	return nil
 }
 
-func encodeEnvironmentBlueprintSeal(value EnvironmentBlueprintSeal) ([]byte, error) {
+func EncodeEnvironmentBlueprintSeal(value EnvironmentBlueprintSeal) ([]byte, error) {
 	if err := validateEnvironmentBlueprintSeal(value); err != nil {
 		return nil, err
 	}
@@ -539,19 +539,19 @@ func encodeEnvironmentBlueprintSeal(value EnvironmentBlueprintSeal) ([]byte, err
 	return encoded, nil
 }
 
-func decodeEnvironmentBlueprintSeal(value []byte) (EnvironmentBlueprintSeal, error) {
+func DecodeEnvironmentBlueprintSeal(value []byte) (EnvironmentBlueprintSeal, error) {
 	payload, err := recordcodec.Decode(
 		value,
 		environmentBlueprintRootRecord,
 		environmentBlueprintRootMaxBytes-recordcodec.HeaderBytes,
 	)
 	if err != nil {
-		return EnvironmentBlueprintSeal{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintSeal{}, CorruptEnvironmentBlueprintStage()
 	}
 	defer clear(payload)
 	reader := blueprintRecordReader{value: payload}
 	if reader.uint16() != environmentBlueprintRecordSchema {
-		return EnvironmentBlueprintSeal{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintSeal{}, CorruptEnvironmentBlueprintStage()
 	}
 	seal := EnvironmentBlueprintSeal{
 		EnvironmentID: reader.string(128), RevisionID: reader.string(128),
@@ -562,13 +562,13 @@ func decodeEnvironmentBlueprintSeal(value []byte) (EnvironmentBlueprintSeal, err
 	}
 	baseline := reader.uint64()
 	if baseline > math.MaxInt64 {
-		reader.err = corruptEnvironmentBlueprintStage()
+		reader.err = CorruptEnvironmentBlueprintStage()
 	} else {
 		seal.BaselineHeadRevision = int64(baseline)
 	}
 	seal.DependencyDigest = reader.digest()
 	if reader.done() != nil || validateEnvironmentBlueprintSeal(seal) != nil {
-		return EnvironmentBlueprintSeal{}, corruptEnvironmentBlueprintStage()
+		return EnvironmentBlueprintSeal{}, CorruptEnvironmentBlueprintStage()
 	}
 	return seal, nil
 }
@@ -577,8 +577,8 @@ func validateEnvironmentBlueprintSeal(value EnvironmentBlueprintSeal) error {
 	if value.BaselineHeadRevision < 0 || value.RenderGeneration == 0 || value.ProjectionSchema == 0 ||
 		value.AuditBytes == 0 || value.AuditBytes > environmentBlueprintMaximumAuditBytes ||
 		value.ProjectionBytes == 0 || value.ProjectionBytes > projectionrecord.EnvironmentBlueprintProjectionMaxBytes ||
-		value.AuditChunks != chunkCount32(int(value.AuditBytes)) ||
-		value.ProjectionChunks != chunkCount32(int(value.ProjectionBytes)) ||
+		value.AuditChunks != ChunkCount32(int(value.AuditBytes)) ||
+		value.ProjectionChunks != ChunkCount32(int(value.ProjectionBytes)) ||
 		value.AuditChunks > environmentBlueprintMaximumAuditChunks ||
 		value.ProjectionChunks > environmentBlueprintMaximumProjectionChunks ||
 		value.AuditChunks+value.ProjectionChunks > environmentBlueprintMaximumChunks ||

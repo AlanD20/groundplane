@@ -20,8 +20,8 @@ type EnvironmentServiceDesiredPublication struct {
 	Project              etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	Environment          etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	ExpectedHeadRevision int64
-	Claim                EnvironmentBlueprintStageClaim
-	Revision             EnvironmentDesiredRevisionIdentity
+	Claim                blueprints.EnvironmentBlueprintStageClaim
+	Revision             blueprints.EnvironmentDesiredRevisionIdentity
 	Projection           projectionrecord.EnvironmentComposeProjection
 	Change               blueprints.EnvironmentBlueprintServiceChange
 	References           ServiceMutationReferences
@@ -46,7 +46,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		input.Environment.ReadRevision < input.Environment.Revision ||
 		input.Environment.Record.ProjectID != input.Project.Record.ID ||
 		input.Environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
-		input.ExpectedHeadRevision < 0 || input.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+		input.ExpectedHeadRevision < 0 || input.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		input.Revision.EnvironmentID != input.Environment.Record.ID ||
 		input.Revision.RevisionID != input.Claim.RevisionID || input.Claim.TaskID != input.Claim.RevisionID ||
 		input.Projection.EnvironmentID != input.Revision.EnvironmentID ||
@@ -117,7 +117,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	serviceID := input.Change.Record.Desired.ID
 	conditions := []etcdstore.Condition{
 		{
-			Key:         environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
+			Key:         blueprints.EnvironmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
@@ -317,23 +317,23 @@ func equalDirectServiceFactReference(left *core.FactRef, right *core.FactRef) bo
 
 func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 	ctx context.Context,
-	claim EnvironmentBlueprintStageClaim,
-	revision EnvironmentDesiredRevisionIdentity,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	revision blueprints.EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
 	marker idempotencyrecord.IdempotencyMarker,
 	expectedHeadRevision int64,
 ) (environmentBlueprintPublicationEvidence, error) {
-	digest, err := EnvironmentBlueprintDependencyDigest(projection)
+	digest, err := blueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	if err := validateEnvironmentBlueprintStageClaim(claim); err != nil {
+	if err := blueprints.ValidateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	if err := validateEnvironmentDesiredRevisionIdentity(revision); err != nil {
+	if err := blueprints.ValidateEnvironmentDesiredRevisionIdentity(revision); err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	descriptorKey := environmentBlueprintDescriptorKeyByID(claim.DescriptorID)
+	descriptorKey := blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID)
 	descriptorRead, err := repository.store.Get(ctx, descriptorKey)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
@@ -345,15 +345,15 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 		)
 	}
 	defer clear(descriptorRead.Entry.Value)
-	descriptor, err := decodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
+	descriptor, err := blueprints.DecodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	locatorKey, _, err := environmentBlueprintLocatorKey(descriptor.Claim.Locator)
+	locatorKey, _, err := blueprints.EnvironmentBlueprintLocatorKey(descriptor.Claim.Locator)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	rootKey := environmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID)
+	rootKey := blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID)
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{rootKey, descriptorKey, locatorKey}, Revision: descriptorRead.ReadRevision,
 	})
@@ -368,22 +368,22 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 		)
 	}
 	defer clearKeyValues(result.Values)
-	seal, err := decodeEnvironmentBlueprintSeal(result.Values[0].Value)
+	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(result.Values[0].Value)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	descriptor, err = decodeEnvironmentBlueprintStageDescriptor(result.Values[1].Value)
+	descriptor, err = blueprints.DecodeEnvironmentBlueprintStageDescriptor(result.Values[1].Value)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
-	descriptorID, locatorDigest, err := decodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
+	descriptorID, locatorDigest, err := blueprints.DecodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
 	protectedDigest, digestErr := protectedBlueprintIntentDigest(descriptor.Claim.Intent)
-	if err != nil || digestErr != nil || !sameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
+	if err != nil || digestErr != nil || !blueprints.SameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
 		descriptorID != claim.DescriptorID || locatorDigest != protectedDigest ||
-		descriptor.State != EnvironmentBlueprintStageSealed || seal != environmentBlueprintSealFromDescriptor(descriptor) ||
+		descriptor.State != blueprints.EnvironmentBlueprintStageSealed || seal != environmentBlueprintSealFromDescriptor(descriptor) ||
 		seal.EnvironmentID != revision.EnvironmentID || seal.RevisionID != revision.RevisionID ||
 		seal.BaselineHeadRevision != expectedHeadRevision || seal.DependencyDigest != digest ||
-		claim.SourceKind != EnvironmentBlueprintSourceMutation || claim.TaskID != revision.RevisionID ||
+		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || claim.TaskID != revision.RevisionID ||
 		projection.RevisionID != revision.RevisionID || projection.RenderGeneration != claim.RenderGeneration ||
 		marker.Locator != claim.Locator || !sameBlueprintProtectedIntent(marker.Intent, claim.Intent) {
 		return environmentBlueprintPublicationEvidence{}, errs.New(
@@ -392,9 +392,9 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 		)
 	}
 	published := descriptor
-	published.State = EnvironmentBlueprintStagePublished
+	published.State = blueprints.EnvironmentBlueprintStagePublished
 	published.UpdatedAt = nextBlueprintProgressTime(descriptor.UpdatedAt)
-	publishedValue, err := encodeEnvironmentBlueprintStageDescriptor(published)
+	publishedValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(published)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}

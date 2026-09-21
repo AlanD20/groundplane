@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"time"
@@ -107,7 +108,7 @@ func (fragment ScriptSourcePublicationFragment) StagedRequirements() []ScriptSta
 }
 
 func (fragment ScriptSourcePublicationFragment) ValidateStagedMutations(
-	stage EnvironmentBlueprintStageClaim,
+	stage blueprints.EnvironmentBlueprintStageClaim,
 	mutations []etcdstore.Mutation,
 ) error {
 	matched := make([]bool, len(fragment.staged))

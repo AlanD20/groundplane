@@ -1,6 +1,7 @@
 package desiredrevision
 
 import (
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"strconv"
 	"time"
 
@@ -19,7 +20,7 @@ type BlueprintIdentityAllocator struct {
 
 // NewBlueprintIdentityAllocator accepts only a validated durable stage claim.
 func NewBlueprintIdentityAllocator(
-	claim etcd.EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 ) (*BlueprintIdentityAllocator, error) {
 	if ids.Validate(ids.KindTask, claim.TaskID) != nil ||
 		!etcd.ValidDesiredRevisionTime(claim.CreatedAt) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -179,14 +180,14 @@ func volumeRemovalPolicyReplacement(
 }
 
 func (prepared VolumeRemovalBackupPolicyPreparation) validateDesiredPublication(
-	claim EnvironmentBlueprintStageClaim,
+	claim blueprints.EnvironmentBlueprintStageClaim,
 	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	removedVolumeID string,
 ) error {
 	state := prepared.state
-	if state == nil || claim.SourceKind != EnvironmentBlueprintSourceMutation ||
+	if state == nil || claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		state.environmentID != claim.EnvironmentID || state.volumeID != removedVolumeID ||
 		task.Type != taskjournal.TaskRemove || task.Target != state.volumeID ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceVolume ||

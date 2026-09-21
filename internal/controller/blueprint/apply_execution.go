@@ -88,7 +88,7 @@ func (service *Service) applyBlueprintOnce(
 		ctx, service.repository, desiredrevision.ClaimInput{
 			EnvironmentID: environmentID, CandidateTaskID: candidateTaskID,
 			Locator: locator, Intent: evidence.Durable, BaselineHeadRevision: expectedHeadRevision,
-			SourceKind: etcd.EnvironmentBlueprintSourceApply,
+			SourceKind: blueprints.EnvironmentBlueprintSourceApply,
 			MatchExistingIntent: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 				return service.idempotency.MatchesStaged(ctx, evidence, existing)
 			},
