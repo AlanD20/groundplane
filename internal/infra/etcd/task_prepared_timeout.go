@@ -12,10 +12,10 @@ import (
 func (repository *TaskRepository) preparedTaskTimeoutResult(
 	ctx context.Context,
 	assignment TaskAssignment,
-) (TaskResultRecord, bool, error) {
+) (taskjournal.TaskResultRecord, bool, error) {
 	if assignment.Task.Record.Type == taskjournal.TaskRemove &&
 		assignment.Task.Record.Params[TaskResourceKindParam] == TaskResourceVolume {
-		return TaskResultRecord{Kind: taskjournal.TaskResultEnvironmentDirectory, Diagnostic: taskjournal.TaskResultDiagnosticNone}, true, nil
+		return taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultEnvironmentDirectory, Diagnostic: taskjournal.TaskResultDiagnosticNone}, true, nil
 	}
 	if assignment.Task.Record.Type != taskjournal.TaskScript {
 		return repository.candidateReleaseTimeoutResult(ctx, assignment)
@@ -25,9 +25,9 @@ func (repository *TaskRepository) preparedTaskTimeoutResult(
 		ctx, assignment.Task.Record, assignment.Task.ReadRevision,
 	)
 	if err != nil {
-		return TaskResultRecord{}, true, err
+		return taskjournal.TaskResultRecord{}, true, err
 	}
-	return TaskResultRecord{
+	return taskjournal.TaskResultRecord{
 		Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 		ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch,
 		ReconciliationRequired: execution.State != ScriptExecutionNotStarted ||

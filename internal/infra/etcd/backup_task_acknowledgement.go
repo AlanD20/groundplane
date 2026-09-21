@@ -21,7 +21,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 	taskID string,
 	assignmentID string,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	runtime, err := newBackupRuntimeRepository(repository.store)
@@ -37,7 +37,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if !assigned {
-			expectedAssignment := TaskTerminalAssignmentRecord{
+			expectedAssignment := taskjournal.TaskTerminalAssignmentRecord{
 				AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 			}
 			if err := repository.validateBackupTaskTerminalReplay(
@@ -416,8 +416,8 @@ func (repository *TaskRepository) validateBackupTaskTerminalReplay(
 	ctx context.Context,
 	task etcdstore.Versioned[TaskRecord],
 	terminalStatus taskjournal.TaskStatus,
-	result *TaskResultRecord,
-	assignment *TaskTerminalAssignmentRecord,
+	result *taskjournal.TaskResultRecord,
+	assignment *taskjournal.TaskTerminalAssignmentRecord,
 ) error {
 	if task.Record.Status != terminalStatus ||
 		((result == nil) != (task.Record.Result == nil)) ||

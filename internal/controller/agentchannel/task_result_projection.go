@@ -8,14 +8,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func durableEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultRecord {
-	return etcd.TaskResultRecord{
+func durableEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) taskjournal.TaskResultRecord {
+	return taskjournal.TaskResultRecord{
 		Kind: taskjournal.TaskResultEnvironmentDirectory, ExitCode: acknowledgement.GetExitCode(),
 		FailedStepID: acknowledgement.GetEnvironmentDirectoryResult().GetFailedStepId(),
 		Diagnostic:   taskjournal.TaskResultDiagnosticNone,
@@ -40,7 +40,7 @@ func validateEnvironmentDirectoryTaskResult(acknowledgement *agentpb.TaskAck) er
 	return nil
 }
 
-func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultRecord {
+func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) taskjournal.TaskResultRecord {
 	result := acknowledgement.GetComposeResult()
 	diagnostic := taskjournal.TaskResultDiagnosticNone
 	switch result.GetDiagnostic() {
@@ -51,29 +51,29 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED:
 		diagnostic = taskjournal.TaskResultDiagnosticComposeFailed
 	}
-	durable := etcd.TaskResultRecord{
+	durable := taskjournal.TaskResultRecord{
 		Kind: taskjournal.TaskResultCompose, ExitCode: acknowledgement.GetExitCode(),
 		FailedStepID: result.GetFailedStepId(), Diagnostic: diagnostic,
 		ReconciliationRequired: result.GetReconciliationRequired(),
-		Projects:               make([]etcd.TaskObservedProjectSummary, len(result.GetProjects())),
-		ProxyEvidence:          make([]etcd.TaskProxyEvidence, len(result.GetProxyEvidence())),
-		RecreateEvidence:       make([]etcd.TaskRecreateEvidence, len(result.GetRecreateEvidence())),
+		Projects:               make([]taskjournal.TaskObservedProjectSummary, len(result.GetProjects())),
+		ProxyEvidence:          make([]taskjournal.TaskProxyEvidence, len(result.GetProxyEvidence())),
+		RecreateEvidence:       make([]taskjournal.TaskRecreateEvidence, len(result.GetRecreateEvidence())),
 	}
 	if evidence := result.GetCandidateAbsenceEvidence(); evidence != nil {
-		durable.CandidateAbsenceEvidence = &etcd.TaskCandidateAbsenceEvidence{
+		durable.CandidateAbsenceEvidence = &taskjournal.TaskCandidateAbsenceEvidence{
 			AssignmentID: evidence.GetAssignmentId(), PlanHash: hex.EncodeToString(evidence.GetPlanHash()),
 			AuthoritySHA256:    hex.EncodeToString(evidence.GetAuthoritySha256()),
 			ComposeProjectName: evidence.GetComposeProjectName(), CandidateArtifactID: evidence.GetCandidateArtifactId(),
-			AbsenceProven: evidence.GetAbsenceProven(), Candidates: make([]etcd.TaskCandidateAbsenceCandidate, len(evidence.GetCandidates())),
+			AbsenceProven: evidence.GetAbsenceProven(), Candidates: make([]taskjournal.TaskCandidateAbsenceCandidate, len(evidence.GetCandidates())),
 		}
 		for index, candidate := range evidence.GetCandidates() {
-			durable.CandidateAbsenceEvidence.Candidates[index] = etcd.TaskCandidateAbsenceCandidate{
+			durable.CandidateAbsenceEvidence.Candidates[index] = taskjournal.TaskCandidateAbsenceCandidate{
 				ServiceID: candidate.GetServiceId(), ReleaseID: candidate.GetReleaseId(),
 			}
 		}
 	}
 	for index, project := range result.GetProjects() {
-		durable.Projects[index] = etcd.TaskObservedProjectSummary{
+		durable.Projects[index] = taskjournal.TaskObservedProjectSummary{
 			ProjectName: project.GetProjectName(),
 			ObservedAt:  project.GetObservedAt().AsTime().UTC(),
 			ContainerCount: uint32(
@@ -87,7 +87,7 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 		}
 	}
 	for index, evidence := range result.GetProxyEvidence() {
-		durable.ProxyEvidence[index] = etcd.TaskProxyEvidence{
+		durable.ProxyEvidence[index] = taskjournal.TaskProxyEvidence{
 			ServiceID:       evidence.GetServiceId(),
 			Target:          evidence.GetTarget(),
 			ProxyGeneration: evidence.GetProxyGeneration(),
@@ -97,7 +97,7 @@ func durableComposeTaskResult(acknowledgement *agentpb.TaskAck) etcd.TaskResultR
 		}
 	}
 	for index, evidence := range result.GetRecreateEvidence() {
-		durable.RecreateEvidence[index] = etcd.TaskRecreateEvidence{
+		durable.RecreateEvidence[index] = taskjournal.TaskRecreateEvidence{
 			ServiceID:   evidence.GetServiceId(),
 			ReleaseID:   evidence.GetReleaseId(),
 			ArtifactID:  evidence.GetArtifactId(),

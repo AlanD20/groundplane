@@ -10,7 +10,7 @@ func releaseTerminalGroupProgress(
 	head ReleaseOperationHead,
 	task TaskRecord,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 ) (domain.GroupProgress, error) {
 	executor, err := domain.NewGroupExecutor(domain.GroupManifest{

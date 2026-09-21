@@ -17,7 +17,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
 	readRevision int64,

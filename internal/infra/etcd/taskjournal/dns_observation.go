@@ -1,11 +1,10 @@
-package etcd
+package taskjournal
 
 import (
 	"bytes"
 	"encoding/hex"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
 	"time"
 
@@ -39,7 +38,7 @@ type TaskDNSResolverObservationEvidence struct {
 }
 
 func validateTaskDNSResolverObservationEvidence(
-	resultKind taskjournal.TaskResultKind,
+	resultKind TaskResultKind,
 	candidate *TaskDNSResolverObservationEvidence,
 ) error {
 	if candidate == nil {
@@ -57,7 +56,7 @@ func validateTaskDNSResolverObservationEvidence(
 	}
 	if canonicalErr != nil || hex.EncodeToString(canonical.GetProofSha256()) != evidence.ProofSHA256 ||
 		canonical.GetComponentId() != evidence.ComponentID || canonical.GetServiceId() != evidence.ServiceID ||
-		canonical.GetArtifactId() != evidence.ArtifactID || resultKind != taskjournal.TaskResultCompose || ids.Validate(ids.KindComponent, evidence.ComponentID) != nil ||
+		canonical.GetArtifactId() != evidence.ArtifactID || resultKind != TaskResultCompose || ids.Validate(ids.KindComponent, evidence.ComponentID) != nil ||
 		ids.Validate(
 			ids.KindService,
 			evidence.ServiceID,
@@ -75,7 +74,7 @@ func validateTaskDNSResolverObservationEvidence(
 	return nil
 }
 
-func taskDNSResolverEvidenceEqual(
+func TaskDNSResolverEvidenceEqual(
 	left *TaskDNSResolverObservationEvidence,
 	right *TaskDNSResolverObservationEvidence,
 ) bool {

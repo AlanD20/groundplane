@@ -19,8 +19,8 @@ func ValidateCapabilityTimestamp(field string, value time.Time) error {
 	return recordcodec.ValidateTimestamp(field, value)
 }
 func ValidateCapabilityTaskRecord(record TaskRecord) error { return validateTaskRecord(record) }
-func ValidateCapabilityTaskResult(result TaskResultRecord, steps []taskjournal.TaskStepRecord, status taskjournal.TaskStatus) error {
-	return validateTaskResult(result, steps, status)
+func ValidateCapabilityTaskResult(result taskjournal.TaskResultRecord, steps []taskjournal.TaskStepRecord, status taskjournal.TaskStatus) error {
+	return taskjournal.ValidateTaskResult(result, steps, status)
 }
 func IsCapabilityTerminalTaskStatus(status taskjournal.TaskStatus) bool {
 	return isTerminalTaskStatus(status)

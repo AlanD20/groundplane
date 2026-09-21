@@ -79,7 +79,7 @@ type releaseRecoveryRecord struct {
 	RestorationAuthoritySHA256 string                            `json:"restoration_authority_sha256"`
 	PrimaryReportSHA256        string                            `json:"primary_report_sha256"`
 	PrimaryStatus              taskjournal.TaskStatus            `json:"primary_status"`
-	PrimaryResult              TaskResultRecord                  `json:"primary_result"`
+	PrimaryResult              taskjournal.TaskResultRecord      `json:"primary_result"`
 	RecoveryDeadline           time.Time                         `json:"recovery_deadline"`
 	MutationEvidence           []releaseRecoveryMutationEvidence `json:"mutation_evidence"`
 	RecoveryStepIDs            []string                          `json:"recovery_step_ids"`
@@ -188,8 +188,8 @@ func validateReleaseRecoveryRecord(record releaseRecoveryRecord) error {
 		return errs.New(errs.KindInternal, "release recovery record is corrupt")
 	}
 	reportDigest, err := domain.Digest(struct {
-		Status taskjournal.TaskStatus `json:"status"`
-		Result TaskResultRecord       `json:"result"`
+		Status taskjournal.TaskStatus       `json:"status"`
+		Result taskjournal.TaskResultRecord `json:"result"`
 	}{record.PrimaryStatus, record.PrimaryResult})
 	if err != nil || reportDigest != record.PrimaryReportSHA256 {
 		return errs.New(errs.KindInternal, "release recovery record is corrupt")
@@ -228,7 +228,7 @@ func releaseRecoveryRecordSHA256(record releaseRecoveryRecord) (string, error) {
 		RestorationAuthoritySHA256 string                            `json:"restoration_authority_sha256"`
 		PrimaryReportSHA256        string                            `json:"primary_report_sha256"`
 		PrimaryStatus              taskjournal.TaskStatus            `json:"primary_status"`
-		PrimaryResult              TaskResultRecord                  `json:"primary_result"`
+		PrimaryResult              taskjournal.TaskResultRecord      `json:"primary_result"`
 		RecoveryDeadline           time.Time                         `json:"recovery_deadline"`
 		MutationEvidence           []releaseRecoveryMutationEvidence `json:"mutation_evidence"`
 		RecoveryStepIDs            []string                          `json:"recovery_step_ids"`
@@ -394,10 +394,10 @@ func validTerminalTaskStatus(status taskjournal.TaskStatus) bool {
 	}
 }
 
-func canonicalPrimaryReportSHA256(status taskjournal.TaskStatus, result TaskResultRecord) (string, error) {
+func canonicalPrimaryReportSHA256(status taskjournal.TaskStatus, result taskjournal.TaskResultRecord) (string, error) {
 	return domain.Digest(struct {
-		Status taskjournal.TaskStatus `json:"status"`
-		Result TaskResultRecord       `json:"result"`
+		Status taskjournal.TaskStatus       `json:"status"`
+		Result taskjournal.TaskResultRecord `json:"result"`
 	}{status, result})
 }
 

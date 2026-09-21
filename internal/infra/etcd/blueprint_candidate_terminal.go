@@ -98,7 +98,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	writer taskMaterializationWriterRecord,
 	assignment TaskAssignmentRecord,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
 	revision int64,
@@ -139,7 +139,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	if err != nil {
 		return blueprintCandidateTerminalChange{}, err
 	}
-	var compensationResult *TaskResultRecord
+	var compensationResult *taskjournal.TaskResultRecord
 	if terminalStatus != taskjournal.TaskStatusCompleted {
 		compensationResult, err = blueprintCandidateCompensationResult(task, result)
 		if err != nil {
@@ -210,7 +210,7 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 	task TaskRecord,
 	publicationID string,
 	manifest ReleaseStagedManifest,
-	compensationResult *TaskResultRecord,
+	compensationResult *taskjournal.TaskResultRecord,
 	revision int64,
 ) ([]etcdstore.Condition, error) {
 	keys := make([]string, 0, len(manifest.Members)*6)

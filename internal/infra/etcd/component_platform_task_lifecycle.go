@@ -28,7 +28,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	ctx context.Context,
 	task TaskRecord,
 	terminalStatus taskjournal.TaskStatus,
-	result *TaskResultRecord,
+	result *taskjournal.TaskResultRecord,
 	revision int64,
 ) (platformComponentTaskChange, error) {
 	if task.Params[TaskResourceKindParam] != TaskResourceComponent ||
@@ -182,7 +182,7 @@ func newPlatformComponentObservation(
 	desiredRevision int64,
 	input PlatformComponentTaskRenderInput,
 	task TaskRecord,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 ) (ComponentObservationRecord, error) {
 	if desiredRevision <= 0 || task.TerminalAssignment == nil || task.FinishedAt == nil || len(task.Steps) == 0 {
 		return ComponentObservationRecord{}, errs.New(
@@ -226,7 +226,7 @@ func newPlatformComponentObservation(
 func validatePlatformComponentObservation(
 	input PlatformComponentTaskRenderInput,
 	renderGeneration uint64,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 ) error {
 	if input.DisableService {
 		if result.DNSResolverCandidateObservation != nil {

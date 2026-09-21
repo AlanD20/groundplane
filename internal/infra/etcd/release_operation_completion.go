@@ -19,7 +19,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 	base *etcdstore.GetManyResult,
 	terminals *etcdstore.GetManyResult,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 	proofConditions ...etcdstore.Condition,
 ) (bool, error) {

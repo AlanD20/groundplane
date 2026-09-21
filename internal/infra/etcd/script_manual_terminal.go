@@ -25,7 +25,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	status taskjournal.TaskStatus,
 	terminalAt *time.Time,
 	revision int64,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 ) (scriptTerminalSourceRelease, bool, error) {
 	scripts := &ScriptRepository{store: repository.store}
 	execution, executionValue, err := scripts.manualScriptExecutionAtRevision(ctx, task, revision)

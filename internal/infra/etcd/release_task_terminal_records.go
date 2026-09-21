@@ -3,6 +3,7 @@ package etcd
 import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -66,7 +67,7 @@ func releaseAcknowledgedRuntime(
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
 	effect domain.EffectEvidence,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 ) ([]byte, error) {
 	if marker.CandidateReleaseDescriptor.PlanID != task.PlanID ||
 		hex.EncodeToString(marker.CandidateReleaseDescriptor.PlanHash) != task.PlanHash ||

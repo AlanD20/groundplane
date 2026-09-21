@@ -24,7 +24,7 @@ func (repository *TaskRepository) AcknowledgeTask(
 	taskID string,
 	assignmentID string,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	return repository.acknowledgeTask(
@@ -43,7 +43,7 @@ func (repository *TaskRepository) AcknowledgeEnvironmentCreation(
 	assignmentID string,
 	environmentID string,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	return repository.acknowledgeTask(
@@ -81,7 +81,7 @@ func (repository *TaskRepository) acknowledgeTask(
 	taskID string,
 	assignmentID string,
 	terminalStatus taskjournal.TaskStatus,
-	result *TaskResultRecord,
+	result *taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 	environmentID string,
 ) (etcdstore.Versioned[TaskRecord], error) {
@@ -107,12 +107,12 @@ func (repository *TaskRepository) acknowledgeTask(
 	}
 
 	claimKey := taskExecutionClaimKey(executor, agentID, taskID)
-	submittedResult := cloneTaskResult(result)
+	submittedResult := taskjournal.CloneTaskResult(result)
 	submittedTerminalStatus := terminalStatus
 	conflicts := 0
 	for {
 		terminalStatus = submittedTerminalStatus
-		result = cloneTaskResult(submittedResult)
+		result = taskjournal.CloneTaskResult(submittedResult)
 		primaryAndAssignment, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 		}})
@@ -180,7 +180,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			)
 		}
 		if result != nil {
-			if err := validateTaskResult(*result, task.Steps, terminalStatus); err != nil {
+			if err := taskjournal.ValidateTaskResult(*result, task.Steps, terminalStatus); err != nil {
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 		}
@@ -210,7 +210,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				((result == nil && task.Result == nil) ||
 					(result != nil && task.Result != nil && taskResultsEqual(*task.Result, *result))) {
 				if executor == taskjournal.TaskExecutorAgent {
-					expected := TaskTerminalAssignmentRecord{
+					expected := taskjournal.TaskTerminalAssignmentRecord{
 						AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 					}
 					if task.TerminalAssignment == nil || *task.TerminalAssignment != expected {
@@ -347,9 +347,9 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		terminal.Result = cloneTaskResult(result)
+		terminal.Result = taskjournal.CloneTaskResult(result)
 		if executor == taskjournal.TaskExecutorAgent {
-			terminal.TerminalAssignment = &TaskTerminalAssignmentRecord{
+			terminal.TerminalAssignment = &taskjournal.TaskTerminalAssignmentRecord{
 				AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 			}
 		}

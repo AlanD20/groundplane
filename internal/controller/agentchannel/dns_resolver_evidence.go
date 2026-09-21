@@ -2,16 +2,17 @@ package agentchannel
 
 import (
 	"encoding/hex"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func durableDNSResolverObservation(
 	evidence *agentpb.DNSResolverObservationEvidence,
-) *etcd.TaskDNSResolverObservationEvidence {
+) *taskjournal.TaskDNSResolverObservationEvidence {
 	canonicalEvidence, _ := dnsproof.Marshal(evidence)
 	static := evidence.GetStaticQuery()
 	staticIPv4 := ""
@@ -21,7 +22,7 @@ func durableDNSResolverObservation(
 			break
 		}
 	}
-	return &etcd.TaskDNSResolverObservationEvidence{
+	return &taskjournal.TaskDNSResolverObservationEvidence{
 		ComponentID: evidence.GetComponentId(), ServiceID: evidence.GetServiceId(),
 		ArtifactID: evidence.GetArtifactId(), ArtifactSHA256: hex.EncodeToString(evidence.GetArtifactSha256()),
 		RenderGeneration: evidence.GetRenderGeneration(), ImageReference: evidence.GetImageReference(),

@@ -28,7 +28,7 @@ func backupTerminalTaskEvidence(task TaskRecord) (BackupTerminalTaskEvidence, er
 		TaskID: task.ID, TaskType: task.Type, OperationID: task.OperationID, RetryOf: task.RetryOf,
 		Owner: task.Owner, Actor: task.Actor, Executor: task.Executor, Target: task.Target,
 		PlanID: task.PlanID, PlanHash: task.PlanHash, Status: task.Status,
-		ResultDigest: resultDigest, TerminalAssignment: cloneTaskTerminalAssignment(task.TerminalAssignment),
+		ResultDigest: resultDigest, TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(task.TerminalAssignment),
 		CreatedAt: task.CreatedAt, UpdatedAt: task.UpdatedAt,
 		FinishedAt: *task.FinishedAt, RetainUntil: *task.RetainUntil, TaskDigest: taskDigest,
 	}

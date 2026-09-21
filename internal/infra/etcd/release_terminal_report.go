@@ -12,7 +12,7 @@ import (
 // Once closing, the original report is immutable and effect classification is
 // no longer permitted; in particular cleanup itself cannot trigger recovery.
 func (repository *TaskRepository) prepareReleaseTerminalReport(
-	ctx context.Context, current TaskAssignment, status taskjournal.TaskStatus, result *TaskResultRecord,
+	ctx context.Context, current TaskAssignment, status taskjournal.TaskStatus, result *taskjournal.TaskResultRecord,
 ) ([]etcdstore.Condition, error) {
 	task, assignment := current.Task.Record, current.Assignment.Record
 	if task.Executor != taskjournal.TaskExecutorAgent || result == nil ||
@@ -67,7 +67,7 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 			conditions = append(conditions, etcdstore.Condition{Key: blueprintClosingReportKey(task.ID)})
 		}
 	}
-	if err := validateTaskResult(*result, task.Steps, status); err != nil {
+	if err := taskjournal.ValidateTaskResult(*result, task.Steps, status); err != nil {
 		return nil, err
 	}
 	return append(conditions, evidence...), nil

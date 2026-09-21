@@ -12,36 +12,36 @@ import (
 )
 
 type taskRecordData struct {
-	ID                 string                                `json:"id"`
-	OperationID        string                                `json:"operation_id"`
-	RetryOf            string                                `json:"retry_of,omitempty"`
-	IdempotencyKey     string                                `json:"idempotency_key,omitempty"`
-	Owner              taskjournal.TaskOwner                 `json:"owner"`
-	Actor              taskjournal.TaskActor                 `json:"actor"`
-	Executor           taskjournal.TaskExecutor              `json:"executor"`
-	PlanID             string                                `json:"plan_id"`
-	PlanHash           string                                `json:"plan_hash,omitempty"`
-	RenderGeneration   int32                                 `json:"render_generation"`
-	Type               taskjournal.TaskType                  `json:"type"`
-	Target             string                                `json:"target"`
-	Params             map[string]string                     `json:"params,omitempty"`
-	Steps              []taskjournal.TaskStepRecord          `json:"steps,omitempty"`
-	Materializations   []materializationrecord.Record        `json:"materializations,omitempty"`
-	EntryRuntime       *EntryTaskRuntime                     `json:"entry_runtime,omitempty"`
-	Configuration      *TaskConfiguration                    `json:"configuration,omitempty"`
-	TimeoutSeconds     int64                                 `json:"timeout_seconds"`
-	Status             taskjournal.TaskStatus                `json:"status"`
-	Result             *taskResultData                       `json:"result,omitempty"`
-	TerminalAssignment *TaskTerminalAssignmentRecord         `json:"terminal_assignment,omitempty"`
-	NextEventSequence  uint64                                `json:"next_event_sequence"`
-	EventCount         uint32                                `json:"event_count"`
-	EventCheckpoints   []TaskEventCheckpoint                 `json:"event_checkpoints,omitempty"`
-	CreatedAt          string                                `json:"created_at"`
-	UpdatedAt          string                                `json:"updated_at"`
-	StartedAt          string                                `json:"started_at,omitempty"`
-	FinishedAt         string                                `json:"finished_at,omitempty"`
-	RetainUntil        string                                `json:"retain_until,omitempty"`
-	IdempotencyMarker  *idempotencyrecord.IdempotencyLocator `json:"idempotency_marker,omitempty"`
+	ID                 string                                    `json:"id"`
+	OperationID        string                                    `json:"operation_id"`
+	RetryOf            string                                    `json:"retry_of,omitempty"`
+	IdempotencyKey     string                                    `json:"idempotency_key,omitempty"`
+	Owner              taskjournal.TaskOwner                     `json:"owner"`
+	Actor              taskjournal.TaskActor                     `json:"actor"`
+	Executor           taskjournal.TaskExecutor                  `json:"executor"`
+	PlanID             string                                    `json:"plan_id"`
+	PlanHash           string                                    `json:"plan_hash,omitempty"`
+	RenderGeneration   int32                                     `json:"render_generation"`
+	Type               taskjournal.TaskType                      `json:"type"`
+	Target             string                                    `json:"target"`
+	Params             map[string]string                         `json:"params,omitempty"`
+	Steps              []taskjournal.TaskStepRecord              `json:"steps,omitempty"`
+	Materializations   []materializationrecord.Record            `json:"materializations,omitempty"`
+	EntryRuntime       *EntryTaskRuntime                         `json:"entry_runtime,omitempty"`
+	Configuration      *TaskConfiguration                        `json:"configuration,omitempty"`
+	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
+	Status             taskjournal.TaskStatus                    `json:"status"`
+	Result             *taskResultData                           `json:"result,omitempty"`
+	TerminalAssignment *taskjournal.TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
+	NextEventSequence  uint64                                    `json:"next_event_sequence"`
+	EventCount         uint32                                    `json:"event_count"`
+	EventCheckpoints   []TaskEventCheckpoint                     `json:"event_checkpoints,omitempty"`
+	CreatedAt          string                                    `json:"created_at"`
+	UpdatedAt          string                                    `json:"updated_at"`
+	StartedAt          string                                    `json:"started_at,omitempty"`
+	FinishedAt         string                                    `json:"finished_at,omitempty"`
+	RetainUntil        string                                    `json:"retain_until,omitempty"`
+	IdempotencyMarker  *idempotencyrecord.IdempotencyLocator     `json:"idempotency_marker,omitempty"`
 
 	ComponentActionStepIDs          []string                                         `json:"component_action_step_ids"`
 	ManagedComponentTeardownSources []projectionrecord.ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
@@ -100,7 +100,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
 		EventCheckpoints:   append([]TaskEventCheckpoint(nil), record.EventCheckpoints...),
 		Result:             taskResultToData(record.Result),
-		TerminalAssignment: cloneTaskTerminalAssignment(record.TerminalAssignment),
+		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(record.TerminalAssignment),
 		EventCount:         record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt:         record.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		StartedAt:         formatOptionalTimestamp(record.StartedAt),
@@ -149,7 +149,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		Configuration:                   data.Configuration,
 		TimeoutSeconds:                  data.TimeoutSeconds, Status: data.Status,
 		Result:             result,
-		TerminalAssignment: cloneTaskTerminalAssignment(data.TerminalAssignment),
+		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(data.TerminalAssignment),
 		NextEventSequence:  data.NextEventSequence, EventCount: data.EventCount,
 		CreatedAt: createdAt, UpdatedAt: updatedAt, StartedAt: startedAt, FinishedAt: finishedAt,
 		RetainUntil: retainUntil, idempotencyMarker: cloneIdempotencyLocator(data.IdempotencyMarker),
@@ -169,8 +169,8 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)
 	cloned.FinishedAt = cloneTimePointer(record.FinishedAt)
 	cloned.RetainUntil = cloneTimePointer(record.RetainUntil)
-	cloned.Result = cloneTaskResult(record.Result)
-	cloned.TerminalAssignment = cloneTaskTerminalAssignment(record.TerminalAssignment)
+	cloned.Result = taskjournal.CloneTaskResult(record.Result)
+	cloned.TerminalAssignment = taskjournal.CloneTaskTerminalAssignment(record.TerminalAssignment)
 	cloned.idempotencyMarker = cloneIdempotencyLocator(record.idempotencyMarker)
 	return cloned
 }

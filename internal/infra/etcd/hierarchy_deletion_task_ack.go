@@ -20,7 +20,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	taskID string,
 	assignmentID string,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
 	claimKey := taskExecutionClaimKey(taskjournal.TaskExecutorAgent, agentID, taskID)
@@ -42,7 +42,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 			"hierarchy deletion child Task identity changed",
 		)
 	}
-	if err := validateTaskResult(result, task.Steps, terminalStatus); err != nil {
+	if err := taskjournal.ValidateTaskResult(result, task.Steps, terminalStatus); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if read.Values[1] == nil {
@@ -52,7 +52,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 				"hierarchy deletion child assignment index is orphaned",
 			)
 		}
-		wantAssignment := TaskTerminalAssignmentRecord{
+		wantAssignment := taskjournal.TaskTerminalAssignmentRecord{
 			AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 		}
 		if task.Status != terminalStatus || task.Result == nil || !taskResultsEqual(*task.Result, result) ||
@@ -99,8 +99,8 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	terminal.Result = cloneTaskResult(&result)
-	terminal.TerminalAssignment = &TaskTerminalAssignmentRecord{
+	terminal.Result = taskjournal.CloneTaskResult(&result)
+	terminal.TerminalAssignment = &taskjournal.TaskTerminalAssignmentRecord{
 		AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 	}
 	if err := validateTaskRecord(terminal); err != nil {

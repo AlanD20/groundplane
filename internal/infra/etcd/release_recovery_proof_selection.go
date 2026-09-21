@@ -29,7 +29,7 @@ type releaseRecoveryProofExpectation struct {
 func validateReleaseRecoveryProof(
 	assignment TaskAssignmentRecord,
 	procedure *agentpb.CandidateReleaseProcedure,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	expectations []releaseRecoveryProofExpectation,
 ) error {
 	authority := assignment.RestorationAuthority

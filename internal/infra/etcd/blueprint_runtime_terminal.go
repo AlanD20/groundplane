@@ -15,7 +15,7 @@ import (
 // input to the same transaction as its terminal Task and serving projection.
 func blueprintAcknowledgedRuntime(
 	marker ReleasePublicationMarker, task TaskRecord, assignment TaskAssignmentRecord,
-	member ReleaseStagedMemberRef, result TaskResultRecord, terminalAt time.Time,
+	member ReleaseStagedMemberRef, result taskjournal.TaskResultRecord, terminalAt time.Time,
 ) ([]byte, error) {
 	if result.Kind != taskjournal.TaskResultCompose || result.ExitCode != 0 || result.Diagnostic != taskjournal.TaskResultDiagnosticNone ||
 		result.ReconciliationRequired || result.ExecutionEpoch == 0 || result.ExecutionEpoch != assignment.ExecutionEpoch ||
@@ -37,8 +37,8 @@ func blueprintAcknowledgedRuntime(
 		}
 	}
 	digest, err := domain.Digest(struct {
-		ReleaseID string           `json:"release_id"`
-		Result    TaskResultRecord `json:"result"`
+		ReleaseID string                       `json:"release_id"`
+		Result    taskjournal.TaskResultRecord `json:"result"`
 	}{member.ReleaseID, result})
 	if err != nil {
 		return nil, err

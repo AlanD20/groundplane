@@ -23,7 +23,7 @@ type blueprintTerminalSourceAdvance struct {
 	terminalAt           time.Time
 	revision             int64
 	submittedStatus      taskjournal.TaskStatus
-	submittedResult      TaskResultRecord
+	submittedResult      taskjournal.TaskResultRecord
 }
 
 func (advance *blueprintTerminalSourceAdvance) execute(ctx context.Context, repository *TaskRepository) error {

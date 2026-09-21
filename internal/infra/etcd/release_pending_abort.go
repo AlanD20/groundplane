@@ -51,7 +51,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			task,
 			TaskAssignmentRecord{},
 			taskjournal.TaskStatusAborted,
-			TaskResultRecord{Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone},
+			taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone},
 			"",
 			*task.FinishedAt,
 			current.ReadRevision,

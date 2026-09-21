@@ -81,7 +81,7 @@ func validateBlueprintCandidateManifest(
 	return nil
 }
 
-func blueprintCandidateCompensationResult(task TaskRecord, result TaskResultRecord) (*TaskResultRecord, error) {
+func blueprintCandidateCompensationResult(task TaskRecord, result taskjournal.TaskResultRecord) (*taskjournal.TaskResultRecord, error) {
 	if result.FailedStepID == "" && result.Diagnostic == taskjournal.TaskResultDiagnosticTimeoutBeforeEffect {
 		return nil, nil
 	}
@@ -94,7 +94,7 @@ func blueprintCandidateCompensationResult(task TaskRecord, result TaskResultReco
 func validateBlueprintCandidateCompensation(
 	intent domain.Intent,
 	render ReleaseRenderInput,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 ) error {
 	proxy, hasProxy := releaseProxyEvidence(result, intent.ServiceID)
 	recreate, hasRecreate := releaseRecreateEvidence(result, intent.ServiceID)

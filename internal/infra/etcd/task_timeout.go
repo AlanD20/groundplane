@@ -59,7 +59,7 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 			}
 			continue
 		}
-		result := TaskResultRecord{
+		result := taskjournal.TaskResultRecord{
 			Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 			ReconciliationRequired: true, ExecutionEpoch: assignment.Assignment.Record.ExecutionEpoch,
 			ReleaseRecoveryRecordSHA256: assignment.Assignment.Record.ReleaseRecoveryRecordSHA256,
@@ -137,7 +137,7 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 		if assignment.Executor == taskjournal.TaskExecutorController {
 			_, err = repository.AcknowledgeControllerTask(ctx, taskID, taskjournal.TaskStatusTimedOut, now)
 		} else {
-			result := TaskResultRecord{
+			result := taskjournal.TaskResultRecord{
 				Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 				ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
 				ReleaseRecoveryRecordSHA256: assignment.ReleaseRecoveryRecordSHA256,

@@ -24,7 +24,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	assignmentValue *etcdstore.KeyValue,
 	assignmentIndexValue *etcdstore.KeyValue,
 	status taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	revision int64,
 	evidenceConditions ...etcdstore.Condition,
 ) (etcdstore.Versioned[TaskRecord], bool, error) {
@@ -164,7 +164,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
 	status taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	revision int64,
 ) (releaseRecoveryAcknowledgement, error) {
 	read, err := repository.store.GetMany(
@@ -233,7 +233,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 			"Component effects remain unproven by workload restoration",
 		)
 	}
-	primary := cloneTaskResult(&record.PrimaryResult)
+	primary := taskjournal.CloneTaskResult(&record.PrimaryResult)
 	if primary == nil {
 		return releaseRecoveryAcknowledgement{}, corruptTaskAssignment()
 	}
@@ -270,12 +270,12 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 	ctx context.Context,
 	task TaskRecord,
 	status taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	agentID string,
 	agentGeneration uint64,
 	assignmentID string,
 	revision int64,
-) (taskjournal.TaskStatus, *TaskResultRecord, bool, error) {
+) (taskjournal.TaskStatus, *taskjournal.TaskResultRecord, bool, error) {
 	if result.ReleaseRecoveryRecordSHA256 == "" {
 		return status, nil, false, nil
 	}
@@ -343,25 +343,25 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 			)
 		}
 	}
-	return task.Status, cloneTaskResult(task.Result), true, nil
+	return task.Status, taskjournal.CloneTaskResult(task.Result), true, nil
 }
 
 func (repository *TaskRepository) candidateReleaseTimeoutResult(
 	ctx context.Context,
 	assignment TaskAssignment,
-) (TaskResultRecord, bool, error) {
+) (taskjournal.TaskResultRecord, bool, error) {
 	record := assignment.Assignment.Record
 	if assignment.Task.Record.Params[TaskReleasePublicationParam] == "" ||
 		record.ExecutionMode != TaskExecutionModeForward {
-		return TaskResultRecord{}, false, nil
+		return taskjournal.TaskResultRecord{}, false, nil
 	}
 	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(
 		ctx, assignment.Task.Record, assignment.Task.ReadRevision,
 	)
 	if err != nil || validateAssignmentRestorationDescriptor(assignment.Task.Record, record, procedure) != nil {
-		return TaskResultRecord{}, true, corruptTaskAssignment()
+		return taskjournal.TaskResultRecord{}, true, corruptTaskAssignment()
 	}
-	result := TaskResultRecord{
+	result := taskjournal.TaskResultRecord{
 		Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticTimeoutBeforeEffect,
 		ExecutionEpoch: record.ExecutionEpoch,
 	}

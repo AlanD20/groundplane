@@ -16,7 +16,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
 	head ReleaseOperationHead,
@@ -125,8 +125,8 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 			projection.CurrentSuccessfulReleaseID = intent.ID
 			checkpoint.State = domain.StateCompleted
 			effectDigest, err := domain.Digest(struct {
-				ReleaseID string           `json:"release_id"`
-				Result    TaskResultRecord `json:"result"`
+				ReleaseID string                       `json:"release_id"`
+				Result    taskjournal.TaskResultRecord `json:"result"`
 			}{intent.ID, result})
 			if err != nil {
 				return false, err

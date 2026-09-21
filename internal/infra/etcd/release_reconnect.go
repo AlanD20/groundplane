@@ -52,7 +52,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 				return TaskAssignment{}, classifyErr
 			}
 			if effect {
-				result := TaskResultRecord{
+				result := taskjournal.TaskResultRecord{
 					Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 					ReconciliationRequired: true, ExecutionEpoch: assignment.ExecutionEpoch,
 				}
@@ -124,5 +124,5 @@ type releaseRecoveryAcknowledgement struct {
 	value      *etcdstore.KeyValue
 	final      bool
 	status     taskjournal.TaskStatus
-	result     TaskResultRecord
+	result     taskjournal.TaskResultRecord
 }

@@ -14,19 +14,19 @@ import (
 // receipt. It is created with source closure and deleted with Task completion.
 // Result is the original Agent report, before recovery normalization.
 type scriptClosingReport struct {
-	TaskID               string                 `json:"task_id"`
-	OperationID          string                 `json:"operation_id"`
-	PlanHash             string                 `json:"plan_hash"`
-	AssignmentID         string                 `json:"assignment_id"`
-	AgentID              string                 `json:"agent_id"`
-	AgentGeneration      uint64                 `json:"agent_generation"`
-	ExecutionEpoch       uint32                 `json:"execution_epoch"`
-	RecoveryRecordSHA256 string                 `json:"recovery_record_sha256,omitempty"`
-	TaskRevision         int64                  `json:"task_revision"`
-	AssignmentRevision   int64                  `json:"assignment_revision"`
-	Status               taskjournal.TaskStatus `json:"status"`
-	Result               TaskResultRecord       `json:"result"`
-	ObservedAt           time.Time              `json:"observed_at"`
+	TaskID               string                       `json:"task_id"`
+	OperationID          string                       `json:"operation_id"`
+	PlanHash             string                       `json:"plan_hash"`
+	AssignmentID         string                       `json:"assignment_id"`
+	AgentID              string                       `json:"agent_id"`
+	AgentGeneration      uint64                       `json:"agent_generation"`
+	ExecutionEpoch       uint32                       `json:"execution_epoch"`
+	RecoveryRecordSHA256 string                       `json:"recovery_record_sha256,omitempty"`
+	TaskRevision         int64                        `json:"task_revision"`
+	AssignmentRevision   int64                        `json:"assignment_revision"`
+	Status               taskjournal.TaskStatus       `json:"status"`
+	Result               taskjournal.TaskResultRecord `json:"result"`
+	ObservedAt           time.Time                    `json:"observed_at"`
 }
 
 func blueprintClosingReportKey(taskID string) string {
@@ -55,7 +55,7 @@ func taskHasScriptClosingReport(task TaskRecord) bool {
 	return task.Type == taskjournal.TaskScript || (task.Type == taskjournal.TaskUpdate && task.Params[TaskReleasePublicationParam] != "")
 }
 
-func (report scriptClosingReport) matches(status taskjournal.TaskStatus, result TaskResultRecord) bool {
+func (report scriptClosingReport) matches(status taskjournal.TaskStatus, result taskjournal.TaskResultRecord) bool {
 	return report.Status == status && taskResultsEqual(report.Result, result) &&
 		report.ExecutionEpoch == result.ExecutionEpoch && report.RecoveryRecordSHA256 == result.ReleaseRecoveryRecordSHA256
 }
@@ -72,7 +72,7 @@ func (report scriptClosingReport) validate(current TaskAssignment) error {
 		report.Result.ExecutionEpoch != assignment.ExecutionEpoch || report.Result.ReconciliationRequired ||
 		report.RecoveryRecordSHA256 != assignment.ReleaseRecoveryRecordSHA256 ||
 		report.Result.ReleaseRecoveryRecordSHA256 != report.RecoveryRecordSHA256 ||
-		validateTaskResult(report.Result, task.Steps, report.Status) != nil ||
+		taskjournal.ValidateTaskResult(report.Result, task.Steps, report.Status) != nil ||
 		!isTerminalTaskStatus(
 			report.Status,
 		) || recordcodec.ValidateTimestamp("Blueprint closing report observed_at", report.ObservedAt) != nil ||
@@ -111,7 +111,7 @@ func (repository *TaskRepository) readScriptClosingReport(
 }
 
 func (repository *TaskRepository) prepareScriptClosingReport(
-	ctx context.Context, current TaskAssignment, status taskjournal.TaskStatus, result TaskResultRecord,
+	ctx context.Context, current TaskAssignment, status taskjournal.TaskStatus, result taskjournal.TaskResultRecord,
 	observedAt time.Time, starting bool,
 ) (scriptClosingReport, etcdstore.Condition, etcdstore.Mutation, error) {
 	report, value, err := repository.readScriptClosingReport(ctx, current)

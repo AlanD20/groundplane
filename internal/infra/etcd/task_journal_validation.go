@@ -139,7 +139,7 @@ func validateTaskRecord(record TaskRecord) error {
 		if !isTerminalTaskStatus(record.Status) {
 			return errs.New(errs.KindInternal, "nonterminal task has a completion result")
 		}
-		if err := validateTaskResult(*record.Result, record.Steps, record.Status); err != nil {
+		if err := taskjournal.ValidateTaskResult(*record.Result, record.Steps, record.Status); err != nil {
 			return err
 		}
 	}

@@ -1,23 +1,22 @@
-package etcd
+package taskjournal
 
 import (
 	"crypto/sha512"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
 	"unicode/utf8"
 )
 
-func validateTaskResult(result TaskResultRecord, steps []taskjournal.TaskStepRecord, status taskjournal.TaskStatus) error {
-	if result.Kind != taskjournal.TaskResultCompose && result.Kind != taskjournal.TaskResultEnvironmentDirectory {
+func ValidateTaskResult(result TaskResultRecord, steps []TaskStepRecord, status TaskStatus) error {
+	if result.Kind != TaskResultCompose && result.Kind != TaskResultEnvironmentDirectory {
 		return errs.New(errs.KindValidationFailed, "task result kind is invalid")
 	}
 	switch result.Diagnostic {
-	case taskjournal.TaskResultDiagnosticNone, taskjournal.TaskResultDiagnosticConfigRejected, taskjournal.TaskResultDiagnosticComposeFailed,
-		taskjournal.TaskResultDiagnosticTimeoutBeforeEffect:
+	case TaskResultDiagnosticNone, TaskResultDiagnosticConfigRejected, TaskResultDiagnosticComposeFailed,
+		TaskResultDiagnosticTimeoutBeforeEffect:
 	default:
 		return errs.New(errs.KindValidationFailed, "task result diagnostic is invalid")
 	}
@@ -33,12 +32,12 @@ func validateTaskResult(result TaskResultRecord, steps []taskjournal.TaskStepRec
 			return errs.New(errs.KindValidationFailed, "task result failed step does not belong to the task")
 		}
 	}
-	if status == taskjournal.TaskStatusCompleted && (result.ExitCode != 0 || result.FailedStepID != "" ||
-		result.Diagnostic != taskjournal.TaskResultDiagnosticNone || result.ReconciliationRequired) {
+	if status == TaskStatusCompleted && (result.ExitCode != 0 || result.FailedStepID != "" ||
+		result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired) {
 		return errs.New(errs.KindValidationFailed, "completed task result is inconsistent")
 	}
-	if result.Kind == taskjournal.TaskResultEnvironmentDirectory &&
-		(len(result.Projects) != 0 || result.Diagnostic != taskjournal.TaskResultDiagnosticNone || result.ReconciliationRequired) {
+	if result.Kind == TaskResultEnvironmentDirectory &&
+		(len(result.Projects) != 0 || result.Diagnostic != TaskResultDiagnosticNone || result.ReconciliationRequired) {
 		return errs.New(errs.KindValidationFailed, "environment directory task result is inconsistent")
 	}
 	if len(result.Projects) > 64 {
@@ -83,7 +82,7 @@ func validateTaskResult(result TaskResultRecord, steps []taskjournal.TaskStepRec
 		}
 	}
 	if evidence := result.CandidateAbsenceEvidence; evidence != nil {
-		if result.Kind != taskjournal.TaskResultCompose || ids.Validate(ids.KindAssignment, evidence.AssignmentID) != nil ||
+		if result.Kind != TaskResultCompose || ids.Validate(ids.KindAssignment, evidence.AssignmentID) != nil ||
 			!recordcodec.ValidSHA256(evidence.PlanHash) || !recordcodec.ValidSHA256(evidence.AuthoritySHA256) ||
 			evidence.ComposeProjectName == "" || ids.Validate(ids.KindConfig, evidence.CandidateArtifactID) != nil ||
 			len(evidence.Candidates) == 0 || len(evidence.Candidates) > 32 {
@@ -111,7 +110,7 @@ func validateTaskResult(result TaskResultRecord, steps []taskjournal.TaskStepRec
 	return nil
 }
 
-func cloneTaskDNSResolverObservationEvidence(
+func CloneTaskDNSResolverObservationEvidence(
 	evidence *TaskDNSResolverObservationEvidence,
 ) *TaskDNSResolverObservationEvidence {
 	if evidence == nil {
@@ -134,7 +133,7 @@ func validReleaseEvidenceTarget(value string) bool {
 	return value == "singleton" || value == "blue" || value == "green"
 }
 
-func cloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
+func CloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 	if result == nil {
 		return nil
 	}
@@ -142,17 +141,17 @@ func cloneTaskResult(result *TaskResultRecord) *TaskResultRecord {
 	cloned.Projects = append([]TaskObservedProjectSummary(nil), result.Projects...)
 	cloned.ProxyEvidence = append([]TaskProxyEvidence(nil), result.ProxyEvidence...)
 	cloned.RecreateEvidence = append([]TaskRecreateEvidence(nil), result.RecreateEvidence...)
-	cloned.CandidateAbsenceEvidence = cloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence)
-	cloned.DNSResolverCandidateObservation = cloneTaskDNSResolverObservationEvidence(
+	cloned.CandidateAbsenceEvidence = CloneTaskCandidateAbsenceEvidence(result.CandidateAbsenceEvidence)
+	cloned.DNSResolverCandidateObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverCandidateObservation,
 	)
-	cloned.DNSResolverRollbackObservation = cloneTaskDNSResolverObservationEvidence(
+	cloned.DNSResolverRollbackObservation = CloneTaskDNSResolverObservationEvidence(
 		result.DNSResolverRollbackObservation,
 	)
 	return &cloned
 }
 
-func cloneTaskCandidateAbsenceEvidence(evidence *TaskCandidateAbsenceEvidence) *TaskCandidateAbsenceEvidence {
+func CloneTaskCandidateAbsenceEvidence(evidence *TaskCandidateAbsenceEvidence) *TaskCandidateAbsenceEvidence {
 	if evidence == nil {
 		return nil
 	}
@@ -161,7 +160,7 @@ func cloneTaskCandidateAbsenceEvidence(evidence *TaskCandidateAbsenceEvidence) *
 	return &clone
 }
 
-func cloneTaskTerminalAssignment(
+func CloneTaskTerminalAssignment(
 	identity *TaskTerminalAssignmentRecord,
 ) *TaskTerminalAssignmentRecord {
 	if identity == nil {

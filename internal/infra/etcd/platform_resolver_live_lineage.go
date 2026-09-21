@@ -39,7 +39,7 @@ func platformResolverObservationForLineage(
 		OwnershipGeneration: input.OwnershipGeneration,
 		CorefileSHA256:      lineage.expectedPreviousArtifactSHA256,
 		TaskID:              lineage.predecessorTaskID, Revision: lineage.priorObservationRevision,
-		DNSResolverProof: &TaskDNSResolverObservationEvidence{
+		DNSResolverProof: &taskjournal.TaskDNSResolverObservationEvidence{
 			ComponentID: input.ComponentID, ServiceID: input.GeneratedServiceID,
 			ArtifactID:       lineage.expectedPreviousArtifactID,
 			ArtifactSHA256:   lineage.expectedPreviousArtifactSHA256,

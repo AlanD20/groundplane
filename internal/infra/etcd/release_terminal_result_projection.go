@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus taskjournal.TaskStatus, result TaskResultRecord) (uint32, error) {
+func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus taskjournal.TaskStatus, result taskjournal.TaskResultRecord) (uint32, error) {
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		return 0, nil
 	}
@@ -23,7 +23,7 @@ func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus taskjournal.Task
 	return ordinal, nil
 }
 
-func releaseFailedOrdinalFromResult(task TaskRecord, result TaskResultRecord) uint32 {
+func releaseFailedOrdinalFromResult(task TaskRecord, result taskjournal.TaskResultRecord) uint32 {
 	for index, step := range task.Steps {
 		if step.ID == result.FailedStepID {
 			if value := task.Params[ReleaseHookStepMemberParam(step.ID)]; value != "" {
@@ -47,7 +47,7 @@ func releaseMemberTerminalState(
 	ordinal uint32,
 	terminalStatus taskjournal.TaskStatus,
 	failedOrdinal uint32,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	compensated bool,
 ) (domain.State, bool, bool) {
 	if terminalStatus == taskjournal.TaskStatusCompleted {
@@ -78,22 +78,22 @@ func releaseMemberTerminalState(
 	}
 }
 
-func releaseProxyEvidence(result TaskResultRecord, serviceID string) (TaskProxyEvidence, bool) {
+func releaseProxyEvidence(result taskjournal.TaskResultRecord, serviceID string) (taskjournal.TaskProxyEvidence, bool) {
 	for _, evidence := range result.ProxyEvidence {
 		if evidence.ServiceID == serviceID {
 			return evidence, true
 		}
 	}
-	return TaskProxyEvidence{}, false
+	return taskjournal.TaskProxyEvidence{}, false
 }
 
-func releaseRecreateEvidence(result TaskResultRecord, serviceID string) (TaskRecreateEvidence, bool) {
+func releaseRecreateEvidence(result taskjournal.TaskResultRecord, serviceID string) (taskjournal.TaskRecreateEvidence, bool) {
 	for _, evidence := range result.RecreateEvidence {
 		if evidence.ServiceID == serviceID {
 			return evidence, true
 		}
 	}
-	return TaskRecreateEvidence{}, false
+	return taskjournal.TaskRecreateEvidence{}, false
 }
 
 func releaseOperationTerminalState(status taskjournal.TaskStatus) domain.State {
@@ -148,7 +148,7 @@ func releaseTerminalSummary(
 	}
 }
 
-func releasePriorServingEvidence(result TaskResultRecord, serviceID string) string {
+func releasePriorServingEvidence(result taskjournal.TaskResultRecord, serviceID string) string {
 	evidence, found := releaseProxyEvidence(result, serviceID)
 	if found {
 		return evidence.ReleaseID

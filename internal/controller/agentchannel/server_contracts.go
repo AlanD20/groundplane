@@ -46,7 +46,7 @@ type TaskStore interface {
 		string,
 		string,
 		taskjournal.TaskStatus,
-		etcd.TaskResultRecord,
+		taskjournal.TaskResultRecord,
 		time.Time,
 	) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
@@ -59,7 +59,7 @@ type environmentCreationTaskStore interface {
 		string,
 		string,
 		taskjournal.TaskStatus,
-		etcd.TaskResultRecord,
+		taskjournal.TaskResultRecord,
 		time.Time,
 	) (etcdstore.Versioned[etcd.TaskRecord], error)
 }

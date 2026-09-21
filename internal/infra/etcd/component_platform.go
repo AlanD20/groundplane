@@ -204,27 +204,27 @@ func validatePlatformComponentRecord(record componentrecord.Record) error {
 
 // ComponentObservationRecord is replaceable Agent evidence, separate from desired state.
 type ComponentObservationRecord struct {
-	ComponentID         string                              `json:"component_id"`
-	ServiceID           string                              `json:"service_id"`
-	PlanID              string                              `json:"plan_id"`
-	ComposeArtifactID   string                              `json:"compose_artifact_id"`
-	ComposeArtifact     *agentpb.ComposeArtifact            `json:"compose_artifact,omitempty"`
-	Enabled             bool                                `json:"enabled"`
-	Healthy             bool                                `json:"healthy"`
-	DesiredGeneration   uint64                              `json:"desired_generation"`
-	RenderGeneration    uint64                              `json:"render_generation"`
-	AgentID             string                              `json:"agent_id"`
-	AgentGeneration     uint64                              `json:"agent_generation"`
-	BaselineGeneration  uint64                              `json:"baseline_generation"`
-	OwnershipGeneration uint64                              `json:"ownership_generation"`
-	CorefileSHA256      string                              `json:"corefile_sha256,omitempty"`
-	InputSHA256         string                              `json:"input_sha256,omitempty"`
-	ObservedAt          time.Time                           `json:"observed_at"`
-	TaskID              string                              `json:"task_id"`
-	StepID              string                              `json:"step_id"`
-	Revision            uint64                              `json:"revision"`
-	PredecessorTaskID   string                              `json:"predecessor_task_id,omitempty"`
-	DNSResolverProof    *TaskDNSResolverObservationEvidence `json:"dns_resolver_proof,omitempty"`
+	ComponentID         string                                          `json:"component_id"`
+	ServiceID           string                                          `json:"service_id"`
+	PlanID              string                                          `json:"plan_id"`
+	ComposeArtifactID   string                                          `json:"compose_artifact_id"`
+	ComposeArtifact     *agentpb.ComposeArtifact                        `json:"compose_artifact,omitempty"`
+	Enabled             bool                                            `json:"enabled"`
+	Healthy             bool                                            `json:"healthy"`
+	DesiredGeneration   uint64                                          `json:"desired_generation"`
+	RenderGeneration    uint64                                          `json:"render_generation"`
+	AgentID             string                                          `json:"agent_id"`
+	AgentGeneration     uint64                                          `json:"agent_generation"`
+	BaselineGeneration  uint64                                          `json:"baseline_generation"`
+	OwnershipGeneration uint64                                          `json:"ownership_generation"`
+	CorefileSHA256      string                                          `json:"corefile_sha256,omitempty"`
+	InputSHA256         string                                          `json:"input_sha256,omitempty"`
+	ObservedAt          time.Time                                       `json:"observed_at"`
+	TaskID              string                                          `json:"task_id"`
+	StepID              string                                          `json:"step_id"`
+	Revision            uint64                                          `json:"revision"`
+	PredecessorTaskID   string                                          `json:"predecessor_task_id,omitempty"`
+	DNSResolverProof    *taskjournal.TaskDNSResolverObservationEvidence `json:"dns_resolver_proof,omitempty"`
 }
 
 func validateComponentObservation(record ComponentObservationRecord) error {
@@ -248,7 +248,7 @@ func validateComponentObservation(record ComponentObservationRecord) error {
 	}
 	if record.Enabled {
 		if !recordcodec.ValidSHA256(record.CorefileSHA256) || !recordcodec.ValidSHA256(record.InputSHA256) ||
-			record.DNSResolverProof == nil || validateTaskResult(TaskResultRecord{
+			record.DNSResolverProof == nil || taskjournal.ValidateTaskResult(taskjournal.TaskResultRecord{
 			Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone,
 			DNSResolverCandidateObservation: record.DNSResolverProof,
 		}, nil, taskjournal.TaskStatusCompleted) != nil || record.DNSResolverProof.ComponentID != record.ComponentID ||

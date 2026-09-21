@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func backupTerminalResultDigest(result *TaskResultRecord) (string, error) {
+func backupTerminalResultDigest(result *taskjournal.TaskResultRecord) (string, error) {
 	return backupTerminalCanonicalDigest("groundplane.backup.terminal.result.v1\x00", result)
 }
 

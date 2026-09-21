@@ -24,7 +24,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	agentID string,
 	terminalAt time.Time,
 	readRevision int64,
@@ -226,8 +226,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 				stepID = result.FailedStepID
 			}
 			effectDigest, digestErr := domain.Digest(struct {
-				ReleaseID string           `json:"release_id"`
-				Result    TaskResultRecord `json:"result"`
+				ReleaseID string                       `json:"release_id"`
+				Result    taskjournal.TaskResultRecord `json:"result"`
 			}{intent.ID, result})
 			if digestErr != nil {
 				return false, digestErr

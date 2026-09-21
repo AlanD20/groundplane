@@ -43,7 +43,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	terminalAt *time.Time,
 	revision int64,
 	submittedStatus taskjournal.TaskStatus,
-	submittedResult TaskResultRecord,
+	submittedResult taskjournal.TaskResultRecord,
 	advanceNow bool,
 ) (scriptTerminalSourceRelease, bool, error) {
 	if task.Type == taskjournal.TaskScript {

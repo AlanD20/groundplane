@@ -360,7 +360,7 @@ func hierarchyDeletionStableULID(domain string, values ...string) string {
 	return operation[len(string(ids.KindOperation))+1:]
 }
 
-func hierarchyDeletionTaskResultDigest(result *TaskResultRecord, terminal taskjournal.TaskStatus) (string, string, error) {
+func hierarchyDeletionTaskResultDigest(result *taskjournal.TaskResultRecord, terminal taskjournal.TaskStatus) (string, string, error) {
 	if result == nil {
 		return "", "", errs.New(errs.KindInternal, "hierarchy deletion child Task lost its result")
 	}

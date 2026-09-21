@@ -1,8 +1,11 @@
 package etcd
 
-import "slices"
+import (
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"slices"
+)
 
-func taskResultsEqual(left, right TaskResultRecord) bool {
+func taskResultsEqual(left, right taskjournal.TaskResultRecord) bool {
 	if left.Kind != right.Kind || left.ExitCode != right.ExitCode || left.ExecutionEpoch != right.ExecutionEpoch ||
 		left.ReleaseRecoveryRecordSHA256 != right.ReleaseRecoveryRecordSHA256 ||
 		left.FailedStepID != right.FailedStepID || left.Diagnostic != right.Diagnostic ||
@@ -27,11 +30,11 @@ func taskResultsEqual(left, right TaskResultRecord) bool {
 			return false
 		}
 	}
-	return taskDNSResolverEvidenceEqual(left.DNSResolverCandidateObservation, right.DNSResolverCandidateObservation) &&
-		taskDNSResolverEvidenceEqual(left.DNSResolverRollbackObservation, right.DNSResolverRollbackObservation)
+	return taskjournal.TaskDNSResolverEvidenceEqual(left.DNSResolverCandidateObservation, right.DNSResolverCandidateObservation) &&
+		taskjournal.TaskDNSResolverEvidenceEqual(left.DNSResolverRollbackObservation, right.DNSResolverRollbackObservation)
 }
 
-func taskCandidateAbsenceEvidenceEqual(left, right *TaskCandidateAbsenceEvidence) bool {
+func taskCandidateAbsenceEvidenceEqual(left, right *taskjournal.TaskCandidateAbsenceEvidence) bool {
 	if (left == nil) != (right == nil) {
 		return false
 	}

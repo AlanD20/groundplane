@@ -31,7 +31,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	ctx context.Context,
 	current TaskAssignment,
 	terminalStatus taskjournal.TaskStatus,
-	result TaskResultRecord,
+	result taskjournal.TaskResultRecord,
 	terminalAt time.Time,
 ) (backupTaskTerminalPlan, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -49,7 +49,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 		assignment.TaskID != current.Task.Record.ID ||
 		assignment.ClaimedTaskRevision >= current.Assignment.Revision ||
 		!isTerminalTaskStatus(terminalStatus) ||
-		validateTaskResult(result, task.Steps, terminalStatus) != nil {
+		taskjournal.ValidateTaskResult(result, task.Steps, terminalStatus) != nil {
 		return backupTaskTerminalPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup Task terminal identity is invalid",
@@ -63,8 +63,8 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
-	terminal.Result = cloneTaskResult(&result)
-	terminal.TerminalAssignment = &TaskTerminalAssignmentRecord{
+	terminal.Result = taskjournal.CloneTaskResult(&result)
+	terminal.TerminalAssignment = &taskjournal.TaskTerminalAssignmentRecord{
 		AssignmentID: assignment.AssignmentID,
 		AgentID:      assignment.AgentID, AgentGeneration: assignment.AgentGeneration,
 	}
