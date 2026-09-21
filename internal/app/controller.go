@@ -39,7 +39,7 @@ import (
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
-	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
+
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
@@ -1082,81 +1082,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Volume mutations: %w", err)
 	}
-	tenantCreationIdempotency, err := hierarchycontroller.NewTenantCreationIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Tenant creation idempotency: %w", err)
-	}
-	tenantMutations, err := hierarchycontroller.NewTenantCreationService(hierarchyRecords, tenantCreationIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Tenant creation service: %w", err)
-	}
-	tenantChangeIdempotency, err := hierarchycontroller.NewTenantChangeIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Tenant change idempotency: %w", err)
-	}
-	tenantChanges, err := hierarchycontroller.NewTenantChangeService(hierarchyRecords, tenantChangeIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Tenant change service: %w", err)
-	}
-	projectCreationIdempotency, err := hierarchycontroller.NewProjectCreationIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Project creation idempotency: %w", err)
-	}
-	projectMutations, err := hierarchycontroller.NewProjectCreationService(hierarchyRecords, projectCreationIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Project creation service: %w", err)
-	}
-	projectChangeIdempotency, err := hierarchycontroller.NewProjectChangeIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Project change idempotency: %w", err)
-	}
-	projectChanges, err := hierarchycontroller.NewProjectChangeService(hierarchyRecords, projectChangeIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Project change service: %w", err)
-	}
-	environmentChangeIdempotency, err := environmentcapability.NewDurableChangeIdempotency(
-		intentCoordinator,
-		idempotency,
+	hierarchyMutations, err := newControllerHierarchyMutations(
+		cfg, hierarchyRecords, zoneRecords, intentCoordinator, idempotency,
 	)
 	if err != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Environment change idempotency: %w", err)
-	}
-	environmentChanges, err := environmentcapability.NewChangeService(
-		cfg.EnvironmentPool,
-		hierarchyRecords,
-		zoneRecords,
-		environmentChangeIdempotency,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Environment change service: %w", err)
-	}
-	environmentCreationIdempotency, err := environmentcapability.NewDurableCreationIdempotency(
-		intentCoordinator,
-		idempotency,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Environment creation idempotency: %w", err)
-	}
-	environmentMutations, err := environmentcapability.NewCreationService(
-		cfg.Storage.VolumeRoot,
-		cfg.EnvironmentPool,
-		hierarchyRecords,
-		environmentCreationIdempotency,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Environment creation service: %w", err)
+		return nil, err
 	}
 	platform, err := newControllerPlatform(ctx, controllerPlatformDependencies{
 		Config: cfg, Key: controllerKey, Store: store, Agents: agents, Tasks: tasks,
@@ -1213,8 +1144,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		OnHTTPReady: platform.readiness.MarkHTTPReady, MutationAdmission: platform.upgrades,
 		Agents: platform.reads, AgentMutations: platform.mutations, Tenants: hierarchyService,
 		Projects:                hierarchyService,
-		ProjectMutations:        projectMutations,
-		ProjectChanges:          projectChanges,
+		ProjectMutations:        hierarchyMutations.projectMutations,
+		ProjectChanges:          hierarchyMutations.projectChanges,
 		BackingServices:         backingServiceReads,
 		BackingServiceMutations: backingServiceMutations,
 		Components:              componentReads,
@@ -1252,8 +1183,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		BackupKeyExports:      backupKeys,
 		Volumes:               volumeReads,
 		VolumeMutations:       volumeMutations,
-		EnvironmentMutations:  environmentMutations,
-		EnvironmentChanges:    environmentChanges,
+		EnvironmentMutations:  hierarchyMutations.environmentMutations,
+		EnvironmentChanges:    hierarchyMutations.environmentChanges,
 		EnvironmentBlueprints: environmentBlueprints,
 		HierarchyDeletions:    hierarchyDeletions,
 		AttachMutations:       attachMutations,
@@ -1262,8 +1193,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		TaskAborts:            taskAborts,
 		ControllerTaskWake:    controllerTaskRunner.Wake,
 		AgentTaskWake:         agentRuntime.Registry.WakeTaskDispatch,
-		TenantMutations:       tenantMutations,
-		TenantChanges:         tenantChanges,
+		TenantMutations:       hierarchyMutations.tenantMutations,
+		TenantChanges:         hierarchyMutations.tenantChanges,
 		Console:               consoleAssets, Tasks: tasks, Logs: serviceReads.logs,
 	})
 
