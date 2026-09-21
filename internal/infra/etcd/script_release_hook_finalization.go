@@ -169,7 +169,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	if err != nil {
 		return false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return false, errs.New(errs.KindStateConflict, "release hook terminal evidence changed")
 	}

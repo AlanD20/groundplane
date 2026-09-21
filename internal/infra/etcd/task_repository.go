@@ -391,7 +391,7 @@ func (repository *TaskRepository) verifyTaskOwnerPage(
 	if indexes == nil {
 		return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
 	}
-	defer clearKeyValues(indexes.Values)
+	defer etcdstore.ClearValues(indexes.Values)
 	if indexes.ReadRevision != page.Revision || len(indexes.Values) != len(keys) {
 		return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
 	}

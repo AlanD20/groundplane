@@ -349,7 +349,7 @@ func (ledger *ReleaseLedger) Publish(
 	if err != nil {
 		return ReleasePublicationResult{}, err
 	}
-	defer clearKeyValues(result.FailureReads)
+	defer etcdstore.ClearValues(result.FailureReads)
 	if result.Succeeded {
 		return ReleasePublicationResult{
 			Revision: result.Revision, Task: evidence.Task,

@@ -81,7 +81,7 @@ func (s *store) GetMany(ctx context.Context, request etcdstore.GetManyRequest) (
 	for index, operation := range response.Responses {
 		rangeResponse := operation.GetResponseRange()
 		if rangeResponse == nil || len(rangeResponse.Kvs) > 1 {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 			clearGetManyResponseValues(response)
 			return nil, errs.New(errs.KindInternal, "etcd multi-get returned an invalid range response")
 		}
@@ -90,13 +90,13 @@ func (s *store) GetMany(ctx context.Context, request etcdstore.GetManyRequest) (
 		}
 		item := rangeResponse.Kvs[0]
 		if string(item.Key) != physicalKeys[index] {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 			clearGetManyResponseValues(response)
 			return nil, errs.New(errs.KindInternal, "etcd multi-get returned an unexpected key")
 		}
 		logical, ok := s.logicalKey(string(item.Key))
 		if !ok {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 			clearGetManyResponseValues(response)
 			return nil, errs.New(errs.KindInternal, "etcd returned a key outside the configured prefix")
 		}

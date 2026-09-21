@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -27,7 +28,7 @@ import (
 )
 
 type Service struct {
-	agents      *etcd.LocalAgentRepository
+	agents      *agentregistration.Repository
 	images      workloadseal.Resolver
 	ledger      *etcd.ReleaseLedger
 	scripts     *etcd.ScriptRepository
@@ -42,7 +43,7 @@ func NewService(
 	plans *taskplanning.TaskPlanResolver,
 	artifacts *taskplanning.ScriptArtifactService,
 	sources *etcd.ScriptSourceReferenceAuthority,
-	agents *etcd.LocalAgentRepository,
+	agents *agentregistration.Repository,
 	images workloadseal.Resolver,
 ) (*Service, error) {
 	if ledger == nil || scripts == nil || plans == nil || artifacts == nil || sources == nil || agents == nil ||

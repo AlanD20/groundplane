@@ -58,7 +58,7 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	if read == nil || read.ReadRevision != runtimeRead.ReadRevision || len(read.Values) != len(keys) {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if index == 1 {
 			if value != nil {
@@ -118,7 +118,7 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 		completionRead.Values[0] == nil || completionRead.Values[0].Key != completionKey || completionRead.Values[0].ModRevision <= 0 {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	defer clearKeyValues(completionRead.Values)
+	defer etcdstore.ClearValues(completionRead.Values)
 	completion, err := removalrecord.DecodeCompletion(completionRead.Values[0].Value)
 	if err != nil || completion.OperationID != runtime.OperationID || !completion.DirectoryAbsent ||
 		completion.RequestOrdinal != progress.NextRequestOrdinal-1 || !completion.CompletedAt.Equal(progress.UpdatedAt) ||
@@ -313,7 +313,7 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	if read == nil || read.ReadRevision != current.ReadRevision || len(read.Values) != len(keys) {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	conditions = append([]etcdstore.Condition(nil), conditions...)
 	conditions = append(conditions, etcdstore.Condition{Key: runtimeKey, ModRevision: current.Entry.ModRevision})
 	for index, value := range read.Values {

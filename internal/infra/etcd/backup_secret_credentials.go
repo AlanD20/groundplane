@@ -95,7 +95,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 	if err != nil {
 		return err
 	}
-	defer clearKeyValues(final.Values)
+	defer etcdstore.ClearValues(final.Values)
 	dynamic.last = final
 	for _, reference := range secretPlans {
 		selected, err := selectBackupSecretCandidate(final.Values, dynamic, reference, evidence.Project.ID)

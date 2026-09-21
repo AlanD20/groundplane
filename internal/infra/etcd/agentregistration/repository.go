@@ -1,4 +1,4 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
@@ -14,7 +14,7 @@ type localAgentRepositoryStore interface {
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
-type LocalAgentRepository struct {
+type Repository struct {
 	store localAgentRepositoryStore
 }
 
@@ -30,15 +30,15 @@ type localAgentEvidence struct {
 	digest          *etcdstore.KeyValue
 }
 
-func NewLocalAgentRepository(store etcdstore.Store) (*LocalAgentRepository, error) {
-	return newLocalAgentRepository(store)
+func NewRepository(store etcdstore.Store) (*Repository, error) {
+	return newRepository(store)
 }
 
-func newLocalAgentRepository(store localAgentRepositoryStore) (*LocalAgentRepository, error) {
+func newRepository(store localAgentRepositoryStore) (*Repository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "local Agent store is required")
 	}
-	return &LocalAgentRepository{store: store}, nil
+	return &Repository{store: store}, nil
 }
 
 func agentCredentialNotFound() error {

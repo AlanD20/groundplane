@@ -106,7 +106,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 			"Environment pool fixed-revision evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(registries.Values)
+	defer etcdstore.ClearValues(registries.Values)
 	for index, value := range registries.Values {
 		if value != nil && value.Key != registryKeys[index] {
 			return IdempotencyTransactionResult{}, errs.New(
@@ -226,11 +226,11 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 		}
 		return stateConflict("environment", current.Record.ID)
 	}
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
+	plan, err := NewIdempotencyMutationPlan(conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

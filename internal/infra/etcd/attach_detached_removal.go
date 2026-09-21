@@ -169,7 +169,7 @@ func prepareAttachRemoval(
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[1]},
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(owner.ID), Value: ownerValue},
 		)
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 	}
 	if len(current.Record.GrantAttachIDs) == 0 {
 		return conditions, mutations, values, nil

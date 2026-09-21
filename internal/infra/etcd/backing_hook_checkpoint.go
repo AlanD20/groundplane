@@ -96,7 +96,7 @@ func (repository *AttachRepository) CheckpointBackingHook(
 			Type: etcdstore.MutationPut, Key: backingHookCheckpointKey(input.TaskID, input.StepID), Value: value,
 		}})
 		clear(value)
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if err != nil {
 			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
 		}
@@ -130,11 +130,11 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 	}
 	if primary == nil || len(primary.Values) != 3 || primary.Values[0] == nil || primary.Values[1] == nil {
 		if primary != nil {
-			clearKeyValues(primary.Values)
+			etcdstore.ClearValues(primary.Values)
 		}
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Backing hook assignment is unavailable")
 	}
-	defer clearKeyValues(primary.Values)
+	defer etcdstore.ClearValues(primary.Values)
 	task, taskErr := decodeTaskRecord(primary.Values[0].Value)
 	assignment, assignmentErr := taskassignments.DecodeTaskAssignment(primary.Values[1].Value)
 	if taskErr != nil || assignmentErr != nil {
@@ -161,11 +161,11 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 	}
 	if claim == nil || len(claim.Values) != 1 || claim.Values[0] == nil {
 		if claim != nil {
-			clearKeyValues(claim.Values)
+			etcdstore.ClearValues(claim.Values)
 		}
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Backing hook execution claim changed")
 	}
-	defer clearKeyValues(claim.Values)
+	defer etcdstore.ClearValues(claim.Values)
 	if claim.Values[0].ModRevision != primary.Values[1].ModRevision ||
 		!bytes.Equal(claim.Values[0].Value, primary.Values[1].Value) {
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindInternal, "Backing hook assignment copies diverged")

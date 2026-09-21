@@ -57,7 +57,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRe
 			"Environment pool reservation registry is missing",
 		)
 	}
-	defer clearKeyValues(registries.Values)
+	defer etcdstore.ClearValues(registries.Values)
 	global, err := recordcodec.Decode[EnvironmentPoolRegistry](
 		registries.Values[0].Value,
 		"environment_pool_registry",

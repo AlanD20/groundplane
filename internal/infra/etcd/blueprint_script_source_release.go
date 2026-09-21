@@ -218,7 +218,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		if transactErr != nil {
 			return scriptTerminalSourceRelease{}, false, transactErr
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		return scriptTerminalSourceRelease{}, true, nil
 	}
 	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||

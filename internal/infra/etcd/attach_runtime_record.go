@@ -64,7 +64,7 @@ func (repository *AttachRepository) PrepareAttachRuntime(
 		if result == nil || result.ReadRevision <= 0 || len(result.Values) != 1 || result.Values[0] == nil {
 			return empty, errs.New(errs.KindStateConflict, "running Attach consumer has no acknowledged runtime")
 		}
-		defer clearKeyValues(result.Values)
+		defer etcdstore.ClearValues(result.Values)
 		record, decodeErr := decodeAcknowledgedServiceRuntime(
 			result.Values[0].Value,
 			prepared.EnvironmentID,

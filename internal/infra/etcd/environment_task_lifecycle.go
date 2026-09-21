@@ -108,13 +108,13 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 		)
 	}
 	if result.ReadRevision != revision || len(result.Values) != 3 {
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 		return taskEnvironmentMutationState{}, errs.New(
 			errs.KindInternal,
 			"environment mutation fence read returned an invalid result",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	environmentValue := result.Values[0]
 	epochValue := result.Values[1]
 	if environmentValue == nil {

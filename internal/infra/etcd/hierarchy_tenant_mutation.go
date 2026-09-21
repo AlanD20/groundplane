@@ -80,7 +80,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantSlugKey(replacement.Slug), Value: []byte(current.Record.ID)},
 		)
 	}
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := NewIdempotencyMutationPlan(
 		conditions,
 		mutations,
 		classifyTenantMutationConflict(current, replacement, renaming),
@@ -88,7 +88,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

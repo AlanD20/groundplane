@@ -4,6 +4,7 @@ import (
 	"context"
 	backupconfigrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 // Rationale: config snapshot progress is assignment-fenced and may advance
@@ -38,11 +39,11 @@ func (repository *BackupRuntimeRepository) currentBackupRunConfigCompanions(
 			read.Values[2].ModRevision != publicationRevision ||
 			string(read.Values[1].Value) != snapshot.ConfigSnapshotID ||
 			string(read.Values[2].Value) != run.TaskID {
-			clearKeyValues(read.Values)
+			etcdstore.ClearValues(read.Values)
 			return false
 		}
 		stored, decodeErr := backupconfigrecord.DecodeBackupConfigSnapshotRecord(read.Values[0].Value)
-		clearKeyValues(read.Values)
+		etcdstore.ClearValues(read.Values)
 		createdAtValid := (run.RetryOfTaskID == "" && stored.CreatedAt.Equal(run.CreatedAt)) ||
 			(run.RetryOfTaskID != "" && stored.CreatedAt.Before(run.CreatedAt))
 		if decodeErr != nil || stored.SnapshotID != snapshot.ConfigSnapshotID ||

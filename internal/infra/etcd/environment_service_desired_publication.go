@@ -181,14 +181,14 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		}
 		return errs.New(errs.KindStateConflict, "direct Service desired publication raced")
 	}
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, classifier)
+	plan, err := NewIdempotencyMutationPlan(conditions, mutations, classifier)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := plan.enforceTransactionBounds(validateEnvironmentDesiredPublicationBudget); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -213,7 +213,7 @@ func (repository *HierarchyRepository) validateDirectServiceHierarchy(
 	if result == nil || len(result.Values) != 2 || result.Values[0] == nil || result.Values[1] == nil {
 		return errs.New(errs.KindStateConflict, "Environment Blueprint hierarchy changed")
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	durableEnvironment, environmentErr := hierarchyrecord.DecodeEnvironment(result.Values[0].Value)
 	durableProject, projectErr := hierarchyrecord.DecodeProject(result.Values[1].Value)
 	if environmentErr != nil || projectErr != nil ||
@@ -367,7 +367,7 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 			"desired revision staging evidence is unavailable",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(result.Values[0].Value)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err

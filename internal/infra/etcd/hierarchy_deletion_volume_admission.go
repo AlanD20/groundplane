@@ -81,7 +81,7 @@ func (repository *HierarchyDeletionRepository) requireEnvironmentVolumeRemovalAb
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] != nil {
 		return errs.New(errs.KindResourceInUse, "descendant Volume removal is still owned")
 	}

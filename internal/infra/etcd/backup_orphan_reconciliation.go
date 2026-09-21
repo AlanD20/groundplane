@@ -42,7 +42,7 @@ func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] != nil {
 		stored, decodeErr := backupruntime.DecodeBackupOrphanRecord(anchor.Values[0].Value)
 		if decodeErr == nil && stored == next &&
@@ -76,7 +76,7 @@ func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	if !result.Succeeded {
-		clearKeyValues(result.FailureReads)
+		etcdstore.ClearValues(result.FailureReads)
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan reconciliation authority changed",
@@ -114,7 +114,7 @@ func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 	if err != nil {
 		return err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] == nil && anchor.Values[1] == nil && anchor.Values[2] == nil {
 		return nil
 	}
@@ -137,7 +137,7 @@ func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 		return err
 	}
 	if !result.Succeeded {
-		clearKeyValues(result.FailureReads)
+		etcdstore.ClearValues(result.FailureReads)
 		return errs.New(errs.KindStateConflict, "backup orphan reconciliation authority changed")
 	}
 	return nil
@@ -202,7 +202,7 @@ func (repository *BackupRuntimeRepository) AdoptReconciledBackupOrphan(
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] == nil {
 		if anchor.Values[1] != nil || anchor.Values[2] != nil {
 			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
@@ -263,7 +263,7 @@ func (repository *BackupRuntimeRepository) AdoptReconciledBackupOrphan(
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if !result.Succeeded {
-		clearKeyValues(result.FailureReads)
+		etcdstore.ClearValues(result.FailureReads)
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan reconciliation authority changed",

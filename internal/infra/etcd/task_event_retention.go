@@ -93,7 +93,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	event, err := taskjournal.DecodeTaskEventRecord(read.Values[0].Value)
 	if err != nil || event.Sequence != oldest || event.Identity.TaskID != task.ID {
 		return nil, nil, recordcodec.CorruptRecord()
@@ -107,7 +107,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		dedupRead.Values[0] == nil {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
-	defer clearKeyValues(dedupRead.Values)
+	defer etcdstore.ClearValues(dedupRead.Values)
 	dedup, err := taskjournal.DecodeTaskEventDedupRecord(dedupRead.Values[0].Value)
 	if err != nil || dedup.Identity != event.Identity || dedup.Sequence != event.Sequence ||
 		dedup.PayloadSHA256 != event.PayloadSHA256 {

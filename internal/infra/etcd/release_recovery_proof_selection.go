@@ -185,7 +185,7 @@ func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 		read.Values[0] == nil || read.Values[1] == nil {
 		return nil, nil, nil, releases.CorruptReleaseRecord()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
 	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
 	procedure, err := validateReleaseCandidateMarker(task, marker, manifest)
@@ -261,7 +261,7 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
 		return releaseRecoveryProofExpectation{}, nil, releases.CorruptReleaseRecord()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	intent, intentErr := releases.DecodeReleaseRecord[domain.Intent](read.Values[0].Value, "release-intent")
 	head, headErr := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](read.Values[2].Value, "release-operation")
 	raw, rawErr := releases.DecodeReleaseRecord[json.RawMessage](read.Values[1].Value, "release-render-input")

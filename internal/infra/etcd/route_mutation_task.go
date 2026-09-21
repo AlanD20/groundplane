@@ -319,7 +319,7 @@ func applyRouteMutationTaskMarkers(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearKeyValues(result.FailureReads)
+	defer etcdstore.ClearValues(result.FailureReads)
 	if result.Succeeded {
 		return IdempotencyTransactionResult{kind: idempotencyTransactionApplied, revision: result.Revision}, nil
 	}

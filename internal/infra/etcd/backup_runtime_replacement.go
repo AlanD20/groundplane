@@ -38,7 +38,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] == nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindTaskNotFound,
@@ -182,7 +182,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	if !result.Succeeded {
-		defer clearKeyValues(result.FailureReads)
+		defer etcdstore.ClearValues(result.FailureReads)
 		if len(result.FailureReads) != len(conditions) {
 			return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 				errs.KindInternal,

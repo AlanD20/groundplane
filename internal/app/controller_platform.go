@@ -7,6 +7,7 @@ import (
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
+	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"os"
@@ -33,7 +34,7 @@ type controllerPlatformDependencies struct {
 	Config        config.ControllerConfig
 	Key           agentruntime.ControllerKey
 	Store         etcdstore.Store
-	Agents        *etcd.LocalAgentRepository
+	Agents        *agentregistration.Repository
 	Tasks         *etcd.TaskRepository
 	Intents       *requestidempotency.Coordinator
 	Idempotency   *etcd.IdempotencyRepository

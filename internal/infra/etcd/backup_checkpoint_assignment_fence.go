@@ -35,7 +35,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		taskResult.Values[0] == nil {
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
-	defer clearKeyValues(taskResult.Values)
+	defer etcdstore.ClearValues(taskResult.Values)
 	task, err := decodeTaskRecord(taskResult.Values[0].Value)
 	if err != nil || task.ID != input.TaskID {
 		return nil, backupruntime.CorruptBackupRuntimeRecord()
@@ -57,7 +57,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		!bytes.Equal(assignmentResult.Values[0].Value, assignmentResult.Values[1].Value) {
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
-	defer clearKeyValues(assignmentResult.Values)
+	defer etcdstore.ClearValues(assignmentResult.Values)
 	assignment, err := taskassignments.DecodeTaskAssignment(assignmentResult.Values[0].Value)
 	if err != nil || assignment.AssignmentID != input.AssignmentID ||
 		assignment.TaskID != input.TaskID || assignment.Executor != task.Executor ||
@@ -77,7 +77,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		!bytes.Equal(timeoutResult.Values[0].Value, assignmentResult.Values[0].Value) {
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
-	defer clearKeyValues(timeoutResult.Values)
+	defer etcdstore.ClearValues(timeoutResult.Values)
 	return []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(input.TaskID), ModRevision: taskResult.Values[0].ModRevision},
 		{Key: claimKey, ModRevision: assignmentResult.Values[0].ModRevision},

@@ -71,7 +71,7 @@ func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
 			"Environment Blueprint hierarchy is unavailable",
 		)
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0].ModRevision != environment.Revision ||
 		anchor.Values[1].ModRevision != project.Revision {
 		return environmentMutationFenceEvidence{}, errs.New(

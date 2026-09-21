@@ -225,7 +225,7 @@ func (repository *HierarchyDeletionRepository) releaseFailedAgentAction(
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,
@@ -281,7 +281,7 @@ func (repository *HierarchyDeletionRepository) commitHierarchyDeletionCompletion
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion completion changed")
 	}

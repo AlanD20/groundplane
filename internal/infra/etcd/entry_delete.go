@@ -77,7 +77,7 @@ func (repository *EntryRepository) DeleteEntry(
 		return 0, err
 	}
 	if !result.Succeeded {
-		defer clearKeyValues(result.FailureReads)
+		defer etcdstore.ClearValues(result.FailureReads)
 		return 0, classified(result.Revision, result.FailureReads)
 	}
 	return result.Revision, nil

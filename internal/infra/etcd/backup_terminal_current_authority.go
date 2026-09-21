@@ -61,7 +61,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
 		return errs.New(errs.KindInternal, "backup terminal authority read is incomplete")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	ownerPresent, successorLock, deletionOwner, err := repository.validateBackupTerminalOwnerSnapshot(
 		ctx,
 		read.ReadRevision,
@@ -216,13 +216,13 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		if dispatchRead == nil || dispatchRead.ReadRevision != read.ReadRevision ||
 			len(dispatchRead.Values) != 1 || dispatchRead.Values[0] == nil {
 			if dispatchRead != nil {
-				clearKeyValues(dispatchRead.Values)
+				etcdstore.ClearValues(dispatchRead.Values)
 			}
 			return errs.New(errs.KindStateConflict, "terminal backup prune successor dispatch is missing")
 		}
 		dispatchRevision := dispatchRead.Values[0].ModRevision
 		dispatch, err := backupruntime.DecodeBackupRecoveryPointPruneDispatchRecord(dispatchRead.Values[0].Value)
-		clearKeyValues(dispatchRead.Values)
+		etcdstore.ClearValues(dispatchRead.Values)
 		if err != nil {
 			return err
 		}

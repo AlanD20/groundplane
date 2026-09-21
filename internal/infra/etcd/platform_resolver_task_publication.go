@@ -127,7 +127,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if err != nil {
 		return err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return err
 	}

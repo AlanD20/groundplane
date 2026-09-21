@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -23,7 +24,7 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	if err != nil {
 		return taskjournal.TaskOwner{}, err
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] == nil {
 		return taskjournal.TaskOwner{}, errs.New(errs.KindStateConflict, "backup Project is unavailable")
 	}
@@ -42,7 +43,7 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	if err != nil {
 		return taskjournal.TaskOwner{}, err
 	}
-	defer clearKeyValues(tenantRead.Values)
+	defer etcdstore.ClearValues(tenantRead.Values)
 	if tenantRead.Values[0] == nil {
 		return taskjournal.TaskOwner{}, errs.New(errs.KindStateConflict, "backup Tenant is unavailable")
 	}
@@ -65,7 +66,7 @@ func (repository *BackupRuntimeRepository) manualBackupConnector(
 	if err != nil {
 		return connectorrecord.Record{}, 0, 0, false, err
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] == nil {
 		return connectorrecord.Record{}, 0, 0, false, errs.New(
 			errs.KindStateConflict,
@@ -123,7 +124,7 @@ func (repository *BackupRuntimeRepository) manualBackupKey(
 	if err != nil {
 		return err
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] == nil || read.Values[1] == nil {
 		return errs.New(errs.KindStateConflict, "backup age key is unavailable")
 	}

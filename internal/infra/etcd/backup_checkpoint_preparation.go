@@ -39,7 +39,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup task assignment changed",
 		)
 	}
-	defer clearKeyValues(taskRead.Values)
+	defer etcdstore.ClearValues(taskRead.Values)
 	task, err := decodeTaskRecord(taskRead.Values[0].Value)
 	if err != nil || task.ID != input.TaskID {
 		return backupCheckpointPlan{}, backupruntime.CorruptBackupRuntimeRecord()
@@ -80,7 +80,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup task assignment changed",
 		)
 	}
-	defer clearKeyValues(assignmentRead.Values)
+	defer etcdstore.ClearValues(assignmentRead.Values)
 	claimValue := assignmentRead.Values[0]
 	indexValue := assignmentRead.Values[1]
 	if claimValue.ModRevision != indexValue.ModRevision ||
@@ -115,7 +115,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup task assignment changed",
 		)
 	}
-	defer clearKeyValues(timeoutRead.Values)
+	defer etcdstore.ClearValues(timeoutRead.Values)
 	nextSequence := uint64(1)
 	if assignmentRead.Values[2] != nil {
 		cursor, decodeErr := decodeBackupCheckpointCursorRecord(assignmentRead.Values[2].Value)

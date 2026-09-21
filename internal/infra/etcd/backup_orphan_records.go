@@ -64,7 +64,7 @@ func (repository *BackupRuntimeRepository) GetBackupOrphan(
 		authority.Values[1] == nil || authority.Values[2] == nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(authority.Values)
+	defer etcdstore.ClearValues(authority.Values)
 	stored, err := backupruntime.DecodeBackupOrphanRecord(authority.Values[0].Value)
 	expectedVersion := int64(1)
 	if stored.State == backupruntime.BackupOrphanDelete {

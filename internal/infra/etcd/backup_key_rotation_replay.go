@@ -33,7 +33,7 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 		read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil || read.Values[3] != nil {
 		return errs.New(errs.KindStateConflict, "backup key rotation terminal replay changed")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	rotation, err := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
 	if err != nil {
 		return corruptBackupKey()

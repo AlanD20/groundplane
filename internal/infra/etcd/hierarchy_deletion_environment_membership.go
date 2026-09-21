@@ -211,7 +211,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 		if read == nil || read.ReadRevision != operation.Tombstone.SnapshotRevision ||
 			len(read.Values) != len(keys) {
 			if read != nil {
-				clearKeyValues(read.Values)
+				etcdstore.ClearValues(read.Values)
 			}
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
@@ -223,7 +223,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 			runtime, decodeErr := servicerecord.DecodeServiceRuntimeRecord(value.Value)
 			if decodeErr != nil || value.Key != keys[index] || runtime.EnvironmentID != environmentID ||
 				runtime.ServiceID != desired.Desired.ID || runtime.BackingNetworkID != desired.BackingNetworkID {
-				clearKeyValues(read.Values)
+				etcdstore.ClearValues(read.Values)
 				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			nodes = append(nodes, hierarchyDeletionControllerNode(
@@ -237,7 +237,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 				hierarchyDeletionBytesDigest(value.Value),
 			))
 		}
-		clearKeyValues(read.Values)
+		etcdstore.ClearValues(read.Values)
 	}
 	return nodes, nil
 }

@@ -123,7 +123,7 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(encryptedValue)
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := NewIdempotencyMutationPlan(
 		secretCreateConditions(owner, record),
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(record.Secret.ID), Value: primaryValue},
@@ -138,7 +138,7 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

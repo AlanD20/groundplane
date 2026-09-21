@@ -64,7 +64,7 @@ func (repository *HierarchyRepository) getEnvironmentBlueprintZoneRegistryAtRevi
 			"Zone pool registry read is incomplete",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	if result.Values[0] == nil {
 		return etcdstore.Versioned[zonePoolRegistry]{
 			Record: zonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: readRevision,

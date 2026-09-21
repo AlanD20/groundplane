@@ -88,7 +88,7 @@ func (repository *TaskRepository) advanceTaskPruneIntent(
 	if err != nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return etcdstore.Versioned[taskPruneIntent]{}, errs.New(
 			errs.KindStateConflict,
@@ -139,7 +139,7 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 			if inputResult == nil || len(inputResult.Values) != 1 || inputResult.Values[0] == nil {
 				return corruptTaskPruneIntent()
 			}
-			defer clearKeyValues(inputResult.Values)
+			defer etcdstore.ClearValues(inputResult.Values)
 			input, err := decodeAttachTaskRenderInput(inputResult.Values[0].Value)
 			if err != nil || input.PlanID != current.Record.AttachPlanID {
 				return corruptTaskPruneIntent()
@@ -159,7 +159,7 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 	if err != nil {
 		return err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return errs.New(errs.KindStateConflict, "task prune completion changed")
 	}

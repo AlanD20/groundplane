@@ -1,4 +1,4 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *LocalAgentRepository) ResolveAgentChannel(
+func (repository *Repository) ResolveAgentChannel(
 	ctx context.Context,
 	presentedAgentID string,
 	token [agentprotocol.RawTokenBytes]byte,

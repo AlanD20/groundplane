@@ -122,7 +122,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
@@ -488,6 +488,6 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 	if err != nil {
 		return false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	return transaction.Succeeded, nil
 }

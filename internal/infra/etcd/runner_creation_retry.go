@@ -45,7 +45,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if err := validateTaskRecord(retry); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

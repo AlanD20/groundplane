@@ -96,7 +96,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	connectorEvidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			connectorrecord.RecordKey(record.ConnectorID), connectorrecord.CredentialValueKey(record.ConnectorID),
@@ -117,7 +117,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 			"backup connector publication evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(connectorEvidence.Values)
+	defer etcdstore.ClearValues(connectorEvidence.Values)
 	if err := validateBackupConnectorSnapshotEvidence(
 		connectorEvidence.Values,
 		record,
@@ -296,11 +296,11 @@ func (repository *BackupRuntimeRepository) exactBackupRunConfigCompanions(
 			read.Values[2].ModRevision != resultRevision ||
 			string(read.Values[1].Value) != snapshot.ConfigSnapshotID ||
 			string(read.Values[2].Value) != run.TaskID {
-			clearKeyValues(read.Values)
+			etcdstore.ClearValues(read.Values)
 			return false
 		}
 		stored, decodeErr := backupconfigrecord.DecodeBackupConfigSnapshotRecord(read.Values[0].Value)
-		clearKeyValues(read.Values)
+		etcdstore.ClearValues(read.Values)
 		createdAtValid := (run.RetryOfTaskID == "" && stored.CreatedAt.Equal(run.CreatedAt)) ||
 			(run.RetryOfTaskID != "" && stored.CreatedAt.Before(run.CreatedAt))
 		if decodeErr != nil || stored.SnapshotID != snapshot.ConfigSnapshotID ||

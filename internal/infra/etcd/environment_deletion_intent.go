@@ -126,13 +126,13 @@ func loadEnvironmentDeletionIntent(
 		)
 	}
 	if result.ReadRevision != revision || len(result.Values) != 1 {
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindInternal,
 			"environment deletion intent evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	if result.Values[0] == nil {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,

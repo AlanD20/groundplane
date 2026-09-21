@@ -182,7 +182,7 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 			Type: etcdstore.MutationPut, Key: scriptExecutionKey(input.ExecutionID), Value: value,
 		}})
 		clear(value)
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if err != nil {
 			return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 		}
@@ -210,10 +210,10 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	}
 	if primary == nil || len(primary.Values) != 3 || primary.Values[0] == nil ||
 		primary.Values[1] == nil || primary.Values[2] == nil {
-		clearKeyValues(primary.Values)
+		etcdstore.ClearValues(primary.Values)
 		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint assignment is unavailable")
 	}
-	defer clearKeyValues(primary.Values)
+	defer etcdstore.ClearValues(primary.Values)
 	execution, executionErr := recordcodec.Decode[ScriptExecutionRecord](primary.Values[0].Value, "script-execution")
 	task, taskErr := decodeTaskRecord(primary.Values[1].Value)
 	assignment, assignmentErr := taskassignments.DecodeTaskAssignment(primary.Values[2].Value)
@@ -258,10 +258,10 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		return scriptCheckpointAnchor{}, err
 	}
 	if claim == nil || len(claim.Values) != 2 || claim.Values[0] == nil || claim.Values[1] == nil {
-		clearKeyValues(claim.Values)
+		etcdstore.ClearValues(claim.Values)
 		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint execution claim changed")
 	}
-	defer clearKeyValues(claim.Values)
+	defer etcdstore.ClearValues(claim.Values)
 	if primary.Values[2].ModRevision != claim.Values[0].ModRevision ||
 		primary.Values[2].ModRevision != claim.Values[1].ModRevision ||
 		!bytes.Equal(primary.Values[2].Value, claim.Values[0].Value) ||

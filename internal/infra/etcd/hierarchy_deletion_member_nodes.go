@@ -135,6 +135,6 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 		return "", hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	digest := hierarchyDeletionBytesDigest(stored.Values[0].Value)
-	clearKeyValues(stored.Values)
+	etcdstore.ClearValues(stored.Values)
 	return digest, nil
 }

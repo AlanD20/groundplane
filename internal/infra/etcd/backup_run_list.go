@@ -68,7 +68,7 @@ func (repository *BackupRuntimeRepository) readBackupRunMembershipPage(
 		len(primaries.Values) != len(keys) {
 		return BackupRuntimePage[backupruntime.BackupRunRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(primaries.Values)
+	defer etcdstore.ClearValues(primaries.Values)
 	page.Items = make([]etcdstore.Versioned[backupruntime.BackupRunRecord], len(keys))
 	for position, value := range primaries.Values {
 		if value == nil {

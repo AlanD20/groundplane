@@ -111,7 +111,7 @@ func (repository *IdempotencyRepository) collectExpired(
 	if markers == nil || markers.ReadRevision != page.ReadRevision || len(markers.Values) != len(markerKeys) {
 		return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	defer clearKeyValues(markers.Values)
+	defer etcdstore.ClearValues(markers.Values)
 	candidates := make([]idempotencyPruneCandidate, 0, len(markerKeys))
 	for index, markerEntry := range markers.Values {
 		if markerEntry == nil || markerEntry.Key != markerKeys[index] || markerEntry.ModRevision <= 0 {
@@ -172,7 +172,7 @@ func (repository *IdempotencyRepository) collectExpired(
 			clearPruneCandidates(candidates)
 			return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 		}
-		defer clearKeyValues(targets.Values)
+		defer etcdstore.ClearValues(targets.Values)
 		for index, targetEntry := range targets.Values {
 			candidateIndex := targetIndexes[index]
 			markerKey, keyErr := idempotencyrecord.IdempotencyMarkerKey(candidates[candidateIndex].Marker.marker.Locator)
@@ -417,7 +417,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 		taskRead.Values[0].Key != taskjournal.TaskStorageKey(marker.TaskID) || taskRead.Values[0].ModRevision <= 0 {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	defer clearKeyValues(taskRead.Values)
+	defer etcdstore.ClearValues(taskRead.Values)
 	task, err := decodeTaskRecord(taskRead.Values[0].Value)
 	if err != nil || task.ID != marker.TaskID {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
@@ -449,7 +449,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	if owners == nil || owners.ReadRevision != revision || len(owners.Values) != len(keys) {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	defer clearKeyValues(owners.Values)
+	defer etcdstore.ClearValues(owners.Values)
 	fences := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRead.Values[0].ModRevision},
 		{Key: root, Prefix: true},
@@ -489,7 +489,7 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	fences := []etcdstore.Condition{{Key: taskjournal.TaskStorageKey(originID), ModRevision: keyValueRevision(read.Values[0])}}
 	if read.Values[0] == nil {
 		return fences, false, nil // Marker-first GC already removed the original Task.
@@ -510,7 +510,7 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	if markerRead == nil || markerRead.ReadRevision != revision || len(markerRead.Values) != 1 {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	defer clearKeyValues(markerRead.Values)
+	defer etcdstore.ClearValues(markerRead.Values)
 	if value := markerRead.Values[0]; value != nil {
 		marker, err := idempotencyrecord.DecodeIdempotencyMarker(value.Value, *origin.idempotencyMarker)
 		if err != nil || value.Key != key || value.ModRevision <= 0 || marker.TaskID != originID {

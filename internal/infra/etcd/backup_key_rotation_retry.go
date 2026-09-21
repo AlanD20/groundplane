@@ -60,7 +60,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 			"backup key rotation retry authority changed",
 		)
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	rotation, err := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
 	if err != nil || rotation.TaskID != source.Record.ID || rotation.State != backupruntime.BackupKeyRotationPrepared {
 		return IdempotencyTransactionResult{}, errs.New(

@@ -46,7 +46,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 			errs.KindInternal, "Blueprint Backup snapshot read is incomplete",
 		)
 	}
-	defer clearKeyValues(base.Values)
+	defer etcdstore.ClearValues(base.Values)
 	if base.Values[0] == nil {
 		return EnvironmentBlueprintBackupPolicySnapshot{}, nil
 	}
@@ -77,7 +77,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 			)
 		}
 	}
-	defer clearKeyValues(support.Values)
+	defer etcdstore.ClearValues(support.Values)
 	snapshot := EnvironmentBlueprintBackupPolicySnapshot{
 		Policy: policy, Sources: make([]backuppolicy.BackupSourceRecord, len(policy.SourceIDs)), Found: true,
 	}

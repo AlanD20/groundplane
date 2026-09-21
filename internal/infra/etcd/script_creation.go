@@ -52,11 +52,11 @@ func (repository *ScriptRepository) CreateScriptIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clearMutationValues(mutations)
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, classify)
+	plan, err := NewIdempotencyMutationPlan(conditions, mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

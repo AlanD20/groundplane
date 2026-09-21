@@ -73,7 +73,7 @@ func (repository *BackupRuntimeRepository) GetBackupRun(
 		len(authority.Values) != 2 || authority.Values[0] == nil || authority.Values[1] == nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(authority.Values)
+	defer etcdstore.ClearValues(authority.Values)
 	stored, err := backupruntime.DecodeBackupRunRecord(authority.Values[0].Value)
 	if err != nil || !backupRunRecordsEqual(stored, record) ||
 		authority.Values[0].ModRevision != result.Entry.ModRevision ||

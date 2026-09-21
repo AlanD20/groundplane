@@ -137,7 +137,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			conflicts++
 			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {
@@ -200,7 +200,7 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 			"pending Backup Task lifecycle records are inconsistent",
 		)
 	}
-	defer clearKeyValues(companions.Values)
+	defer etcdstore.ClearValues(companions.Values)
 	queuedTaskID, err := idempotencyrecord.DecodeTaskReference(companions.Values[2].Value)
 	if err != nil || queuedTaskID != task.ID ||
 		validateTaskLifecycleCompanions(task, companions.Values[0], companions.Values[1]) != nil {

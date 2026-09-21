@@ -112,18 +112,18 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 		for index, value := range read.Values {
 			id := idsAtRevision[begin+index]
 			if value == nil || value.Key != keys[index] || value.ModRevision <= 0 {
-				clearKeyValues(read.Values)
+				etcdstore.ClearValues(read.Values)
 				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			if validateErr := validateOwner(value.Value, id, ownerID); validateErr != nil {
-				clearKeyValues(read.Values)
+				etcdstore.ClearValues(read.Values)
 				return nil, validateErr
 			}
 			targets = append(targets, hierarchyDeletionIndexedTarget{
 				id: id, revision: value.ModRevision, digest: hierarchyDeletionBytesDigest(value.Value),
 			})
 		}
-		clearKeyValues(read.Values)
+		etcdstore.ClearValues(read.Values)
 	}
 	return targets, nil
 }

@@ -62,7 +62,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
 		return nil, nil, releases.CorruptReleaseRecord()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	witnesses := make([]taskassignments.ReleaseNativePredecessorAuthority, 0, len(manifest.Members))
 	conditions := make([]etcdstore.Condition, 0, len(keys))
 	index := 0

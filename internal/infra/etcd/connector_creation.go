@@ -56,7 +56,7 @@ func (repository *ConnectorRepository) CreateConnector(
 	if err != nil {
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
 	}
-	clearKeyValues(evidence.Values)
+	etcdstore.ClearValues(evidence.Values)
 	epochMutation, err := fence.epochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
@@ -87,7 +87,7 @@ func (repository *ConnectorRepository) CreateConnector(
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		defer clearKeyValues(result.FailureReads)
+		defer etcdstore.ClearValues(result.FailureReads)
 		return etcdstore.Versioned[connectorrecord.Record]{}, classifyConnectorCreateConflict(
 			result.FailureReads, fence, len(secretFence.conditions),
 		)
@@ -181,7 +181,7 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 		clearMutationValues(mutations)
 		return IdempotencyTransactionResult{}, err
 	}
-	clearKeyValues(evidence.Values)
+	etcdstore.ClearValues(evidence.Values)
 	epochMutation, err := fence.epochRewriteMutation()
 	if err != nil {
 		clearMutationValues(mutations)
@@ -191,7 +191,7 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	defer clearMutationValues(mutations)
 	conditions := append(connectorCreateConditions(record), fence.transactionConditions()...)
 	conditions = append(conditions, secretFence.conditions...)
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := NewIdempotencyMutationPlan(
 		conditions,
 		mutations,
 		func(_ int64, values []*etcdstore.KeyValue) error {
@@ -201,7 +201,7 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

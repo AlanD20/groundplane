@@ -81,7 +81,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	if err != nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return etcdstore.Versioned[taskPruneIntent]{}, errs.New(
 			errs.KindStateConflict,

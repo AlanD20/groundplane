@@ -78,7 +78,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 	if err != nil {
 		return false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return false, errs.New(errs.KindStateConflict, "release terminal closure evidence changed")
 	}

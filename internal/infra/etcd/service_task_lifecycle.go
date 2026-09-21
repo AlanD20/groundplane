@@ -139,11 +139,11 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 	if inputRead == nil || inputRead.ReadRevision != readRevision || len(inputRead.Values) != 1 ||
 		inputRead.Values[0] == nil {
 		if inputRead != nil {
-			clearKeyValues(inputRead.Values)
+			etcdstore.ClearValues(inputRead.Values)
 		}
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input is missing")
 	}
-	defer clearKeyValues(inputRead.Values)
+	defer etcdstore.ClearValues(inputRead.Values)
 	input, err := decodeServiceLifecycleRenderInput(inputRead.Values[0].Value)
 	if err != nil || input.PlanID != task.PlanID || input.ServiceID != task.Target {
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input changed")

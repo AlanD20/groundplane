@@ -546,7 +546,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			conflicts++
 			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {

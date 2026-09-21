@@ -1,4 +1,4 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func (repository *LocalAgentRepository) MarkReady(
+func (repository *Repository) MarkReady(
 	ctx context.Context,
 	agentID string,
 	generation uint64,
@@ -34,7 +34,7 @@ func (repository *LocalAgentRepository) MarkReady(
 
 // ReplaceGeneration atomically rotates the complete authenticated runtime
 // identity while retaining the stable Agent aggregate and first Ready time.
-func (repository *LocalAgentRepository) ReplaceGeneration(
+func (repository *Repository) ReplaceGeneration(
 	ctx context.Context,
 	current etcdstore.Versioned[localagentrecord.LocalAgentRecord],
 	image string,
@@ -119,7 +119,7 @@ func (repository *LocalAgentRepository) ReplaceGeneration(
 	if err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 	}
-	clearKeyValues(result.FailureReads)
+	etcdstore.ClearValues(result.FailureReads)
 	if !result.Succeeded {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(
 			errs.KindStateConflict,
@@ -131,7 +131,7 @@ func (repository *LocalAgentRepository) ReplaceGeneration(
 	}, nil
 }
 
-func (repository *LocalAgentRepository) MarkReplacementReady(
+func (repository *Repository) MarkReplacementReady(
 	ctx context.Context,
 	agentID string,
 	generation uint64,
@@ -149,7 +149,7 @@ func (repository *LocalAgentRepository) MarkReplacementReady(
 	)
 }
 
-func (repository *LocalAgentRepository) transitionPhase(
+func (repository *Repository) transitionPhase(
 	ctx context.Context,
 	agentID string,
 	generation uint64,
@@ -198,7 +198,7 @@ func (repository *LocalAgentRepository) transitionPhase(
 	if err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 	}
-	clearKeyValues(result.FailureReads)
+	etcdstore.ClearValues(result.FailureReads)
 	if !result.Succeeded {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent phase changed")
 	}

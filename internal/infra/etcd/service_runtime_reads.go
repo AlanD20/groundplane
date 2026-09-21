@@ -38,7 +38,7 @@ func (ledger *ReleaseLedger) LoadAcknowledgedServiceRuntimesAtRevision(
 		return nil, errs.New(errs.KindInternal, "acknowledged Service runtime read is incomplete")
 	}
 	result := make([]etcdstore.Versioned[serviceruntimerecord.Record], len(keys))
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil {
 			return nil, errs.New(errs.KindStateConflict, "running Service has no acknowledged runtime")

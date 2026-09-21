@@ -6,6 +6,7 @@ import (
 	"fmt"
 	agentchannel "github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
+	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 
 	"github.com/AlanD20/groundplane/internal/common/config"
 
@@ -27,7 +28,7 @@ type controllerAuthorityComposition struct {
 	releaseGroups               *etcdreleasegroup.Store
 	releaseLedger               *etcd.ReleaseLedger
 	hierarchyService            *hierarchycontroller.Service
-	agents                      *etcd.LocalAgentRepository
+	agents                      *agentregistration.Repository
 	authenticator               agentchannel.Authenticator
 	controllerKey               *ageinfra.ControllerKey
 	intentProtector             *secretvalue.Protector
@@ -93,7 +94,7 @@ func newControllerAuthorityComposition(
 		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize hierarchy service: %w", err)
 	}
-	agents, err := etcd.NewLocalAgentRepository(store)
+	agents, err := agentregistration.NewRepository(store)
 	if err != nil {
 		_ = store.Close()
 		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize local Agent repository: %w", err)

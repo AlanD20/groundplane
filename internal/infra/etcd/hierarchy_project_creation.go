@@ -65,7 +65,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	}
 	defer clear(coordinationValue)
 	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), record.ID)
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := NewIdempotencyMutationPlan(
 		[]etcdstore.Condition{
 			{Key: hierarchyrecord.ProjectKey(record.ID)},
 			{Key: hierarchyrecord.ProjectSlugKey(record)},
@@ -85,7 +85,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

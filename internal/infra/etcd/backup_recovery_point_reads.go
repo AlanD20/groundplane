@@ -72,7 +72,7 @@ func (repository *BackupRuntimeRepository) GetBackupRecoveryPoint(
 		authority.Values[2] == nil || authority.Values[3] == nil || authority.Values[4] == nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(authority.Values)
+	defer etcdstore.ClearValues(authority.Values)
 	for index, expectedKey := range []string{environmentIndex, sourceIndex, connectorIndex} {
 		value := authority.Values[index+2]
 		if value.Key != expectedKey || value.Version != 1 || value.ModRevision != record.Revision ||
@@ -284,7 +284,7 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 			"recovery point fixed-revision page is incomplete",
 		)
 	}
-	defer clearKeyValues(points.Values)
+	defer etcdstore.ClearValues(points.Values)
 	records := make([]backupruntime.BackupRecoveryPointRecord, len(pointIDs))
 	visible := make([]bool, len(pointIDs))
 	companionKeys := make([]string, 0, len(pointIDs)*3)
@@ -342,7 +342,7 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 			"recovery point companion page is incomplete",
 		)
 	}
-	defer clearKeyValues(companions.Values)
+	defer etcdstore.ClearValues(companions.Values)
 	page.Items = make([]etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord], 0, len(pointIDs))
 	for position, point := range records {
 		primary := points.Values[position*2]
@@ -381,14 +381,14 @@ func (repository *BackupRuntimeRepository) readBackupRecoveryPointPageChunks(
 			Keys: keys[start:end], Revision: revision,
 		})
 		if err != nil {
-			clearKeyValues(combined.Values)
+			etcdstore.ClearValues(combined.Values)
 			return nil, err
 		}
 		if chunk == nil || chunk.ReadRevision != revision || len(chunk.Values) != end-start {
 			if chunk != nil {
-				clearKeyValues(chunk.Values)
+				etcdstore.ClearValues(chunk.Values)
 			}
-			clearKeyValues(combined.Values)
+			etcdstore.ClearValues(combined.Values)
 			return nil, errs.New(
 				errs.KindInternal,
 				"recovery point fixed-revision page chunk is incomplete",
@@ -396,8 +396,8 @@ func (repository *BackupRuntimeRepository) readBackupRecoveryPointPageChunks(
 		}
 		for position, value := range chunk.Values {
 			if value != nil && value.Key != keys[start+position] {
-				clearKeyValues(chunk.Values)
-				clearKeyValues(combined.Values)
+				etcdstore.ClearValues(chunk.Values)
+				etcdstore.ClearValues(combined.Values)
 				return nil, errs.New(
 					errs.KindInternal,
 					"recovery point fixed-revision page chunk is corrupt",

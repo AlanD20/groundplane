@@ -244,7 +244,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 }
 

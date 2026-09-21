@@ -70,13 +70,13 @@ func (repository *TaskRepository) validateEnvironmentDeletionIntentReplay(
 		)
 	}
 	if result.ReadRevision != revision || len(result.Values) != 1 {
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 		return errs.New(
 			errs.KindInternal,
 			"environment deletion replay intent evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if result.Values[0] != nil {
 			return errs.New(

@@ -71,7 +71,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 	if read == nil || read.ReadRevision != readRevision || len(read.Values) != len(keys) || read.Values[2] == nil {
 		return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	state := &volumeRemovalBackupPolicyState{environmentID: environmentID, volumeID: volumeID}
 	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(read.Values[2].Value)
 	if err != nil || epoch.EnvironmentID != environmentID {

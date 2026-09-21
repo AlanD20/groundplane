@@ -1,4 +1,4 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 // revision and makes every delayed transaction using the old evidence fail.
 // A read alone cannot supply this proof. An already advanced record is returned
 // unchanged so the lifecycle owner can recover the committed generation.
-func (repository *LocalAgentRepository) FenceReplacementAttempt(
+func (repository *Repository) FenceReplacementAttempt(
 	ctx context.Context, agentID string, generation uint64, revision int64,
 ) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -58,7 +58,7 @@ func (repository *LocalAgentRepository) FenceReplacementAttempt(
 		if err != nil {
 			return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 		}
-		clearKeyValues(result.FailureReads)
+		etcdstore.ClearValues(result.FailureReads)
 		if result.Succeeded {
 			return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
 				Record:       evidence.record,

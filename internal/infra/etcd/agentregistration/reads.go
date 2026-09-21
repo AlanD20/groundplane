@@ -1,4 +1,4 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *LocalAgentRepository) GetSingleton(
+func (repository *Repository) GetSingleton(
 	ctx context.Context,
 ) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -23,7 +23,7 @@ func (repository *LocalAgentRepository) GetSingleton(
 	}, nil
 }
 
-func (repository *LocalAgentRepository) readSingleton(ctx context.Context) (localAgentEvidence, error) {
+func (repository *Repository) readSingleton(ctx context.Context) (localAgentEvidence, error) {
 	pointer, err := repository.store.Get(ctx, localagentrecord.LocalAgentSingletonKey)
 	if err != nil {
 		return localAgentEvidence{}, err

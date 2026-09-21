@@ -35,7 +35,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 			errs.KindInternal, "Blueprint Backup base read is incomplete",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	var current *etcdstore.Versioned[backuppolicy.BackupPolicyRecord]
 	if result.Values[0] != nil {
 		record, decodeErr := backuppolicy.DecodeBackupPolicyRecord(result.Values[0].Value)
@@ -158,7 +158,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 		source, decodeErr := backuppolicy.DecodeBackupSourceRecord(values.Values[0].Value)
 		if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != policy.EnvironmentID ||
 			string(values.Values[1].Value) != sourceID {
-			clearKeyValues(values.Values)
+			etcdstore.ClearValues(values.Values)
 			return nil, recordcodec.CorruptRecord()
 		}
 		identity, identityErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
@@ -166,9 +166,9 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 		}, Revision: revision})
 		if identityErr != nil || identity == nil || identity.ReadRevision != revision || len(identity.Values) != 1 ||
 			identity.Values[0] == nil || string(identity.Values[0].Value) != sourceID {
-			clearKeyValues(values.Values)
+			etcdstore.ClearValues(values.Values)
 			if identity != nil {
-				clearKeyValues(identity.Values)
+				etcdstore.ClearValues(identity.Values)
 			}
 			if identityErr != nil {
 				return nil, identityErr
@@ -180,8 +180,8 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 			environmentIndex: cloneBackupPolicyEvidenceKeyValue(values.Values[1]),
 			identityIndex:    cloneBackupPolicyEvidenceKeyValue(identity.Values[0]),
 		}
-		clearKeyValues(values.Values)
-		clearKeyValues(identity.Values)
+		etcdstore.ClearValues(values.Values)
+		etcdstore.ClearValues(identity.Values)
 	}
 	return result, nil
 }
@@ -204,7 +204,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) {
 		return nil, nil, nil, nil, errs.New(errs.KindInternal, "retained Blueprint Backup Connector read is incomplete")
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	tombstone := cloneBackupPolicyEvidenceKeyValue(result.Values[2])
 	if result.Values[0] == nil {
 		if enabled || result.Values[1] != nil {
@@ -227,7 +227,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 		string(name.Values[0].Value) != connectorID {
 		return nil, nil, nil, nil, connectorrecord.CorruptRecord()
 	}
-	defer clearKeyValues(name.Values)
+	defer etcdstore.ClearValues(name.Values)
 	return &etcdstore.Versioned[connectorrecord.Record]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: revision,
 	}, cloneBackupPolicyEvidenceKeyValue(result.Values[1]), cloneBackupPolicyEvidenceKeyValue(name.Values[0]), tombstone, nil

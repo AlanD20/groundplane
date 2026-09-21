@@ -55,7 +55,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] == nil || anchor.Values[0].ModRevision != run.Revision {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindStateConflict,
@@ -126,7 +126,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	if !result.Succeeded {
-		defer clearKeyValues(result.FailureReads)
+		defer etcdstore.ClearValues(result.FailureReads)
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan state changed",

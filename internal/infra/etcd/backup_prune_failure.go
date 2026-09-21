@@ -50,7 +50,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if err := validateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
 		return backupPruneTransactionPlan{}, err
 	}

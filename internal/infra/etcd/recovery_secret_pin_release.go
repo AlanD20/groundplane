@@ -56,14 +56,14 @@ func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 		}
 		if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 			if read != nil {
-				clearKeyValues(read.Values)
+				etcdstore.ClearValues(read.Values)
 			}
 			return taskMaterializationProjectionChange{}, errs.New(
 				errs.KindStateConflict,
 				"Backing hook Task inputs are unavailable at completion",
 			)
 		}
-		defer clearKeyValues(read.Values)
+		defer etcdstore.ClearValues(read.Values)
 		stored, err := taskconfiguration.DecodeBackingHookEncryptedInputs(read.Values[0].Value)
 		if err != nil {
 			return taskMaterializationProjectionChange{}, err
@@ -167,7 +167,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
 		return true, errs.New(errs.KindInternal, "recovery Secret expiry evidence is incomplete")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] != nil || read.Values[1] != nil || read.Values[2] != nil {
 		return true, nil
 	}
@@ -235,7 +235,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		})
 	}
 	commit, err := repository.store.Transact(ctx, change.conditions, change.mutations)
-	clearKeyValues(commit.FailureReads)
+	etcdstore.ClearValues(commit.FailureReads)
 	if err != nil {
 		return true, err
 	}
@@ -270,7 +270,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
 		return true, errs.New(errs.KindInternal, "Backing hook expiry evidence is incomplete")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] != nil || read.Values[1] != nil {
 		return true, nil
 	}
@@ -293,7 +293,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
 	}
 	commit, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: keys[2]}})
-	clearKeyValues(commit.FailureReads)
+	etcdstore.ClearValues(commit.FailureReads)
 	if err != nil {
 		return true, err
 	}

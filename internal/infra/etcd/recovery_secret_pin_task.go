@@ -54,7 +54,7 @@ func prepareRecoverySecretPins(
 			"Secret pin source read is incomplete",
 		)
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	configuration, err := runtimeconfiguration.NewRepository(runtimeConfigurationStore{store: store})
 	if err != nil {
 		return TaskRecord{}, tasksecretpins.Prepared{}, err
@@ -166,7 +166,7 @@ func finishRecoverySecretPreparation(ctx context.Context, store hierarchyStore, 
 		err = errs.New(errs.KindInternal, "Secret pin cleanup Task read is incomplete")
 	}
 	if err == nil {
-		defer clearKeyValues(read.Values)
+		defer etcdstore.ClearValues(read.Values)
 		if read.Values[0] != nil {
 			return cause
 		}

@@ -312,7 +312,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, errs.New(
 			errs.KindStateConflict,

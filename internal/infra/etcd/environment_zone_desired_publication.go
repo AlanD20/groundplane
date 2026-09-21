@@ -152,14 +152,14 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		}
 		return errs.New(errs.KindStateConflict, "direct Zone desired publication raced")
 	}
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, classifier)
+	plan, err := NewIdempotencyMutationPlan(conditions, mutations, classifier)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := plan.enforceTransactionBounds(validateEnvironmentDesiredPublicationBudget); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

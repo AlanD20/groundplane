@@ -31,7 +31,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 		return TaskAssignment{}, err
 	}
 	if len(indexed.Values) != 2 || indexed.Values[0] == nil {
-		clearKeyValues(indexed.Values)
+		etcdstore.ClearValues(indexed.Values)
 		return TaskAssignment{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 	}
 	taskValue := indexed.Values[0]
@@ -62,7 +62,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 		return TaskAssignment{}, err
 	}
 	if len(claim.Values) != 1 || claim.Values[0] == nil {
-		clearKeyValues(claim.Values)
+		etcdstore.ClearValues(claim.Values)
 		return TaskAssignment{}, errs.New(errs.KindStateConflict, "Task execution claim changed")
 	}
 	claimValue := claim.Values[0]

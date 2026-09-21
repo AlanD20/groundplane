@@ -66,7 +66,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if err := validateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
@@ -153,7 +153,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	if !result.Succeeded {
-		defer clearKeyValues(result.FailureReads)
+		defer etcdstore.ClearValues(result.FailureReads)
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup prune authority changed",
@@ -201,7 +201,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if err := validateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
 		return backupPruneTransactionPlan{}, err
 	}

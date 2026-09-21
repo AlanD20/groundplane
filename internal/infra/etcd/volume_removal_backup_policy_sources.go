@@ -25,7 +25,7 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 		if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
 			return backupruntime.CorruptBackupRuntimeRecord()
 		}
-		defer clearKeyValues(read.Values)
+		defer etcdstore.ClearValues(read.Values)
 		for index, value := range read.Values {
 			if value == nil {
 				return backupruntime.CorruptBackupRuntimeRecord()
@@ -63,7 +63,7 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	for index, value := range read.Values {
 		condition := etcdstore.Condition{Key: keys[index]}
 		if values[index] == "" {

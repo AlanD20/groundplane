@@ -20,11 +20,11 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 		taskResult.Values[0] == nil ||
 		taskResult.Values[0].ModRevision != current.Record.TaskRevision {
 		if taskResult != nil {
-			clearKeyValues(taskResult.Values)
+			etcdstore.ClearValues(taskResult.Values)
 		}
 		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
-	defer clearKeyValues(taskResult.Values)
+	defer etcdstore.ClearValues(taskResult.Values)
 	task, err := decodeTaskRecord(taskResult.Values[0].Value)
 	if err != nil || task.ID != current.Record.TaskID || !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
@@ -42,11 +42,11 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	if ownerResult == nil || ownerResult.ReadRevision != taskResult.ReadRevision ||
 		len(ownerResult.Values) != len(ownerKeys) {
 		if ownerResult != nil {
-			clearKeyValues(ownerResult.Values)
+			etcdstore.ClearValues(ownerResult.Values)
 		}
 		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
-	defer clearKeyValues(ownerResult.Values)
+	defer etcdstore.ClearValues(ownerResult.Values)
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
 		{Key: backupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},

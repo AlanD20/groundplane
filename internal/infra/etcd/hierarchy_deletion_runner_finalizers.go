@@ -21,14 +21,14 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	}
 	if result == nil || len(result.Values) != 2 || result.Values[0] == nil || result.Values[1] == nil {
 		if result != nil {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 		}
 		return hierarchyDeletionControllerEffects{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion reservation authority changed",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	environment, err := hierarchyrecord.DecodeEnvironment(result.Values[0].Value)
 	if err != nil || environment.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
@@ -92,14 +92,14 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 	if base == nil || len(base.Values) != 4 || base.Values[0] == nil || base.Values[1] == nil ||
 		base.Values[0].ModRevision != action.TargetRevision || base.Values[3] != nil {
 		if base != nil {
-			clearKeyValues(base.Values)
+			etcdstore.ClearValues(base.Values)
 		}
 		return hierarchyDeletionControllerEffects{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion Runner cleanup authority changed",
 		)
 	}
-	defer clearKeyValues(base.Values)
+	defer etcdstore.ClearValues(base.Values)
 	record, err := decodeRunnerAggregate(base.Values[0], base.Values[1])
 	if err != nil || record.Desired.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()

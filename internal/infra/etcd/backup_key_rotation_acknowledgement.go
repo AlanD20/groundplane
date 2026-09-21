@@ -87,7 +87,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 			"backup key rotation acknowledgement authority changed",
 		)
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	rotation, err := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
 	if err != nil {
 		return backupKeyRotationTaskChange{}, corruptBackupKey()

@@ -1,4 +1,4 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *LocalAgentRepository) CreateSingleton(
+func (repository *Repository) CreateSingleton(
 	ctx context.Context,
 	record localagentrecord.LocalAgentRecord,
 ) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error) {
@@ -46,7 +46,7 @@ func (repository *LocalAgentRepository) CreateSingleton(
 	if err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 	}
-	clearKeyValues(result.FailureReads)
+	etcdstore.ClearValues(result.FailureReads)
 	if !result.Succeeded {
 		if len(result.FailureReads) == len(conditions) && result.FailureReads[0] != nil {
 			return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "the local Agent already exists")

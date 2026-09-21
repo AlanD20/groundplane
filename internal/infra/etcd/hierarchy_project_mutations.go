@@ -105,7 +105,7 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectSlugKey(replacement), Value: []byte(current.Record.ID)},
 		)
 	}
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := NewIdempotencyMutationPlan(
 		conditions,
 		mutations,
 		classifyProjectMutationConflict(current, replacement, renaming),
@@ -113,7 +113,7 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -31,7 +31,7 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 	}
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 			return environmentMutationFenceEvidence{}, nil, errs.New(
 				errs.KindInternal,
 				"Connector mutation fixed-revision evidence is corrupt",
@@ -39,28 +39,28 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 		}
 	}
 	if result.Values[environmentIndex] == nil {
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 		return environmentMutationFenceEvidence{}, nil, errs.New(
 			errs.KindEnvironmentNotFound,
 			"Connector Environment was not found",
 		)
 	}
 	if result.Values[environmentIndex].ModRevision != environment.Revision {
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 		return environmentMutationFenceEvidence{}, nil, stateConflict(
 			"Connector Environment",
 			environment.Record.ID,
 		)
 	}
 	if result.Values[projectIndex] == nil {
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 		return environmentMutationFenceEvidence{}, nil, errs.New(
 			errs.KindProjectNotFound,
 			"Connector Project was not found",
 		)
 	}
 	if result.Values[projectIndex].ModRevision != project.Revision {
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 		return environmentMutationFenceEvidence{}, nil, stateConflict(
 			"Connector Project",
 			project.Record.ID,
@@ -73,7 +73,7 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 		result.ReadRevision,
 	)
 	if err != nil {
-		clearKeyValues(result.Values)
+		etcdstore.ClearValues(result.Values)
 		return environmentMutationFenceEvidence{}, nil, err
 	}
 	return fence, result, nil

@@ -143,7 +143,7 @@ func (repository *TaskRepository) entryRuntimeClaimConditions(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
 		return nil, errs.New(errs.KindInternal, "Entry runtime claim source read is incomplete")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil || value.ModRevision != conditions[index].ModRevision {
 			return nil, errs.New(errs.KindStateConflict, "Entry acknowledged runtime changed before execution")
@@ -204,7 +204,7 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 			"Entry runtime terminal source read is incomplete",
 		)
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	proof, err := json.Marshal(struct {
 		Updates []taskjournal.EntryRuntimeUpdate `json:"updates"`
 		Result  *taskjournal.TaskResultData      `json:"result"`

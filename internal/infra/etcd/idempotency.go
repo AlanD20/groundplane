@@ -83,7 +83,7 @@ func (plan *idempotencyMutationPlan) transactionValidator() func([]etcdstore.Con
 	return plan.validate
 }
 
-func newIdempotencyMutationPlan(
+func NewIdempotencyMutationPlan(
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
@@ -219,6 +219,11 @@ type IdempotencyTransactionResult struct {
 	conflict error
 }
 
+// Revision returns the MVCC revision at which the transaction outcome was observed.
+func (result IdempotencyTransactionResult) Revision() int64 {
+	return result.revision
+}
+
 type idempotencyTransactionResultKind uint8
 
 const (
@@ -288,11 +293,7 @@ type idempotencyPruneCandidate struct {
 	ReplayTargetModRevision int64
 }
 
-func NewIdempotencyRepository(store etcdstore.Store) (*IdempotencyRepository, error) {
-	return newIdempotencyRepository(store)
-}
-
-func newIdempotencyRepository(store idempotencyRepositoryStore) (*IdempotencyRepository, error) {
+func NewIdempotencyRepository(store idempotencyRepositoryStore) (*IdempotencyRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "idempotency store is required")
 	}
@@ -391,7 +392,7 @@ func (repository *IdempotencyRepository) apply(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearKeyValues(result.FailureReads)
+	defer etcdstore.ClearValues(result.FailureReads)
 	if result.Succeeded {
 		return IdempotencyTransactionResult{
 			kind: idempotencyTransactionApplied, revision: result.Revision,
@@ -439,15 +440,6 @@ func (repository *IdempotencyRepository) apply(
 	return IdempotencyTransactionResult{
 		kind: idempotencyTransactionConflict, revision: result.Revision, conflict: conflict,
 	}, nil
-}
-
-func clearKeyValues(values []*etcdstore.KeyValue) {
-	for _, value := range values {
-		if value != nil {
-			clear(value.Value)
-			value.Value = nil
-		}
-	}
 }
 
 func (evidence *IdempotencyEvidence) Marker() (idempotencyrecord.IdempotencyMarker, error) {

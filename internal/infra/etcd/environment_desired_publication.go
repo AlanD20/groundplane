@@ -587,7 +587,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			return IdempotencyTransactionResult{}, err
 		}
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -90,11 +90,11 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 	if intentRead == nil || intentRead.ReadRevision != readRevision || len(intentRead.Values) != 1 ||
 		intentRead.Values[0] == nil {
 		if intentRead != nil {
-			clearKeyValues(intentRead.Values)
+			etcdstore.ClearValues(intentRead.Values)
 		}
 		return false, nil, false, errs.New(errs.KindStateConflict, "terminal backup deletion intent is missing")
 	}
-	defer clearKeyValues(intentRead.Values)
+	defer etcdstore.ClearValues(intentRead.Values)
 	intent, err := decodeEnvironmentDeletionIntent(intentRead.Values[0].Value)
 	if err != nil {
 		return false, nil, false, err

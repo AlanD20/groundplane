@@ -88,11 +88,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDe
 	}
 	if indexes == nil || len(indexes.Values) != len(indexKeys) {
 		if indexes != nil {
-			clearKeyValues(indexes.Values)
+			etcdstore.ClearValues(indexes.Values)
 		}
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	defer clearKeyValues(indexes.Values)
+	defer etcdstore.ClearValues(indexes.Values)
 	for index, key := range indexKeys {
 		value := indexes.Values[index]
 		if value == nil || value.Key != key || (index < 2 && string(value.Value) != action.TargetID) {

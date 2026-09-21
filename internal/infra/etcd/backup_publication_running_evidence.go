@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
@@ -54,7 +55,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 	if err != nil {
 		return false
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if len(read.Values) != len(keys) || read.Values[3] != nil || read.Values[4] == nil {
 		return false
 	}
@@ -133,7 +134,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 	if err != nil {
 		return false
 	}
-	defer clearKeyValues(claim.Values)
+	defer etcdstore.ClearValues(claim.Values)
 	for index, value := range claim.Values {
 		if value == nil || value.Key != claimKeys[index] ||
 			value.ModRevision != assignmentValue.ModRevision ||

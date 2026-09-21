@@ -67,7 +67,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 			"Blueprint sealed staging evidence is unavailable",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(result.Values[0].Value)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
@@ -147,7 +147,7 @@ func (repository *HierarchyRepository) readEnvironmentBlueprintStreamAtRevision(
 	if result == nil || len(result.Values) != len(keys) {
 		return nil, 0, blueprints.CorruptEnvironmentBlueprintStage()
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	stream := make([]byte, 0, int(length))
 	for index, entry := range result.Values {
 		if entry == nil || entry.Key != keys[index] {

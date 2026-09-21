@@ -86,11 +86,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != record.ID || string(indexes.Values[1].Value) != record.ID {
 		if indexes != nil {
-			clearKeyValues(indexes.Values)
+			etcdstore.ClearValues(indexes.Values)
 		}
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	defer clearKeyValues(indexes.Values)
+	defer etcdstore.ClearValues(indexes.Values)
 	conditions := []etcdstore.Condition{
 		{Key: primary.Key, ModRevision: primary.ModRevision},
 		{Key: indexes.Values[0].Key, ModRevision: indexes.Values[0].ModRevision},

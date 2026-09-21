@@ -262,7 +262,7 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 			"backup source creation evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	if result.Values[0] != nil {
 		return backupSourceCreationEvidence{}, errs.New(
 			errs.KindStateConflict,

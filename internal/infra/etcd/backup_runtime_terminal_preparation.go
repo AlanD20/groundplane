@@ -91,7 +91,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	if err != nil {
 		return backupRunPublicationPlan{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] == nil || anchor.Values[0].ModRevision != current.Revision {
 		return backupRunPublicationPlan{}, errs.New(errs.KindStateConflict, "backup run changed")
 	}

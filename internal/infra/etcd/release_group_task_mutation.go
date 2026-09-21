@@ -96,7 +96,7 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	if err := validateReleaseGroupPreparedFragment(prepared); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := NewIdempotencyMutationPlan(
 		cloneReleaseGroupConditions(prepared.conditions),
 		cloneReleaseGroupMutations(prepared.mutations),
 		func(_ int64, _ []*etcdstore.KeyValue) error {
@@ -106,7 +106,7 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -211,7 +211,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -39,14 +39,14 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		state.Values[0] == nil ||
 		state.Values[1] == nil {
 		if state != nil {
-			clearKeyValues(state.Values)
+			etcdstore.ClearValues(state.Values)
 		}
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion cleanup ownership is missing",
 		)
 	}
-	defer clearKeyValues(state.Values)
+	defer etcdstore.ClearValues(state.Values)
 	persistedTask, err := decodeTaskRecord(state.Values[1].Value)
 	if err != nil || persistedTask.ID != task.ID || persistedTask.OperationID != task.OperationID ||
 		persistedTask.Executor != task.Executor || persistedTask.Type != task.Type ||
@@ -123,7 +123,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	if err != nil {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,

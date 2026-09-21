@@ -2,6 +2,7 @@ package app
 
 import (
 	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
+	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
@@ -21,7 +22,7 @@ type serviceReadResources struct {
 
 func newServiceReadResources(
 	hierarchy *etcd.HierarchyRepository, services *etcd.ServiceRepository, zones *etcd.ZoneRepository,
-	releases *etcd.ReleaseLedger, agents *etcd.LocalAgentRepository, channel *agentchannel.Registry,
+	releases *etcd.ReleaseLedger, agents *agentregistration.Repository, channel *agentchannel.Registry,
 ) (serviceReadResources, error) {
 	reads, err := serviceread.New(hierarchy, services)
 	if err != nil {

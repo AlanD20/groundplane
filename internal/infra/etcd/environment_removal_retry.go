@@ -71,13 +71,13 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	}
 	if state.ReadRevision != revision || len(state.Values) != 3 || state.Values[0] == nil ||
 		state.Values[1] == nil {
-		clearKeyValues(state.Values)
+		etcdstore.ClearValues(state.Values)
 		return environmentTaskChange{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion retry ownership is missing",
 		)
 	}
-	defer clearKeyValues(state.Values)
+	defer etcdstore.ClearValues(state.Values)
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[0].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment ||
 		tombstone.TargetID != source.Target ||

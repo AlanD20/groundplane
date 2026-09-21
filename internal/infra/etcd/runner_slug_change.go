@@ -27,7 +27,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 		marker.ReplayTarget.ID != runnerID || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "runner slug mutation is invalid")
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -102,7 +102,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 			},
 		)
 	}
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*etcdstore.KeyValue) error {
+	plan, err := NewIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "runner slug mutation compare evidence is incomplete")
 		}

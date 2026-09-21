@@ -64,7 +64,7 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 		len(primaries.Values) != len(keys) {
 		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(primaries.Values)
+	defer etcdstore.ClearValues(primaries.Values)
 	records := make([]backupruntime.BackupOrphanRecord, len(keys))
 	connectorKeys := make([]string, len(keys))
 	for position, value := range primaries.Values {
@@ -102,7 +102,7 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 		len(connectors.Values) != len(connectorKeys) {
 		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(connectors.Values)
+	defer etcdstore.ClearValues(connectors.Values)
 	page.Items = make([]etcdstore.Versioned[backupruntime.BackupOrphanRecord], len(keys))
 	for position, connector := range connectors.Values {
 		record := records[position]

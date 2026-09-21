@@ -53,11 +53,11 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 		}
 		sealedValue := sealed.Values[0]
 		if sealedValue == nil || sealedValue.ModRevision != int64(planned.PruneRevision) {
-			clearKeyValues(sealed.Values)
+			etcdstore.ClearValues(sealed.Values)
 			return errs.New(errs.KindStateConflict, "backup prune sealed authority changed")
 		}
 		sealedPrune, sealedErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(sealedValue.Value)
-		clearKeyValues(sealed.Values)
+		etcdstore.ClearValues(sealed.Values)
 		if sealedErr != nil || sealedPrune.Point != prune.Point ||
 			sealedPrune.PointRevision != prune.PointRevision ||
 			sealedPrune.OperationID != prune.OperationID || sealedPrune.TaskID != "" ||

@@ -154,7 +154,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 			},
 		)
 	}
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := NewIdempotencyMutationPlan(
 		conditions,
 		mutations,
 		classifyEnvironmentMutationConflict(
@@ -168,7 +168,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

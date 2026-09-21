@@ -75,7 +75,7 @@ func (repository *EntryRepository) ReplaceEntry(
 		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		defer clearKeyValues(result.FailureReads)
+		defer etcdstore.ClearValues(result.FailureReads)
 		return etcdstore.Versioned[entryrecord.Record]{}, classifyEntryWriteConflict(
 			result.FailureReads, current.Record, current.Revision, ownerRevision, fence,
 		)
@@ -151,7 +151,7 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epochMutation.Value)
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := NewIdempotencyMutationPlan(
 		append(
 			entryWriteConditions(current.Record, generationKey, current.Revision, ownerRevision),
 			fence.transactionConditions()...,
@@ -170,7 +170,7 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

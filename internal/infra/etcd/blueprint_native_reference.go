@@ -157,7 +157,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
 		return nil, nil, releases.CorruptReleaseRecord()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	members := make([]ReleaseTaskRenderMember, len(manifest.Members))
 	conditions := make([]etcdstore.Condition, len(keys))
 	for index, reference := range manifest.Members {

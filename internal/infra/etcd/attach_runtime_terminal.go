@@ -67,7 +67,7 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 			"Attach acknowledged runtime changed after preparation",
 		)
 	}
-	defer clearKeyValues(snapshot.Values)
+	defer etcdstore.ClearValues(snapshot.Values)
 	previous, err := decodeAcknowledgedServiceRuntime(
 		snapshot.Values[0].Value,
 		input.EnvironmentID,
@@ -121,7 +121,7 @@ func (repository *TaskRepository) readAttachRuntimePreparation(
 	if snapshot == nil || snapshot.ReadRevision != revision || len(snapshot.Values) != 1 || snapshot.Values[0] == nil {
 		return AttachTaskRenderInput{}, 0, errs.New(errs.KindStateConflict, "Attach runtime preparation is missing")
 	}
-	defer clearKeyValues(snapshot.Values)
+	defer etcdstore.ClearValues(snapshot.Values)
 	input, err := decodeAttachTaskRenderInput(snapshot.Values[0].Value)
 	if err != nil {
 		return AttachTaskRenderInput{}, 0, err
@@ -154,7 +154,7 @@ func (repository *TaskRepository) attachRuntimeClaimConditions(
 			snapshot.Values[0].ModRevision != update.PreviousRevision {
 			return nil, errs.New(errs.KindStateConflict, "Attach acknowledged runtime changed before execution")
 		}
-		clearKeyValues(snapshot.Values)
+		etcdstore.ClearValues(snapshot.Values)
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: update.PreviousRevision})
 	}
 	return conditions, nil

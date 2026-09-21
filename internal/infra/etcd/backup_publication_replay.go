@@ -37,7 +37,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	if err != nil {
 		return err
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if len(read.Values) != 3 || read.Values[1] == nil {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}

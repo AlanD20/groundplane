@@ -326,7 +326,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if cleanupSnapshot == nil || cleanupSnapshot.ReadRevision < readRevision ||
 		len(cleanupSnapshot.Values) != 1 {
 		if cleanupSnapshot != nil {
-			clearKeyValues(cleanupSnapshot.Values)
+			etcdstore.ClearValues(cleanupSnapshot.Values)
 		}
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
@@ -334,7 +334,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		)
 	}
 	cleanupReadRevision := cleanupSnapshot.ReadRevision
-	clearKeyValues(cleanupSnapshot.Values)
+	etcdstore.ClearValues(cleanupSnapshot.Values)
 	cleanupPhase, err := initialEnvironmentDeletionCleanupPhase(
 		ctx,
 		repository.store,
@@ -382,7 +382,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -215,7 +215,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -321,7 +321,7 @@ func loadEntryTaskInitiationTenantAtRevision(
 	if result == nil || result.ReadRevision != readRevision || len(result.Values) != 1 || result.Values[0] == nil {
 		return nil, errs.New(errs.KindStateConflict, "task initiation tenant is missing")
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	tenant, err := hierarchyrecord.DecodeTenant(result.Values[0].Value)
 	if err != nil || result.Values[0].Key != hierarchyrecord.TenantKey(project.Record.TenantID) ||
 		tenant.ID != project.Record.TenantID {

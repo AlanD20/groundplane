@@ -150,11 +150,11 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		return binding.classify(revision, values, originalClassify)
 	}
-	plan, err := newIdempotencyMutationPlan(binding.conditions, binding.mutations, classify)
+	plan, err := NewIdempotencyMutationPlan(binding.conditions, binding.mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

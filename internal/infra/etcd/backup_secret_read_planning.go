@@ -164,7 +164,7 @@ func (reader *BackupSecretResolutionReader) readFixed(
 		batch := keys[start:end]
 		result, err := getBackupSecretManyOwned(ctx, reader.store, batch, revision)
 		if err != nil {
-			clearKeyValues(combined.Values)
+			etcdstore.ClearValues(combined.Values)
 			return nil, err
 		}
 		combined.Values = append(combined.Values, result.Values...)

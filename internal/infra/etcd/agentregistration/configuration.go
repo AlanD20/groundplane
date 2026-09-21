@@ -1,7 +1,8 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
+	etcd "github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
@@ -11,44 +12,44 @@ import (
 // UpdateConfigIdempotent atomically replaces the generation-bound config
 // singleton and commits the exact completed replay marker. The lifecycle
 // primary and singleton pointer fence deletion or replacement of the Agent.
-func (repository *LocalAgentRepository) UpdateConfigIdempotent(
+func (repository *Repository) UpdateConfigIdempotent(
 	ctx context.Context,
 	current etcdstore.Versioned[localagentrecord.LocalAgentRecord],
 	config localagentrecord.LocalAgentConfig,
 	marker idempotencyrecord.IdempotencyMarker,
-) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], IdempotencyTransactionResult, error) {
+) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], etcd.IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
 	}
 	if err := localagentrecord.ValidateLocalAgentConfig(config); err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
 		current.Record.ID == "" || marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
 		marker.State != idempotencyrecord.IdempotencyMarkerCompleted || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform ||
 		marker.Locator.ScopeID != "-" || marker.Locator.Method != "PUT" ||
 		marker.Locator.Route != "/agents/{id}/config" {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"local Agent config mutation identity is invalid",
 		)
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
 	if err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
 	}
 	if evidence.record.ID != current.Record.ID || evidence.record.Generation != current.Record.Generation ||
 		evidence.primaryRevision != current.Revision {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent generation or revision changed",
 		)
 	}
 	if evidence.record.Phase == localagentrecord.LocalAgentPhaseDeleting {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
 			"deleting local Agent config cannot be changed",
 		)
@@ -57,10 +58,10 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 	replacement.Config = localagentrecord.CloneLocalAgentConfig(config)
 	configValue, err := localagentrecord.EncodeLocalAgentConfig(replacement)
 	if err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
 	}
 	defer clear(configValue)
-	plan, err := newIdempotencyMutationPlan(
+	plan, err := etcd.NewIdempotencyMutationPlan(
 		[]etcdstore.Condition{
 			{Key: localagentrecord.LocalAgentSingletonKey, ModRevision: evidence.singleton.ModRevision},
 			{Key: localagentrecord.LocalAgentPrimaryKey(current.Record.ID), ModRevision: evidence.primary.ModRevision},
@@ -72,19 +73,19 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 		classifyLocalAgentConfigConflict(current.Record.ID),
 	)
 	if err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := etcd.NewIdempotencyRepository(repository.store)
 	if err != nil {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, etcd.IdempotencyTransactionResult{}, err
 	}
 	result, err := idempotency.Apply(ctx, marker, plan)
 	return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
-		Record: replacement, Revision: evidence.primaryRevision, ReadRevision: result.revision,
+		Record: replacement, Revision: evidence.primaryRevision, ReadRevision: result.Revision(),
 	}, result, err
 }
 
-func classifyLocalAgentConfigConflict(agentID string) idempotencyPlanClassifier {
+func classifyLocalAgentConfigConflict(agentID string) func(int64, []*etcdstore.KeyValue) error {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 3 {
 			return errs.New(errs.KindInternal, "local Agent config compare evidence is incomplete")

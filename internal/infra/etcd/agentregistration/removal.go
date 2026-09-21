@@ -1,4 +1,4 @@
-package etcd
+package agentregistration
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *LocalAgentRepository) BeginDelete(
+func (repository *Repository) BeginDelete(
 	ctx context.Context,
 	agentID string,
 	generation uint64,
@@ -57,7 +57,7 @@ func (repository *LocalAgentRepository) BeginDelete(
 	if err != nil {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, err
 	}
-	clearKeyValues(result.FailureReads)
+	etcdstore.ClearValues(result.FailureReads)
 	if !result.Succeeded {
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent deletion state changed")
 	}
@@ -66,7 +66,7 @@ func (repository *LocalAgentRepository) BeginDelete(
 	}, nil
 }
 
-func (repository *LocalAgentRepository) Delete(
+func (repository *Repository) Delete(
 	ctx context.Context,
 	agentID string,
 	generation uint64,
@@ -102,7 +102,7 @@ func (repository *LocalAgentRepository) Delete(
 	if err != nil {
 		return err
 	}
-	clearKeyValues(result.FailureReads)
+	etcdstore.ClearValues(result.FailureReads)
 	if !result.Succeeded {
 		return errs.New(errs.KindStateConflict, "local Agent deletion state changed")
 	}

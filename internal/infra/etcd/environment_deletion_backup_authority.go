@@ -74,7 +74,7 @@ func environmentDeletionBackupAuthorityPresent(
 		)
 	}
 	if direct.ReadRevision != revision || len(direct.Values) != 3 {
-		clearKeyValues(direct.Values)
+		etcdstore.ClearValues(direct.Values)
 		return false, errs.New(
 			errs.KindInternal,
 			"environment deletion backup authority evidence is incomplete",
@@ -84,7 +84,7 @@ func environmentDeletionBackupAuthorityPresent(
 	for _, value := range direct.Values {
 		directPresent = directPresent || value != nil
 	}
-	clearKeyValues(direct.Values)
+	etcdstore.ClearValues(direct.Values)
 	if directPresent {
 		return true, nil
 	}

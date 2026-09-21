@@ -42,7 +42,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 			"backup policy replacement base read is incomplete",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	if result.Values[0] == nil {
 		return backupPolicyReplacementCandidate{}, false, errs.New(
 			errs.KindEnvironmentNotFound,

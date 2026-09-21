@@ -51,7 +51,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		taskResult.Values[0] == nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
-	defer clearKeyValues(taskResult.Values)
+	defer etcdstore.ClearValues(taskResult.Values)
 	taskValue := taskResult.Values[0]
 	task, err := decodeTaskRecord(taskValue.Value)
 	if err != nil || task.ID != taskID || !taskjournal.IsTerminalTaskStatus(task.Status) ||
@@ -126,7 +126,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		len(companions.Values) != len(companionKeys) {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
-	defer clearKeyValues(companions.Values)
+	defer etcdstore.ClearValues(companions.Values)
 	if companions.Values[0] != nil {
 		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
@@ -235,7 +235,7 @@ func (repository *TaskRepository) beginTaskPrune(
 			if transactErr != nil {
 				return etcdstore.Versioned[taskPruneIntent]{}, false, transactErr
 			}
-			clearKeyValues(transaction.FailureReads)
+			etcdstore.ClearValues(transaction.FailureReads)
 			if !transaction.Succeeded {
 				return etcdstore.Versioned[taskPruneIntent]{}, false, errs.New(
 					errs.KindStateConflict,
@@ -360,7 +360,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	if err != nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, errs.New(
 			errs.KindStateConflict,

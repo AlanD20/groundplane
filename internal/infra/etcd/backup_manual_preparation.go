@@ -54,7 +54,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	if err != nil {
 		return PreparedManualBackupRun{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] == nil || anchor.Values[1] == nil {
 		return PreparedManualBackupRun{}, errs.New(
 			errs.KindStateConflict,
@@ -141,7 +141,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	if err != nil {
 		return PreparedManualBackupRun{}, err
 	}
-	defer clearKeyValues(sourceRead.Values)
+	defer etcdstore.ClearValues(sourceRead.Values)
 	run.Sources = make([]backupruntime.BackupRunSourceAttemptRecord, len(sourceRead.Values))
 	for index, value := range sourceRead.Values {
 		if value == nil {

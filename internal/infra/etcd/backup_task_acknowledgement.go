@@ -154,7 +154,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			conflicts++
 			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {
@@ -185,7 +185,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 3 || read.Values[0] == nil {
 		return TaskAssignment{}, false, errs.New(errs.KindInternal, "backup Task assignment read is incomplete")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	task, err := decodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != taskID || task.Executor != taskjournal.TaskExecutorAgent ||
 		(task.Type != taskjournal.TaskBackup && task.Type != taskjournal.TaskBackupPrune) {
@@ -271,7 +271,7 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 			"backup prune authority read is incomplete",
 		)
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	prunes := make([]etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord], len(keys))
 	for index, value := range read.Values {
 		if value == nil {

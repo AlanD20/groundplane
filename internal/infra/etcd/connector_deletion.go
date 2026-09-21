@@ -78,7 +78,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearKeyValues(fixed.Values)
+	defer etcdstore.ClearValues(fixed.Values)
 	dependencies := fixed.Values[5:8]
 	if dependencies[0] == nil || string(dependencies[0].Value) != connector.ID {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -191,7 +191,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -478,7 +478,7 @@ func loadConnectorTaskInitiationTenantAtRevision(
 		result.Values[0] == nil {
 		return nil, errs.New(errs.KindStateConflict, "task initiation tenant is missing")
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	tenant, err := hierarchyrecord.DecodeTenant(result.Values[0].Value)
 	if err != nil || tenant.ID != project.Record.TenantID {
 		return nil, errs.New(errs.KindInternal, "task initiation tenant is corrupt")

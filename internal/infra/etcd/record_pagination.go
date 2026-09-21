@@ -275,7 +275,7 @@ func listIndexPageAtRevision[T any](
 	if err != nil {
 		return etcdstore.Page[T]{}, err
 	}
-	defer clearKeyValues(primaries.Values)
+	defer etcdstore.ClearValues(primaries.Values)
 	if len(primaries.Values) != len(primaryKeys) {
 		return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index read returned an invalid primary count")
 	}
@@ -321,16 +321,16 @@ func getManyBatchedAtRevision(
 		batch, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys[start:end], Revision: revision})
 		if err != nil {
 			if batch != nil {
-				clearKeyValues(batch.Values)
+				etcdstore.ClearValues(batch.Values)
 			}
-			clearKeyValues(values)
+			etcdstore.ClearValues(values)
 			return nil, err
 		}
 		if batch == nil || batch.ReadRevision != revision || len(batch.Values) != end-start {
 			if batch != nil {
-				clearKeyValues(batch.Values)
+				etcdstore.ClearValues(batch.Values)
 			}
-			clearKeyValues(values)
+			etcdstore.ClearValues(values)
 			return nil, errs.New(errs.KindInternal, "fixed-revision batched read is incomplete")
 		}
 		values = append(values, batch.Values...)

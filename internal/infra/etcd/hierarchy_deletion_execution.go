@@ -78,7 +78,7 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 	if err != nil {
 		return nil, HierarchyDeletionOperation{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return nil, HierarchyDeletionOperation{}, errs.New(
 			errs.KindStateConflict,

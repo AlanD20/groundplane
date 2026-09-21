@@ -48,7 +48,7 @@ func (repository *BackupRuntimeRepository) GetBackupRetentionSweep(
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, err
 	}
-	defer clearKeyValues(authority.Values)
+	defer etcdstore.ClearValues(authority.Values)
 	if authority.Values[0] == nil || authority.Values[1] == nil ||
 		authority.Values[0].ModRevision != record.Revision || authority.Values[1].Version != 1 {
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
@@ -142,7 +142,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] == nil || anchor.Values[0].ModRevision != run.Revision ||
 		anchor.Values[1] == nil || anchor.Values[1].ModRevision != current.Revision {
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, errs.New(
@@ -218,7 +218,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 			"backup retention point authority is incomplete",
 		)
 	}
-	defer clearKeyValues(authority.Values)
+	defer etcdstore.ClearValues(authority.Values)
 	points := make([]backupruntime.BackupRecoveryPointRecord, len(pointIDs))
 	companionKeys := make([]string, 0, len(pointIDs)*3)
 	for position, pointID := range pointIDs {
@@ -256,7 +256,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
-	defer clearKeyValues(companions.Values)
+	defer etcdstore.ClearValues(companions.Values)
 	if companions.ReadRevision != selectionRevision || len(companions.Values) != len(companionKeys) {
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
@@ -360,7 +360,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	if !result.Succeeded {
-		clearKeyValues(result.FailureReads)
+		etcdstore.ClearValues(result.FailureReads)
 		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, errs.New(
 			errs.KindStateConflict,
 			"backup retention authority changed",

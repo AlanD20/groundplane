@@ -177,7 +177,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			string(read.Values[0].Value) != current.Record.ID {
 			return IdempotencyTransactionResult{}, attachrecord.CorruptAttachRecord()
 		}
-		defer clearKeyValues(read.Values)
+		defer etcdstore.ClearValues(read.Values)
 		condition := etcdstore.Condition{Key: key, ModRevision: read.Values[0].ModRevision}
 		credentialReferenceCondition = &condition
 	}

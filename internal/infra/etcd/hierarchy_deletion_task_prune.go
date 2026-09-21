@@ -89,7 +89,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		if transactErr != nil {
 			return false, false, transactErr
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			return false, false, errs.New(errs.KindStateConflict, "hierarchy deletion failed Task prune fence changed")
 		}
@@ -120,7 +120,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		if transactErr != nil {
 			return false, false, transactErr
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			return false, false, errs.New(errs.KindStateConflict, "hierarchy deletion prune initiation changed")
 		}
@@ -186,7 +186,7 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 		if transactErr != nil {
 			return false, transactErr
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			return false, errs.New(errs.KindStateConflict, "hierarchy deletion prune batch changed")
 		}
@@ -208,7 +208,7 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 		if transactErr != nil {
 			return false, transactErr
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			return false, errs.New(errs.KindStateConflict, "hierarchy deletion prune phase changed")
 		}
@@ -303,7 +303,7 @@ func (repository *TaskRepository) finishHierarchyDeletionPrune(
 	if err != nil {
 		return false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return false, errs.New(errs.KindStateConflict, "hierarchy deletion prune finalization changed")
 	}

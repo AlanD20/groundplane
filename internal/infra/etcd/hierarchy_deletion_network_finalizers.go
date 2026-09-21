@@ -96,11 +96,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 	if values == nil || len(values.Values) != 4 || values.Values[0] == nil ||
 		values.Values[2] != nil || values.Values[3] != nil {
 		if values != nil {
-			clearKeyValues(values.Values)
+			etcdstore.ClearValues(values.Values)
 		}
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	defer clearKeyValues(values.Values)
+	defer etcdstore.ClearValues(values.Values)
 	pool, err := recordcodec.Decode[zonePoolRegistry](values.Values[0].Value, "zone_pool_registry")
 	if err != nil || validateZonePoolRegistry(pool) != nil ||
 		pool.Reservations[action.TargetID] != evidence.Desired.Subnet {

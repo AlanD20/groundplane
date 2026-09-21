@@ -242,7 +242,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 	if lookups == nil || lookups.ReadRevision != active.ReadRevision || len(lookups.Values) != len(lookupKeys) {
 		return false, errs.New(errs.KindInternal, "Blueprint Script staging evidence is incomplete")
 	}
-	defer clearKeyValues(lookups.Values)
+	defer etcdstore.ClearValues(lookups.Values)
 
 	conditions := []etcdstore.Condition{
 		{Key: scriptrecord.ScriptSetActiveKey(active.Record.EnvironmentID), ModRevision: active.Revision},

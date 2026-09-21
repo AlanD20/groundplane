@@ -275,7 +275,7 @@ func (repository *TaskRepository) claimNextTask(
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			conflicts++
 			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {

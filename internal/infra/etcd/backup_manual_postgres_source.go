@@ -23,7 +23,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	if err != nil {
 		return backupruntime.BackupRunSourceAttemptRecord{}, err
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] == nil || read.Values[1] == nil {
 		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
@@ -50,7 +50,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	if err != nil {
 		return backupruntime.BackupRunSourceAttemptRecord{}, err
 	}
-	defer clearKeyValues(backingRead.Values)
+	defer etcdstore.ClearValues(backingRead.Values)
 	if backingRead.Values[0] == nil || backingRead.Values[1] == nil ||
 		backingRead.Values[2] == nil {
 		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(

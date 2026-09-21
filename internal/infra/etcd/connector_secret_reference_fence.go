@@ -46,7 +46,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 			"Connector credential Secret index evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(indexes.Values)
+	defer etcdstore.ClearValues(indexes.Values)
 	candidates := make([]connectorSecretCandidate, len(references))
 	candidateKeys := make([]string, 0, len(references)*6)
 	for index, reference := range references {
@@ -91,7 +91,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 			"Connector credential Secret evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(values.Values)
+	defer etcdstore.ClearValues(values.Values)
 	fence := connectorSecretReferenceFence{conditions: make([]etcdstore.Condition, 0, len(candidateKeys)+len(indexKeys))}
 	offset := 0
 	for _, candidate := range candidates {

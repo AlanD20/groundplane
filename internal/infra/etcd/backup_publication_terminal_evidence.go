@@ -74,7 +74,7 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 	if err != nil {
 		return false
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if len(read.Values) != len(keys) || read.Values[0] == nil || read.Values[1] == nil ||
 		read.Values[2] != nil || read.Values[3] != nil || read.Values[4] != nil ||
 		(claimIndex >= 0 && read.Values[claimIndex] != nil) {

@@ -64,11 +64,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	if indexes == nil || len(indexes.Values) != 5 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != record.ID || string(indexes.Values[1].Value) != record.ID {
 		if indexes != nil {
-			clearKeyValues(indexes.Values)
+			etcdstore.ClearValues(indexes.Values)
 		}
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	defer clearKeyValues(indexes.Values)
+	defer etcdstore.ClearValues(indexes.Values)
 	if err := requireEnvironmentDeletionLiveAuthorityEmpty(
 		ctx, repository.store, record.ID, operation.Tombstone.OperationID, indexes.ReadRevision,
 	); err != nil {

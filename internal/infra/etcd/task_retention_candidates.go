@@ -59,7 +59,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		return false, corruptTaskPruneIntent()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	task, err := decodeTaskRecord(read.Values[0].Value)
 	if err != nil || task.ID != taskID || !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(deadline) {
@@ -77,7 +77,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	if sources == nil || sources.ReadRevision != revision || len(sources.Values) != 2 {
 		return false, corruptTaskPruneIntent()
 	}
-	defer clearKeyValues(sources.Values)
+	defer etcdstore.ClearValues(sources.Values)
 	if sources.Values[0] == nil {
 		return false, nil
 	}

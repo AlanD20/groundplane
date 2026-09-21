@@ -159,7 +159,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err != nil {
 		return result, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return result, err
 	}
@@ -186,7 +186,7 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 	if err != nil {
 		return 0, err
 	}
-	defer clearKeyValues(result.FailureReads)
+	defer etcdstore.ClearValues(result.FailureReads)
 	if result.Succeeded {
 		return result.Revision, nil
 	}

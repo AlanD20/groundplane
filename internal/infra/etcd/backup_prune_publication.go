@@ -90,7 +90,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		clear(lockValue)
 		return backupPruneTransactionPlan{}, err
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] != nil {
 		clear(dispatchValue)
 		clear(lockValue)
@@ -206,7 +206,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 			return nil, err
 		}
 		if len(fixed.Values) != 3 || fixed.Values[0] == nil || fixed.Values[1] == nil || fixed.Values[2] == nil {
-			clearKeyValues(fixed.Values)
+			etcdstore.ClearValues(fixed.Values)
 			return nil, errs.New(errs.KindStateConflict, "backup prune plan evidence is missing")
 		}
 		source, sourceErr := backuppolicy.DecodeBackupSourceRecord(fixed.Values[0].Value)
@@ -216,7 +216,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 			source.ID != point.SourceID || source.EnvironmentID != point.EnvironmentID ||
 			environment.ID != point.EnvironmentID || connector.Connector.ID != point.ConnectorID ||
 			connector.Connector.EnvironmentID != point.EnvironmentID {
-			clearKeyValues(fixed.Values)
+			etcdstore.ClearValues(fixed.Values)
 			return nil, errs.New(errs.KindStateConflict, "backup prune plan evidence changed")
 		}
 		evidence[index] = backupPruneExecutionEvidence{
@@ -231,7 +231,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 			connectorRegion:     connector.Connector.Region,
 			connectorPathStyle:  connector.Connector.PathStyle,
 		}
-		clearKeyValues(fixed.Values)
+		etcdstore.ClearValues(fixed.Values)
 	}
 	return evidence, nil
 }

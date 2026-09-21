@@ -49,7 +49,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	if anchor == nil || len(anchor.Values) != 3 {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindInternal, "backup key rotation evidence is incomplete")
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	if anchor.Values[0] == nil || anchor.Values[1] == nil || anchor.Values[2] == nil {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindStateConflict, "backup encryption key is not configured")
 	}
@@ -83,7 +83,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 			"backup key rotation Project is unavailable",
 		)
 	}
-	defer clearKeyValues(projectRead.Values)
+	defer etcdstore.ClearValues(projectRead.Values)
 	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindInternal, "backup key rotation Project is corrupt")

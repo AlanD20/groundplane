@@ -227,7 +227,7 @@ func (binding *ordinaryEnvironmentMutationBinding) clear() {
 	if binding == nil {
 		return
 	}
-	clearKeyValues(binding.preparedReads)
+	etcdstore.ClearValues(binding.preparedReads)
 	binding.preparedReads = nil
 }
 
@@ -293,7 +293,7 @@ func existingIdempotencyTransaction(
 	store hierarchyStore,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, bool, error) {
-	repository, err := newIdempotencyRepository(store)
+	repository, err := NewIdempotencyRepository(store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, false, err
 	}

@@ -223,7 +223,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	if err := plan.enforceTransactionBounds(zoneRemovalTransactionBudgetValidator(zoneRemovalTransactionBegin)); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -535,7 +535,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

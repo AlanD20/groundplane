@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	localagentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
@@ -70,7 +71,7 @@ func NewService(
 	scripts *etcd.ScriptRepository,
 	artifacts *taskplanning.ScriptArtifactService,
 	timeout time.Duration,
-	agents *etcd.LocalAgentRepository,
+	agents *agentregistration.Repository,
 	images workloadseal.Resolver,
 ) (*Service, error) {
 	if ledger == nil || services == nil || groups == nil || idempotency == nil || coordinator == nil ||

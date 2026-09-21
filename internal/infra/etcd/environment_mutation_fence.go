@@ -113,7 +113,7 @@ func loadEnvironmentMutationFence(
 	if err != nil {
 		return environmentMutationFenceEvidence{}, err
 	}
-	defer clearKeyValues(base.Values)
+	defer etcdstore.ClearValues(base.Values)
 	if base.Values[0] == nil {
 		return environmentMutationFenceEvidence{}, errs.New(
 			errs.KindEnvironmentNotFound,
@@ -160,7 +160,7 @@ func loadEnvironmentMutationFence(
 	if err != nil {
 		return environmentMutationFenceEvidence{}, err
 	}
-	defer clearKeyValues(projectRead.Values)
+	defer etcdstore.ClearValues(projectRead.Values)
 	if projectRead.Values[0] == nil {
 		return environmentMutationFenceEvidence{}, errs.New(
 			errs.KindProjectNotFound,
@@ -209,7 +209,7 @@ func loadEnvironmentMutationFence(
 		if readErr != nil {
 			return environmentMutationFenceEvidence{}, readErr
 		}
-		defer clearKeyValues(tenantRead.Values)
+		defer etcdstore.ClearValues(tenantRead.Values)
 		if tenantRead.Values[0] == nil {
 			return environmentMutationFenceEvidence{}, errs.New(
 				errs.KindTenantNotFound,
@@ -309,7 +309,7 @@ func readEnvironmentMutationFenceKeys(
 	}
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 			return nil, errs.New(
 				errs.KindInternal,
 				"environment mutation fence fixed-revision read is corrupt",

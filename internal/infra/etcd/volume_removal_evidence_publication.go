@@ -27,7 +27,7 @@ func (repository *HierarchyRepository) volumeRemovalEvidenceConditions(
 	if read == nil {
 		return nil, volumeRemovalEvidenceConflict()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.ReadRevision != readRevision || len(read.Values) != len(keys) {
 		return nil, volumeRemovalEvidenceConflict()
 	}

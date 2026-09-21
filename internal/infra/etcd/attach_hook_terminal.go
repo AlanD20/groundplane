@@ -61,11 +61,11 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 	}
 	if current == nil || current.ReadRevision != revision || len(current.Values) != 1 || current.Values[0] == nil {
 		if current != nil {
-			clearKeyValues(current.Values)
+			etcdstore.ClearValues(current.Values)
 		}
 		return errs.New(errs.KindInternal, "Attach hook input bundle is missing")
 	}
-	defer clearKeyValues(current.Values)
+	defer etcdstore.ClearValues(current.Values)
 	value, err := attachrecord.EncodeAttachEncryptedFacts(*checkpoint.Facts)
 	if err != nil {
 		return err
@@ -94,14 +94,14 @@ func (repository *TaskRepository) requireBackingHookResultCheckpoint(
 	if checkpointResult == nil || checkpointResult.ReadRevision != revision ||
 		len(checkpointResult.Values) != 1 || checkpointResult.Values[0] == nil {
 		if checkpointResult != nil {
-			clearKeyValues(checkpointResult.Values)
+			etcdstore.ClearValues(checkpointResult.Values)
 		}
 		return BackingHookCheckpointRecord{}, etcdstore.Condition{}, errs.New(
 			errs.KindStateConflict,
 			"Backing hook RESULT checkpoint is missing",
 		)
 	}
-	defer clearKeyValues(checkpointResult.Values)
+	defer etcdstore.ClearValues(checkpointResult.Values)
 	checkpoint, err := recordcodec.Decode[BackingHookCheckpointRecord](
 		checkpointResult.Values[0].Value,
 		"backing-hook-checkpoint",

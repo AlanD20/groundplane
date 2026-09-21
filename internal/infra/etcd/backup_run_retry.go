@@ -112,7 +112,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 			"backup retry source is incomplete",
 		)
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0].ModRevision != read.Values[1].ModRevision ||
 		read.Values[0].ModRevision != read.Values[2].ModRevision {
 		return backupRunRetrySource{}, errs.New(
@@ -245,7 +245,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 	if err != nil {
 		return nil, nil, err
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	if read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil ||
 		read.Values[3] != nil || read.Values[4] != nil || read.Values[5] == nil ||
 		string(read.Values[1].Value) != snapshotID ||

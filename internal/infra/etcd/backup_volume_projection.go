@@ -100,7 +100,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 	if policyRead == nil || policyRead.ReadRevision != revision || len(policyRead.Values) != 1 {
 		return BackupVolumeRemovalImpact{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	defer clearKeyValues(policyRead.Values)
+	defer etcdstore.ClearValues(policyRead.Values)
 	selected := make(map[string]struct{})
 	impact := BackupVolumeRemovalImpact{}
 	if policyRead.Values[0] != nil {
@@ -140,7 +140,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 			return BackupVolumeRemovalImpact{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		sourceRevision := sourceRead.Values[0].ModRevision
-		clearKeyValues(sourceRead.Values)
+		etcdstore.ClearValues(sourceRead.Values)
 		impact.Sources = append(impact.Sources, BackupVolumeSourceImpact{
 			SourceID: sourceID, SourceRevision: sourceRevision, Selected: isSelected,
 			RecoveryPointCount: points, HistoricalDigest: digest,
@@ -183,7 +183,7 @@ func (repository *BackupRuntimeRepository) backupVolumeSourceIDsAtRevision(
 				return nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
 			source, decodeErr := backuppolicy.DecodeBackupSourceRecord(read.Values[0].Value)
-			clearKeyValues(read.Values)
+			etcdstore.ClearValues(read.Values)
 			if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != environmentID {
 				return nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
@@ -246,12 +246,12 @@ func (repository *BackupRuntimeRepository) backupVolumeHistoricalImpactAtRevisio
 		}
 		point, decodeErr := backupruntime.DecodeBackupRecoveryPointRecord(read.Values[0].Value)
 		if decodeErr != nil || point.ID != pointID || point.SourceID != sourceID || point.TargetID != volumeID {
-			clearKeyValues(read.Values)
+			etcdstore.ClearValues(read.Values)
 			return 0, "", backupruntime.CorruptBackupRuntimeRecord()
 		}
 		writeBackupImpactField(digest, []byte(pointID))
 		writeBackupImpactField(digest, read.Values[0].Value)
-		clearKeyValues(read.Values)
+		etcdstore.ClearValues(read.Values)
 	}
 	return int64(len(pointIDs)), hex.EncodeToString(digest.Sum(nil)), nil
 }
@@ -287,7 +287,7 @@ func loadBackupVolumeProjectionEvidence(
 		headRead.Values[0] == nil || headRead.Values[1] == nil {
 		return backupVolumeProjectionEvidence{}, errs.New(errs.KindVolumeNotFound, "volume was not found")
 	}
-	defer clearKeyValues(headRead.Values)
+	defer etcdstore.ClearValues(headRead.Values)
 	if fixedRevision > 0 && headRead.ReadRevision != fixedRevision {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
@@ -307,7 +307,7 @@ func loadBackupVolumeProjectionEvidence(
 		rootRead.Values[0] == nil {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
-	defer clearKeyValues(rootRead.Values)
+	defer etcdstore.ClearValues(rootRead.Values)
 	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(rootRead.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()

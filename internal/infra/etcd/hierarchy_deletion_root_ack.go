@@ -234,7 +234,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict,

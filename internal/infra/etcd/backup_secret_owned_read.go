@@ -20,19 +20,19 @@ func getBackupSecretManyOwned(
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		if result != nil {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 		}
 		return nil, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) {
 		if result != nil {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 		}
 		return nil, errs.New(errs.KindInternal, "backup secret fixed read is incomplete")
 	}
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 			return nil, errs.New(errs.KindInternal, "backup secret fixed read is corrupt")
 		}
 	}

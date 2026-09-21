@@ -232,7 +232,7 @@ func (repository *TaskRepository) transactTaskTerminal(
 	}
 	transaction, err := repository.blueprintTerminalStore.TransactBlueprintTaskTerminal(ctx, envelope)
 	if err == nil && !transaction.Succeeded {
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		return etcdstore.TransactionResult{}, errs.New(errs.KindStateConflict, "blueprint terminal authority changed")
 	}
 	return transaction, err

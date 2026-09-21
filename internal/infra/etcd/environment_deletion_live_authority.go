@@ -34,17 +34,17 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 	if direct == nil || direct.ReadRevision != revision ||
 		len(direct.Values) != len(directKeys) {
 		if direct != nil {
-			clearKeyValues(direct.Values)
+			etcdstore.ClearValues(direct.Values)
 		}
 		return errs.New(errs.KindInternal, "environment child authority evidence is incomplete")
 	}
 	for _, value := range direct.Values {
 		if value != nil {
-			clearKeyValues(direct.Values)
+			etcdstore.ClearValues(direct.Values)
 			return errs.New(errs.KindStateConflict, "environment retained live child authority")
 		}
 	}
-	clearKeyValues(direct.Values)
+	etcdstore.ClearValues(direct.Values)
 	active, err := readActiveScriptSet(ctx, store, environmentID, revision)
 	if err != nil {
 		return err

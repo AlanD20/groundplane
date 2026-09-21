@@ -34,7 +34,7 @@ func (repository *EntryRepository) loadEntryMutationFence(
 			"Entry mutation fixed-revision evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
 			return environmentMutationFenceEvidence{}, 0, errs.New(

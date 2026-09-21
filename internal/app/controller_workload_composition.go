@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 )
 
 func newControllerServiceMutations(
@@ -46,7 +47,7 @@ func newControllerServiceMutations(
 func newControllerScriptMutations(
 	scriptMutationRepository *scriptoperations.MutationRepository,
 	scriptArtifacts *taskplanning.ScriptArtifactService,
-	agents *etcd.LocalAgentRepository,
+	agents *agentregistration.Repository,
 	images workloadseal.Resolver,
 	intentCoordinator *requestidempotency.Coordinator,
 	idempotency *etcd.IdempotencyRepository,

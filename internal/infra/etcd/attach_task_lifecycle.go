@@ -242,7 +242,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	if evidence == nil || evidence.ReadRevision != revision || len(evidence.Values) != 1 || evidence.Values[0] == nil {
 		return errs.New(errs.KindInternal, "attach detach replay evidence is incomplete")
 	}
-	defer clearKeyValues(evidence.Values)
+	defer etcdstore.ClearValues(evidence.Values)
 	input, err := decodeAttachTaskRenderInput(evidence.Values[0].Value)
 	if err != nil || input.PlanID != task.PlanID || input.AttachID != task.Target ||
 		input.EnvironmentID != task.Params[taskjournal.TaskMutationEnvironmentParam] {
@@ -307,7 +307,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	if state == nil || state.ReadRevision != revision || len(state.Values) != len(keys) {
 		return errs.New(errs.KindInternal, "attach detach replay state is incomplete")
 	}
-	defer clearKeyValues(state.Values)
+	defer etcdstore.ClearValues(state.Values)
 	companionCount := len(state.Values)
 	if replayTargetIndex >= 0 {
 		companionCount = replayTargetIndex
@@ -352,7 +352,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 			successor.Values[0] == nil {
 			return errs.New(errs.KindInternal, "attach detach replay successor name owner is dangling")
 		}
-		defer clearKeyValues(successor.Values)
+		defer etcdstore.ClearValues(successor.Values)
 		primary := successor.Values[0]
 		successorRecord, decodeErr := attachrecord.DecodeAttachRecord(primary.Value)
 		if decodeErr != nil || primary.Key != successorKey || successorRecord.ID != successorNameOwnerID ||

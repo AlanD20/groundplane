@@ -67,11 +67,11 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 	}
 	if evidence == nil || len(evidence.Values) != 2 || evidence.Values[0] == nil || evidence.Values[1] == nil {
 		if evidence != nil {
-			clearKeyValues(evidence.Values)
+			etcdstore.ClearValues(evidence.Values)
 		}
 		return nil, errs.New(errs.KindStateConflict, "hierarchy deletion terminal receipt is not visible")
 	}
-	defer clearKeyValues(evidence.Values)
+	defer etcdstore.ClearValues(evidence.Values)
 	var receipt hierarchydeletion.HierarchyDeletionTerminalAttemptReceipt
 	var progress hierarchydeletion.HierarchyDeletionChildProgress
 	if hierarchydeletion.DecodeHierarchyDeletionRecord(evidence.Values[0].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &receipt) != nil ||
@@ -253,7 +253,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 	if err != nil {
 		return err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return errs.New(errs.KindStateConflict, "hierarchy deletion terminal receipt publication changed")
 	}
@@ -334,7 +334,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionProgress(
 	if transaction.Succeeded {
 		return nil
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	existing, getErr := repository.store.Get(ctx, progressKey)
 	if getErr != nil {
 		return getErr

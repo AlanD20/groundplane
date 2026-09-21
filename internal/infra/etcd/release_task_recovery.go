@@ -195,7 +195,7 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	if err != nil {
 		return false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return false, errs.New(errs.KindStateConflict, "release recovery evidence changed")
 	}
@@ -229,7 +229,7 @@ func (repository *TaskRepository) returnReleaseToRecovery(
 	if err != nil {
 		return false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return false, errs.New(errs.KindStateConflict, "release recovery failure evidence changed")
 	}
@@ -276,7 +276,7 @@ func (repository *TaskRepository) closeRecoveredRelease(
 	if err != nil {
 		return false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return false, errs.New(errs.KindStateConflict, "release recovery closure evidence changed")
 	}

@@ -57,7 +57,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		runtimeRead.Values[0] == nil || runtimeRead.Values[0].Key != runtimeKey || runtimeRead.Values[0].ModRevision <= 0 {
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	defer clearKeyValues(runtimeRead.Values)
+	defer etcdstore.ClearValues(runtimeRead.Values)
 	runtime, err := removalrecord.DecodeRuntime(runtimeRead.Values[0].Value)
 	if err != nil || !volumeRemovalTaskMatchesRuntime(source.Record, runtime) ||
 		runtime.Checkpoint < removalrecord.DesiredPublished || runtime.Checkpoint > removalrecord.DirectoryAbsent ||
@@ -96,7 +96,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	if read == nil || read.ReadRevision != source.ReadRevision || len(read.Values) != len(keys) {
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	conditions := []etcdstore.Condition{{Key: taskjournal.TaskStorageKey(source.Record.ID), ModRevision: source.Revision},
 		{Key: taskjournal.TaskStorageKey(retry.ID)}, {Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(retry.OperationID)}, {Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
@@ -137,7 +137,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 				prior.Values[0] == nil || prior.Values[0].Key != key || prior.Values[0].ModRevision <= 0 {
 				return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 			}
-			defer clearKeyValues(prior.Values)
+			defer etcdstore.ClearValues(prior.Values)
 			origin, err = decodeTaskRecord(prior.Values[0].Value)
 			if err != nil {
 				return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
@@ -239,7 +239,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -265,12 +265,12 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 				return result, err
 			}
 			if len(result.FailureReads) != len(all) {
-				clearKeyValues(result.FailureReads)
+				etcdstore.ClearValues(result.FailureReads)
 				return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 			}
 			// The plan classifies every losing operation fence as StateConflict.
 			// Its caller owns only the plan and new-marker failure reads.
-			clearKeyValues(result.FailureReads[len(compares):])
+			etcdstore.ClearValues(result.FailureReads[len(compares):])
 			result.FailureReads = result.FailureReads[:len(compares)]
 			return result, nil
 		},

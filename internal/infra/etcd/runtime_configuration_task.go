@@ -58,7 +58,7 @@ func prepareRuntimeConfigurationTask(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 2 {
 		return TaskRecord{}, errs.New(errs.KindInternal, "runtime configuration read is incomplete")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	sources, err := runtimeconfiguration.NewRepository(runtimeConfigurationStore{store: store})
 	if err != nil {
 		return TaskRecord{}, err
@@ -252,7 +252,7 @@ func (repository *TaskRepository) runtimeConfigurationClaimConditions(
 		(revision > 0 && read.ReadRevision != revision) {
 		return nil, errs.New(errs.KindInternal, "configuration claim read is incomplete")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	value := read.Values[0]
 	if keyValueRevision(value) != condition.ModRevision ||
 		(value != nil && value.Key != condition.Key) {

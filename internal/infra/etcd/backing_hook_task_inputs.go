@@ -76,7 +76,7 @@ func (repository *AttachRepository) GetBackingHookTaskInputs(
 	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
 		return taskconfiguration.BackingHookEncryptedInputs{}, errs.New(errs.KindStateConflict, "Backing hook Task inputs are unavailable")
 	}
-	defer clearKeyValues(result.Values)
+	defer etcdstore.ClearValues(result.Values)
 	record, err := taskconfiguration.DecodeBackingHookEncryptedInputs(result.Values[0].Value)
 	if err != nil {
 		return taskconfiguration.BackingHookEncryptedInputs{}, err
@@ -104,11 +104,11 @@ func (repository *TaskRepository) backingHookInputClaimConditions(
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		if read != nil {
-			clearKeyValues(read.Values)
+			etcdstore.ClearValues(read.Values)
 		}
 		return nil, errs.New(errs.KindStateConflict, "Backing hook Task inputs are unavailable at claim")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	record, err := taskconfiguration.DecodeBackingHookEncryptedInputs(read.Values[0].Value)
 	if err != nil {
 		return nil, err

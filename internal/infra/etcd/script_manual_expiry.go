@@ -88,7 +88,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		if err != nil {
 			return false, err
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			return false, errs.New(errs.KindStateConflict, "manual Script expiry authority changed")
 		}
@@ -119,7 +119,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	if err != nil {
 		return false, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	// Successful release also invalidates the caller's pre-release MVCC read.
 	// The ordinary prune retry loop must refresh it before admitting a journal.
 	return false, errs.New(errs.KindStateConflict, "manual Script source expiry changed pruning authority")

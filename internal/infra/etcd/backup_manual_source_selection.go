@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -60,7 +61,7 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 		if readErr != nil {
 			return backupruntime.BackupRunSourceAttemptRecord{}, readErr
 		}
-		defer clearKeyValues(read.Values)
+		defer etcdstore.ClearValues(read.Values)
 		if read.Values[0] == nil {
 			return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 				errs.KindStateConflict,

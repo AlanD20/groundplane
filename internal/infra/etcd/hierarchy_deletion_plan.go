@@ -105,7 +105,7 @@ func (repository *HierarchyDeletionRepository) AppendActions(
 		if err != nil {
 			return HierarchyDeletionOperation{}, err
 		}
-		clearKeyValues(transaction.FailureReads)
+		etcdstore.ClearValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			return HierarchyDeletionOperation{}, errs.New(
 				errs.KindStateConflict,
@@ -228,7 +228,7 @@ func (repository *HierarchyDeletionRepository) sealPlan(
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
-	clearKeyValues(transaction.FailureReads)
+	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
 		return HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion plan seal changed")
 	}

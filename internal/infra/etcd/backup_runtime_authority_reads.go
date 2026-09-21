@@ -81,7 +81,7 @@ func (repository *BackupRuntimeRepository) readCurrentKeys(
 	}
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 			return nil, errs.New(errs.KindInternal, "backup runtime fixed-revision read is corrupt")
 		}
 	}
@@ -108,7 +108,7 @@ func (repository *BackupRuntimeRepository) readFixedKeys(
 	}
 	for index, value := range result.Values {
 		if value != nil && value.Key != keys[index] {
-			clearKeyValues(result.Values)
+			etcdstore.ClearValues(result.Values)
 			return nil, errs.New(errs.KindInternal, "backup runtime fixed-revision read is corrupt")
 		}
 	}
@@ -134,7 +134,7 @@ func (repository *BackupRuntimeRepository) loadManualBackupPolicyFence(
 		read.Values[0].ModRevision <= 0 {
 		return nil, errs.New(errs.KindStateConflict, "backup policy schedule coordination changed")
 	}
-	defer clearKeyValues(read.Values)
+	defer etcdstore.ClearValues(read.Values)
 	coordination, err := coordinationrecord.Decode(read.Values[0].Value)
 	if err != nil || coordination.EnvironmentID != record.EnvironmentID ||
 		coordination.CurrentBackupScheduleState == nil {

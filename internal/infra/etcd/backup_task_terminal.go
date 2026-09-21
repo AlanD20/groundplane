@@ -101,7 +101,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 			"backup Task terminal evidence is incomplete",
 		)
 	}
-	defer clearKeyValues(anchor.Values)
+	defer etcdstore.ClearValues(anchor.Values)
 	currentTaskValue, err := encodeTaskRecord(task)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err

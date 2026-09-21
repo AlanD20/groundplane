@@ -131,7 +131,7 @@ func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
 			"backup policy replacement exceeds the atomic transaction limit",
 		)
 	}
-	mutationPlan, err := newIdempotencyMutationPlan(
+	mutationPlan, err := NewIdempotencyMutationPlan(
 		plan.conditions,
 		plan.mutations,
 		func(_ int64, values []*etcdstore.KeyValue) error {
@@ -141,7 +141,7 @@ func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	idempotency, err := newIdempotencyRepository(repository.store)
+	idempotency, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

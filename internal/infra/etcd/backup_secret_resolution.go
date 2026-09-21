@@ -116,14 +116,14 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 		return BackupSecretResolutionEvidence{}, err
 	}
 	if anchor == nil || anchor.ReadRevision <= 0 || len(anchor.Values) != 2 || anchor.Values[1] == nil {
-		clearKeyValues(anchorValues(anchor))
+		etcdstore.ClearValues(anchorValues(anchor))
 		return BackupSecretResolutionEvidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task assignment evidence is unavailable",
 		)
 	}
 	assignmentForKey, err := taskassignments.DecodeTaskAssignment(anchor.Values[1].Value)
-	clearKeyValues(anchor.Values)
+	etcdstore.ClearValues(anchor.Values)
 	if err != nil {
 		return BackupSecretResolutionEvidence{}, errs.New(
 			errs.KindInternal,
@@ -144,7 +144,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 	if err != nil {
 		return BackupSecretResolutionEvidence{}, err
 	}
-	defer clearKeyValues(base.Values)
+	defer etcdstore.ClearValues(base.Values)
 	if base.Values[0] == nil {
 		return BackupSecretResolutionEvidence{}, errs.New(
 			errs.KindTaskNotFound,
@@ -296,7 +296,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 	if err != nil {
 		return BackupSecretResolutionEvidence{}, err
 	}
-	defer clearKeyValues(firstDynamic.Values)
+	defer etcdstore.ClearValues(firstDynamic.Values)
 	selectedConnectorID := ""
 	if evidence.Run != nil {
 		selectedConnectorID = evidence.Run.ConnectorID
@@ -329,7 +329,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 		evidence.Clear()
 		return BackupSecretResolutionEvidence{}, err
 	}
-	defer clearKeyValues(secondDynamic.Values)
+	defer etcdstore.ClearValues(secondDynamic.Values)
 	if err := reader.resolveEncryptedCredentialValues(
 		ctx, fixedRevision, dynamic, &evidence, secondDynamic,
 	); err != nil {
