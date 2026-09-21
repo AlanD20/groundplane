@@ -11,6 +11,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
+	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 
 	"github.com/AlanD20/groundplane/internal/controller/backingservices"
@@ -144,7 +145,7 @@ func newControllerDataComposition(
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize host-resolution projection repository: %w", err)
 	}
-	platformComponents, err := etcd.DefaultPlatformComponents(detectTailnetDelegationDefault())
+	platformComponents, err := platformcomponents.DefaultPlatformComponents(detectTailnetDelegationDefault())
 	if err != nil {
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize platform Components: %w", err)

@@ -82,7 +82,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		Keys: []string{
 			platformcomponents.PlatformComponentOwnerKey(task.Target),
 			platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind),
-			platformComponentBootstrapKey(task.Target),
+			platformcomponents.PlatformComponentBootstrapKey(task.Target),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -100,7 +100,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		{Key: componentrecord.RecordKey(task.Target), ModRevision: current.Revision},
 		{Key: platformcomponents.PlatformComponentOwnerKey(task.Target), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
-		{Key: platformComponentBootstrapKey(task.Target), ModRevision: indexes.Values[2].ModRevision},
+		{Key: platformcomponents.PlatformComponentBootstrapKey(task.Target), ModRevision: indexes.Values[2].ModRevision},
 		{Key: resolutionrecord.StorageKey},
 		{Key: platformComponentTaskActiveKey(task.Target)},
 		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)},
@@ -115,7 +115,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(task.Target), Value: []byte(task.ID)},
-		{Type: etcdstore.MutationDelete, Key: platformComponentBootstrapKey(task.Target)},
+		{Type: etcdstore.MutationDelete, Key: platformcomponents.PlatformComponentBootstrapKey(task.Target)},
 	}
 	initiation, err := newPlatformTaskInitiation(taskjournal.TaskActorSystem)
 	if err != nil {

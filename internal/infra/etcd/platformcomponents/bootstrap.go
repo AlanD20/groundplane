@@ -1,10 +1,9 @@
-package etcd
+package platformcomponents
 
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +14,7 @@ const (
 	platformComponentBootstrapPrefix = "/v1/records/platform-component-bootstrap/"
 )
 
-func platformComponentBootstrapKey(componentID string) string {
+func PlatformComponentBootstrapKey(componentID string) string {
 	return platformComponentBootstrapPrefix + componentID
 }
 
@@ -47,16 +46,16 @@ func DefaultPlatformComponents(tailnetDelegation bool) ([]componentrecord.Record
 
 // EnsurePlatformComponents creates missing singleton records without replacing
 // existing desired configuration or runtime state.
-func (repository *ComponentRepository) EnsurePlatformComponents(
+func (repository *Persistence) EnsurePlatformComponents(
 	ctx context.Context,
 	records []componentrecord.Record,
 ) ([]etcdstore.Versioned[componentrecord.Record], error) {
 	result := make([]etcdstore.Versioned[componentrecord.Record], 0, len(records))
 	for _, record := range records {
-		if err := platformcomponents.ValidatePlatformComponentRecord(record); err != nil {
+		if err := ValidatePlatformComponentRecord(record); err != nil {
 			return nil, err
 		}
-		current, err := repository.GetComponent(ctx, record.Desired.ID)
+		current, err := repository.components.GetComponent(ctx, record.Desired.ID)
 		if err == nil {
 			if current.Record.Desired.Owner != core.ComponentOwnerPlatform ||
 				current.Record.Desired.Kind != record.Desired.Kind {
@@ -79,21 +78,21 @@ func (repository *ComponentRepository) EnsurePlatformComponents(
 
 // HasPlatformComponentBootstrapProvenance proves that the current record is
 // still the exact singleton created by the bootstrap repository transaction.
-func (repository *ComponentRepository) HasPlatformComponentBootstrapProvenance(
+func (repository *Persistence) HasPlatformComponentBootstrapProvenance(
 	ctx context.Context,
 	current etcdstore.Versioned[componentrecord.Record],
 ) (bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return false, err
 	}
-	if err := platformcomponents.ValidatePlatformComponentRecord(current.Record); err != nil {
+	if err := ValidatePlatformComponentRecord(current.Record); err != nil {
 		return false, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision {
 		return false, errs.New(errs.KindValidationFailed, "platform Component version metadata is invalid")
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{platformComponentBootstrapKey(current.Record.Desired.ID)}, Revision: current.ReadRevision,
+		Keys: []string{PlatformComponentBootstrapKey(current.Record.Desired.ID)}, Revision: current.ReadRevision,
 	})
 	if err != nil {
 		return false, err
