@@ -22,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/volume"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -56,7 +57,7 @@ type controllerDataComposition struct {
 }
 
 func newControllerDataComposition(
-	ctx context.Context, store etcd.Store, authority controllerAuthorityComposition,
+	ctx context.Context, store etcdstore.Store, authority controllerAuthorityComposition,
 ) (controllerDataComposition, error) {
 	entryValues, err := entryvalues.New(store)
 	if err != nil {

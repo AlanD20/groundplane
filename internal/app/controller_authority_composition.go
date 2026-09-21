@@ -35,7 +35,7 @@ type controllerAuthorityComposition struct {
 }
 
 func newControllerAuthorityComposition(
-	ctx context.Context, cfg config.ControllerConfig, store etcd.Store,
+	ctx context.Context, cfg config.ControllerConfig, store etcd.EnvironmentBlueprintStore,
 ) (controllerAuthorityComposition, error) {
 	runnerRecords, err := etcd.NewRunnerRepository(store)
 	if err != nil {

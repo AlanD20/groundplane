@@ -15,6 +15,7 @@ import (
 
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -31,7 +32,7 @@ type controllerExecutionComposition struct {
 }
 
 func newControllerExecutionComposition(
-	ctx context.Context, cfg config.ControllerConfig, store etcd.Store,
+	ctx context.Context, cfg config.ControllerConfig, store etcdstore.Store,
 	authority controllerAuthorityComposition, dataServices controllerDataComposition,
 	componentCatalog []componentrender.EnvironmentComponentRegistration,
 ) (controllerExecutionComposition, error) {
