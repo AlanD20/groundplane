@@ -3,6 +3,7 @@ package etcd
 import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -81,7 +82,7 @@ func prepareBlueprintAttachTaskPublication(
 	}
 	if preparation.Intent.OwnsEnvironmentFence {
 		publication.mutations = append(publication.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
+			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		})
 	}
 	for _, input := range preparation.candidates {

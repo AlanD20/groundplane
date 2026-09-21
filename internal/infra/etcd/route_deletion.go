@@ -152,7 +152,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
-	conditions = append(conditions, etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)})
+	conditions = append(conditions, etcdstore.Condition{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)})
 	conditions = append(conditions, publication.conditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
@@ -166,7 +166,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		mutations,
 		etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   componentTaskActiveEnvironmentKey(environment.Record.ID),
+			Key:   environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
 			Value: []byte(task.ID),
 		},
 	)
@@ -182,7 +182,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	baseConditions := append([]etcdstore.Condition(nil), conditions...)
 	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) == len(baseConditions) {
-			activeKey := componentTaskActiveEnvironmentKey(environment.Record.ID)
+			activeKey := environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)
 			for index, condition := range baseConditions {
 				if condition.Key == activeKey && !conditionMatchesRead(condition, values[index]) {
 					return errs.New(

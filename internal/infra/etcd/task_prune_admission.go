@@ -81,7 +81,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		taskjournal.TaskActiveOperationKey(task.OperationID),
 		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
 		taskjournal.TaskPruneIntentKey(task.ID),
-		componentTaskIntentKey(task.ID),
+		environmentchanges.ComponentTaskIntentKey(task.ID),
 		environmentchanges.RouteRemovalIntentKey(task.ID),
 		environmentchanges.RouteMutationIntentKey(task.ID),
 		environmentchanges.EntryRemovalIntentKey(task.ID),
@@ -166,7 +166,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 	}
 	if companions.Values[4] != nil {
-		componentIntent, decodeErr := decodeComponentTaskIntent(companions.Values[4].Value)
+		componentIntent, decodeErr := environmentchanges.DecodeComponentTaskIntent(companions.Values[4].Value)
 		if decodeErr != nil || validateComponentTaskOwner(task, componentIntent) != nil ||
 			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!componentIntent.TerminalAt.Equal(*task.FinishedAt) {
@@ -312,12 +312,12 @@ func (repository *TaskRepository) beginTaskPrune(
 		value := companions.Values[ownerIndexStart+index]
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
 	}
-	componentCondition := etcdstore.Condition{Key: componentTaskIntentKey(task.ID)}
+	componentCondition := etcdstore.Condition{Key: environmentchanges.ComponentTaskIntentKey(task.ID)}
 	if companions.Values[4] != nil {
 		componentCondition.ModRevision = companions.Values[4].ModRevision
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: componentTaskIntentKey(task.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.ComponentTaskIntentKey(task.ID)},
 		)
 	}
 	conditions = append(conditions, componentCondition)

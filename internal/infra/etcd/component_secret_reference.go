@@ -4,6 +4,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -38,7 +39,7 @@ func prepareComponentTaskSecretReferences(
 	store hierarchyStore,
 	projectID string,
 	taskID string,
-	candidates []ComponentTaskCandidate,
+	candidates []environmentchanges.ComponentTaskCandidate,
 	revision int64,
 ) ([]componentTaskSecretReference, []etcdstore.Condition, []etcdstore.Mutation, error) {
 	references := make([]componentTaskSecretReference, 0, len(candidates))
@@ -118,7 +119,7 @@ func prepareComponentTaskSecretReferences(
 }
 
 func componentTaskTerminalSecretMutations(
-	intent ComponentTaskIntent,
+	intent environmentchanges.ComponentTaskIntent,
 	taskID string,
 	terminalStatus taskjournal.TaskStatus,
 ) ([]etcdstore.Mutation, error) {

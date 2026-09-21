@@ -124,7 +124,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	)
 	if intent.CurrentProjection != nil {
 		change.mutations = append(change.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
+			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		})
 	}
 	return change, nil
@@ -162,7 +162,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 		retry.RenderGeneration != source.RenderGeneration || !maps.Equal(retry.Params, source.Params) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry changed its pinned Task")
 	}
-	stateKeys := []string{componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
+	stateKeys := []string{environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -187,14 +187,14 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	conditions := []etcdstore.Condition{
 		{Key: environmentchanges.RouteMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: environmentchanges.RouteMutationIntentKey(retry.ID)},
-		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 	}
 	return routeTaskChange{
 		applies:    true,
 		conditions: conditions,
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: environmentchanges.RouteMutationIntentKey(retry.ID), Value: encoded},
-			{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID)},
+			{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID)},
 		},
 		values: [][]byte{encoded},
 	}, nil
@@ -265,7 +265,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		values = append(values, tenantRead.Values[0])
 	}
 	if intent.CurrentProjection != nil {
-		activeKey := componentTaskActiveEnvironmentKey(intent.EnvironmentID)
+		activeKey := environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)
 		activeRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{activeKey}, Revision: revision,
 		})

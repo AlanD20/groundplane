@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -31,7 +32,7 @@ type EnvironmentComponentCandidateInput struct {
 // ApplyEnvironmentBlueprintWithTask consumes its private CAS evidence in the
 // same transaction that publishes its Intent and Task.
 type ComponentTaskPreparation struct {
-	Intent                    ComponentTaskIntent
+	Intent                    environmentchanges.ComponentTaskIntent
 	managedRuntimeSources     []projectionrecord.ManagedComponentRuntimeSource
 	appliedComponentRuntime   []byte
 	appliedProjectionPresent  bool
@@ -104,12 +105,12 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 				"Component candidate supplied Controller-owned address or health state",
 			)
 		}
-		currentBinding, currentPresent, err := componentTaskAddress(input.Current.Record)
+		currentBinding, currentPresent, err := environmentchanges.ComponentTaskAddress(input.Current.Record)
 		if err != nil {
 			return ComponentTaskPreparation{}, err
 		}
 		if currentPresent {
-			zoneSet[currentBinding.zoneID] = struct{}{}
+			zoneSet[currentBinding.ZoneID()] = struct{}{}
 		}
 		candidateZoneID, candidatePresent, err := projectedComponentCandidateZone(candidate)
 		if err != nil {
@@ -237,7 +238,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	}
 
 	keys := make([]string, 0, 1+len(ordered)+len(zones))
-	keys = append(keys, componentTaskActiveEnvironmentKey(environmentID))
+	keys = append(keys, environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID))
 	for _, input := range ordered {
 		keys = append(keys, componentrecord.RecordKey(input.Current.Record.Desired.ID))
 	}
@@ -320,14 +321,14 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		return ComponentTaskPreparation{}, err
 	}
 
-	candidates := make([]ComponentTaskCandidate, len(ordered))
+	candidates := make([]environmentchanges.ComponentTaskCandidate, len(ordered))
 	for index, input := range ordered {
 		projected := input.Candidate
 		candidateZoneID, candidatePresent, _ := projectedComponentCandidateZone(projected)
 		if candidatePresent {
-			currentBinding, currentPresent, _ := componentTaskAddress(input.Current.Record)
-			if currentPresent && currentBinding.zoneID == candidateZoneID {
-				projected.PinnedIPv4 = currentBinding.address
+			currentBinding, currentPresent, _ := environmentchanges.ComponentTaskAddress(input.Current.Record)
+			if currentPresent && currentBinding.ZoneID() == candidateZoneID {
+				projected.PinnedIPv4 = currentBinding.Address()
 			} else {
 				addressIndex := sort.SearchStrings(zones, candidateZoneID)
 				registry, address, reserveErr := addresses[addressIndex].Next.Reserve(
@@ -347,13 +348,13 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		if recordErr != nil {
 			return ComponentTaskPreparation{}, recordErr
 		}
-		candidates[index] = ComponentTaskCandidate{
+		candidates[index] = environmentchanges.ComponentTaskCandidate{
 			CurrentRevision: input.Current.Revision,
 			Current:         input.Current.Record,
 			Candidate:       record,
 		}
 	}
-	intent, err := NewComponentTaskIntent(taskID, environmentID, candidates, createdAt)
+	intent, err := environmentchanges.NewComponentTaskIntent(taskID, environmentID, candidates, createdAt)
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
@@ -434,11 +435,11 @@ func validatePreparedCurrentComponentReservations(
 	registries map[string]networkreservations.ComponentAddressRegistry,
 ) error {
 	for _, input := range inputs {
-		binding, present, err := componentTaskAddress(input.Current.Record)
+		binding, present, err := environmentchanges.ComponentTaskAddress(input.Current.Record)
 		if err != nil {
 			return err
 		}
-		if present && registries[binding.zoneID].Reservations[input.Current.Record.Desired.ID] != binding.address {
+		if present && registries[binding.ZoneID()].Reservations[input.Current.Record.Desired.ID] != binding.Address() {
 			return errs.New(errs.KindStateConflict, "active Component address reservation changed")
 		}
 	}
@@ -446,7 +447,7 @@ func validatePreparedCurrentComponentReservations(
 }
 
 func validateComponentTaskPreparation(preparation ComponentTaskPreparation) error {
-	if err := validateComponentTaskIntent(preparation.Intent); err != nil {
+	if err := environmentchanges.ValidateComponentTaskIntent(preparation.Intent); err != nil {
 		return err
 	}
 	if len(preparation.managedRuntimeSources) > projectionrecord.MaximumManagedComponentRuntimeSources {
@@ -459,12 +460,12 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 	wantZones := make(map[string]struct{})
 	for _, candidate := range preparation.Intent.Candidates {
 		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
-			binding, present, err := componentTaskAddress(record)
+			binding, present, err := environmentchanges.ComponentTaskAddress(record)
 			if err != nil {
 				return err
 			}
 			if present {
-				wantZones[binding.zoneID] = struct{}{}
+				wantZones[binding.ZoneID()] = struct{}{}
 			}
 		}
 	}
@@ -495,7 +496,7 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 
 func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) ComponentTaskPreparation {
 	clone := ComponentTaskPreparation{
-		Intent:                    cloneComponentTaskIntent(preparation.Intent),
+		Intent:                    environmentchanges.CloneComponentTaskIntent(preparation.Intent),
 		managedRuntimeSources:     append([]projectionrecord.ManagedComponentRuntimeSource(nil), preparation.managedRuntimeSources...),
 		appliedComponentRuntime:   append([]byte(nil), preparation.appliedComponentRuntime...),
 		appliedProjectionPresent:  preparation.appliedProjectionPresent,

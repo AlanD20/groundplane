@@ -74,7 +74,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
-		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -222,7 +222,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		servicerecord.ServiceRuntimeKey(intent.ServiceID), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
-		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}, Revision: revision})
 	if err != nil {
 		return err

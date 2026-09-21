@@ -329,7 +329,7 @@ func validateCompletedRouteHeadReplay(
 		blueprints.EnvironmentBlueprintRootKey(environmentID, candidateRevisionID),
 		blueprints.EnvironmentBlueprintHeadKey(environmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), task.Target),
-		componentTaskActiveEnvironmentKey(environmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 		routerecord.ObservationKey(task.Target),
 	}
 	state, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})

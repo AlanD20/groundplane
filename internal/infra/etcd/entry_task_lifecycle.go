@@ -152,7 +152,7 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	)
 	if intent.CurrentProjection != nil {
 		change.mutations = append(change.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
+			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		})
 	}
 	return change, nil
@@ -208,7 +208,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	}
 	if intent.CurrentProjection != nil {
 		projectionKey := projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID)
-		activeKey := componentTaskActiveEnvironmentKey(intent.EnvironmentID)
+		activeKey := environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)
 		projectionRead, readErr := recordquery.GetManyBatchedAtRevision(
 			ctx, repository.store, []string{projectionKey, activeKey}, revision)
 		if readErr != nil {
@@ -307,7 +307,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 	if intent.CurrentProjection != nil {
 		companionKeys = append(companionKeys,
 			projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
-			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+			environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		)
 	}
 	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: companionKeys, Revision: revision})
@@ -360,7 +360,7 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 			etcdstore.Condition{Key: companionKeys[2], ModRevision: companions.Values[2].ModRevision},
 		)
 		change.mutations = append(change.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+			Type: etcdstore.MutationDelete, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		})
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
@@ -437,7 +437,7 @@ func (repository *TaskRepository) validateEntryTaskAcknowledgementReplay(
 		Keys: []string{
 			entryrecord.RecordKey(intent.EntryID),
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
-			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+			environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		},
 		Revision: revision,
 	})

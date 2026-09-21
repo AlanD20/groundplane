@@ -172,7 +172,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 		serviceLifecycleActiveKey(current.Record.Desired.ID),
-		componentTaskActiveEnvironmentKey(environment.Record.ID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
 	}, Revision: mutationContext.readRevision})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -232,7 +232,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
-		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
+		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)},
 		{
 			Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -251,7 +251,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: environmentchanges.ServiceRemovalIntentKey(task.ID), Value: intentValue},
-		{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)},
 	}
 	originalClassify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {

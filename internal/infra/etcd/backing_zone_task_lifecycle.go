@@ -51,7 +51,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		environmentchanges.ZoneRemovalIntentKey(operationID), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
 		blueprints.EnvironmentBlueprintHeadKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
-		componentTaskActiveEnvironmentKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

@@ -16,7 +16,7 @@ import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -34,7 +34,7 @@ func ResolveComponentTaskRouteProvider(
 	catalog []componentrender.EnvironmentComponentRegistration,
 	environment core.Environment,
 	components []componentrecord.Record,
-	candidates []etcd.ComponentTaskCandidate,
+	candidates []environmentchanges.ComponentTaskCandidate,
 	inputRevision int64,
 	inputGeneration uint64,
 ) (*environmentchanges.RouteProviderPin, bool, error) {

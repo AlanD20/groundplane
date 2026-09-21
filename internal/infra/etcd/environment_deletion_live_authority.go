@@ -8,6 +8,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -102,7 +103,7 @@ func environmentDeletionLiveAuthorityKeys(environmentID string) []string {
 	return []string{
 		networkreservations.ZonePoolRegistryKey(environmentID),
 		coordinationrecord.Key(environmentID),
-		componentTaskActiveEnvironmentKey(environmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 		removalrecord.EnvironmentLockKey(environmentID),
 		backuppolicy.BackupPolicyKey(environmentID),
 		backuppolicy.BackupKeyKey(environmentID),

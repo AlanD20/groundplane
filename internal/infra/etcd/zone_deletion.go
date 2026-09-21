@@ -179,7 +179,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: environmentchanges.ZoneRemovalIntentKey(intent.OperationID)},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: intent.DesiredHeadRevision},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
-		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		{
 			Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -199,7 +199,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 		{Type: etcdstore.MutationPut, Key: environmentchanges.ZoneRemovalIntentKey(intent.OperationID), Value: intentValue},
-		{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
@@ -392,7 +392,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	}
 	parentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskjournal.TaskStorageKey(parentTaskID), environmentchanges.ZoneRemovalIntentKey(intent.OperationID),
-		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 	}, Revision: tombstone.ReadRevision})
 	if err != nil {
@@ -488,7 +488,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 			ModRevision: addresses.Revision,
 		},
 		{Key: environmentchanges.ZoneRemovalIntentKey(intent.OperationID), ModRevision: parentResult.Values[1].ModRevision},
-		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: parentResult.Values[2].ModRevision},
+		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: parentResult.Values[2].ModRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: parentResult.Values[3].ModRevision},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: parentResult.Values[4].ModRevision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), intent.EnvironmentID)},
@@ -511,7 +511,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: environmentchanges.ZoneRemovalIntentKey(intent.OperationID), Value: intentValue},
-		{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
 	}
 	initiation, err := newInheritedTaskInitiation(etcdstore.Versioned[TaskRecord]{
 		Record: parent, Revision: parentResult.Values[0].ModRevision, ReadRevision: parentResult.ReadRevision,

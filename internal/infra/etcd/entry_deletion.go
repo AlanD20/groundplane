@@ -111,7 +111,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		domainKeys = append(
 			domainKeys,
 			projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
-			componentTaskActiveEnvironmentKey(environment.Record.ID),
+			environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
 		)
 	}
 	fence, ownerRevision, err := repository.loadEntryMutationFence(
@@ -157,7 +157,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if projection != nil {
 		conditions = append(conditions,
 			etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: projection.Revision},
-			etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
+			etcdstore.Condition{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)},
 		)
 	}
 	conditions = append(conditions, fence.TransactionConditions()...)
@@ -183,7 +183,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	}
 	if projection != nil {
 		mutations = append(mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
+			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		})
 	}
 	taskTenant, err := loadEntryTaskInitiationTenantAtRevision(

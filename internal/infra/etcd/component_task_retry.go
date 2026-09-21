@@ -6,6 +6,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -26,7 +27,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	revision int64,
 ) (componentTaskChange, error) {
 	intentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{componentTaskIntentKey(source.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.ComponentTaskIntentKey(source.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return componentTaskChange{}, err
@@ -38,7 +39,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if intentValue == nil {
 		return componentTaskChange{}, nil
 	}
-	intent, err := decodeComponentTaskIntent(intentValue.Value)
+	intent, err := environmentchanges.DecodeComponentTaskIntent(intentValue.Value)
 	if err != nil {
 		return componentTaskChange{}, err
 	}
@@ -51,7 +52,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		retry.RenderGeneration != source.RenderGeneration {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry changed its pinned Task")
 	}
-	retryIntent, err := NewComponentTaskIntent(
+	retryIntent, err := environmentchanges.NewComponentTaskIntent(
 		retry.ID,
 		intent.EnvironmentID,
 		intent.Candidates,
@@ -60,17 +61,17 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if err != nil {
 		return componentTaskChange{}, err
 	}
-	retryIntent.RouteProjection = cloneComponentTaskRouteProjection(intent.RouteProjection)
+	retryIntent.RouteProjection = environmentchanges.CloneComponentTaskRouteProjection(intent.RouteProjection)
 
 	zoneSet := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
 		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
-			binding, present, bindingErr := componentTaskAddress(record)
+			binding, present, bindingErr := environmentchanges.ComponentTaskAddress(record)
 			if bindingErr != nil {
 				return componentTaskChange{}, bindingErr
 			}
 			if present {
-				zoneSet[binding.zoneID] = struct{}{}
+				zoneSet[binding.ZoneID()] = struct{}{}
 			}
 		}
 	}
@@ -110,7 +111,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	keys := make([]string, 0, 4+len(intent.Candidates)+(2*len(zones)))
 	keys = append(
 		keys,
-		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
@@ -179,9 +180,9 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	change := componentTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: componentTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
-			{Key: componentTaskIntentKey(retry.ID)},
-			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+			{Key: environmentchanges.ComponentTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
+			{Key: environmentchanges.ComponentTaskIntentKey(retry.ID)},
+			{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 			{
 				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 				ModRevision: keyValueRevision(state.Values[1]),
@@ -249,26 +250,26 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 
 	changedRegistries := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
-		current, currentPresent, _ := componentTaskAddress(candidate.Current)
-		if currentPresent && registries[current.zoneID].Reservations[candidate.Current.Desired.ID] != current.address {
+		current, currentPresent, _ := environmentchanges.ComponentTaskAddress(candidate.Current)
+		if currentPresent && registries[current.ZoneID()].Reservations[candidate.Current.Desired.ID] != current.Address() {
 			return componentTaskChange{}, errs.New(errs.KindStateConflict, "active Component address changed")
 		}
-		next, nextPresent, _ := componentTaskAddress(candidate.Candidate)
-		if !nextPresent || componentTaskBindingsEqual(current, currentPresent, next, nextPresent) {
+		next, nextPresent, _ := environmentchanges.ComponentTaskAddress(candidate.Candidate)
+		if !nextPresent || environmentchanges.ComponentTaskBindingsEqual(current, currentPresent, next, nextPresent) {
 			continue
 		}
-		registry := registries[next.zoneID]
+		registry := registries[next.ZoneID()]
 		replacement, reserveErr := registry.ReserveExact(
-			zoneRecords[next.zoneID],
+			zoneRecords[next.ZoneID()],
 			candidate.Candidate.Desired.ID,
-			next.address,
+			next.Address(),
 		)
 		if reserveErr != nil {
 			return componentTaskChange{}, reserveErr
 		}
 		if !reflect.DeepEqual(registry, replacement) {
-			registries[next.zoneID] = replacement
-			changedRegistries[next.zoneID] = struct{}{}
+			registries[next.ZoneID()] = replacement
+			changedRegistries[next.ZoneID()] = struct{}{}
 		}
 	}
 	for _, zoneID := range zones {
@@ -285,16 +286,16 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			Type: etcdstore.MutationPut, Key: networkreservations.ComponentAddressRegistryKey(zoneID), Value: value,
 		})
 	}
-	intentBytes, err := encodeComponentTaskIntent(retryIntent)
+	intentBytes, err := environmentchanges.EncodeComponentTaskIntent(retryIntent)
 	if err != nil {
 		clearComponentTaskChange(change)
 		return componentTaskChange{}, err
 	}
 	change.values = append(change.values, intentBytes)
 	change.mutations = append(change.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentTaskIntentKey(retry.ID), Value: intentBytes},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskIntentKey(retry.ID), Value: intentBytes},
 		etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
+			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		},
 	)
 	environmentState, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -378,7 +379,7 @@ func componentTaskRetryIsBlueprint(source TaskRecord) (bool, error) {
 }
 
 func componentRetryProjectionMatches(
-	intent ComponentTaskIntent,
+	intent environmentchanges.ComponentTaskIntent,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) bool {
 	for _, candidate := range intent.Candidates {

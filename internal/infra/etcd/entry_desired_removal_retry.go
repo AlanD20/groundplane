@@ -21,7 +21,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 		deletionrecord.TombstoneKey(
 			string(deletionrecord.DeletionTargetEntry),
 			intent.EntryID,
-		), componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		), environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(
 			intent.EnvironmentID,
 		), blueprints.EnvironmentBlueprintDescriptorKeyByID(desired.DescriptorID),

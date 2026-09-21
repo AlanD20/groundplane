@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -32,7 +33,7 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	publication := preparedComponentTaskPublication{
 		preparation: cloneComponentTaskPreparation(preparation),
 		conditions: []etcdstore.Condition{{
-			Key: componentTaskActiveEnvironmentKey(environment.Record.ID),
+			Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
 		}},
 	}
 	if componentTaskPreparationIsZero(preparation) {
@@ -60,7 +61,7 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	}
 	publication.secrets = secretReferences
 	publication.conditions = append(publication.conditions, etcdstore.Condition{
-		Key: componentTaskIntentKey(task.ID),
+		Key: environmentchanges.ComponentTaskIntentKey(task.ID),
 	})
 	appliedProjectionCondition := etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID)}
 	if preparation.appliedProjectionPresent {
@@ -83,15 +84,15 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 		})
 	}
 	publication.conditions = append(publication.conditions, secretConditions...)
-	intentValue, err := encodeComponentTaskIntent(preparation.Intent)
+	intentValue, err := environmentchanges.EncodeComponentTaskIntent(preparation.Intent)
 	if err != nil {
 		return preparedComponentTaskPublication{}, err
 	}
 	publication.values = append(publication.values, intentValue)
 	publication.mutations = append(publication.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentTaskIntentKey(task.ID), Value: intentValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskIntentKey(task.ID), Value: intentValue},
 		etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
+			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		},
 	)
 	publication.mutations = append(publication.mutations, secretMutations...)

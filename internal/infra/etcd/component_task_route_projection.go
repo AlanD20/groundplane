@@ -15,21 +15,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// ComponentTaskRouteCandidate pins one desired Route generation whose
-// observation may change only when the owning Component Task succeeds.
-type ComponentTaskRouteCandidate struct {
-	Desired           core.Route `json:"desired"`
-	DesiredGeneration uint64     `json:"desired_generation"`
-}
-
-// ComponentTaskRouteProjection is the generic terminal projection contributed
-// by a Component that provides the HTTP router capability. A nil Provider means
-// successful removal of that capability projects every retained Route unserved.
-type ComponentTaskRouteProjection struct {
-	Provider *environmentchanges.RouteProviderPin `json:"provider,omitempty"`
-	Routes   []ComponentTaskRouteCandidate        `json:"routes"`
-}
-
 // WithComponentTaskRouteProjection attaches immutable Route observation input
 // to an otherwise complete Component Task preparation without publishing it.
 func WithComponentTaskRouteProjection(
@@ -40,8 +25,8 @@ func WithComponentTaskRouteProjection(
 	if componentTaskPreparationIsZero(preparation) {
 		return ComponentTaskPreparation{}, errs.New(errs.KindInternal, "Component Route projection requires a Task")
 	}
-	projection := &ComponentTaskRouteProjection{
-		Routes: make([]ComponentTaskRouteCandidate, len(routes)),
+	projection := &environmentchanges.ComponentTaskRouteProjection{
+		Routes: make([]environmentchanges.ComponentTaskRouteCandidate, len(routes)),
 	}
 	if provider != nil {
 		cloned := environmentchanges.CloneRouteProviderPin(*provider)
@@ -55,7 +40,7 @@ func WithComponentTaskRouteProjection(
 				"Component Route projection input is invalid",
 			)
 		}
-		projection.Routes[index] = ComponentTaskRouteCandidate{
+		projection.Routes[index] = environmentchanges.ComponentTaskRouteCandidate{
 			Desired: route.Desired, DesiredGeneration: route.DesiredGeneration,
 		}
 	}
@@ -70,48 +55,6 @@ func WithComponentTaskRouteProjection(
 	return cloneComponentTaskPreparation(result), nil
 }
 
-func validateComponentTaskRouteProjection(intent ComponentTaskIntent) error {
-	projection := intent.RouteProjection
-	if projection == nil {
-		return nil
-	}
-	if projection.Provider != nil {
-		if err := environmentchanges.ValidateRouteProviderPin(projection.Provider); err != nil {
-			return err
-		}
-		matched := false
-		for _, candidate := range intent.Candidates {
-			matched = matched || candidate.Candidate.Desired.ID == projection.Provider.ComponentID &&
-				candidate.Candidate.Desired.Enabled
-		}
-		if !matched {
-			return errs.New(errs.KindValidationFailed, "Component Route provider is not a candidate")
-		}
-	}
-	previousID := ""
-	for _, route := range projection.Routes {
-		if route.Desired.ID <= previousID || route.DesiredGeneration == 0 || route.Desired.Validate() != nil {
-			return errs.New(errs.KindValidationFailed, "Component Route projection is invalid")
-		}
-		previousID = route.Desired.ID
-	}
-	return nil
-}
-
-func cloneComponentTaskRouteProjection(source *ComponentTaskRouteProjection) *ComponentTaskRouteProjection {
-	if source == nil {
-		return nil
-	}
-	clone := &ComponentTaskRouteProjection{
-		Routes: append([]ComponentTaskRouteCandidate(nil), source.Routes...),
-	}
-	if source.Provider != nil {
-		provider := environmentchanges.CloneRouteProviderPin(*source.Provider)
-		clone.Provider = &provider
-	}
-	return clone
-}
-
 type componentTaskRouteObservationChange struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
@@ -120,7 +63,7 @@ type componentTaskRouteObservationChange struct {
 
 func (repository *TaskRepository) prepareComponentTaskRouteObservationAcknowledgement(
 	ctx context.Context,
-	intent ComponentTaskIntent,
+	intent environmentchanges.ComponentTaskIntent,
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) (componentTaskRouteObservationChange, error) {
@@ -141,7 +84,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationAcknowledg
 
 func (repository *TaskRepository) prepareComponentTaskRouteObservationRetry(
 	ctx context.Context,
-	intent ComponentTaskIntent,
+	intent environmentchanges.ComponentTaskIntent,
 	revision int64,
 ) (componentTaskRouteObservationChange, error) {
 	if intent.RouteProjection == nil || intent.RouteProjection.Provider == nil ||
@@ -155,7 +98,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationRetry(
 
 func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 	ctx context.Context,
-	intent ComponentTaskIntent,
+	intent environmentchanges.ComponentTaskIntent,
 	status routerecord.ObservedStatus,
 	revision int64,
 ) (componentTaskRouteObservationChange, error) {
@@ -239,7 +182,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 	return change, nil
 }
 
-func validateComponentTaskRouteIdentity(route ComponentTaskRouteCandidate) error {
+func validateComponentTaskRouteIdentity(route environmentchanges.ComponentTaskRouteCandidate) error {
 	if ids.Validate(ids.KindRoute, route.Desired.ID) != nil {
 		return errs.New(errs.KindValidationFailed, "Component Route identity is invalid")
 	}

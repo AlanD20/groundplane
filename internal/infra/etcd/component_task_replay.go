@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,8 +17,8 @@ func (repository *TaskRepository) validateComponentTaskAcknowledgementReplay(
 ) error {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			componentTaskIntentKey(task.ID),
-			componentTaskActiveEnvironmentKey(task.Target),
+			environmentchanges.ComponentTaskIntentKey(task.ID),
+			environmentchanges.ComponentTaskActiveEnvironmentKey(task.Target),
 		},
 		Revision: revision,
 	})
@@ -30,7 +31,7 @@ func (repository *TaskRepository) validateComponentTaskAcknowledgementReplay(
 	if result.Values[0] == nil {
 		return nil
 	}
-	intent, err := decodeComponentTaskIntent(result.Values[0].Value)
+	intent, err := environmentchanges.DecodeComponentTaskIntent(result.Values[0].Value)
 	if err != nil {
 		return err
 	}

@@ -48,7 +48,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
-			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+			environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		},
 		Revision: revision,
 	})
@@ -102,7 +102,7 @@ func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay
 		intent.TerminalAt == nil || task.FinishedAt == nil || !intent.TerminalAt.Equal(*task.FinishedAt) {
 		return true, errs.New(errs.KindStateConflict, "Route mutation replay evidence changed")
 	}
-	stateKeys := []string{componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
+	stateKeys := []string{environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return true, err

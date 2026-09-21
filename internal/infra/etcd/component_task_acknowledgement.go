@@ -5,6 +5,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -26,7 +27,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	revision int64,
 ) (componentTaskChange, error) {
 	intentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{componentTaskIntentKey(task.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.ComponentTaskIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return componentTaskChange{}, err
@@ -38,7 +39,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	if intentValue == nil {
 		return componentTaskChange{}, nil
 	}
-	intent, err := decodeComponentTaskIntent(intentValue.Value)
+	intent, err := environmentchanges.DecodeComponentTaskIntent(intentValue.Value)
 	if err != nil {
 		return componentTaskChange{}, err
 	}
@@ -52,12 +53,12 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	zoneSet := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
 		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
-			binding, present, bindingErr := componentTaskAddress(record)
+			binding, present, bindingErr := environmentchanges.ComponentTaskAddress(record)
 			if bindingErr != nil {
 				return componentTaskChange{}, bindingErr
 			}
 			if present {
-				zoneSet[binding.zoneID] = struct{}{}
+				zoneSet[binding.ZoneID()] = struct{}{}
 			}
 		}
 	}
@@ -76,7 +77,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	keys := make([]string, 0, 3+len(intent.Candidates)+(2*len(zones)))
 	keys = append(
 		keys,
-		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
@@ -106,8 +107,8 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	change := componentTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: componentTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
-			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
+			{Key: environmentchanges.ComponentTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
+			{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
 			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
 		},
 	}
@@ -180,9 +181,9 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	}
 	changedRegistries := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
-		current, currentPresent, _ := componentTaskAddress(candidate.Current)
-		next, nextPresent, _ := componentTaskAddress(candidate.Candidate)
-		if componentTaskBindingsEqual(current, currentPresent, next, nextPresent) {
+		current, currentPresent, _ := environmentchanges.ComponentTaskAddress(candidate.Current)
+		next, nextPresent, _ := environmentchanges.ComponentTaskAddress(candidate.Candidate)
+		if environmentchanges.ComponentTaskBindingsEqual(current, currentPresent, next, nextPresent) {
 			continue
 		}
 		removed := next
@@ -194,16 +195,16 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		if !removedPresent {
 			continue
 		}
-		registry := registries[removed.zoneID]
+		registry := registries[removed.ZoneID()]
 		replacement, address, found, releaseErr := registry.Release(
-			zoneRecords[removed.zoneID],
+			zoneRecords[removed.ZoneID()],
 			candidate.Current.Desired.ID,
 		)
-		if releaseErr != nil || !found || address != removed.address {
+		if releaseErr != nil || !found || address != removed.Address() {
 			return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component address reservation changed")
 		}
-		registries[removed.zoneID] = replacement
-		changedRegistries[removed.zoneID] = struct{}{}
+		registries[removed.ZoneID()] = replacement
+		changedRegistries[removed.ZoneID()] = struct{}{}
 	}
 
 	if terminalStatus == taskjournal.TaskStatusCompleted {
@@ -262,20 +263,20 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			Type: etcdstore.MutationPut, Key: networkreservations.ComponentAddressRegistryKey(zoneID), Value: value,
 		})
 	}
-	terminalIntent, err := terminalComponentTaskIntent(intent, terminalStatus, terminalAt)
+	terminalIntent, err := environmentchanges.TerminalComponentTaskIntent(intent, terminalStatus, terminalAt)
 	if err != nil {
 		clearComponentTaskChange(change)
 		return componentTaskChange{}, err
 	}
-	intentBytes, err := encodeComponentTaskIntent(terminalIntent)
+	intentBytes, err := environmentchanges.EncodeComponentTaskIntent(terminalIntent)
 	if err != nil {
 		clearComponentTaskChange(change)
 		return componentTaskChange{}, err
 	}
 	change.values = append(change.values, intentBytes)
 	change.mutations = append(change.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentTaskIntentKey(task.ID), Value: intentBytes},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskIntentKey(task.ID), Value: intentBytes},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 	)
 	return change, nil
 }

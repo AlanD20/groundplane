@@ -115,7 +115,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		{Key: deletions.TombstoneKey("environment", environment.Record.ID)},
 		{Key: deletions.TombstoneKey("project", project.Record.ID)},
 		{Key: deletions.TombstoneKey("service", target.Record.Desired.ID)},
-		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
+		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)},
 	}
 	var mutations []etcdstore.Mutation
 
@@ -178,7 +178,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	}
 	mutations = append(mutations, publication.mutations...)
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
+		Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 	})
 
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)

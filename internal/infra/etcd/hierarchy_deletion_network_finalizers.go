@@ -4,6 +4,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
@@ -89,7 +90,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		poolKey, addressesKey,
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID),
-		componentTaskActiveEnvironmentKey(evidence.EnvironmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(evidence.EnvironmentID),
 	}})
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
@@ -130,7 +131,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 			{Key: poolKey, ModRevision: values.Values[0].ModRevision},
 			{Key: addressesKey, ModRevision: keyValueRevision(values.Values[1])},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID)},
-			{Key: componentTaskActiveEnvironmentKey(evidence.EnvironmentID)},
+			{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(evidence.EnvironmentID)},
 		},
 		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: addressesKey}},
 	}

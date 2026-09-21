@@ -65,7 +65,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 	}
 	keys := []string{projectionrecord.EnvironmentComposeProjectionStorageKey(claim.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), task.Target), environmentchanges.EntryRemovalIntentKey(task.ID),
-		componentTaskActiveEnvironmentKey(claim.EnvironmentID), taskjournal.TaskMaterializationWriterKey(claim.EnvironmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(claim.EnvironmentID), taskjournal.TaskMaterializationWriterKey(claim.EnvironmentID),
 		blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

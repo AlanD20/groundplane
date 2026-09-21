@@ -29,7 +29,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		networkreservations.ZonePoolRegistryKey(environmentID), networkreservations.ComponentAddressRegistryKey(task.Target),
 		environmentchanges.ZoneRemovalIntentKey(operationID), blueprints.EnvironmentBlueprintHeadKey(environmentID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), componentTaskActiveEnvironmentKey(environmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
@@ -180,7 +180,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		networkreservations.ZonePoolRegistryKey(environmentID), environmentchanges.ZoneRemovalIntentKey(operationID),
 		blueprints.EnvironmentBlueprintHeadKey(environmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
-		componentTaskActiveEnvironmentKey(environmentID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {

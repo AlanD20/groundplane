@@ -72,7 +72,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 		}
 	case taskjournal.TaskResourceComponent:
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{componentTaskIntentKey(task.ID)}, Revision: revision,
+			Keys: []string{environmentchanges.ComponentTaskIntentKey(task.ID)}, Revision: revision,
 		})
 		if err != nil {
 			return "", nil, nil, err
@@ -81,7 +81,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 			return "", nil, nil, errs.New(errs.KindInternal, "host-resolution Component intent read is incomplete")
 		}
 		if read.Values[0] != nil {
-			intent, decodeErr := decodeComponentTaskIntent(read.Values[0].Value)
+			intent, decodeErr := environmentchanges.DecodeComponentTaskIntent(read.Values[0].Value)
 			if decodeErr != nil {
 				return "", nil, nil, decodeErr
 			}

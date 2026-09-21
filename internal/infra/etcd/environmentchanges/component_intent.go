@@ -1,4 +1,4 @@
-package etcd
+package environmentchanges
 
 import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -53,21 +53,21 @@ func NewComponentTaskIntent(
 	sort.Slice(intent.Candidates, func(left int, right int) bool {
 		return intent.Candidates[left].Current.Desired.ID < intent.Candidates[right].Current.Desired.ID
 	})
-	if err := validateComponentTaskIntent(intent); err != nil {
+	if err := ValidateComponentTaskIntent(intent); err != nil {
 		return ComponentTaskIntent{}, err
 	}
 	return intent, nil
 }
 
-func componentTaskIntentKey(taskID string) string {
+func ComponentTaskIntentKey(taskID string) string {
 	return componentTaskIntentPrefix + taskID
 }
 
-func componentTaskActiveEnvironmentKey(environmentID string) string {
+func ComponentTaskActiveEnvironmentKey(environmentID string) string {
 	return "/v1/indexes/component-task-intents/by-environment/" + environmentID
 }
 
-func terminalComponentTaskIntent(
+func TerminalComponentTaskIntent(
 	intent ComponentTaskIntent,
 	status taskjournal.TaskStatus,
 	terminalAt time.Time,
@@ -75,34 +75,34 @@ func terminalComponentTaskIntent(
 	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return ComponentTaskIntent{}, errs.New(errs.KindStateConflict, "Component candidate is not pending")
 	}
-	terminal := cloneComponentTaskIntent(intent)
+	terminal := CloneComponentTaskIntent(intent)
 	terminal.Status = status
 	terminal.TerminalAt = timePointer(terminalAt)
-	if err := validateComponentTaskIntent(terminal); err != nil {
+	if err := ValidateComponentTaskIntent(terminal); err != nil {
 		return ComponentTaskIntent{}, err
 	}
 	return terminal, nil
 }
 
-func encodeComponentTaskIntent(intent ComponentTaskIntent) ([]byte, error) {
-	if err := validateComponentTaskIntent(intent); err != nil {
+func EncodeComponentTaskIntent(intent ComponentTaskIntent) ([]byte, error) {
+	if err := ValidateComponentTaskIntent(intent); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("component_task_intent", intent)
 }
 
-func decodeComponentTaskIntent(value []byte) (ComponentTaskIntent, error) {
+func DecodeComponentTaskIntent(value []byte) (ComponentTaskIntent, error) {
 	intent, err := recordcodec.Decode[ComponentTaskIntent](value, "component_task_intent")
 	if err != nil {
 		return ComponentTaskIntent{}, err
 	}
-	if err := validateComponentTaskIntent(intent); err != nil {
+	if err := ValidateComponentTaskIntent(intent); err != nil {
 		return ComponentTaskIntent{}, corruptComponentTaskIntent()
 	}
 	return intent, nil
 }
 
-func validateComponentTaskIntent(intent ComponentTaskIntent) error {
+func ValidateComponentTaskIntent(intent ComponentTaskIntent) error {
 	if ids.Validate(ids.KindTask, intent.TaskID) != nil ||
 		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil {
 		return errs.New(errs.KindValidationFailed, "Component candidate identity is invalid")
@@ -157,10 +157,10 @@ func validateComponentTaskIntent(intent ComponentTaskIntent) error {
 			(!candidate.Current.Desired.Enabled || candidate.Current.Runtime.Healthy) {
 			return errs.New(errs.KindValidationFailed, "Component candidate does not change active state")
 		}
-		if _, _, err := componentTaskAddress(candidate.Current); err != nil {
+		if _, _, err := ComponentTaskAddress(candidate.Current); err != nil {
 			return err
 		}
-		if _, _, err := componentTaskAddress(candidate.Candidate); err != nil {
+		if _, _, err := ComponentTaskAddress(candidate.Candidate); err != nil {
 			return err
 		}
 	}
@@ -175,7 +175,11 @@ type componentTaskAddressBinding struct {
 	address string
 }
 
-func componentTaskAddress(record componentrecord.Record) (componentTaskAddressBinding, bool, error) {
+func (binding componentTaskAddressBinding) ZoneID() string { return binding.zoneID }
+
+func (binding componentTaskAddressBinding) Address() string { return binding.address }
+
+func ComponentTaskAddress(record componentrecord.Record) (componentTaskAddressBinding, bool, error) {
 	if record.Desired.Kind != core.ComponentKindIngressCaddy {
 		if record.Runtime.PinnedIPv4 != "" {
 			return componentTaskAddressBinding{}, false, errs.New(
@@ -223,7 +227,7 @@ func componentTaskAddress(record componentrecord.Record) (componentTaskAddressBi
 	return componentTaskAddressBinding{zoneID: zoneID, address: address.String()}, true, nil
 }
 
-func componentTaskBindingsEqual(
+func ComponentTaskBindingsEqual(
 	left componentTaskAddressBinding,
 	leftPresent bool,
 	right componentTaskAddressBinding,
@@ -232,10 +236,10 @@ func componentTaskBindingsEqual(
 	return leftPresent == rightPresent && (!leftPresent || left == right)
 }
 
-func cloneComponentTaskIntent(intent ComponentTaskIntent) ComponentTaskIntent {
+func CloneComponentTaskIntent(intent ComponentTaskIntent) ComponentTaskIntent {
 	clone := intent
 	clone.Candidates = cloneComponentTaskCandidates(intent.Candidates)
-	clone.RouteProjection = cloneComponentTaskRouteProjection(intent.RouteProjection)
+	clone.RouteProjection = CloneComponentTaskRouteProjection(intent.RouteProjection)
 	clone.TerminalAt = cloneTimePointer(intent.TerminalAt)
 	return clone
 }
