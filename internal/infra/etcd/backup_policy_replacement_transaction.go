@@ -210,10 +210,10 @@ func prepareBackupPolicyReplacement(
 		})
 	}
 	keyRecordRevision := int64(0)
-	etcdstore.RevisionOf := int64(0)
+	keyValueRevision := int64(0)
 	if candidate.ExistingKey != nil {
 		keyRecordRevision = candidate.ExistingKey.RecordRevision
-		etcdstore.RevisionOf = candidate.ExistingKey.EncryptedRevision
+		keyValueRevision = candidate.ExistingKey.EncryptedRevision
 	}
 	plan.compare(
 		backupPolicyCompareKey,
@@ -225,7 +225,7 @@ func prepareBackupPolicyReplacement(
 		backupPolicyCompareKey,
 		candidate.Replacement.EnvironmentID,
 		backuppolicy.BackupKeyValueKey(candidate.Replacement.EnvironmentID),
-		etcdstore.RevisionOf,
+		keyValueRevision,
 	)
 	if candidate.InitialKey != nil {
 		initial := backupPolicyInitialKey{

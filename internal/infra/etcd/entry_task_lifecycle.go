@@ -195,15 +195,15 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	keys := append(baseKeys, extraKeys...)
 	values := append(base.Values, projectRead.Values...)
 	if project.TenantID != "" {
-		hierarchyrecord.TenantKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)
-		tenantRead, readErr := recordquery.GetManyBatchedAtRevision(ctx, repository.store, []string{hierarchyrecord.TenantKey}, revision)
+		tenantDeletionKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)
+		tenantRead, readErr := recordquery.GetManyBatchedAtRevision(ctx, repository.store, []string{tenantDeletionKey}, revision)
 		if readErr != nil {
 			return nil, nil, readErr
 		}
 		if tenantRead.Values[0] != nil {
 			return nil, nil, errs.New(errs.KindResourceInUse, "entry retry Tenant is unavailable")
 		}
-		keys = append(keys, hierarchyrecord.TenantKey)
+		keys = append(keys, tenantDeletionKey)
 		values = append(values, tenantRead.Values[0])
 	}
 	if intent.CurrentProjection != nil {

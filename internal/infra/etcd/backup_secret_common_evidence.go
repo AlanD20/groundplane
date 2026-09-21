@@ -70,11 +70,11 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 	} {
 		credential := evidence.Connector.Connector.Credentials[name]
 		if credential.Kind == backupsecret.CredentialSourceSecretRef {
-			hierarchyrecord.ProjectKey := secrets.SecretKeyIndexKey(backupsecret.SecretScopeProject, projectKeyID, credential.SecretRef)
+			projectSecretKey := secrets.SecretKeyIndexKey(backupsecret.SecretScopeProject, projectKeyID, credential.SecretRef)
 			platformKey := secrets.SecretKeyIndexKey(backupsecret.SecretScopePlatform, "", credential.SecretRef)
 			dynamic.secretIndexes = append(dynamic.secretIndexes, backupSecretIndexRead{
 				name: name, reference: credential.SecretRef,
-				projectIndex: dynamic.add(hierarchyrecord.ProjectKey), platformIndex: dynamic.add(platformKey),
+				projectIndex: dynamic.add(projectSecretKey), platformIndex: dynamic.add(platformKey),
 			})
 		}
 	}
