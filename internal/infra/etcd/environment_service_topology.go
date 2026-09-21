@@ -7,6 +7,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 	"strings"
@@ -84,7 +85,7 @@ func (repository *ServiceRepository) ListServices(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 	}
-	limit, revision, lastID, query, err := normalizePageRequest(
+	limit, revision, lastID, query, err := recordquery.NormalizePageRequest(
 		request, "services", "environment", environmentID, "", ids.KindService,
 	)
 	if err != nil {

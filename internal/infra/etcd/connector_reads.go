@@ -6,6 +6,7 @@ import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +20,7 @@ func (repository *ConnectorRepository) GetConnector(
 	if err := recordcodec.ValidateID(ids.KindConnector, id); err != nil {
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx,
 		repository.store,
 		connectorrecord.RecordKey(id),
@@ -66,7 +67,7 @@ func (repository *ConnectorRepository) ListConnectors(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return etcdstore.Page[connectorrecord.Record]{}, err
 	}
-	return listIndexPage(
+	return recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"connectors",

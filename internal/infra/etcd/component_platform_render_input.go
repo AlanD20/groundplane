@@ -7,6 +7,7 @@ import (
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"net/netip"
 	"sort"
 	"strings"
@@ -89,7 +90,7 @@ func (repository *ComponentRepository) GetPlatformComponentTaskRenderInput(
 			"platform Component render-input Plan id is invalid",
 		)
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx,
 		repository.store,
 		platformComponentTaskRenderInputKey(planID),

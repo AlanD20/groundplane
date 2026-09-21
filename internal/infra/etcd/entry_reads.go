@@ -6,6 +6,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +20,7 @@ func (repository *EntryRepository) GetEntry(
 	if err := recordcodec.ValidateID(ids.KindEnvEntry, id); err != nil {
 		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx,
 		repository.store,
 		entryrecord.RecordKey(id),
@@ -38,7 +39,7 @@ func (repository *EntryRepository) ListEntries(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return etcdstore.Page[entryrecord.Record]{}, err
 	}
-	return listIndexPage(
+	return recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"entries",

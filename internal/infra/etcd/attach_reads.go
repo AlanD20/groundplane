@@ -6,6 +6,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -16,7 +17,7 @@ func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (e
 	if err := recordcodec.ValidateID(ids.KindAttach, id); err != nil {
 		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx,
 		repository.store,
 		attachrecord.AttachKey(id),
@@ -91,7 +92,7 @@ func (repository *AttachRepository) ListAttaches(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return etcdstore.Page[attachrecord.Record]{}, err
 	}
-	return listIndexPage(
+	return recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"attaches",

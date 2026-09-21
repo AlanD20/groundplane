@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -34,7 +35,7 @@ func (repository *TaskRepository) platformResolverAtRevision(
 		}
 		for _, value := range page.Values {
 			if !strings.HasPrefix(value.Key, platformComponentOwnerPrefix) {
-				clearRangeKeyValues(page.Values)
+				recordquery.ClearRangeKeyValues(page.Values)
 				return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 					errs.KindInternal,
 					"platform Component scan contains an invalid key",
@@ -42,7 +43,7 @@ func (repository *TaskRepository) platformResolverAtRevision(
 			}
 			componentID := strings.TrimPrefix(value.Key, platformComponentOwnerPrefix)
 			if ids.Validate(ids.KindComponent, componentID) != nil || string(value.Value) != componentID {
-				clearRangeKeyValues(page.Values)
+				recordquery.ClearRangeKeyValues(page.Values)
 				return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 					errs.KindInternal,
 					"platform Component owner index is corrupt",
@@ -51,14 +52,14 @@ func (repository *TaskRepository) platformResolverAtRevision(
 			componentIDs = append(componentIDs, componentID)
 		}
 		if !page.More {
-			clearRangeKeyValues(page.Values)
+			recordquery.ClearRangeKeyValues(page.Values)
 			break
 		}
 		if len(page.Values) == 0 {
 			return etcdstore.Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "platform Component scan did not advance")
 		}
 		start = page.Values[len(page.Values)-1].Key
-		clearRangeKeyValues(page.Values)
+		recordquery.ClearRangeKeyValues(page.Values)
 	}
 	sort.Strings(componentIDs)
 	if len(componentIDs) == 0 {

@@ -11,6 +11,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"maps"
 	"time"
@@ -164,7 +165,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 		hierarchyrecord.EnvironmentKey(entry.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), entry.EnvironmentID),
 	}
-	base, err := getManyBatchedAtRevision(ctx, repository.store, baseKeys, revision)
+	base, err := recordquery.GetManyBatchedAtRevision(ctx, repository.store, baseKeys, revision)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -180,7 +181,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 		hierarchyrecord.ProjectKey(environment.ProjectID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), environment.ProjectID),
 	}
-	projectRead, err := getManyBatchedAtRevision(ctx, repository.store, extraKeys, revision)
+	projectRead, err := recordquery.GetManyBatchedAtRevision(ctx, repository.store, extraKeys, revision)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -195,7 +196,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	values := append(base.Values, projectRead.Values...)
 	if project.TenantID != "" {
 		hierarchyrecord.TenantKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)
-		tenantRead, readErr := getManyBatchedAtRevision(ctx, repository.store, []string{hierarchyrecord.TenantKey}, revision)
+		tenantRead, readErr := recordquery.GetManyBatchedAtRevision(ctx, repository.store, []string{hierarchyrecord.TenantKey}, revision)
 		if readErr != nil {
 			return nil, nil, readErr
 		}
@@ -208,7 +209,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	if intent.CurrentProjection != nil {
 		projectionKey := projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID)
 		activeKey := componentTaskActiveEnvironmentKey(intent.EnvironmentID)
-		projectionRead, readErr := getManyBatchedAtRevision(
+		projectionRead, readErr := recordquery.GetManyBatchedAtRevision(
 			ctx, repository.store, []string{projectionKey, activeKey}, revision)
 		if readErr != nil {
 			return nil, nil, readErr

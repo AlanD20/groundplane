@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strings"
 	"time"
@@ -55,7 +56,7 @@ func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
 		return "", err
 	}
-	project, err := getRecord(
+	project, err := recordquery.Get(
 		ctx,
 		repository.store,
 		hierarchyrecord.ProjectKey(projectID),
@@ -102,7 +103,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			ScopeID:    targetID,
 		}, nil
 	case hierarchydeletion.HierarchyDeletionTargetProject:
-		project, err := getRecord(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
+		project, err := recordquery.Get(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
 			hierarchyrecord.DecodeProject, func(record hierarchyrecord.ProjectRecord) string { return record.ID })
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err
@@ -128,7 +129,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		if err := recordcodec.ValidateID(ids.KindProject, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		project, err := getRecord(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
+		project, err := recordquery.Get(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
 			hierarchyrecord.DecodeProject, func(record hierarchyrecord.ProjectRecord) string { return record.ID })
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err
@@ -148,7 +149,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		if err := recordcodec.ValidateID(ids.KindEnvironment, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		environment, err := getRecord(
+		environment, err := recordquery.Get(
 			ctx,
 			repository.store,
 			hierarchyrecord.EnvironmentKey(targetID),

@@ -6,6 +6,7 @@ import (
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
@@ -91,7 +92,7 @@ func (repository *ComponentRepository) ListPlatformComponents(
 	ctx context.Context,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[componentrecord.Record], error) {
-	return listIndexPage(ctx, repository.store, "components", "platform", "", platformComponentOwnerPrefix,
+	return recordquery.ListIndex(ctx, repository.store, "components", "platform", "", platformComponentOwnerPrefix,
 		componentrecord.RecordKey, ids.KindComponent, request, componentrecord.DecodeRecord,
 		func(record componentrecord.Record) string { return record.Desired.ID },
 		func(record componentrecord.Record) bool {

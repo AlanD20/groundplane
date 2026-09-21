@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -72,7 +73,7 @@ func (repository *ScriptRepository) ListScripts(
 	if err != nil {
 		return etcdstore.Page[scriptrecord.Record]{}, err
 	}
-	page, err := listIndexPageAtRevision(
+	page, err := recordquery.ListIndexAtRevision(
 		ctx, repository.store, "scripts", "environment", environmentID,
 		scriptrecord.ScriptSetOwnerPrefix(environmentID, active.Record.GenerationID),
 		func(id string) string {

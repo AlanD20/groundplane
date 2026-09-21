@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
 )
@@ -74,7 +75,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		for _, value := range page.Values {
-			if validateListKey(prefix, value.Key, kind) != nil {
+			if recordquery.ValidateListKey(prefix, value.Key, kind) != nil {
 				clearRangeValues(page.Values)
 				return nil, hierarchydeletion.CorruptHierarchyDeletion()
 			}

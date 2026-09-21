@@ -1,4 +1,4 @@
-package etcd
+package recordquery
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func normalizePageRequest(
+func NormalizePageRequest(
 	request etcdstore.PageRequest,
 	collection string,
 	ownerKind string,
@@ -57,7 +57,7 @@ func normalizePageRequest(
 	return limit, cursor.Revision, prefix + cursor.LastID, query, nil
 }
 
-func validateListKey(prefix string, key string, kind ids.Kind) error {
+func ValidateListKey(prefix string, key string, kind ids.Kind) error {
 	if !strings.HasPrefix(key, prefix) {
 		return fmt.Errorf("key is outside prefix")
 	}
@@ -68,9 +68,9 @@ func validateListKey(prefix string, key string, kind ids.Kind) error {
 	return ids.Validate(kind, id)
 }
 
-func listPrimaryPage[T any](
+func ListPrimary[T any](
 	ctx context.Context,
-	store hierarchyStore,
+	store store,
 	collection string,
 	ownerKind string,
 	ownerID string,
@@ -84,7 +84,7 @@ func listPrimaryPage[T any](
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[T]{}, err
 	}
-	limit, revision, start, query, err := normalizePageRequest(
+	limit, revision, start, query, err := NormalizePageRequest(
 		request, collection, ownerKind, ownerID, prefix, idKind,
 	)
 	if err != nil {
@@ -96,10 +96,10 @@ func listPrimaryPage[T any](
 	if err != nil {
 		return etcdstore.Page[T]{}, err
 	}
-	defer clearRangeKeyValues(rangeResult.Values)
+	defer ClearRangeKeyValues(rangeResult.Values)
 	items := make([]etcdstore.Versioned[T], 0, len(rangeResult.Values))
 	for _, value := range rangeResult.Values {
-		if err := validateListKey(prefix, value.Key, idKind); err != nil {
+		if err := ValidateListKey(prefix, value.Key, idKind); err != nil {
 			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "primary list contains an invalid key")
 		}
 		record, err := decode(value.Value)
@@ -124,9 +124,9 @@ func listPrimaryPage[T any](
 	return etcdstore.Page[T]{Items: items, NextCursor: next, Revision: rangeResult.ReadRevision}, nil
 }
 
-func listFilteredPrimaryPage[T any](
+func ListFilteredPrimary[T any](
 	ctx context.Context,
-	store hierarchyStore,
+	store store,
 	collection string,
 	filterKind string,
 	filterID string,
@@ -140,7 +140,7 @@ func listFilteredPrimaryPage[T any](
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[T]{}, err
 	}
-	limit, revision, start, query, err := normalizePageRequest(
+	limit, revision, start, query, err := NormalizePageRequest(
 		request, collection, filterKind, filterID, prefix, idKind,
 	)
 	if err != nil {
@@ -161,7 +161,7 @@ func listFilteredPrimaryPage[T any](
 		}
 		readRevision = rangeResult.ReadRevision
 		for _, value := range rangeResult.Values {
-			if err := validateListKey(prefix, value.Key, idKind); err != nil {
+			if err := ValidateListKey(prefix, value.Key, idKind); err != nil {
 				return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "filtered primary list contains an invalid key")
 			}
 			record, err := decode(value.Value)
@@ -199,9 +199,9 @@ func listFilteredPrimaryPage[T any](
 	}
 }
 
-func listIndexPage[T any](
+func ListIndex[T any](
 	ctx context.Context,
-	store hierarchyStore,
+	store store,
 	collection string,
 	ownerKind string,
 	ownerID string,
@@ -213,15 +213,15 @@ func listIndexPage[T any](
 	identity func(T) string,
 	matches func(T) bool,
 ) (etcdstore.Page[T], error) {
-	return listIndexPageAtRevision(
+	return ListIndexAtRevision(
 		ctx, store, collection, ownerKind, ownerID, prefix, primaryKey, idKind,
 		request, decode, identity, matches, 0,
 	)
 }
 
-func listIndexPageAtRevision[T any](
+func ListIndexAtRevision[T any](
 	ctx context.Context,
-	store hierarchyStore,
+	store store,
 	collection string,
 	ownerKind string,
 	ownerID string,
@@ -237,7 +237,7 @@ func listIndexPageAtRevision[T any](
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[T]{}, err
 	}
-	limit, revision, start, query, err := normalizePageRequest(
+	limit, revision, start, query, err := NormalizePageRequest(
 		request, collection, ownerKind, ownerID, prefix, idKind,
 	)
 	if err != nil {
@@ -254,14 +254,14 @@ func listIndexPageAtRevision[T any](
 	if err != nil {
 		return etcdstore.Page[T]{}, err
 	}
-	defer clearRangeKeyValues(rangeResult.Values)
+	defer ClearRangeKeyValues(rangeResult.Values)
 	if len(rangeResult.Values) == 0 {
 		return etcdstore.Page[T]{Items: []etcdstore.Versioned[T]{}, Revision: rangeResult.ReadRevision}, nil
 	}
 	primaryKeys := make([]string, len(rangeResult.Values))
 	expectedIDs := make([]string, len(rangeResult.Values))
 	for index, value := range rangeResult.Values {
-		if err := validateListKey(prefix, value.Key, idKind); err != nil {
+		if err := ValidateListKey(prefix, value.Key, idKind); err != nil {
 			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index contains an invalid key")
 		}
 		id := strings.TrimPrefix(value.Key, prefix)
@@ -271,7 +271,7 @@ func listIndexPageAtRevision[T any](
 		primaryKeys[index] = primaryKey(id)
 		expectedIDs[index] = id
 	}
-	primaries, err := getManyBatchedAtRevision(ctx, store, primaryKeys, rangeResult.ReadRevision)
+	primaries, err := GetManyBatchedAtRevision(ctx, store, primaryKeys, rangeResult.ReadRevision)
 	if err != nil {
 		return etcdstore.Page[T]{}, err
 	}
@@ -305,9 +305,9 @@ func listIndexPageAtRevision[T any](
 	return etcdstore.Page[T]{Items: items, NextCursor: next, Revision: rangeResult.ReadRevision}, nil
 }
 
-func getManyBatchedAtRevision(
+func GetManyBatchedAtRevision(
 	ctx context.Context,
-	store hierarchyStore,
+	store store,
 	keys []string,
 	revision int64,
 ) (*etcdstore.GetManyResult, error) {
@@ -341,7 +341,7 @@ func getManyBatchedAtRevision(
 	}, nil
 }
 
-func clearRangeKeyValues(values []etcdstore.KeyValue) {
+func ClearRangeKeyValues(values []etcdstore.KeyValue) {
 	for index := range values {
 		clear(values[index].Value)
 	}
@@ -355,7 +355,7 @@ func nextPageCursor(result *etcdstore.RangeResult, query string, kind ids.Kind, 
 		return "", errs.New(errs.KindInternal, "paginated range returned an invalid continuation")
 	}
 	lastKey := result.Values[len(result.Values)-1].Key
-	if err := validateListKey(prefix, lastKey, kind); err != nil {
+	if err := ValidateListKey(prefix, lastKey, kind); err != nil {
 		return "", errs.New(errs.KindInternal, "paginated range returned an invalid continuation key")
 	}
 	lastID := strings.TrimPrefix(lastKey, prefix)

@@ -1,4 +1,4 @@
-package etcd
+package recordquery
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func getRecord[T any](
+func Get[T any](
 	ctx context.Context,
-	store hierarchyStore,
+	store store,
 	key string,
 	id string,
 	notFound errs.Kind,
@@ -35,9 +35,9 @@ func getRecord[T any](
 	}, nil
 }
 
-func resolveRecord[T any](
+func Resolve[T any](
 	ctx context.Context,
-	store hierarchyStore,
+	store store,
 	indexKey string,
 	primaryKey func(string) string,
 	idKind ids.Kind,

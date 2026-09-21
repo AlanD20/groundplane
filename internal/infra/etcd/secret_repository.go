@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -186,7 +187,7 @@ func (repository *SecretRepository) ListSecrets(
 		return etcdstore.Page[secretrecord.Record]{}, err
 	}
 	ownerKind, ownerID := secretScopeKey(scope, projectID)
-	page, err := listIndexPage(
+	page, err := recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"secrets",

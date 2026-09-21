@@ -6,6 +6,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"strings"
 )
@@ -38,17 +39,17 @@ func (repository *HierarchyRepository) ListEnvironmentAppliedComposeProjections(
 		}
 		for _, value := range page.Values {
 			if !strings.HasPrefix(value.Key, projectionrecord.EnvironmentComposeProjectionPrefix) {
-				clearRangeKeyValues(page.Values)
+				recordquery.ClearRangeKeyValues(page.Values)
 				return nil, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			environmentID := strings.TrimPrefix(value.Key, projectionrecord.EnvironmentComposeProjectionPrefix)
 			if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-				clearRangeKeyValues(page.Values)
+				recordquery.ClearRangeKeyValues(page.Values)
 				return nil, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(value.Value)
 			if err != nil || projection.EnvironmentID != environmentID {
-				clearRangeKeyValues(page.Values)
+				recordquery.ClearRangeKeyValues(page.Values)
 				return nil, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			result = append(result, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
@@ -56,7 +57,7 @@ func (repository *HierarchyRepository) ListEnvironmentAppliedComposeProjections(
 			})
 			start = value.Key
 		}
-		clearRangeKeyValues(page.Values)
+		recordquery.ClearRangeKeyValues(page.Values)
 		if !page.More {
 			return result, nil
 		}

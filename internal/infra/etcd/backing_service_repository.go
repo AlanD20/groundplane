@@ -5,6 +5,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"strings"
 
@@ -67,7 +68,7 @@ func (repository *BackingServiceRepository) ListBackingServices(
 	ctx context.Context,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[BackingServiceRecord], error) {
-	projects, err := listIndexPage(
+	projects, err := recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"backing-services",
@@ -188,7 +189,7 @@ func (repository *BackingServiceRepository) singleOwnerID(
 		return "", errs.New(errs.KindInternal, "Backing-service hierarchy must contain exactly one child")
 	}
 	value := result.Values[0]
-	if err := validateListKey(prefix, value.Key, kind); err != nil {
+	if err := recordquery.ValidateListKey(prefix, value.Key, kind); err != nil {
 		return "", errs.New(errs.KindInternal, "Backing-service owner index contains an invalid key")
 	}
 	id := strings.TrimPrefix(value.Key, prefix)

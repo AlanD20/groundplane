@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -135,7 +136,7 @@ func (repository *RunnerRepository) ListRunners(
 		if err := recordcodec.ValidateID(ids.KindProject, filter.ProjectID); err != nil {
 			return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 		}
-		page, err := listIndexPage(
+		page, err := recordquery.ListIndex(
 			ctx, repository.store, "runners", "project", filter.ProjectID,
 			runnerOwnerPrefix(runnerrecord.RunnerOwnerProject, filter.ProjectID), runnerKey, ids.KindRunner, request,
 			runnerrecord.DecodeRunnerDesiredAggregate,
@@ -161,7 +162,7 @@ func (repository *RunnerRepository) listTenantRunners(
 		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 	}
 	prefix := runnerTenantCursorPrefix(tenantID)
-	limit, revision, startKey, query, err := normalizePageRequest(
+	limit, revision, startKey, query, err := recordquery.NormalizePageRequest(
 		request, "runners", "tenant", tenantID, prefix, ids.KindRunner,
 	)
 	if err != nil {

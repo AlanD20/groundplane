@@ -5,6 +5,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 	"strings"
@@ -51,7 +52,7 @@ func (repository *ZoneRepository) ListZones(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return etcdstore.Page[zonerecord.Record]{}, err
 	}
-	limit, revision, lastID, query, err := normalizePageRequest(
+	limit, revision, lastID, query, err := recordquery.NormalizePageRequest(
 		request, "zones", "environment", environmentID, "", ids.KindNetwork,
 	)
 	if err != nil {

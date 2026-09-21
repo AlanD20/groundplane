@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -13,7 +14,7 @@ func (repository *HierarchyRepository) ListTenants(
 	ctx context.Context,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[hierarchyrecord.TenantRecord], error) {
-	return listPrimaryPage(
+	return recordquery.ListPrimary(
 		ctx,
 		repository.store,
 		"tenants",
@@ -36,7 +37,7 @@ func (repository *HierarchyRepository) ListTenantProjects(
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
 		return etcdstore.Page[hierarchyrecord.ProjectRecord]{}, err
 	}
-	return listIndexPage(
+	return recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"projects",
@@ -77,7 +78,7 @@ func (repository *HierarchyRepository) ListProjects(
 	if ownerID == "" {
 		ownerID = "-"
 	}
-	return listFilteredPrimaryPage(
+	return recordquery.ListFilteredPrimary(
 		ctx,
 		repository.store,
 		"projects",
@@ -99,7 +100,7 @@ func (repository *HierarchyRepository) ListBackingProjects(
 	ctx context.Context,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[hierarchyrecord.ProjectRecord], error) {
-	return listIndexPage(
+	return recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"projects",
@@ -125,7 +126,7 @@ func (repository *HierarchyRepository) ListEnvironments(
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
 		return etcdstore.Page[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	return listIndexPage(
+	return recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"environments",

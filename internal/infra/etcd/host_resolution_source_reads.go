@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
@@ -35,17 +36,17 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 		}
 		for _, value := range page.Values {
 			if !strings.HasPrefix(value.Key, projectionrecord.EnvironmentComposeProjectionPrefix) {
-				clearRangeKeyValues(page.Values)
+				recordquery.ClearRangeKeyValues(page.Values)
 				return nil, errs.New(errs.KindInternal, "Applied Environment projection scan contains an invalid key")
 			}
 			environmentID := strings.TrimPrefix(value.Key, projectionrecord.EnvironmentComposeProjectionPrefix)
 			if strings.Contains(environmentID, "/") || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
-				clearRangeKeyValues(page.Values)
+				recordquery.ClearRangeKeyValues(page.Values)
 				return nil, recordcodec.CorruptRecord()
 			}
 			projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(value.Value)
 			if decodeErr != nil || projection.EnvironmentID != environmentID {
-				clearRangeKeyValues(page.Values)
+				recordquery.ClearRangeKeyValues(page.Values)
 				return nil, projectionrecord.CorruptEnvironmentComposeProjection()
 			}
 			versioned := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
@@ -54,21 +55,21 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 			for _, desired := range projection.DesiredRoutes {
 				record, joinErr := projectionrecord.ReadRoute(ctx, repository.store, versioned, desired)
 				if joinErr != nil {
-					clearRangeKeyValues(page.Values)
+					recordquery.ClearRangeKeyValues(page.Values)
 					return nil, joinErr
 				}
 				result = append(result, scannedRoute{record: record.Record})
 			}
 		}
 		if !page.More {
-			clearRangeKeyValues(page.Values)
+			recordquery.ClearRangeKeyValues(page.Values)
 			return result, nil
 		}
 		if len(page.Values) == 0 {
 			return nil, errs.New(errs.KindInternal, "Route scan did not advance")
 		}
 		start = page.Values[len(page.Values)-1].Key
-		clearRangeKeyValues(page.Values)
+		recordquery.ClearRangeKeyValues(page.Values)
 	}
 }
 

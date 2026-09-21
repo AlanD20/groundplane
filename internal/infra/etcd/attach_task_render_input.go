@@ -6,6 +6,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -82,7 +83,7 @@ func (repository *AttachRepository) GetAttachTaskRenderInput(
 	if err := recordcodec.ValidateID(ids.KindPlan, planID); err != nil {
 		return etcdstore.Versioned[AttachTaskRenderInput]{}, err
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx,
 		repository.store,
 		attachTaskRenderInputKey(planID),

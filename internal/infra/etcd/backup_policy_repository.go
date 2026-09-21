@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -105,7 +106,7 @@ func (repository *BackupPolicyRepository) GetBackupSource(
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
 		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx,
 		repository.store,
 		backuppolicy.BackupSourceKey(sourceID),
@@ -124,7 +125,7 @@ func (repository *BackupPolicyRepository) ListBackupSources(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return etcdstore.Page[backuppolicy.BackupSourceRecord]{}, err
 	}
-	return listIndexPage(
+	return recordquery.ListIndex(
 		ctx,
 		repository.store,
 		"backup-sources",

@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +20,7 @@ func (repository *HierarchyRepository) GetTenant(
 	if err := recordcodec.ValidateID(ids.KindTenant, id); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx, repository.store, hierarchyrecord.TenantKey(id), id, errs.KindTenantNotFound, hierarchyrecord.DecodeTenant,
 		func(record hierarchyrecord.TenantRecord) string { return record.ID },
 	)
@@ -35,7 +36,7 @@ func (repository *HierarchyRepository) GetProject(
 	if err := recordcodec.ValidateID(ids.KindProject, id); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx, repository.store, hierarchyrecord.ProjectKey(id), id, errs.KindProjectNotFound, hierarchyrecord.DecodeProject,
 		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
 	)
@@ -51,7 +52,7 @@ func (repository *HierarchyRepository) GetEnvironment(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, id); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	return getRecord(
+	return recordquery.Get(
 		ctx, repository.store, hierarchyrecord.EnvironmentKey(id), id, errs.KindEnvironmentNotFound, hierarchyrecord.DecodeEnvironment,
 		func(record hierarchyrecord.EnvironmentRecord) string { return record.ID },
 	)
@@ -67,7 +68,7 @@ func (repository *HierarchyRepository) ResolveTenant(
 	if err := recordcodec.ValidateLabel("tenant slug", slug); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
-	return resolveRecord(
+	return recordquery.Resolve(
 		ctx,
 		repository.store,
 		hierarchyrecord.TenantSlugKey(slug),
@@ -94,7 +95,7 @@ func (repository *HierarchyRepository) ResolveTenantProject(
 	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
-	return resolveRecord(
+	return recordquery.Resolve(
 		ctx,
 		repository.store,
 		hierarchyrecord.ProjectTenantSlugKey(tenantID, slug),
@@ -119,7 +120,7 @@ func (repository *HierarchyRepository) ResolveBackingProject(
 	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
-	return resolveRecord(
+	return recordquery.Resolve(
 		ctx,
 		repository.store,
 		hierarchyrecord.ProjectPlatformSlugKey(slug),
@@ -148,7 +149,7 @@ func (repository *HierarchyRepository) ResolveEnvironment(
 	if err := recordcodec.ValidateLabel("environment name", name); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	return resolveRecord(
+	return recordquery.Resolve(
 		ctx,
 		repository.store,
 		hierarchyrecord.EnvironmentNameKey(projectID, name),

@@ -6,6 +6,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 
@@ -28,7 +29,7 @@ func loadEnvironmentAttachesAtRevision(
 	var result []etcdstore.Versioned[attachrecord.Record]
 	request := etcdstore.PageRequest{Limit: 200}
 	for {
-		page, err := listIndexPageAtRevision(ctx, store, "attaches", "environment", environmentID,
+		page, err := recordquery.ListIndexAtRevision(ctx, store, "attaches", "environment", environmentID,
 			attachrecord.AttachOwnerPrefix(environmentID), attachrecord.AttachKey, ids.KindAttach, request, attachrecord.DecodeAttachRecord,
 			func(record attachrecord.Record) string { return record.ID },
 			func(record attachrecord.Record) bool { return record.EnvironmentID == environmentID }, revision)

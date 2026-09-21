@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
@@ -121,7 +122,7 @@ func (repository *RouteRepository) SnapshotRevision(ctx context.Context) (int64,
 	if result == nil || result.ReadRevision <= 0 {
 		return 0, errs.New(errs.KindInternal, "Route planning snapshot revision is unavailable")
 	}
-	defer clearRangeKeyValues(result.Values)
+	defer recordquery.ClearRangeKeyValues(result.Values)
 	return result.ReadRevision, nil
 }
 

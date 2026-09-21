@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math/rand/v2"
 	"time"
@@ -293,7 +294,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		if scope.ID != "" {
 			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "global task scope cannot contain an id")
 		}
-		page, err := listPrimaryPage(
+		page, err := recordquery.ListPrimary(
 			ctx, repository.store, "tasks", "global", "-", taskjournal.TaskPrefix, ids.KindTask,
 			request, decodeTaskRecord, identity, func(TaskRecord) bool { return true },
 		)
@@ -305,7 +306,7 @@ func (repository *TaskRepository) ListTasksByScope(
 				"platform task workspace scope cannot contain an id",
 			)
 		}
-		page, err := listIndexPage(
+		page, err := recordquery.ListIndex(
 			ctx, repository.store, "tasks", "workspace", "platform", taskjournal.TaskWorkspacePlatformPrefix,
 			taskjournal.TaskStorageKey, ids.KindTask, request, decodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform },
@@ -315,7 +316,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		if ids.Validate(ids.KindTenant, scope.ID) != nil {
 			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "tenant task workspace scope is invalid")
 		}
-		page, err := listIndexPage(
+		page, err := recordquery.ListIndex(
 			ctx, repository.store, "tasks", "workspace", scope.ID,
 			taskjournal.TaskWorkspaceTenantPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
 			decodeTaskRecord, identity,
@@ -328,7 +329,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		if ids.Validate(ids.KindProject, scope.ID) != nil {
 			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "project task scope is invalid")
 		}
-		page, err := listFilteredPrimaryPage(
+		page, err := recordquery.ListFilteredPrimary(
 			ctx,
 			repository.store,
 			"tasks",
@@ -346,7 +347,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		if ids.Validate(ids.KindEnvironment, scope.ID) != nil {
 			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "environment task scope is invalid")
 		}
-		page, err := listIndexPage(
+		page, err := recordquery.ListIndex(
 			ctx, repository.store, "tasks", "environment", scope.ID,
 			taskjournal.TaskEnvironmentIndexPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
 			decodeTaskRecord, identity,
@@ -384,7 +385,7 @@ func (repository *TaskRepository) verifyTaskOwnerPage(
 			expectedTaskIDs = append(expectedTaskIDs, item.Record.ID)
 		}
 	}
-	indexes, err := getManyBatchedAtRevision(ctx, repository.store, keys, page.Revision)
+	indexes, err := recordquery.GetManyBatchedAtRevision(ctx, repository.store, keys, page.Revision)
 	if err != nil {
 		return etcdstore.Page[TaskRecord]{}, err
 	}
