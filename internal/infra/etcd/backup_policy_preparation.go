@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupsources"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -113,8 +114,10 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 		if err := repository.validateBackupPolicySelectionTarget(ctx, input.EnvironmentID, source); err != nil {
 			return PreparedBackupPolicyReplacement{}, err
 		}
-		resolved[index], err = repository.EnsureBackupSource(
+		resolved[index], err = backupsources.EnsureBackupSource(
 			ctx,
+			repository.store,
+			repository.now,
 			environment,
 			project,
 			source.Kind,
