@@ -1,4 +1,4 @@
-package etcd
+package connectormutations
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *ConnectorRepository) loadConnectorMutationFence(
+func (repository *Repository) LoadConnectorMutationFence(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -81,7 +81,7 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 	return fence, result, nil
 }
 
-func validateConnectorHierarchy(
+func ValidateConnectorHierarchy(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -113,7 +113,7 @@ func validateConnectorHierarchy(
 	return nil
 }
 
-func classifyConnectorCreateConflict(
+func ClassifyConnectorCreateConflict(
 	reads []*etcdstore.KeyValue,
 	fence environmentfence.Evidence,
 	secretConditionCount int,

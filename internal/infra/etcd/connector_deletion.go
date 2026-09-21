@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	connectormutations "github.com/AlanD20/groundplane/internal/infra/etcd/connectormutations"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
@@ -34,7 +35,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateConnectorHierarchy(ctx, environment, project, current.Record); err != nil {
+	if err := connectormutations.ValidateConnectorHierarchy(ctx, environment, project, current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := connectorrecord.ValidateConnectorVersion(current); err != nil {
@@ -71,7 +72,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		connectorrecord.RemovalIntentKey(task.ID),
 		backuppolicy.BackupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID),
 	}
-	fence, fixed, err := repository.loadConnectorMutationFence(
+	fence, fixed, err := repository.LoadConnectorMutationFence(
 		ctx,
 		environment,
 		project,
