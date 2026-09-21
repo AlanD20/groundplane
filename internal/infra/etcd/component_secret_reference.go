@@ -139,7 +139,7 @@ func componentTaskTerminalSecretMutations(
 				Key:  componentCandidateSecretReferenceKey(nextID, taskID, candidate.Candidate.Desired.ID),
 			})
 		}
-		if terminalStatus != taskjournal.TaskStatusCompleted || equalSecretReferences(currentIDs, nextIDs) {
+		if terminalStatus != taskjournal.TaskStatusCompleted || componentrecord.EqualSecretReferences(currentIDs, nextIDs) {
 			continue
 		}
 		for _, currentID := range currentIDs {
@@ -157,16 +157,4 @@ func componentTaskTerminalSecretMutations(
 		}
 	}
 	return mutations, nil
-}
-
-func equalSecretReferences(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }

@@ -86,7 +86,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	zoneSet := make(map[string]struct{})
 	previousID := ""
 	for _, input := range ordered {
-		if err := validateComponentVersion(input.Current); err != nil {
+		if err := componentrecord.ValidateComponentVersion(input.Current); err != nil {
 			return ComponentTaskPreparation{}, err
 		}
 		current := input.Current.Record.Desired

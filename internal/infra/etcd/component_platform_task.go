@@ -39,7 +39,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err := platformcomponents.ValidatePlatformComponentRecord(current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateComponentVersion(current); err != nil {
+	if err := componentrecord.ValidateComponentVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	replacement, err := componentrecord.ReplaceDesired(current.Record, desired)
