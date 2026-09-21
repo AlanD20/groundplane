@@ -1,11 +1,11 @@
-package etcd
+package backupruntime
 
 import (
-	"context"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	context "context"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testing "testing"
+	time "time"
 )
 
 // Rationale: the public Recovery Point paging seam carries only a stable id;
@@ -14,17 +14,17 @@ func TestRecoveryPointContinuationKeyRoundTripsToStableID(t *testing.T) {
 	t.Parallel()
 	environmentID := ids.NewAt(ids.KindEnvironment, time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC), 1)
 	pointID := ids.NewAt(ids.KindRecoveryPoint, time.Date(2026, 8, 27, 12, 1, 0, 0, time.UTC), 2)
-	key, err := backupRecoveryPointEnvironmentIndexKey(environmentID, pointID)
+	key, err := BackupRecoveryPointEnvironmentIndexKey(environmentID, pointID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := backupRecoveryPointIDFromEnvironmentIndexKey(environmentID, key)
+	got, err := BackupRecoveryPointIDFromEnvironmentIndexKey(environmentID, key)
 	if err != nil || got != pointID {
 		t.Fatalf("stable continuation = %q, %v; want %q", got, err, pointID)
 	}
-	if _, err := backupRecoveryPointIDFromEnvironmentIndexKey(
-		environmentID,
-		backupRecoveryPointEnvironmentPrefix+environmentID+"/not-an-inverted-ulid",
+	if _, err := BackupRecoveryPointIDFromEnvironmentIndexKey(
+		environmentID, BackupRecoveryPointEnvironmentPrefix+
+			environmentID+"/not-an-inverted-ulid",
 	); err == nil {
 		t.Fatal("continuation decoder accepted a storage-layout-shaped invalid boundary")
 	}
@@ -40,7 +40,7 @@ func TestVerifiedRecoveryPointPageScansHiddenRawPageBeforeVisiblePoint(t *testin
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 10)
 	hiddenID := ids.NewAt(ids.KindRecoveryPoint, at.Add(2*time.Minute), 11)
 	visibleID := ids.NewAt(ids.KindRecoveryPoint, at.Add(time.Minute), 12)
-	hiddenBoundary, err := backupRecoveryPointEnvironmentIndexKey(environmentID, hiddenID)
+	hiddenBoundary, err := BackupRecoveryPointEnvironmentIndexKey(environmentID, hiddenID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestVerifiedRecoveryPointPageScansHiddenRawPageBeforeVisiblePoint(t *testin
 	pages := []BackupRuntimePage[BackupRecoveryPointRecord]{
 		{Revision: 41, Next: hiddenBoundary},
 		{
-			Items: []Versioned[BackupRecoveryPointRecord]{{
+			Items: []testkeyvalue.Versioned[BackupRecoveryPointRecord]{{
 				Record: BackupRecoveryPointRecord{BackupRecoveryPointSnapshot: BackupRecoveryPointSnapshot{
 					ID: visibleID,
 				}},
@@ -59,9 +59,7 @@ func TestVerifiedRecoveryPointPageScansHiddenRawPageBeforeVisiblePoint(t *testin
 	}
 	page, err := collectVerifiedRecoveryPointPage(
 		ctx,
-		environmentID,
-		BackupRecoveryPointPageRequest{Limit: 1},
-		func(
+		environmentID, BackupRecoveryPointPageRequest{Limit: 1}, func(
 			_ context.Context,
 			gotEnvironmentID string,
 			request BackupRuntimeListRequest,

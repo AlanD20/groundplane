@@ -1,12 +1,12 @@
-package etcd
+package backupruntime
 
 import (
-	"errors"
-	"strings"
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/pkg/errs"
+	errors "errors"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	strings "strings"
+	testing "testing"
+	time "time"
 )
 
 // Rationale: scheduler replay and retention cleanup depend on one canonical key identity for a due occurrence.
@@ -15,7 +15,7 @@ func TestBackupRuntimeDueKeysPreserveCompositeIdentity(t *testing.T) {
 	scheduledAt := time.Unix(0, 123).UTC()
 	retainUntil := time.Unix(0, 456).UTC()
 
-	dueKey, err := backupDueOutcomeKey(environmentID, 41, scheduledAt)
+	dueKey, err := BackupDueOutcomeKey(environmentID, 41, scheduledAt)
 	if err != nil {
 		t.Fatalf("backupDueOutcomeKey() error = %v", err)
 	}
@@ -23,7 +23,7 @@ func TestBackupRuntimeDueKeysPreserveCompositeIdentity(t *testing.T) {
 		"/00000000000000000041/00000000000000000123" {
 		t.Fatalf("backupDueOutcomeKey() = %q", dueKey)
 	}
-	retentionKey, err := backupDueRetentionIndexKey(retainUntil, environmentID, 41, scheduledAt)
+	retentionKey, err := BackupDueRetentionIndexKey(retainUntil, environmentID, 41, scheduledAt)
 	if err != nil {
 		t.Fatalf("backupDueRetentionIndexKey() error = %v", err)
 	}
@@ -49,7 +49,7 @@ func TestBackupRecoveryPointIndexSuffixInvertsCanonicalULIDOrder(t *testing.T) {
 	if len(older) != 26 || len(newer) != 26 || newer >= older {
 		t.Fatalf("inverted suffixes older=%q newer=%q do not order newest first", older, newer)
 	}
-	restored, ok := invertBackupRecoveryPointULIDBody(older)
+	restored, ok := InvertBackupRecoveryPointULIDBody(older)
 	if !ok || restored != strings.TrimPrefix(olderID, "rp_") {
 		t.Fatalf("double inversion = %q, %v", restored, ok)
 	}
@@ -60,7 +60,7 @@ func TestBackupConnectorReverseReferenceKeysUseRawStablePointID(t *testing.T) {
 	connectorID := "con_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	pointID := "rp_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
-	pointKey, err := backupRecoveryPointConnectorIndexKey(connectorID, pointID)
+	pointKey, err := BackupRecoveryPointConnectorIndexKey(connectorID, pointID)
 	if err != nil {
 		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
 	}
@@ -69,7 +69,7 @@ func TestBackupConnectorReverseReferenceKeysUseRawStablePointID(t *testing.T) {
 		t.Fatalf("backupRecoveryPointConnectorIndexKey() = %q, want %q", pointKey, wantPointKey)
 	}
 
-	orphanKey, err := backupOrphanConnectorIndexKey(connectorID, pointID)
+	orphanKey, err := BackupOrphanConnectorIndexKey(connectorID, pointID)
 	if err != nil {
 		t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
 	}
@@ -91,23 +91,23 @@ func TestBackupRuntimeKeyConstructorsUseLockedV1Roots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backupScheduleCursorKey() error = %v", err)
 	}
-	volumeExclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetVolume, volumeID)
+	volumeExclusionKey, err := BackupSourceTargetExclusionKey(BackupSourceTargetVolume, volumeID)
 	if err != nil {
 		t.Fatalf("backupSourceTargetExclusionKey() error = %v", err)
 	}
-	connectorPointKey, err := backupRecoveryPointConnectorIndexKey(connectorID, pointID)
+	connectorPointKey, err := BackupRecoveryPointConnectorIndexKey(connectorID, pointID)
 	if err != nil {
 		t.Fatalf("backupRecoveryPointConnectorIndexKey() error = %v", err)
 	}
-	runEnvironmentKey, err := backupRunEnvironmentIndexKey(environmentID, taskID)
+	runEnvironmentKey, err := BackupRunEnvironmentIndexKey(environmentID, taskID)
 	if err != nil {
 		t.Fatalf("backupRunEnvironmentIndexKey() error = %v", err)
 	}
-	orphanConnectorKey, err := backupOrphanConnectorIndexKey(connectorID, pointID)
+	orphanConnectorKey, err := BackupOrphanConnectorIndexKey(connectorID, pointID)
 	if err != nil {
 		t.Fatalf("backupOrphanConnectorIndexKey() error = %v", err)
 	}
-	orphanEnvironmentKey, err := backupOrphanEnvironmentIndexKey(environmentID, pointID)
+	orphanEnvironmentKey, err := BackupOrphanEnvironmentIndexKey(environmentID, pointID)
 	if err != nil {
 		t.Fatalf("backupOrphanEnvironmentIndexKey() error = %v", err)
 	}
@@ -115,32 +115,32 @@ func TestBackupRuntimeKeyConstructorsUseLockedV1Roots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("backupRestoreEnvironmentIndexKey() error = %v", err)
 	}
-	rotationEnvironmentKey, err := backupKeyRotationEnvironmentIndexKey(environmentID, taskID)
+	rotationEnvironmentKey, err := BackupKeyRotationEnvironmentIndexKey(environmentID, taskID)
 	if err != nil {
 		t.Fatalf("backupKeyRotationEnvironmentIndexKey() error = %v", err)
 	}
 
 	cases := map[string]string{
 		"cursor":               cursorKey,
-		"lock":                 environmentOperationLockKey(environmentID),
+		"lock":                 testhierarchy.EnvironmentOperationLockKey(environmentID),
 		"source exclusion":     volumeExclusionKey,
-		"run":                  backupRunKey(taskID),
+		"run":                  BackupRunKey(taskID),
 		"run environment":      runEnvironmentKey,
-		"point":                backupRecoveryPointKey(pointID),
+		"point":                BackupRecoveryPointKey(pointID),
 		"point connector":      connectorPointKey,
-		"orphan":               backupOrphanKey(pointID),
+		"orphan":               BackupOrphanKey(pointID),
 		"orphan connector":     orphanConnectorKey,
 		"orphan environment":   orphanEnvironmentKey,
-		"retention":            backupRetentionKey(sourceID, pointID),
-		"prune":                backupRecoveryPointPruneKey(pointID),
-		"prune dispatch":       backupRecoveryPointPruneDispatchKey(taskID),
-		"terminal receipt":     backupTerminalReceiptKey(taskID),
+		"retention":            BackupRetentionKey(sourceID, pointID),
+		"prune":                BackupRecoveryPointPruneKey(pointID),
+		"prune dispatch":       BackupRecoveryPointPruneDispatchKey(taskID),
+		"terminal receipt":     BackupTerminalReceiptKey(taskID),
 		"restore":              backupRestoreKey(taskID),
 		"restore environment":  restoreEnvironmentKey,
 		"restore service":      backupRestoreServiceKey(taskID, 1),
-		"rotation":             backupKeyRotationKey(taskID),
+		"rotation":             BackupKeyRotationKey(taskID),
 		"rotation environment": rotationEnvironmentKey,
-		"mutation epoch":       environmentMutationEpochKey(environmentID),
+		"mutation epoch":       testhierarchy.EnvironmentMutationEpochKey(environmentID),
 	}
 	wants := map[string]string{
 		"cursor":           "/v1/runtime/backup-schedule-cursors/" + environmentID + "/00000000000000000007",
@@ -183,7 +183,7 @@ func TestBackupRuntimeOrderedKeysRejectNoncanonicalTimes(t *testing.T) {
 		time.Date(2500, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 	for _, invalid := range invalidTimes {
-		if _, err := backupDueOutcomeKey(environmentID, 1, invalid); !errors.Is(
+		if _, err := BackupDueOutcomeKey(environmentID, 1, invalid); !errors.Is(
 			err,
 			errs.New(errs.KindValidationFailed, ""),
 		) {

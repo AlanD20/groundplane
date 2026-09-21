@@ -1,9 +1,8 @@
-package etcd
+package releasequeries
 
 import (
-	"testing"
-
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	testing "testing"
 )
 
 func TestRollbackIntentMatchesBothIndexedOwners(t *testing.T) {

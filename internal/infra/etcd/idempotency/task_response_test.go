@@ -1,10 +1,9 @@
-package etcd
+package idempotency
 
 import (
-	"net/http"
-	"testing"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	http "net/http"
+	testing "testing"
 )
 
 func TestValidTaskResponseAcceptsCreatedResource(t *testing.T) {
@@ -17,7 +16,7 @@ func TestValidTaskResponseAcceptsCreatedResource(t *testing.T) {
 		),
 	}
 
-	if !validTaskResponse(response, taskID) {
+	if !ValidTaskResponse(response, taskID) {
 		t.Fatal("created Task response was rejected")
 	}
 }
@@ -49,7 +48,7 @@ func TestValidTaskResponseAcceptsUpdatedResource(t *testing.T) {
 		Body:        []byte(`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV","volume":{"slug":"data"}}`),
 	}
 
-	if !validTaskResponse(response, taskID) {
+	if !ValidTaskResponse(response, taskID) {
 		t.Fatal("updated Task response was rejected")
 	}
 }

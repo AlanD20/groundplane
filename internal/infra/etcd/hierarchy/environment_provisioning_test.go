@@ -1,10 +1,9 @@
-package etcd
+package hierarchy
 
 import (
-	"testing"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	testing "testing"
+	time "time"
 )
 
 func TestEnvironmentProvisioningFieldsRoundTrip(t *testing.T) {
@@ -22,11 +21,11 @@ func TestEnvironmentProvisioningFieldsRoundTrip(t *testing.T) {
 		CreatedAt:         createdAt,
 	}
 
-	encoded, err := encodeEnvironment(record)
+	encoded, err := EncodeEnvironment(record)
 	if err != nil {
 		t.Fatalf("encodeEnvironment() error = %v", err)
 	}
-	decoded, err := decodeEnvironment(encoded)
+	decoded, err := DecodeEnvironment(encoded)
 	if err != nil {
 		t.Fatalf("decodeEnvironment() error = %v", err)
 	}

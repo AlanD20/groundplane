@@ -1,10 +1,9 @@
-package etcd
+package idempotency
 
 import (
-	"testing"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/pkg/errs"
+	ids "github.com/AlanD20/groundplane/internal/common/ids"
+	errs "github.com/AlanD20/groundplane/pkg/errs"
+	testing "testing"
 )
 
 // Rationale: Runner deletion requires the same stable post-delete replay index

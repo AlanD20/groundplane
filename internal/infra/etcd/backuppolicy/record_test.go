@@ -1,4 +1,4 @@
-package etcd
+package backuppolicy_test
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"filippo.io/age"
 
 	"github.com/AlanD20/groundplane/internal/core"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,7 +20,7 @@ import (
 func TestBackupPolicyRecordRoundTripsCompleteEnabledState(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-	record := BackupPolicyRecord{
+	record := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Enabled:       true, Frequency: "*-*-* 03:15:00", Keep: 7, Encryption: "age",
 		ConnectorID: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
@@ -29,11 +30,11 @@ func TestBackupPolicyRecordRoundTripsCompleteEnabledState(t *testing.T) {
 		},
 		UpdatedAt: at,
 	}
-	encoded, err := encodeBackupPolicyRecord(record)
+	encoded, err := testbackuppolicy.EncodeBackupPolicyRecord(record)
 	if err != nil {
 		t.Fatalf("encodeBackupPolicyRecord() error = %v", err)
 	}
-	decoded, err := decodeBackupPolicyRecord(encoded)
+	decoded, err := testbackuppolicy.DecodeBackupPolicyRecord(encoded)
 	if err != nil {
 		t.Fatalf("decodeBackupPolicyRecord() error = %v", err)
 	}
@@ -49,29 +50,29 @@ func TestBackupPolicyRecordRoundTripsCompleteEnabledState(t *testing.T) {
 // without depending on machine word size and reject the next integer.
 func TestBackupPolicyRecordEnforcesMaximumPublicKeep(t *testing.T) {
 	t.Parallel()
-	record := BackupPolicyRecord{
+	record := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Enabled:       true,
 		Frequency:     "*-*-* 03:15:00",
-		Keep:          MaximumBackupPolicyKeep,
+		Keep:          testbackuppolicy.MaximumBackupPolicyKeep,
 		Encryption:    "none",
 		ConnectorID:   "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		SourceIDs:     []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 		UpdatedAt:     time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC),
 	}
-	encoded, err := encodeBackupPolicyRecord(record)
+	encoded, err := testbackuppolicy.EncodeBackupPolicyRecord(record)
 	if err != nil {
 		t.Fatalf("encodeBackupPolicyRecord(maximum Keep) error = %v", err)
 	}
-	decoded, err := decodeBackupPolicyRecord(encoded)
+	decoded, err := testbackuppolicy.DecodeBackupPolicyRecord(encoded)
 	if err != nil {
 		t.Fatalf("decodeBackupPolicyRecord(maximum Keep) error = %v", err)
 	}
-	if decoded.Keep != MaximumBackupPolicyKeep {
-		t.Fatalf("decoded Keep = %d, want %d", decoded.Keep, MaximumBackupPolicyKeep)
+	if decoded.Keep != testbackuppolicy.MaximumBackupPolicyKeep {
+		t.Fatalf("decoded Keep = %d, want %d", decoded.Keep, testbackuppolicy.MaximumBackupPolicyKeep)
 	}
 	record.Keep++
-	if _, err := encodeBackupPolicyRecord(record); !errors.Is(
+	if _, err := testbackuppolicy.EncodeBackupPolicyRecord(record); !errors.Is(
 		err, errs.New(errs.KindValidationFailed, ""),
 	) {
 		t.Fatalf("encodeBackupPolicyRecord(Keep above maximum) error = %v", err)
@@ -91,11 +92,11 @@ func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T
 		allConfiguredFields = frequencyField | keepField | encryptionField | connectorField | sourcesField
 	)
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-	base := BackupPolicyRecord{
+	base := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		UpdatedAt:     at,
 	}
-	if err := validateBackupPolicyRecord(base); err != nil {
+	if err := testbackuppolicy.ValidateBackupPolicyRecord(base); err != nil {
 		t.Fatalf("validateBackupPolicyRecord(unconfigured disabled) error = %v", err)
 	}
 	for fields := 1; fields < allConfiguredFields; fields++ {
@@ -119,12 +120,12 @@ func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T
 				record.SourceIDs = []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"}
 			}
 			if fields == allConfiguredFields&^sourcesField {
-				if err := validateBackupPolicyRecord(record); err != nil {
+				if err := testbackuppolicy.ValidateBackupPolicyRecord(record); err != nil {
 					t.Fatalf("retained disabled configuration without sources: %v", err)
 				}
 				return
 			}
-			if err := validateBackupPolicyRecord(record); !errors.Is(
+			if err := testbackuppolicy.ValidateBackupPolicyRecord(record); !errors.Is(
 				err,
 				errs.New(errs.KindValidationFailed, ""),
 			) {
@@ -138,7 +139,7 @@ func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T
 	configured.Encryption = "none"
 	configured.ConnectorID = "con_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	configured.SourceIDs = []string{"spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"}
-	if err := validateBackupPolicyRecord(configured); err != nil {
+	if err := testbackuppolicy.ValidateBackupPolicyRecord(configured); err != nil {
 		t.Fatalf("validateBackupPolicyRecord(configured disabled) error = %v", err)
 	}
 }
@@ -147,18 +148,18 @@ func TestBackupPolicyRecordRejectsEveryPartialDisabledConfiguration(t *testing.T
 // is removed, but an enabled policy still requires a selected source.
 func TestBackupPolicyRecordRetainsConfigurationAfterLastVolumeSource(t *testing.T) {
 	t.Parallel()
-	record := BackupPolicyRecord{
+	record := testbackuppolicy.BackupPolicyRecord{
 		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Frequency:     "*-*-* 03:15:00", Keep: 7, Encryption: "age",
 		ConnectorID: "con_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		UpdatedAt:   time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC),
 	}
-	encoded, err := encodeBackupPolicyRecord(record)
+	encoded, err := testbackuppolicy.EncodeBackupPolicyRecord(record)
 	if err != nil {
 		t.Fatalf("encode retained policy after last source removal: %v", err)
 	}
 	defer clear(encoded)
-	decoded, err := decodeBackupPolicyRecord(encoded)
+	decoded, err := testbackuppolicy.DecodeBackupPolicyRecord(encoded)
 	if err != nil || decoded.Enabled || len(decoded.SourceIDs) != 0 ||
 		decoded.Frequency != record.Frequency || decoded.Keep != record.Keep ||
 		decoded.Encryption != record.Encryption || decoded.ConnectorID != record.ConnectorID ||
@@ -166,7 +167,10 @@ func TestBackupPolicyRecordRetainsConfigurationAfterLastVolumeSource(t *testing.
 		t.Fatalf("retained policy did not survive persistence: %v", err)
 	}
 	record.Enabled = true
-	if _, err := encodeBackupPolicyRecord(record); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if _, err := testbackuppolicy.EncodeBackupPolicyRecord(record); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("enabled policy without a source accepted: %v", err)
 	}
 }
@@ -177,7 +181,7 @@ func TestBackupPolicyRecordRejectsIncompleteEnabledAndDuplicateSources(t *testin
 	t.Parallel()
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
 	sourceID := "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	for name, record := range map[string]BackupPolicyRecord{
+	for name, record := range map[string]testbackuppolicy.BackupPolicyRecord{
 		"negative retention": {
 			EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Keep: -1, UpdatedAt: at,
 		},
@@ -193,7 +197,10 @@ func TestBackupPolicyRecordRejectsIncompleteEnabledAndDuplicateSources(t *testin
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if err := validateBackupPolicyRecord(record); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+			if err := testbackuppolicy.ValidateBackupPolicyRecord(record); !errors.Is(
+				err,
+				errs.New(errs.KindValidationFailed, ""),
+			) {
 				t.Fatalf("validateBackupPolicyRecord() error = %v, want validation failure", err)
 			}
 		})
@@ -205,24 +212,24 @@ func TestBackupPolicyRecordRejectsIncompleteEnabledAndDuplicateSources(t *testin
 func TestBackupSourceRecordEnforcesKindSpecificStableTarget(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-	base := BackupSourceRecord{
+	base := testbackuppolicy.BackupSourceRecord{
 		ID: "spt_01ARZ3NDEKTSV4RRFFQ69G5FAV", EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		CreatedAt: at,
 	}
-	for name, source := range map[string]BackupSourceRecord{
-		"attach": func() BackupSourceRecord {
+	for name, source := range map[string]testbackuppolicy.BackupSourceRecord{
+		"attach": func() testbackuppolicy.BackupSourceRecord {
 			source := base
 			source.Kind = core.BackupSourceAttach
 			source.TargetID = "att_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 			return source
 		}(),
-		"volume": func() BackupSourceRecord {
+		"volume": func() testbackuppolicy.BackupSourceRecord {
 			source := base
 			source.Kind = core.BackupSourceVolume
 			source.TargetID = "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 			return source
 		}(),
-		"config": func() BackupSourceRecord {
+		"config": func() testbackuppolicy.BackupSourceRecord {
 			source := base
 			source.Kind = core.BackupSourceConfig
 			source.TargetID = source.EnvironmentID
@@ -231,7 +238,7 @@ func TestBackupSourceRecordEnforcesKindSpecificStableTarget(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if err := validateBackupSourceRecord(source); err != nil {
+			if err := testbackuppolicy.ValidateBackupSourceRecord(source); err != nil {
 				t.Fatalf("validateBackupSourceRecord() error = %v", err)
 			}
 		})
@@ -239,7 +246,10 @@ func TestBackupSourceRecordEnforcesKindSpecificStableTarget(t *testing.T) {
 	invalid := base
 	invalid.Kind = core.BackupSourceConfig
 	invalid.TargetID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	if err := validateBackupSourceRecord(invalid); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+	if err := testbackuppolicy.ValidateBackupSourceRecord(invalid); !errors.Is(
+		err,
+		errs.New(errs.KindValidationFailed, ""),
+	) {
 		t.Fatalf("validateBackupSourceRecord(invalid config) error = %v", err)
 	}
 }
@@ -253,22 +263,22 @@ func TestBackupKeyRecordsSeparatePublicMetadataFromCiphertext(t *testing.T) {
 		t.Fatalf("age.GenerateX25519Identity() error = %v", err)
 	}
 	at := time.Date(2026, 8, 23, 12, 0, 0, 0, time.UTC)
-	metadata := BackupKeyRecord{
+	metadata := testbackuppolicy.BackupKeyRecord{
 		EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		Recipient:     identity.Recipient().String(), KeyEra: 1, CreatedAt: at, RotatedAt: at,
 	}
-	if _, err := encodeBackupKeyRecord(metadata); err != nil {
+	if _, err := testbackuppolicy.EncodeBackupKeyRecord(metadata); err != nil {
 		t.Fatalf("encodeBackupKeyRecord() error = %v", err)
 	}
-	value := BackupKeyEncryptedValue{
+	value := testbackuppolicy.BackupKeyEncryptedValue{
 		EnvironmentID: metadata.EnvironmentID, KeyEra: metadata.KeyEra,
 		Ciphertext: []byte("controller-key-wrapped-identity"),
 	}
-	encoded, err := encodeBackupKeyEncryptedValue(value)
+	encoded, err := testbackuppolicy.EncodeBackupKeyEncryptedValue(value)
 	if err != nil {
 		t.Fatalf("encodeBackupKeyEncryptedValue() error = %v", err)
 	}
-	decoded, err := decodeBackupKeyEncryptedValue(encoded)
+	decoded, err := testbackuppolicy.DecodeBackupKeyEncryptedValue(encoded)
 	if err != nil {
 		t.Fatalf("decodeBackupKeyEncryptedValue() error = %v", err)
 	}

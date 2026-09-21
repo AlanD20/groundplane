@@ -1,12 +1,11 @@
-package etcd
+package environmentprojection
 
 import (
-	"strconv"
-	"testing"
-
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
+	proto "google.golang.org/protobuf/proto"
+	strconv "strconv"
+	testing "testing"
 )
 
 // Rationale: executed artifacts cover logical Services through closed runtime

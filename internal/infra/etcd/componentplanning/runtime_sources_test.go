@@ -1,4 +1,4 @@
-package etcd
+package componentplanning
 
 import (
 	"reflect"
@@ -7,6 +7,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -27,7 +30,7 @@ func TestManagedComponentRuntimeSourcesCarryFailedHeadThenDisable(t *testing.T) 
 	oldTunnelService := ids.NewAt(ids.KindService, now, 9)
 	newTunnelService := ids.NewAt(ids.KindService, now, 10)
 	oldDigest := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	oldSources := []ManagedComponentRuntimeSource{
+	oldSources := []testenvironmentprojection.ManagedComponentRuntimeSource{
 		{ComponentKind: core.ComponentKindIngressCaddy, ComponentID: caddyID, ServiceID: oldCaddyService,
 			ComposeName: "caddy-old", RevisionID: oldRevision, ArtifactID: oldArtifact, ArtifactSHA256: oldDigest},
 		{ComponentKind: core.ComponentKindEdgeCloudflare, ComponentID: tunnelID, ServiceID: oldTunnelService,
@@ -39,15 +42,19 @@ func TestManagedComponentRuntimeSourcesCarryFailedHeadThenDisable(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	failedHead := EnvironmentComposeProjection{
+	failedHead := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: failedRevision, ComposeArtifact: artifactBytes,
-		Components: []ComponentRecord{
+		Components: []testcomponents.Record{
 			managedComponentSourceRecord(t, environmentID, caddyID, core.ComponentKindIngressCaddy, false, "", ""),
 			managedComponentSourceRecord(t, environmentID, tunnelID, core.ComponentKindEdgeCloudflare, false, "", ""),
 		},
 		ManagedComponentRuntimeSources: oldSources,
 	}
-	carried, err := ProjectManagedComponentRuntimeSources(ComponentTaskPreparation{}, failedHead)
+	carried, err := testenvironmentprojection.SelectManagedComponentRuntimeSources(
+		failedHead,
+		testenvironmentprojection.EnvironmentComposeProjection{},
+		false,
+	)
 	if err != nil {
 		t.Fatalf("failed desired head source carry = %v", err)
 	}
@@ -74,25 +81,34 @@ func TestManagedComponentRuntimeSourcesCarryFailedHeadThenDisable(t *testing.T) 
 		"",
 	)
 	taskID := ids.NewAt(ids.KindTask, now, 11)
-	intent, err := NewComponentTaskIntent(taskID, environmentID, []ComponentTaskCandidate{{
-		CurrentRevision: 7, Current: currentTunnel, Candidate: disabledTunnel,
-	}}, now)
+	intent, err := testenvironmentchanges.NewComponentTaskIntent(
+		taskID,
+		environmentID,
+		[]testenvironmentchanges.ComponentTaskCandidate{{
+			CurrentRevision: 7, Current: currentTunnel, Candidate: disabledTunnel,
+		}},
+		now,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	disabledProjection := failedHead
-	disabledProjection.Components = []ComponentRecord{
+	disabledProjection.Components = []testcomponents.Record{
 		failedHead.Components[0], disabledTunnel,
 	}
 	preparation := ComponentTaskPreparation{
 		Intent: intent, managedRuntimeSources: oldSources, desiredProjectionRevision: 12,
 	}
-	retained, err := ProjectManagedComponentRuntimeSources(preparation, disabledProjection)
-	if err != nil {
-		t.Fatalf("disable source retention = %v", err)
+	if err := ValidateComponentTaskPreparation(preparation); err != nil {
+		t.Fatalf("ValidateComponentTaskPreparation() error = %v", err)
 	}
+	retained := preparation.ManagedComponentTeardownSources()
 	if !reflect.DeepEqual(retained, oldSources) {
 		t.Fatalf("disable changed historical source descriptors: %#v", retained)
+	}
+	retained[0].ComposeName = "mutated"
+	if reflect.DeepEqual(preparation.ManagedComponentTeardownSources(), retained) {
+		t.Fatal("managed Component teardown sources leaked mutable preparation authority")
 	}
 
 	newArtifactBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(&agentpb.ComposeArtifact{
@@ -113,26 +129,25 @@ func TestManagedComponentRuntimeSourcesCarryFailedHeadThenDisable(t *testing.T) 
 		newTunnelService,
 		"",
 	)
-	enableIntent, err := NewComponentTaskIntent(
-		ids.NewAt(ids.KindTask, now, 13),
-		environmentID,
-		[]ComponentTaskCandidate{{
-			CurrentRevision: 8, Current: disabledTunnel, Candidate: enabledTunnel,
-		}},
-		now,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
 	enableProjection := disabledProjection
 	enableProjection.ComposeArtifact = newArtifactBytes
-	enableProjection.Components = []ComponentRecord{failedHead.Components[0], enabledTunnel}
-	replaced, err := ProjectManagedComponentRuntimeSources(ComponentTaskPreparation{
-		Intent: enableIntent, managedRuntimeSources: oldSources, desiredProjectionRevision: 14,
-	}, enableProjection)
-	if err != nil {
-		t.Fatalf("enabled source replacement = %v", err)
+	enableProjection.Components = []testcomponents.Record{failedHead.Components[0], enabledTunnel}
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(newArtifactBytes, artifact); err != nil {
+		t.Fatalf("Unmarshal(ComposeArtifact) error = %v", err)
 	}
+	replacement, err := testenvironmentprojection.PrepareManagedComponentRuntimeSource(
+		enableProjection,
+		enabledTunnel,
+		artifact,
+	)
+	if err != nil {
+		t.Fatalf("PrepareManagedComponentRuntimeSource() error = %v", err)
+	}
+	replaced := testenvironmentprojection.ReplaceManagedComponentRuntimeSource(
+		append([]testenvironmentprojection.ManagedComponentRuntimeSource(nil), oldSources...),
+		replacement,
+	)
 	if len(replaced) != 2 || replaced[0] != oldSources[0] || replaced[1].ServiceID != newTunnelService ||
 		replaced[1].RevisionID != failedRevision || replaced[1].ArtifactID != newArtifact || replaced[1].ComposeName != "tunnel-new" {
 		t.Fatalf("enabled candidate did not replace only its source: %#v", replaced)
@@ -145,7 +160,7 @@ func managedComponentSourceRecord(
 	kind core.ComponentKind,
 	enabled bool,
 	serviceID, zoneID string,
-) ComponentRecord {
+) testcomponents.Record {
 	t.Helper()
 	component := core.Component{
 		ID:      componentID,
@@ -165,7 +180,7 @@ func managedComponentSourceRecord(
 			component.Config = core.ComponentConfig{Caddy: &core.CaddyComponentConfig{ZoneIDs: []string{zoneID}}}
 		}
 	}
-	record, err := NewComponentRecord(component)
+	record, err := testcomponents.NewRecord(component)
 	if err != nil {
 		t.Fatalf("NewComponentRecord() error = %v", err)
 	}
