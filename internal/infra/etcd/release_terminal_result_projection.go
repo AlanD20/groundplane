@@ -1,0 +1,160 @@
+package etcd
+
+import (
+	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"strconv"
+	"time"
+)
+
+func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus TaskStatus, result TaskResultRecord) (uint32, error) {
+	if terminalStatus == TaskStatusCompleted {
+		return 0, nil
+	}
+	ordinal := releaseFailedOrdinalFromResult(task, result)
+	if ordinal == 0 &&
+		(result.Diagnostic == TaskResultDiagnosticTimeoutBeforeEffect || unassignedReleaseAbort(task, terminalStatus)) {
+		return 1, nil
+	}
+	if ordinal == 0 {
+		return 0, errs.New(errs.KindStateConflict, "release failed step is outside the frozen procedure")
+	}
+	return ordinal, nil
+}
+
+func releaseFailedOrdinalFromResult(task TaskRecord, result TaskResultRecord) uint32 {
+	for index, step := range task.Steps {
+		if step.ID == result.FailedStepID {
+			if value := task.Params[ReleaseHookStepMemberParam(step.ID)]; value != "" {
+				ordinal, err := strconv.ParseUint(value, 10, 32)
+				if err != nil || ordinal == 0 {
+					return 0
+				}
+				return uint32(ordinal)
+			}
+			if task.Params[ReleaseHookStepExecutionParam(step.ID)] != "" {
+				return 0
+			}
+			return uint32(index/5 + 1)
+		}
+	}
+	return 0
+}
+
+func releaseMemberTerminalState(
+	head ReleaseOperationHead,
+	ordinal uint32,
+	terminalStatus TaskStatus,
+	failedOrdinal uint32,
+	result TaskResultRecord,
+	compensated bool,
+) (domain.State, bool, bool) {
+	if terminalStatus == TaskStatusCompleted {
+		return domain.StateCompleted, true, false
+	}
+	if compensated {
+		return domain.StateFailed, false, false
+	}
+	if ordinal < failedOrdinal {
+		if head.FailurePolicy == domain.OnFailureSwitchBack {
+			return domain.StateRecoveryRequired, true, true
+		}
+		return domain.StateCompleted, true, false
+	}
+	if ordinal > failedOrdinal {
+		return domain.StateAborted, false, false
+	}
+	if result.ReconciliationRequired {
+		return domain.StateRecoveryRequired, false, true
+	}
+	switch terminalStatus {
+	case TaskStatusTimedOut:
+		return domain.StateTimedOut, false, false
+	case TaskStatusAborted:
+		return domain.StateAborted, false, false
+	default:
+		return domain.StateFailed, false, false
+	}
+}
+
+func releaseProxyEvidence(result TaskResultRecord, serviceID string) (TaskProxyEvidence, bool) {
+	for _, evidence := range result.ProxyEvidence {
+		if evidence.ServiceID == serviceID {
+			return evidence, true
+		}
+	}
+	return TaskProxyEvidence{}, false
+}
+
+func releaseRecreateEvidence(result TaskResultRecord, serviceID string) (TaskRecreateEvidence, bool) {
+	for _, evidence := range result.RecreateEvidence {
+		if evidence.ServiceID == serviceID {
+			return evidence, true
+		}
+	}
+	return TaskRecreateEvidence{}, false
+}
+
+func releaseOperationTerminalState(status TaskStatus) domain.State {
+	switch status {
+	case TaskStatusCompleted:
+		return domain.StateCompleted
+	case TaskStatusTimedOut:
+		return domain.StateTimedOut
+	case TaskStatusAborted:
+		return domain.StateAborted
+	default:
+		return domain.StateFailed
+	}
+}
+
+func releaseRollbackMaterial(intent domain.Intent, state domain.State, terminalAt time.Time) domain.RollbackMaterial {
+	references := []string{intent.RenderInputID, intent.CandidateWorkload.LocalImageID}
+	digest, _ := domain.Digest(references)
+	material := domain.RollbackMaterial{
+		ReleaseID: intent.ID, Status: domain.RetentionAvailable,
+		References: references, Digest: digest, Revision: 1,
+	}
+	if state != domain.StateCompleted {
+		material.Status = domain.RetentionExpired
+		expired := terminalAt
+		material.ExpiredAt = &expired
+	}
+	return material
+}
+
+func releaseTerminalSummary(
+	intent domain.Intent,
+	state domain.State,
+	servingReleaseID string,
+	evidence []domain.EffectEvidence,
+	attempts []domain.Attempt,
+	materialDigest string,
+	terminalAt time.Time,
+) domain.TerminalSummary {
+	effectDigests := make([]string, len(evidence))
+	for index := range evidence {
+		effectDigests[index] = evidence[index].EffectDigest
+	}
+	attemptIDs := make([]string, len(attempts))
+	for index := range attempts {
+		attemptIDs[index] = attempts[index].TaskID
+	}
+	return domain.TerminalSummary{
+		ReleaseID: intent.ID, Outcome: state, FinalServingReleaseID: servingReleaseID,
+		EffectDigests: effectDigests, AttemptIDs: attemptIDs,
+		RollbackMaterialDigest: materialDigest, CompletedAt: terminalAt,
+	}
+}
+
+func releasePriorServingEvidence(result TaskResultRecord, serviceID string) string {
+	evidence, found := releaseProxyEvidence(result, serviceID)
+	if found {
+		return evidence.ReleaseID
+	}
+	recreate, found := releaseRecreateEvidence(result, serviceID)
+	if found {
+		return recreate.ReleaseID
+	}
+	return ""
+}
