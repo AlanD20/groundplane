@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"time"
 
@@ -26,7 +27,7 @@ func NewDurableBackupPolicyRepository(
 func (repository *PolicyRepository) GetBackupPolicyProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcd.BackupPolicyProjection, error) {
+) (backupqueries.BackupPolicyProjection, error) {
 	return repository.repository.GetBackupPolicyProjection(ctx, environmentID)
 }
 
@@ -49,10 +50,10 @@ func (repository *PolicyRepository) SupplyBackupPolicyInitialKey(
 func (repository *PolicyRepository) FinalizeBackupPolicySchedule(
 	prepared etcd.PreparedBackupPolicyReplacement,
 	now time.Time,
-) (etcd.PreparedBackupPolicyReplacement, etcd.BackupPolicyProjection, error) {
+) (etcd.PreparedBackupPolicyReplacement, backupqueries.BackupPolicyProjection, error) {
 	finalized, err := prepared.FinalizeSchedule(now)
 	if err != nil {
-		return etcd.PreparedBackupPolicyReplacement{}, etcd.BackupPolicyProjection{}, err
+		return etcd.PreparedBackupPolicyReplacement{}, backupqueries.BackupPolicyProjection{}, err
 	}
 	return finalized, finalized.Projection(), nil
 }

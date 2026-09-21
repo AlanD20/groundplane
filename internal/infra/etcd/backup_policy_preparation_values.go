@@ -2,6 +2,7 @@ package etcd
 
 import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -40,19 +41,19 @@ func newbackupPolicyInitialKey(
 	return initial, nil
 }
 
-func backupPolicyProjectionFromCandidate(candidate backupPolicyReplacementCandidate) BackupPolicyProjection {
-	projection := BackupPolicyProjection{
+func backupPolicyProjectionFromCandidate(candidate backupPolicyReplacementCandidate) backupqueries.BackupPolicyProjection {
+	projection := backupqueries.BackupPolicyProjection{
 		EnvironmentID: candidate.Replacement.EnvironmentID,
 		Enabled:       candidate.Replacement.Enabled,
 		Frequency:     candidate.Replacement.Frequency,
 		Keep:          candidate.Replacement.Keep,
 		Encryption:    candidate.Replacement.Encryption,
 		ConnectorID:   candidate.Replacement.ConnectorID,
-		Sources:       make([]BackupPolicySourceProjection, len(candidate.Sources)),
+		Sources:       make([]backupqueries.BackupPolicySourceProjection, len(candidate.Sources)),
 		NextRunAt:     backupPolicyNextRunAt(candidate.NextRunAt),
 	}
 	for index, source := range candidate.Sources {
-		projection.Sources[index] = BackupPolicySourceProjection{
+		projection.Sources[index] = backupqueries.BackupPolicySourceProjection{
 			ID: source.Source.Record.ID, Kind: source.Source.Record.Kind,
 			TargetID: source.Source.Record.TargetID,
 		}

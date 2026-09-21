@@ -60,16 +60,16 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	}
 	current, err := backuppolicy.DecodeBackupKeyRecord(anchor.Values[1].Value)
 	if err != nil {
-		return PreparedBackupKeyRotation{}, corruptBackupKey()
+		return PreparedBackupKeyRotation{}, backuppolicy.CorruptBackupKey()
 	}
 	currentValue, err := backuppolicy.DecodeBackupKeyEncryptedValue(anchor.Values[2].Value)
 	if err != nil {
-		return PreparedBackupKeyRotation{}, corruptBackupKey()
+		return PreparedBackupKeyRotation{}, backuppolicy.CorruptBackupKey()
 	}
 	defer clear(currentValue.Ciphertext)
 	if current.EnvironmentID != input.EnvironmentID || currentValue.EnvironmentID != input.EnvironmentID ||
 		current.KeyEra != currentValue.KeyEra {
-		return PreparedBackupKeyRotation{}, corruptBackupKey()
+		return PreparedBackupKeyRotation{}, backuppolicy.CorruptBackupKey()
 	}
 	fence, err := environmentfence.LoadOrdinary(ctx, repository.store, input.EnvironmentID, anchor.ReadRevision)
 	if err != nil {

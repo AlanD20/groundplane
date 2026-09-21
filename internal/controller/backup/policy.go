@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
@@ -21,7 +22,7 @@ import (
 const backupPolicyReplacementRoute = "/environments/{id}/backup-policy"
 
 type backupPolicyRepository interface {
-	GetBackupPolicyProjection(context.Context, string) (etcd.BackupPolicyProjection, error)
+	GetBackupPolicyProjection(context.Context, string) (backupqueries.BackupPolicyProjection, error)
 	PrepareBackupPolicyReplacement(
 		context.Context,
 		backuppolicy.BackupPolicyReplacementInput,
@@ -34,7 +35,7 @@ type backupPolicyRepository interface {
 	FinalizeBackupPolicySchedule(
 		etcd.PreparedBackupPolicyReplacement,
 		time.Time,
-	) (etcd.PreparedBackupPolicyReplacement, etcd.BackupPolicyProjection, error)
+	) (etcd.PreparedBackupPolicyReplacement, backupqueries.BackupPolicyProjection, error)
 	ReplaceBackupPolicyProtected(
 		context.Context,
 		etcd.PreparedBackupPolicyReplacement,
@@ -253,7 +254,7 @@ func (service *PolicyService) SetBackupPolicy(
 		}
 	}
 	transitionAt := service.now().UTC().Truncate(time.Second)
-	var projection etcd.BackupPolicyProjection
+	var projection backupqueries.BackupPolicyProjection
 	prepared, projection, err = service.repository.FinalizeBackupPolicySchedule(prepared, transitionAt)
 	if err != nil {
 		return apiTypes.BackupPolicyMutationResult{}, err
@@ -315,7 +316,7 @@ func backupPolicyReplacementInput(
 	}
 }
 
-func backupPolicyAPI(projection etcd.BackupPolicyProjection) apiTypes.BackupPolicy {
+func backupPolicyAPI(projection backupqueries.BackupPolicyProjection) apiTypes.BackupPolicy {
 	sources := make([]apiTypes.BackupSource, len(projection.Sources))
 	for index, source := range projection.Sources {
 		sources[index] = apiTypes.BackupSource{

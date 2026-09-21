@@ -36,16 +36,16 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 	defer etcdstore.ClearValues(read.Values)
 	rotation, err := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
 	if err != nil {
-		return corruptBackupKey()
+		return backuppolicy.CorruptBackupKey()
 	}
 	defer clear(rotation.NextEncryptedIdentity)
 	current, err := backuppolicy.DecodeBackupKeyRecord(read.Values[1].Value)
 	if err != nil {
-		return corruptBackupKey()
+		return backuppolicy.CorruptBackupKey()
 	}
 	currentValue, err := backuppolicy.DecodeBackupKeyEncryptedValue(read.Values[2].Value)
 	if err != nil {
-		return corruptBackupKey()
+		return backuppolicy.CorruptBackupKey()
 	}
 	defer clear(currentValue.Ciphertext)
 	if rotation.TaskID != task.ID || rotation.OperationID != task.OperationID ||

@@ -91,16 +91,16 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 	defer etcdstore.ClearValues(read.Values)
 	rotation, err := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
 	if err != nil {
-		return backupKeyRotationTaskChange{}, corruptBackupKey()
+		return backupKeyRotationTaskChange{}, backuppolicy.CorruptBackupKey()
 	}
 	defer clear(rotation.NextEncryptedIdentity)
 	current, err := backuppolicy.DecodeBackupKeyRecord(read.Values[1].Value)
 	if err != nil {
-		return backupKeyRotationTaskChange{}, corruptBackupKey()
+		return backupKeyRotationTaskChange{}, backuppolicy.CorruptBackupKey()
 	}
 	currentValue, err := backuppolicy.DecodeBackupKeyEncryptedValue(read.Values[2].Value)
 	if err != nil {
-		return backupKeyRotationTaskChange{}, corruptBackupKey()
+		return backupKeyRotationTaskChange{}, backuppolicy.CorruptBackupKey()
 	}
 	defer clear(currentValue.Ciphertext)
 	lock, err := backupruntime.DecodeBackupOperationLockRecord(read.Values[3].Value)

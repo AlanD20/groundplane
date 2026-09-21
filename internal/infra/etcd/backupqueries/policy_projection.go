@@ -1,4 +1,4 @@
-package etcd
+package backupqueries
 
 import (
 	"context"
@@ -12,10 +12,13 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupschedule"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+type policyReader interface {
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+}
 
 // BackupPolicySourceProjection is the stable public-safe identity of one
 // selected source. Mutable labels are deliberately absent.
@@ -43,17 +46,13 @@ type BackupPolicyProjection struct {
 	NextRunAt     *time.Time
 }
 
-func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
+// ReadPolicySnapshot joins a validated Environment's policy at one revision.
+func ReadPolicySnapshot(
 	ctx context.Context,
+	store policyReader,
 	environmentID string,
 ) (BackupPolicyProjection, error) {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return BackupPolicyProjection{}, err
-	}
-	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return BackupPolicyProjection{}, err
-	}
-	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
+	base, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentKey(environmentID),
 		backuppolicy.BackupPolicyKey(environmentID),
 		backuppolicy.BackupKeyKey(environmentID),
@@ -97,7 +96,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		return BackupPolicyProjection{}, err
 	}
 	if policy == nil && key != nil {
-		return BackupPolicyProjection{}, corruptBackupKey()
+		return BackupPolicyProjection{}, backuppolicy.CorruptBackupKey()
 	}
 
 	keys := []string{hierarchyrecord.ProjectKey(environment.ProjectID)}
@@ -119,7 +118,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 			keys = append(keys, backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID))
 		}
 	}
-	support, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: base.ReadRevision})
+	support, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: base.ReadRevision})
 	if err != nil {
 		return BackupPolicyProjection{}, err
 	}
@@ -216,7 +215,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		})
 	}
 	if len(identityKeys) > 0 {
-		identityIndexes, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		identityIndexes, readErr := store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: identityKeys, Revision: base.ReadRevision,
 		})
 		if readErr != nil {
@@ -268,7 +267,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		projection.KeyCreatedAt = key.CreatedAt
 		projection.KeyRotatedAt = key.RotatedAt
 	} else if policy.Enabled && policy.Encryption == "age" {
-		return BackupPolicyProjection{}, corruptBackupKey()
+		return BackupPolicyProjection{}, backuppolicy.CorruptBackupKey()
 	}
 	return projection, nil
 }
@@ -282,25 +281,25 @@ func decodeBackupPolicyProjectionKey(
 		return nil, nil
 	}
 	if recordValue == nil || encryptedValue == nil {
-		return nil, corruptBackupKey()
+		return nil, backuppolicy.CorruptBackupKey()
 	}
 	record, err := backuppolicy.DecodeBackupKeyRecord(recordValue.Value)
 	if err != nil {
-		return nil, corruptBackupKey()
+		return nil, backuppolicy.CorruptBackupKey()
 	}
 	encrypted, err := backuppolicy.DecodeBackupKeyEncryptedValue(encryptedValue.Value)
 	if err != nil {
-		return nil, corruptBackupKey()
+		return nil, backuppolicy.CorruptBackupKey()
 	}
 	defer clear(encrypted.Ciphertext)
 	if record.EnvironmentID != environmentID || encrypted.EnvironmentID != environmentID ||
 		record.KeyEra != encrypted.KeyEra {
-		return nil, corruptBackupKey()
+		return nil, backuppolicy.CorruptBackupKey()
 	}
 	return &record, nil
 }
 
-func cloneBackupPolicyProjection(projection BackupPolicyProjection) BackupPolicyProjection {
+func CloneBackupPolicyProjection(projection BackupPolicyProjection) BackupPolicyProjection {
 	projection.Sources = append([]BackupPolicySourceProjection(nil), projection.Sources...)
 	if projection.NextRunAt != nil {
 		next := *projection.NextRunAt

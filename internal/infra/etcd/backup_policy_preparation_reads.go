@@ -156,19 +156,19 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		return backupPolicyReplacementCandidate{}, false, coordinationrecord.CorruptRecord()
 	}
 	if (result.Values[5] == nil) != (result.Values[6] == nil) {
-		return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
+		return backupPolicyReplacementCandidate{}, false, backuppolicy.CorruptBackupKey()
 	}
 	keyFound := result.Values[5] != nil
 	if keyFound {
 		record, decodeErr := backuppolicy.DecodeBackupKeyRecord(result.Values[5].Value)
 		if decodeErr != nil {
-			return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
+			return backupPolicyReplacementCandidate{}, false, backuppolicy.CorruptBackupKey()
 		}
 		encrypted, decodeErr := backuppolicy.DecodeBackupKeyEncryptedValue(result.Values[6].Value)
 		if decodeErr != nil || record.EnvironmentID != input.EnvironmentID ||
 			encrypted.EnvironmentID != input.EnvironmentID || record.KeyEra != encrypted.KeyEra {
 			clear(encrypted.Ciphertext)
-			return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
+			return backupPolicyReplacementCandidate{}, false, backuppolicy.CorruptBackupKey()
 		}
 		candidate.ExistingKey = &backuppolicy.VersionedBackupKey{
 			Record: record, Encrypted: encrypted,

@@ -71,11 +71,11 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	}
 	current, err := backuppolicy.DecodeBackupKeyRecord(read.Values[4].Value)
 	if err != nil {
-		return IdempotencyTransactionResult{}, corruptBackupKey()
+		return IdempotencyTransactionResult{}, backuppolicy.CorruptBackupKey()
 	}
 	currentValue, err := backuppolicy.DecodeBackupKeyEncryptedValue(read.Values[5].Value)
 	if err != nil {
-		return IdempotencyTransactionResult{}, corruptBackupKey()
+		return IdempotencyTransactionResult{}, backuppolicy.CorruptBackupKey()
 	}
 	defer clear(currentValue.Ciphertext)
 	if current.KeyEra != rotation.CurrentKeyEra ||

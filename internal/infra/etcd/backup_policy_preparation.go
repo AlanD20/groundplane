@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -22,12 +23,12 @@ type BackupPolicyInitialKeyMaterial struct {
 // protected 200 response.
 type PreparedBackupPolicyReplacement struct {
 	candidate          backupPolicyReplacementCandidate
-	projection         BackupPolicyProjection
+	projection         backupqueries.BackupPolicyProjection
 	requiresInitialKey bool
 }
 
-func (prepared PreparedBackupPolicyReplacement) Projection() BackupPolicyProjection {
-	return cloneBackupPolicyProjection(prepared.projection)
+func (prepared PreparedBackupPolicyReplacement) Projection() backupqueries.BackupPolicyProjection {
+	return backupqueries.CloneBackupPolicyProjection(prepared.projection)
 }
 
 func (prepared PreparedBackupPolicyReplacement) RequiresInitialKey() bool {
@@ -175,7 +176,7 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	requiresInitialKey := input.Enabled && input.Encryption == "age" && !keyFound
-	projection := BackupPolicyProjection{}
+	projection := backupqueries.BackupPolicyProjection{}
 	if !requiresInitialKey {
 		if err := validatebackupPolicyReplacementCandidate(ctx, candidate); err != nil {
 			return PreparedBackupPolicyReplacement{}, err

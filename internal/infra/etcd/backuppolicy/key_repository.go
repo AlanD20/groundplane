@@ -63,20 +63,20 @@ func (repository *KeyRepository) GetBackupKey(
 		return VersionedBackupKey{ReadRevision: result.ReadRevision}, false, nil
 	}
 	if result.Values[0] == nil || result.Values[1] == nil {
-		return VersionedBackupKey{}, false, corruptBackupKey()
+		return VersionedBackupKey{}, false, CorruptBackupKey()
 	}
 	record, err := DecodeBackupKeyRecord(result.Values[0].Value)
 	if err != nil {
-		return VersionedBackupKey{}, false, corruptBackupKey()
+		return VersionedBackupKey{}, false, CorruptBackupKey()
 	}
 	encrypted, err := DecodeBackupKeyEncryptedValue(result.Values[1].Value)
 	if err != nil {
-		return VersionedBackupKey{}, false, corruptBackupKey()
+		return VersionedBackupKey{}, false, CorruptBackupKey()
 	}
 	if record.EnvironmentID != environmentID || encrypted.EnvironmentID != environmentID ||
 		record.KeyEra != encrypted.KeyEra {
 		clear(encrypted.Ciphertext)
-		return VersionedBackupKey{}, false, corruptBackupKey()
+		return VersionedBackupKey{}, false, CorruptBackupKey()
 	}
 	return VersionedBackupKey{
 		Record: record, Encrypted: encrypted,
@@ -100,6 +100,6 @@ func ValidateVersionedBackupKey(key VersionedBackupKey) error {
 	return nil
 }
 
-func corruptBackupKey() error {
+func CorruptBackupKey() error {
 	return errs.New(errs.KindInternal, "Backup key is corrupt")
 }
