@@ -87,6 +87,38 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 	}
 }
 
+// Rationale: editing a directly created Script through canonical Blueprint
+// input must preserve its stable id and API origin, not allocate a duplicate.
+func TestReconcileBlueprintScriptsMatchesDirectAuthoringKey(t *testing.T) {
+	at := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
+	service := desiredRevisionScriptService(t, environmentID, ids.NewAt(ids.KindService, at, 2), "api")
+	previous := desiredRevisionScriptRecord(
+		t, environmentID, service, ids.NewAt(ids.KindScript, at, 3),
+		"", "setup", "echo old", "api",
+	)
+	key, err := testscripts.BlueprintAuthoringKey(previous)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reconciled, err := ReconcileBlueprintScripts(
+		environmentID,
+		map[string]core.ScriptSpec{key: {
+			Slug: "renamed", Service: "api", When: core.ScriptManual, Script: "echo old",
+		}},
+		[]testservices.ServiceRecord{service}, []testscripts.Record{previous}, BlueprintScriptResources{},
+		func(ids.Kind, string) string {
+			t.Fatal("existing direct Script allocated a new id")
+			return ""
+		},
+	)
+	if err != nil || len(reconciled.Current) != 1 || len(reconciled.BodyGenerations) != 0 ||
+		reconciled.Current[0].Desired.ID != previous.Desired.ID ||
+		reconciled.Current[0].Desired.Slug != "renamed" || reconciled.Current[0].Origin != "api" {
+		t.Fatalf("direct Script reconciliation = %#v, %v", reconciled, err)
+	}
+}
+
 func TestReconcileBlueprintScriptsBodyChangeAppendsExactGeneration(t *testing.T) {
 	// Rationale: a body edit must advance only the active generation and emit the exact immutable
 	// bytes, size, and digest needed for publication and recovery.
@@ -130,9 +162,9 @@ func TestReconcileBlueprintScriptsBodyChangeAppendsExactGeneration(t *testing.T)
 	}
 }
 
-func TestReconcileBlueprintScriptsCarriesOmittedBlueprintAndAPIRecordsForward(t *testing.T) {
-	// Rationale: Blueprint apply is non-destructive, so omission must preserve both a previously
-	// authored reconciliation identity and a direct API record without adoption or mutation.
+func TestReconcileBlueprintScriptsOmitsBlueprintAndDirectRecords(t *testing.T) {
+	// Rationale: the Blueprint is the complete Environment; omitted Scripts
+	// must disappear regardless of which authoring surface created them.
 	at := time.Date(2026, 8, 30, 14, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 20)
 	service := desiredRevisionScriptService(t, environmentID, ids.NewAt(ids.KindService, at, 21), "api")
@@ -159,12 +191,7 @@ func TestReconcileBlueprintScriptsCarriesOmittedBlueprintAndAPIRecordsForward(t 
 	if err != nil {
 		t.Fatalf("ReconcileBlueprintScripts() error = %v", err)
 	}
-	byID := make(map[string]testscripts.Record, len(reconciled.Current))
-	for _, record := range reconciled.Current {
-		byID[record.Desired.ID] = record
-	}
-	if len(byID) != 2 || byID[blueprint.Desired.ID] != blueprint || byID[api.Desired.ID] != api ||
-		len(reconciled.BodyGenerations) != 0 {
+	if len(reconciled.Current) != 0 || len(reconciled.BodyGenerations) != 0 {
 		t.Fatalf("omitted reconciliation = %#v", reconciled)
 	}
 }
@@ -182,9 +209,14 @@ func TestReconcileBlueprintScriptsRejectsSlugCollisionAndTargetChange(t *testing
 			t, environmentID, apiService, ids.NewAt(ids.KindScript, at, 33),
 			"", "shared", "printf api", "api",
 		)
+		apiKey, keyErr := testscripts.BlueprintAuthoringKey(api)
+		if keyErr != nil {
+			t.Fatal(keyErr)
+		}
 		_, err := ReconcileBlueprintScripts(
 			environmentID,
 			map[string]core.ScriptSpec{
+				apiKey:     {Slug: "shared", Service: "api", When: core.ScriptManual, Script: "printf api"},
 				"new-hook": {Slug: "shared", Service: "api", When: core.ScriptManual, Script: "printf new"},
 			},
 			[]testservices.ServiceRecord{apiService, workerService},

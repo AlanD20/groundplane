@@ -449,6 +449,11 @@ x-gp-scripts:
       /app/migrate --non-interactive
 ```
 
+A Script created through the API also appears in canonical Blueprint export.
+Its key is `direct-` followed by the lowercase suffix of its stable Script id;
+renaming its slug does not change that key. Omitting a Script key removes the
+Script from the next active Script set.
+
 Keys and slugs are 1 through 63 lowercase ASCII bytes matching
 `^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`. `when` is `manual`,
 `pre-deploy`, `post-deploy`, `pre-rollback`, `post-rollback`, or
@@ -554,7 +559,9 @@ x-gp-backup:
 Source kinds are `attach`, `volume`, and `config`; `config` refers to this
 Environment's Entries and has no `ref`. `keep` is an integer from 1 through
 `9007199254740991`. An enabled policy requires a Connector. `enabled: false`
-alone is the unconfigured disabled form. Frequency, encryption, retention,
+alone is the unconfigured disabled form. Omitting `x-gp-backup` also disables
+and unconfigures the policy; it does not retain the previous settings or sources.
+Frequency, encryption, retention,
 restore, and recovery-point behavior belong to [Backups](features/backups.md).
 
 ### `x-gp-slug`

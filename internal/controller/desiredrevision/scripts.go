@@ -26,9 +26,8 @@ type BlueprintScriptReconciliation struct {
 
 // ReconcileBlueprintScripts resolves authored service names to stable Service
 // ids and produces durable Script records without mutating storage. A
-// Blueprint-origin Script is matched only by its immutable reconciliation key;
-// omitted records remain visible, including records edited through the human
-// API. API-origin records are never adopted by a Blueprint key.
+// Script is matched by its stable canonical authoring key, including directly
+// created Scripts. Omitted Scripts are absent from the next active set.
 func ReconcileBlueprintScripts(
 	environmentID string,
 	authored map[string]core.ScriptSpec,
@@ -50,15 +49,15 @@ func ReconcileBlueprintScripts(
 		)
 	}
 
-	servicesByName, servicesByID, err := scriptServices(environmentID, services)
+	servicesByName, err := scriptServices(environmentID, services)
 	if err != nil {
 		return BlueprintScriptReconciliation{}, err
 	}
 
 	currentByID := make(map[string]scriptrecord.Record, len(previous))
-	blueprintByKey := make(map[string]scriptrecord.Record, len(previous))
+	previousByKey := make(map[string]scriptrecord.Record, len(previous))
 	for _, record := range previous {
-		if err := validateBlueprintScriptRecord(environmentID, record, servicesByID); err != nil {
+		if err := validateBlueprintScriptRecord(environmentID, record); err != nil {
 			return BlueprintScriptReconciliation{}, err
 		}
 		if _, duplicate := currentByID[record.Desired.ID]; duplicate {
@@ -68,15 +67,17 @@ func ReconcileBlueprintScripts(
 			)
 		}
 		currentByID[record.Desired.ID] = record
-		if record.Origin == "blueprint" {
-			if _, duplicate := blueprintByKey[record.ReconciliationKey]; duplicate {
-				return BlueprintScriptReconciliation{}, errs.New(
-					errs.KindInternal,
-					"durable Blueprint Script projection repeats a reconciliation key",
-				)
-			}
-			blueprintByKey[record.ReconciliationKey] = record
+		key, keyErr := scriptrecord.BlueprintAuthoringKey(record)
+		if keyErr != nil {
+			return BlueprintScriptReconciliation{}, keyErr
 		}
+		if _, duplicate := previousByKey[key]; duplicate {
+			return BlueprintScriptReconciliation{}, errs.New(
+				errs.KindInternal,
+				"durable Script projection repeats a Blueprint authoring key",
+			)
+		}
+		previousByKey[key] = record
 	}
 
 	keys := make([]string, 0, len(authored))
@@ -85,10 +86,7 @@ func ReconcileBlueprintScripts(
 	}
 	sort.Strings(keys)
 
-	result := make(map[string]scriptrecord.Record, len(previous)+len(authored))
-	for _, record := range previous {
-		result[record.Desired.ID] = record
-	}
+	result := make(map[string]scriptrecord.Record, len(authored))
 	generations := make([]scriptrecord.BodyGenerationRecord, 0, len(authored))
 	for _, key := range keys {
 		spec := authored[key]
@@ -119,7 +117,7 @@ func ReconcileBlueprintScripts(
 		if err != nil {
 			return BlueprintScriptReconciliation{}, err
 		}
-		current, exists := blueprintByKey[key]
+		current, exists := previousByKey[key]
 		if !exists {
 			if len(result) >= maximumBlueprintScripts {
 				return BlueprintScriptReconciliation{}, errs.New(
@@ -168,7 +166,7 @@ func ReconcileBlueprintScripts(
 			}
 		}
 		result[current.Desired.ID] = current
-		delete(blueprintByKey, key)
+		delete(previousByKey, key)
 	}
 
 	scripts := make([]scriptrecord.Record, 0, len(result))
@@ -201,24 +199,24 @@ func ReconcileBlueprintScripts(
 func scriptServices(
 	environmentID string,
 	services []servicerecord.ServiceRecord,
-) (map[string]servicerecord.ServiceRecord, map[string]servicerecord.ServiceRecord, error) {
+) (map[string]servicerecord.ServiceRecord, error) {
 	byName := make(map[string]servicerecord.ServiceRecord, len(services))
 	byID := make(map[string]servicerecord.ServiceRecord, len(services))
 	for _, service := range services {
 		if service.EnvironmentID != environmentID || ids.Validate(ids.KindService, service.Desired.ID) != nil ||
 			service.Desired.Name == "" || service.Desired.Validate() != nil {
-			return nil, nil, errs.New(errs.KindInternal, "Blueprint Script Service projection is invalid")
+			return nil, errs.New(errs.KindInternal, "Blueprint Script Service projection is invalid")
 		}
 		if _, duplicate := byName[service.Desired.Name]; duplicate {
-			return nil, nil, errs.New(errs.KindInternal, "Blueprint Script Service projection repeats a name")
+			return nil, errs.New(errs.KindInternal, "Blueprint Script Service projection repeats a name")
 		}
 		if _, duplicate := byID[service.Desired.ID]; duplicate {
-			return nil, nil, errs.New(errs.KindInternal, "Blueprint Script Service projection repeats an id")
+			return nil, errs.New(errs.KindInternal, "Blueprint Script Service projection repeats an id")
 		}
 		byName[service.Desired.Name] = service
 		byID[service.Desired.ID] = service
 	}
-	return byName, byID, nil
+	return byName, nil
 }
 
 func validateBlueprintScriptSpec(key string, spec core.ScriptSpec) error {
@@ -259,22 +257,11 @@ func newBlueprintScriptRecord(
 func validateBlueprintScriptRecord(
 	environmentID string,
 	record scriptrecord.Record,
-	servicesByID map[string]servicerecord.ServiceRecord,
 ) error {
 	if record.EnvironmentID != environmentID || ids.Validate(ids.KindService, record.ServiceID) != nil ||
 		ids.Validate(ids.KindScript, record.Desired.ID) != nil || record.ActiveGeneration == 0 ||
 		record.Desired.Validate() != nil {
 		return errs.New(errs.KindInternal, "durable Script projection is invalid")
-	}
-	if _, exists := servicesByID[record.ServiceID]; !exists {
-		return errs.New(errs.KindInternal, "durable Script projection targets an unknown Service")
-	}
-	service := servicesByID[record.ServiceID]
-	if service.Desired.Replicas < 1 {
-		return errs.New(errs.KindValidationFailed, "durable Script target Service must have positive replicas")
-	}
-	if service.Desired.Adapter != "" || service.BackingNetworkID != "" {
-		return errs.New(errs.KindValidationFailed, "durable Script target must be an operator-owned Service")
 	}
 	switch record.Origin {
 	case "api":

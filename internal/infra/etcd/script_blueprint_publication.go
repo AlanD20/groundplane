@@ -151,14 +151,6 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 		desiredByID[record.Desired.ID] = struct{}{}
 		record.ScriptSetGeneration = nextGenerationID
 	}
-	for id := range currentByID {
-		if _, retained := desiredByID[id]; !retained {
-			return BlueprintScriptPublication{}, errs.New(
-				errs.KindStateConflict,
-				"Blueprint Script projection omits durable state",
-			)
-		}
-	}
 	if err := validateBlueprintBodyGenerationInputs(currentByID, ordered, generations); err != nil {
 		return BlueprintScriptPublication{}, err
 	}

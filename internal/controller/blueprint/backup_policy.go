@@ -44,24 +44,6 @@ type environmentBlueprintBackupPolicySnapshot struct {
 	found          bool
 }
 
-func (snapshot environmentBlueprintBackupPolicySnapshot) projection() *projectionrecord.EnvironmentBlueprintBackupPolicy {
-	if !snapshot.found {
-		return nil
-	}
-	result := &projectionrecord.EnvironmentBlueprintBackupPolicy{
-		Enabled: snapshot.policy.Enabled, Frequency: snapshot.policy.Frequency,
-		Keep: snapshot.policy.Keep, Encryption: snapshot.policy.Encryption,
-		ConnectorID: snapshot.policy.ConnectorID,
-		Sources:     make([]projectionrecord.EnvironmentBlueprintBackupPolicySource, len(snapshot.sources)),
-	}
-	for index, source := range snapshot.sources {
-		result.Sources[index] = projectionrecord.EnvironmentBlueprintBackupPolicySource{
-			ID: source.ID, Kind: source.Kind, TargetID: source.TargetID,
-		}
-	}
-	return result
-}
-
 func (repository *durableRepository) PrepareEnvironmentBlueprintBackupPolicy(
 	ctx context.Context,
 	input blueprintplanning.EnvironmentBlueprintBackupPolicyInput,
@@ -108,22 +90,7 @@ func (service *Service) prepareEnvironmentBlueprintBackup(
 		)
 	}
 	if authored == nil {
-		snapshot, err := service.backups.GetEnvironmentBlueprintBackupPolicySnapshot(ctx, environmentID, readRevision)
-		if err != nil {
-			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, err
-		}
-		prepared, err := service.backups.PrepareEnvironmentBlueprintBackupPolicy(
-			ctx,
-			blueprintplanning.EnvironmentBlueprintBackupPolicyInput{
-				EnvironmentID: environmentID, TaskID: taskID, ReadRevision: readRevision,
-				Retain: true, Projection: projection, AttachPreparation: attaches.publication,
-				CreatedAt: createdAt,
-			},
-		)
-		if err != nil {
-			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, err
-		}
-		return snapshot.projection(), prepared, nil
+		authored = &core.BackupSpec{}
 	}
 	sources := make([]blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput, len(authored.Sources))
 	for index, source := range authored.Sources {
@@ -181,7 +148,7 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 	attaches []etcdstore.Versioned[attachrecord.Record],
 ) error {
 	if authored == nil {
-		return nil
+		authored = &core.BackupSpec{}
 	}
 	if service.backups == nil {
 		return errs.New(errs.KindInternal, "Environment Blueprint Backup repository is not configured")
@@ -257,7 +224,7 @@ func (service *Service) environmentBlueprintAuthoringBackup(
 	configured := stored.policy.Frequency != "" || stored.policy.Keep != 0 ||
 		stored.policy.Encryption != "" || stored.policy.ConnectorID != "" || len(stored.sources) != 0
 	if !configured {
-		return &core.BackupSpec{}, nil
+		return nil, nil
 	}
 	if stored.policy.Enabled && !stored.connectorFound {
 		return nil, errs.New(errs.KindInternal, "enabled Blueprint Backup Connector is missing")

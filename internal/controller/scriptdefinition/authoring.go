@@ -19,17 +19,18 @@ func Authoring(
 	result := make(map[string]core.ScriptSpec)
 	for _, versioned := range records {
 		record := versioned.Record
-		if record.Origin != "blueprint" || record.ReconciliationKey == "" {
-			continue
+		key, err := scriptrecord.BlueprintAuthoringKey(record)
+		if err != nil {
+			return nil, err
 		}
-		if _, duplicate := result[record.ReconciliationKey]; duplicate {
+		if _, duplicate := result[key]; duplicate {
 			return nil, errs.New(errs.KindInternal, "Environment Blueprint Script key is duplicated")
 		}
 		execution, err := authoringExecution(record, volumes, entries)
 		if err != nil {
 			return nil, err
 		}
-		result[record.ReconciliationKey] = core.ScriptSpec{
+		result[key] = core.ScriptSpec{
 			Slug:      record.Desired.Slug,
 			Service:   record.Desired.ServiceName,
 			When:      record.Desired.When,

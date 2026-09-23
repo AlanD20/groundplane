@@ -9,6 +9,26 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+// BlueprintAuthoringKey identifies a Script in the canonical Blueprint. A
+// directly created Script has no authored reconciliation key, so its stable id
+// supplies one without changing its origin or adopting it by a mutable slug.
+func BlueprintAuthoringKey(record Record) (string, error) {
+	switch record.Origin {
+	case "blueprint":
+		if err := core.ValidateScriptLabel("script reconciliation key", record.ReconciliationKey); err != nil {
+			return "", errs.Wrap(errs.KindValidationFailed, err)
+		}
+		return record.ReconciliationKey, nil
+	case "api":
+		if err := ids.Validate(ids.KindScript, record.Desired.ID); err != nil || record.ReconciliationKey != "" {
+			return "", errs.New(errs.KindValidationFailed, "direct Script identity is invalid")
+		}
+		return "direct-" + strings.ToLower(strings.TrimPrefix(record.Desired.ID, string(ids.KindScript)+"_")), nil
+	default:
+		return "", errs.New(errs.KindValidationFailed, "Script origin is invalid")
+	}
+}
+
 type SetGenerationRecord struct {
 	EnvironmentID string `json:"environment_id"`
 	GenerationID  string `json:"generation_id"`

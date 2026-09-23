@@ -98,6 +98,40 @@ func TestBlueprintScriptFinalFlipMakesCompleteSetVisible(t *testing.T) {
 	}
 }
 
+// Rationale: publication must remove an omitted Script atomically with the
+// active-set flip; a staged candidate alone cannot hide the old Script.
+func TestBlueprintScriptFinalFlipRemovesOmittedScript(t *testing.T) {
+	store := newMemoryHierarchyStore()
+	repository, current := scriptBlueprintSeedActiveSet(t, store, 1)
+	id := current[0].Record.Desired.ID
+	environmentID := current[0].Record.EnvironmentID
+	publication, err := repository.PrepareBlueprintScriptPublication(
+		context.Background(), environmentID, current[0].ReadRevision,
+		scriptBlueprintGenerationID(910), current, nil, nil,
+	)
+	if err != nil {
+		t.Fatalf("PrepareBlueprintScriptPublication(omit) error = %v", err)
+	}
+	defer publication.Clear()
+	if _, err := repository.GetScript(context.Background(), id); err != nil {
+		t.Fatalf("Script disappeared before publication: %v", err)
+	}
+	result, err := store.Transact(context.Background(), publication.conditions, publication.mutations)
+	if err != nil || !result.Succeeded {
+		t.Fatalf("final Script-set flip = %#v, %v", result, err)
+	}
+	if _, err := repository.GetScript(context.Background(), id); !errors.Is(
+		err,
+		errs.New(errs.KindScriptNotFound, ""),
+	) {
+		t.Fatalf("GetScript(omitted) error = %v, want script.not_found", err)
+	}
+	page, err := repository.ListScripts(context.Background(), environmentID, testkeyvalue.PageRequest{Limit: 64})
+	if err != nil || len(page.Items) != 0 {
+		t.Fatalf("ListScripts(omitted) = %#v, %v", page, err)
+	}
+}
+
 func TestBlueprintScriptFinalFlipConflictsWithConcurrentDirectEditCAS(t *testing.T) {
 	store := newMemoryHierarchyStore()
 	repository, current := scriptBlueprintSeedActiveSet(t, store, 1)

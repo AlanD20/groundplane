@@ -91,27 +91,15 @@ func (stub *environmentBlueprintBackupRepositoryStub) GetEnvironmentBlueprintBac
 	return stub.snapshot, stub.snapshotErr
 }
 
-// Rationale: omission retains the effective durable policy, while presence
-// resolves every authored resource label to a stable candidate identity.
+// Rationale: omission clears the policy instead of silently retaining a
+// configured one; presence resolves authored labels to stable identities.
 func TestEnvironmentBlueprintBackupOmissionAndPresentLabelResolution(t *testing.T) {
 	now := time.Date(2026, 9, 2, 15, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
 	taskID := ids.NewAt(ids.KindTask, now, 2)
 	volumeID := ids.NewAt(ids.KindVolume, now, 3)
 	attachID := ids.NewAt(ids.KindAttach, now, 4)
-	sourceID := ids.NewAt(ids.KindBackupSource, now, 5)
-	stub := &environmentBlueprintBackupRepositoryStub{snapshot: environmentBlueprintBackupPolicySnapshot{
-		found: true,
-		policy: testbackuppolicy.BackupPolicyRecord{
-			EnvironmentID: environmentID, Enabled: false, Frequency: "*-*-* 02:00:00",
-			Keep: 2, Encryption: "none", ConnectorID: ids.NewAt(ids.KindConnector, now, 6),
-			SourceIDs: []string{sourceID}, UpdatedAt: now,
-		},
-		sources: []testbackuppolicy.BackupSourceRecord{{
-			ID: sourceID, EnvironmentID: environmentID, Kind: core.BackupSourceConfig,
-			TargetID: environmentID, CreatedAt: now,
-		}},
-	}}
+	stub := &environmentBlueprintBackupRepositoryStub{}
 	service := &Service{backups: stub}
 	omitted, preparation, err := service.prepareEnvironmentBlueprintBackup(
 		context.Background(),
@@ -124,8 +112,9 @@ func TestEnvironmentBlueprintBackupOmissionAndPresentLabelResolution(t *testing.
 		nil,
 		now,
 	)
-	if err != nil || omitted == nil || !stub.input.Retain ||
-		omitted.Sources[0].ID != sourceID || omitted.ConnectorID != stub.snapshot.policy.ConnectorID {
+	if err != nil || omitted != nil || stub.input.Retain || stub.input.Enabled ||
+		stub.input.Frequency != "" || stub.input.Keep != 0 || stub.input.Encryption != "" ||
+		stub.input.ConnectorName != "" || len(stub.input.Sources) != 0 {
 		t.Fatalf("omitted Backup = %#v, preparation zero = %t, error = %v", omitted, preparation.IsZero(), err)
 	}
 	projection := testenvironmentprojection.EnvironmentComposeProjection{
