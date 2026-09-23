@@ -23,14 +23,6 @@ func (service *Service) prepareApplyRoutes(
 	if err != nil {
 		return taskplanning.BlueprintRouteChanges{}, nil, err
 	}
-	if !preserveRoutes {
-		parsed.Extensions.Routes, err = preserveEnvironmentBlueprintRoutes(
-			parsed.Extensions.Routes, desiredServices, currentRoutes,
-		)
-		if err != nil {
-			return taskplanning.BlueprintRouteChanges{}, nil, err
-		}
-	}
 	previousRoutes := make([]taskplanning.RouteIdentity, len(currentRoutes))
 	for index, route := range currentRoutes {
 		previousRoutes[index] = taskplanning.RouteIdentity{

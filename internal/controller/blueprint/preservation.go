@@ -3,11 +3,9 @@ package blueprint
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
 
-	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -143,45 +141,4 @@ func preserveEnvironmentBlueprintResources(
 		project.Volumes[volume.Key] = config
 	}
 	return nil
-}
-
-func preserveEnvironmentBlueprintRoutes(
-	specs []core.RouteSpec,
-	services []core.Service,
-	current []etcdstore.Versioned[routerecord.Record],
-) ([]core.RouteSpec, error) {
-	serviceByID := make(map[string]string, len(services))
-	for _, service := range services {
-		serviceByID[service.ID] = service.Name
-	}
-	retained := make(map[string]struct{}, len(specs)+len(current))
-	for _, spec := range specs {
-		path := spec.Path
-		if path == "" {
-			path = "/"
-		}
-		retained[spec.Hostname+"\x00"+path] = struct{}{}
-	}
-	result := append([]core.RouteSpec(nil), specs...)
-	for _, versioned := range current {
-		route := versioned.Record.Desired
-		serviceName, exists := serviceByID[route.TargetServiceID]
-		if !exists {
-			return nil, errs.New(errs.KindInternal, "durable Route target Service is not retained")
-		}
-		path := route.Path
-		if path == "" {
-			path = "/"
-		}
-		match := route.Host + "\x00" + path
-		if _, authored := retained[match]; authored {
-			continue
-		}
-		result = append(result, core.RouteSpec{
-			Hostname: route.Host, Path: path, Target: serviceName,
-			TargetPort: route.TargetPort, Exposure: route.Exposure,
-		})
-		retained[match] = struct{}{}
-	}
-	return result, nil
 }

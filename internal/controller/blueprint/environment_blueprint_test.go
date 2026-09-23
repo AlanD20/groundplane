@@ -748,30 +748,3 @@ func TestPreserveEnvironmentBlueprintResourcesCarriesNativeVolumeConfig(t *testi
 		t.Fatalf("preserved volume extensions = %#v", got.Extensions)
 	}
 }
-
-func TestPreserveEnvironmentBlueprintRoutesCarriesForwardOmittedRoute(t *testing.T) {
-	t.Parallel()
-	at := time.Date(2026, 8, 22, 22, 0, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, at, 13)
-	serviceID := ids.NewAt(ids.KindService, at, 14)
-	routeID := ids.NewAt(ids.KindRoute, at, 15)
-	record, err := testroutes.NewRecord(environmentID, core.Route{
-		ID: routeID, Host: "old.example.com", Path: "/legacy/*", TargetServiceID: serviceID,
-		TargetPort: 8080, Exposure: "internal",
-	})
-	if err != nil {
-		t.Fatalf("NewRouteRecord() error = %v", err)
-	}
-	specs, err := preserveEnvironmentBlueprintRoutes(
-		nil,
-		[]core.Service{{ID: serviceID, Name: "api"}},
-		[]testkeyvalue.Versioned[testroutes.Record]{{Record: record}},
-	)
-	if err != nil {
-		t.Fatalf("preserveEnvironmentBlueprintRoutes() error = %v", err)
-	}
-	if len(specs) != 1 || specs[0].Hostname != record.Desired.Host || specs[0].Path != record.Desired.Path ||
-		specs[0].Target != "api" || specs[0].TargetPort != record.Desired.TargetPort || specs[0].Exposure != record.Desired.Exposure {
-		t.Fatalf("retained Route specs = %#v", specs)
-	}
-}

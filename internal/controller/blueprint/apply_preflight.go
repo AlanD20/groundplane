@@ -87,20 +87,28 @@ func (service *Service) prepareApplyPreflight(
 	}
 	desiredEnvironment := environment
 	desiredEnvironment.Record.NetworkPool = parsed.Extensions.NetworkPool
-	if err := preserveEnvironmentBlueprintResources(
-		parsed.Project, priorProject, previous, previousProjection.Record.Volumes, hasProjection,
-	); err != nil {
-		return applyPreflight{}, err
+	if preserveRoutes {
+		if err := preserveEnvironmentBlueprintResources(
+			parsed.Project, priorProject, previous, previousProjection.Record.Volumes, hasProjection,
+		); err != nil {
+			return applyPreflight{}, err
+		}
 	}
 	preflightServices, err := service.listBlueprintServices(ctx, environmentID)
 	if err != nil {
 		return applyPreflight{}, err
 	}
-	preflightExtensions, err := preserveEnvironmentBlueprintServiceExtensions(
-		parsed.ServiceExtensions, submittedServiceNames, previous.Services, previousProjection.Record.ServiceExtensions,
-	)
-	if err != nil {
-		return applyPreflight{}, err
+	preflightExtensions := cloneEnvironmentBlueprintServiceExtensions(parsed.ServiceExtensions)
+	if preserveRoutes {
+		preflightExtensions, err = preserveEnvironmentBlueprintServiceExtensions(
+			parsed.ServiceExtensions,
+			submittedServiceNames,
+			previous.Services,
+			previousProjection.Record.ServiceExtensions,
+		)
+		if err != nil {
+			return applyPreflight{}, err
+		}
 	}
 	workloads, err := service.blueprintReleases.PreflightBlueprint(ctx, blueprintrelease.BlueprintPreflightInput{
 		EnvironmentID: environmentID, Project: parsed.Project, PriorProject: priorProject,

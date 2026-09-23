@@ -165,14 +165,17 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	serviceExtensions, err := preserveEnvironmentBlueprintServiceExtensions(
-		parsed.ServiceExtensions,
-		submittedServiceNames,
-		previous.Services,
-		previousProjection.Record.ServiceExtensions,
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	serviceExtensions := cloneEnvironmentBlueprintServiceExtensions(parsed.ServiceExtensions)
+	if preserveRoutes {
+		serviceExtensions, err = preserveEnvironmentBlueprintServiceExtensions(
+			parsed.ServiceExtensions,
+			submittedServiceNames,
+			previous.Services,
+			previousProjection.Record.ServiceExtensions,
+		)
+		if err != nil {
+			return idempotencyrecord.IdempotencyResponse{}, err
+		}
 	}
 	desiredServices, err := taskplanning.ProjectServiceProjection(
 		parsed.Project,
