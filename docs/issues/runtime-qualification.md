@@ -65,23 +65,17 @@ except persistent Volumes, which require their protected Remove action. Entry
 export and reconciliation include directly created Entries, and validation
 reports omitted Entries as removals. One isolated live Entry omission removed
 its public record while retaining unrelated Entry identities and a selected
-synthetic secret value. No running Service or managed-file pickup was checked.
+synthetic secret value. A separate running-Service variant removed the managed
+file without restarting the container; its absence reached the new process on
+the next Deploy.
+
+Failure, Abort, recovery and other exposure variants remain untested.
 Other resource omission paths still preserve or reject the missing resource;
 they must not be reported as successful removal.
 
 Closure requires completing those removal paths under their dependency and
 recovery rules, then proving the selected current candidate changes real
 Environment state without orphaning data or unrelated resources.
-
-### Blueprint validation disagreement
-
-On the current QA candidate, Validate previewed creation of an implicit default
-Zone without an authored subnet, while Apply rejected those same bytes because
-each MVP Zone needs an explicit IPv4 subnet. Apply made no resource or Task
-change. The test input was incomplete, but Validate must reject it before
-showing an actionable preview. Running-Service Entry removal remains untested
-until a valid isolated Service fixture is applied; see H71 in the
-[qualification register](../acceptance.md#blueprint-and-entry-intent).
 
 ### Other limits
 
