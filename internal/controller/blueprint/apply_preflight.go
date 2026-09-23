@@ -106,7 +106,7 @@ func (service *Service) prepareApplyPreflight(
 		EnvironmentID: environmentID, Project: parsed.Project, PriorProject: priorProject,
 		PreviousIdentities: previous, ServiceExtensions: preflightExtensions,
 		CurrentServices: preflightServices, AuthoredGroups: parsed.Extensions.ReleaseGroups,
-	}, service.releaseGroups)
+	})
 	if err != nil {
 		return applyPreflight{}, err
 	}

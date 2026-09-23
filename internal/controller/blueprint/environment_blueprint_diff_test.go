@@ -12,7 +12,7 @@ import (
 )
 
 // Rationale: a reapply must not advertise existing native resources as new;
-// omitted native resources receive the same preservation preview as extensions.
+// unsupported omission paths cannot promise removal in Validate.
 func TestBlueprintDiffRecognizesExistingNativeResources(t *testing.T) {
 	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		DesiredServices: []testservices.EnvironmentServiceProjection{{Desired: core.Service{Name: "api"}}},

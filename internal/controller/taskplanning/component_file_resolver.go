@@ -121,7 +121,6 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 		identity,
 		projection,
 		parsed.Extensions.Routes,
-		parsed.Extensions.Components,
 		projectedEnvironmentEntries(projection.Entries),
 		resolver.componentCatalog,
 	)

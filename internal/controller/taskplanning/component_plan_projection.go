@@ -1,7 +1,6 @@
 package taskplanning
 
 import (
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
@@ -9,7 +8,6 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
@@ -22,7 +20,6 @@ func projectPinnedEnvironmentComponents(
 	identity pinnedEnvironmentIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
 	_ []core.RouteSpec,
-	componentSpecs map[string]core.ComponentSpec,
 	entries []core.EnvEntry,
 	catalog []componentrender.EnvironmentComponentRegistration,
 ) (composerender.EnvironmentComponentComposeProjection, error) {
@@ -75,23 +72,15 @@ func projectPinnedEnvironmentComponents(
 			componentRecords[index].Healthy = true
 		}
 	}
-	componentAllocated := false
-	components, err := ReconcileBlueprintComponents(componentSpecs, componentRecords, func(_ ids.Kind) string {
-		componentAllocated = true
-		return ""
-	})
-	if err != nil || componentAllocated || len(components.Candidates) != 0 {
-		return composerender.EnvironmentComponentComposeProjection{}, errs.New(
-			errs.KindInternal,
-			"Blueprint Task Component projection cannot be reproduced exactly",
-		)
+	if _, err := blueprintComponentMap(componentRecords); err != nil {
+		return composerender.EnvironmentComponentComposeProjection{}, err
 	}
 	environment := core.Environment{
 		ID: identity.EnvironmentID, ProjectID: identity.ProjectID, Name: identity.EnvironmentName,
 		VolumeDir: identity.AuthorizedVolumeDir,
 		Zones:     make(map[string]core.Zone, len(zones)),
 		Services:  make(map[string]core.Service, len(services)),
-		Routes:    effectiveRoutes, Components: components.Effective,
+		Routes:    effectiveRoutes, Components: componentRecords,
 		Entries: append([]core.EnvEntry(nil), entries...),
 	}
 	for _, zone := range zones {

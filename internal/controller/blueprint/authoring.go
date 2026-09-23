@@ -314,6 +314,9 @@ func environmentBlueprintAuthoringComponents(
 ) (map[string]core.ComponentSpec, error) {
 	result := make(map[string]core.ComponentSpec)
 	for _, record := range records {
+		if !record.Desired.Enabled {
+			continue
+		}
 		var capability core.ComponentCapability
 		spec := core.ComponentSpec{Implementation: record.Desired.Kind, Enabled: record.Desired.Enabled}
 		switch record.Desired.Kind {
@@ -500,7 +503,7 @@ func environmentBlueprintChanges(
 				continue
 			}
 			action := apiTypes.BlueprintChangeRetain
-			if resource == "entry" {
+			if resource == "entry" || resource == "component" || resource == "release-group" {
 				action = apiTypes.BlueprintChangeRemove
 			}
 			changes = append(changes, apiTypes.EnvironmentBlueprintChange{

@@ -327,13 +327,6 @@ func routeRemovalPlanTestState(
 		identity,
 		projection,
 		routeSpecs,
-		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
-			Implementation: core.ComponentKindIngressCaddy,
-			Enabled:        true,
-			Settings: core.ComponentCapabilitySettings{
-				ZoneIDs: []string{projection.DesiredZones[0].Desired.ID},
-			},
-		}},
 		nil,
 		catalog,
 	)

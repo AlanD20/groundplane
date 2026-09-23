@@ -82,10 +82,6 @@ func TestProjectPinnedEnvironmentComponentsRehydratesExactGraph(t *testing.T) {
 		identity,
 		projection,
 		routeSpecs,
-		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
-			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneIDs: []string{projection.DesiredZones[0].Desired.ID}},
-		}},
 		nil,
 		catalog,
 	)
@@ -114,10 +110,6 @@ func TestProjectPinnedEnvironmentComponentsUsesDesiredRoutesDirectly(t *testing.
 		identity,
 		projection,
 		routeSpecs,
-		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
-			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneIDs: []string{projection.DesiredZones[0].Desired.ID}},
-		}},
 		nil,
 		catalog,
 	)
@@ -142,10 +134,6 @@ func TestProjectPinnedEnvironmentComponentsOmitsSuppressedRoute(t *testing.T) {
 		identity,
 		next,
 		routeSpecs,
-		map[string]core.ComponentSpec{string(core.ComponentCapabilityHTTPRouter): {
-			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
-			Settings: core.ComponentCapabilitySettings{ZoneIDs: []string{projection.DesiredZones[0].Desired.ID}},
-		}},
 		nil,
 		catalog,
 	)

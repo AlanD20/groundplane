@@ -51,7 +51,6 @@ func TestPinnedComponentProjectionAllowsMoreManagedThanNativeServices(t *testing
 				projection,
 				routes,
 				nil,
-				nil,
 				catalog,
 			)
 			if err != nil {

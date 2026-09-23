@@ -165,7 +165,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	}
 	if len(projection.Components) != 0 {
 		managed, err := projectPinnedEnvironmentComponents(project, nil, identity, projection,
-			nil, nil, projectedEnvironmentEntries(projection.Entries), resolver.componentCatalog)
+			nil, projectedEnvironmentEntries(projection.Entries), resolver.componentCatalog)
 		if err != nil {
 			return nil, err
 		}

@@ -3,7 +3,6 @@ package blueprintrelease
 import (
 	"context"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	releasegroup "github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
@@ -29,10 +28,11 @@ type BlueprintPreflightInput struct {
 
 // PreflightBlueprint projects candidates and resolves their complete image
 // batch before the caller may claim or stage a Blueprint revision.
-func (service *Service) PreflightBlueprint(ctx context.Context, input BlueprintPreflightInput,
-	groups *releasegroup.ReleaseGroupBlueprintPlanner,
+func (service *Service) PreflightBlueprint(
+	ctx context.Context,
+	input BlueprintPreflightInput,
 ) (WorkloadPreparation, error) {
-	if ctx == nil || groups == nil || input.Project == nil {
+	if ctx == nil || input.Project == nil {
 		return WorkloadPreparation{}, errs.New(errs.KindInternal, "Blueprint image preflight inputs are incomplete")
 	}
 	// Provisional IDs permit the same projection rules for new Services before a
@@ -53,16 +53,5 @@ func (service *Service) PreflightBlueprint(ctx context.Context, input BlueprintP
 	if err != nil {
 		return WorkloadPreparation{}, err
 	}
-	names := make(map[string]string, len(input.CurrentServices))
-	for _, record := range input.CurrentServices {
-		names[record.Record.Desired.ID] = record.Record.Desired.Name
-	}
-	effectiveGroups, err := groups.AuthoringSpecs(ctx, input.EnvironmentID, names)
-	if err != nil {
-		return WorkloadPreparation{}, err
-	}
-	for name, spec := range input.AuthoredGroups {
-		effectiveGroups[name] = spec
-	}
-	return service.Preflight(ctx, input.EnvironmentID, changes, memberships, effectiveGroups)
+	return service.Preflight(ctx, input.EnvironmentID, changes, memberships, input.AuthoredGroups)
 }

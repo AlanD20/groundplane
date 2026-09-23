@@ -23,9 +23,8 @@ type BlueprintComponentChanges struct {
 	Candidates []BlueprintComponentCandidate
 }
 
-// ReconcileBlueprintComponents applies only explicitly authored singleton
-// switches. Omission preserves the active Component; disabling requires an
-// explicit enabled:false and never acts as an implicit host teardown.
+// ReconcileBlueprintComponents treats omitted optional singletons as disabled.
+// The candidate lifecycle still owns teardown and dependency checks.
 func ReconcileBlueprintComponents(
 	specs map[string]core.ComponentSpec,
 	current []core.Component,
@@ -37,41 +36,9 @@ func ReconcileBlueprintComponents(
 			"Blueprint Component id allocator is required",
 		)
 	}
-	byKind := make(map[core.ComponentKind]core.Component, len(current))
-	for _, component := range current {
-		if component.Owner != core.ComponentOwnerEnvironment || component.Validate() != nil ||
-			(component.Kind != core.ComponentKindIngressCaddy &&
-				component.Kind != core.ComponentKindEdgeCloudflare) {
-			return BlueprintComponentChanges{}, errs.New(
-				errs.KindInternal,
-				"active Environment Component projection is invalid",
-			)
-		}
-		if _, duplicate := byKind[component.Kind]; duplicate {
-			return BlueprintComponentChanges{}, errs.New(
-				errs.KindInternal,
-				"active Environment Component kind is duplicated",
-			)
-		}
-		if component.Enabled && len(component.GeneratedServices) != 1 {
-			return BlueprintComponentChanges{}, errs.New(
-				errs.KindInternal,
-				"enabled Environment Component does not own one generated Service",
-			)
-		}
-		if !component.Enabled && (len(component.GeneratedServices) != 0 || component.PinnedIPv4 != "") {
-			return BlueprintComponentChanges{}, errs.New(
-				errs.KindInternal,
-				"disabled Environment Component retains active runtime identity",
-			)
-		}
-		byKind[component.Kind] = cloneBlueprintComponent(component)
-	}
-	if len(byKind) != 2 {
-		return BlueprintComponentChanges{}, errs.New(
-			errs.KindInternal,
-			"Environment must have Caddy and Cloudflare Component singletons",
-		)
+	byKind, err := blueprintComponentMap(current)
+	if err != nil {
+		return BlueprintComponentChanges{}, err
 	}
 
 	authored := make(map[core.ComponentKind]core.ComponentSpec, len(specs))
@@ -97,11 +64,11 @@ func ReconcileBlueprintComponents(
 	for _, kind := range kinds {
 		active := byKind[kind]
 		spec, present := authored[kind]
-		config := active.Config
+		var config core.ComponentConfig
 		if present {
 			config = blueprintComponentConfig(kind, spec)
 		}
-		if !present || (active.Enabled == spec.Enabled && core.EqualComponentConfig(active.Config, config)) {
+		if active.Enabled == spec.Enabled && core.EqualComponentConfig(active.Config, config) {
 			if active.Enabled && !active.Healthy {
 				candidate := cloneBlueprintComponent(active)
 				candidate.PinnedIPv4 = ""
@@ -141,6 +108,46 @@ func ReconcileBlueprintComponents(
 		return result.Candidates[left].Current.ID < result.Candidates[right].Current.ID
 	})
 	return result, nil
+}
+
+func blueprintComponentMap(current []core.Component) (map[core.ComponentKind]core.Component, error) {
+	byKind := make(map[core.ComponentKind]core.Component, len(current))
+	for _, component := range current {
+		if component.Owner != core.ComponentOwnerEnvironment || component.Validate() != nil ||
+			(component.Kind != core.ComponentKindIngressCaddy &&
+				component.Kind != core.ComponentKindEdgeCloudflare) {
+			return nil, errs.New(
+				errs.KindInternal,
+				"active Environment Component projection is invalid",
+			)
+		}
+		if _, duplicate := byKind[component.Kind]; duplicate {
+			return nil, errs.New(
+				errs.KindInternal,
+				"active Environment Component kind is duplicated",
+			)
+		}
+		if component.Enabled && len(component.GeneratedServices) != 1 {
+			return nil, errs.New(
+				errs.KindInternal,
+				"enabled Environment Component does not own one generated Service",
+			)
+		}
+		if !component.Enabled && (len(component.GeneratedServices) != 0 || component.PinnedIPv4 != "") {
+			return nil, errs.New(
+				errs.KindInternal,
+				"disabled Environment Component retains active runtime identity",
+			)
+		}
+		byKind[component.Kind] = cloneBlueprintComponent(component)
+	}
+	if len(byKind) != 2 {
+		return nil, errs.New(
+			errs.KindInternal,
+			"Environment must have Caddy and Cloudflare Component singletons",
+		)
+	}
+	return byKind, nil
 }
 
 func validateBlueprintComponentSpec(

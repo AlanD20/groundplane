@@ -8,9 +8,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
-func TestReconcileBlueprintComponentsPreservesOmissionAndExplicitlyDisables(t *testing.T) {
-	// Rationale: Blueprint omission must never become an implicit ingress
-	// teardown, while enabled:false must produce the complete removal candidate.
+func TestReconcileBlueprintComponentsDisablesOmittedIngress(t *testing.T) {
+	// Rationale: an omitted optional Component must use the same protected
+	// teardown candidate as an explicitly disabled Component.
 	t.Parallel()
 	now := time.Date(2026, 8, 22, 21, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
@@ -28,8 +28,8 @@ func TestReconcileBlueprintComponentsPreservesOmissionAndExplicitlyDisables(t *t
 		OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare,
 	}
 	omitted, err := ReconcileBlueprintComponents(nil, []core.Component{tunnel, caddy}, ids.New)
-	if err != nil || len(omitted.Candidates) != 0 || !omitted.Effective[0].Enabled ||
-		omitted.Effective[0].PinnedIPv4 != caddy.PinnedIPv4 {
+	if err != nil || len(omitted.Candidates) != 1 || omitted.Effective[0].Enabled ||
+		len(omitted.Effective[0].GeneratedServices) != 0 || omitted.Effective[0].PinnedIPv4 != "" {
 		t.Fatalf("ReconcileBlueprintComponents(omitted) = %#v, %v", omitted, err)
 	}
 	disabled, err := ReconcileBlueprintComponents(
@@ -62,7 +62,12 @@ func TestReconcileBlueprintComponentsPlansUnhealthyEnabledRepair(t *testing.T) {
 		OwnerID: environmentID, Kind: core.ComponentKindEdgeCloudflare,
 	}
 
-	result, err := ReconcileBlueprintComponents(nil, []core.Component{caddy, tunnel}, ids.New)
+	result, err := ReconcileBlueprintComponents(map[string]core.ComponentSpec{
+		"http-router": {
+			Implementation: core.ComponentKindIngressCaddy, Enabled: true,
+			Settings: core.ComponentCapabilitySettings{ZoneIDs: []string{caddy.Config.Caddy.ZoneIDs[0]}},
+		},
+	}, []core.Component{caddy, tunnel}, ids.New)
 	if err != nil {
 		t.Fatalf("ReconcileBlueprintComponents() error = %v", err)
 	}
@@ -109,6 +114,7 @@ func TestReconcileBlueprintComponentsAllocatesIndependentEnableIdentities(t *tes
 	}
 	tunnelResult, err := ReconcileBlueprintComponents(
 		map[string]core.ComponentSpec{
+			"http-router": {Implementation: core.ComponentKindIngressCaddy, Enabled: false},
 			"edge-tunnel": {
 				Implementation: core.ComponentKindEdgeCloudflare, Enabled: true,
 				Settings: core.ComponentCapabilitySettings{

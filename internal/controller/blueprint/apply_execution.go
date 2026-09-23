@@ -211,17 +211,7 @@ func (service *Service) applyBlueprintOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer scriptPublication.Clear()
-	serviceNames := make(map[string]string, len(desiredServices))
-	for _, desired := range desiredServices {
-		serviceNames[desired.ID] = desired.Name
-	}
-	effectiveReleaseGroups, err := service.releaseGroups.AuthoringSpecs(ctx, environmentID, serviceNames)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	for name, spec := range parsed.Extensions.ReleaseGroups {
-		effectiveReleaseGroups[name] = spec
-	}
+	effectiveReleaseGroups := parsed.Extensions.ReleaseGroups
 	releaseGroupPreparation, err := service.releaseGroups.Prepare(
 		ctx,
 		environmentID,
