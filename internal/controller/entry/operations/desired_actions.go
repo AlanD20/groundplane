@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -111,8 +112,12 @@ func (service *entryDesiredMutationService) EditEntry(
 	desired := current.Entry
 	desired.Source = prepared.Source
 	desired.Exposure = append([]string(nil), prepared.Exposure...)
-	if err := desired.Validate(); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
+	validationEntry := desired
+	if validationEntry.Secret && validationEntry.Source.Kind == core.SourceLiteral {
+		validationEntry.Source.Literal = ""
+	}
+	if err := validationEntry.Validate(); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	for attempt := 0; attempt < maximumEntryEditAttempts; attempt++ {
 		evidence, err := service.edit.Prepare(ctx, environmentID, entryID, prepared)

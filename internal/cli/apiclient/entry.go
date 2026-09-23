@@ -288,6 +288,9 @@ func entryFromGenerated(entry generated.Entry) (apiTypes.Entry, error) {
 	result := apiTypes.Entry{
 		ID: entry.Id, Type: entry.Type, Source: entrySourceFromGenerated(entry.Source), Secret: entry.Secret,
 	}
+	if entry.EmptySecretValue != nil {
+		result.EmptySecretValue = *entry.EmptySecretValue
+	}
 	if entry.Key != nil {
 		result.Key = *entry.Key
 	}
