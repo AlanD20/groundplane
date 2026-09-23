@@ -28,15 +28,17 @@ export type BlueprintActions = {
   ) => Promise<BlueprintTaskAccepted>;
 };
 
+const getBlueprint: BlueprintActions["getBlueprint"] = async (envId) =>
+  controllerRequest<BlueprintDocumentResponse>(
+    `/environments/${encodeURIComponent(envId)}/blueprint`,
+    200,
+  );
+
 export function createBlueprintActions(
   assertEnvironmentMutable: (environmentId: string, operation: string) => void,
 ): BlueprintActions {
   return {
-    getBlueprint: async (envId) =>
-      controllerRequest<BlueprintDocumentResponse>(
-        `/environments/${encodeURIComponent(envId)}/blueprint`,
-        200,
-      ),
+    getBlueprint,
     validateBlueprint: async (envId, request, expectedRevision) => {
       const path = `/environments/${encodeURIComponent(envId)}/blueprint/validate`;
       const multipart = await createBlueprintMultipartBody(request);

@@ -49,6 +49,7 @@ export function BlueprintWorkspace({
   workspace: string;
 }) {
   const store = useStore();
+  const getBlueprint = store.getBlueprint;
   const fileInput = useRef<HTMLInputElement>(null);
   const [snapshot, setSnapshot] = useState<BlueprintDocumentResponse | null>(
     null,
@@ -65,7 +66,7 @@ export function BlueprintWorkspace({
     setLoading(true);
     setError("");
     try {
-      const current = await store.getBlueprint(environment.id);
+      const current = await getBlueprint(environment.id);
       setSnapshot(current);
       setDraft(current.document);
       setEditing(false);
@@ -78,7 +79,7 @@ export function BlueprintWorkspace({
     } finally {
       setLoading(false);
     }
-  }, [environment.id, store]);
+  }, [environment.id, getBlueprint]);
 
   useEffect(() => {
     void load();
