@@ -1,4 +1,5 @@
 import type { BlueprintApplyAudit, BlueprintFileAudit } from './types'
+import { sha256 as sha256Bytes } from '@noble/hashes/sha2.js'
 
 export const BLUEPRINT_BUNDLE_LIMITS = {
   files: 64,
@@ -89,8 +90,8 @@ function selectedPath(file: File, directorySelection: boolean) {
 }
 
 async function sha256(file: File) {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  const digest = sha256Bytes(new Uint8Array(await file.arrayBuffer()))
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 export async function inspectBlueprintFiles(selected: File[], directorySelection: boolean) {
