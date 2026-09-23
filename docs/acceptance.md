@@ -147,6 +147,12 @@ automatic recovery into a pass. Preserve failures instead of overwriting them.
 | H68 | PKG-01/02/03 PARTIAL, local. | Ten bundle tests and the 83-test deployment suite passed; native amd64 Controller/CLI builds matched the descriptor and Console audit was clean. The Agent scratch image measured 147,450,780 bytes versus 275,992,667 baseline and passed Docker/Compose/helper probes. No arm64, registry publication, host install or complete helper qualification. |
 | H69 | PKG-04 PARTIAL, local. | Eight installer-idempotency and five distro-selection tests passed, as did the 99-test deployment gate and ShellCheck. Fake package/process evidence covered three allowed OS releases, drift and resume paths. All real OS/architecture fresh-install, rerun and native-update journeys remained unrun. |
 
+### Blueprint and Entry intent
+
+| Ref | Cases and historical outcome | Evidence retained and limitation |
+| --- | --- | --- |
+| H70 | BP-05/06/09, ENT-01 and UI-01 PARTIAL on 2026-09-23. | Signed `c246b837a`, version `0.0.1-qa.blueprint20260923.5`, passed local `make ci` and a normal update on one disposable Ubuntu 24.04 amd64 host. Isolated QA showed direct Entry adoption, an empty key-only secret, nonempty secret rotation, secret-safe export, omission of one Entry, refusal of persistent Volume omission, and a Console review with a new empty-secret badge; the review was cancelled before Apply. An earlier build returned 500 on secret edit, then corrected; later builds exposed and corrected editor refresh, HTTP-origin hashing and a generated Volume bind in canonical export. Exact reapply retained Entry IDs and selected synthetic secret values, but Validate reported updates and Apply created a Task. No running Service, managed-file pickup, runtime continuity, at-rest inspection, latest-wins handoff or resource cleanup was qualified. |
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

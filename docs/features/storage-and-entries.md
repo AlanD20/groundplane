@@ -59,8 +59,8 @@ materializes files.
 
 Entry removal is different: it updates or removes the pinned configuration files
 without running Compose or restarting a Service. A running process keeps its
-already-loaded environment until its next deployment or reconciliation. The
-shared environment file is rewritten even when empty; an empty Service-specific
+already-loaded environment until its next Deploy. The shared environment file
+is rewritten even when empty; an empty Service-specific
 file is removed. Removing a never-applied Entry has no host effect.
 
 On failure, timeout or Abort, Entry metadata and generations remain available for

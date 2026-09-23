@@ -63,9 +63,11 @@ evidence; private HTTP alone is not enough.
 The accepted Blueprint contract now removes omitted operator-managed resources,
 except persistent Volumes, which require their protected Remove action. Entry
 export and reconciliation include directly created Entries, and validation
-reports omitted Entries as removals. This implementation has local checks but
-no live removal qualification. Other resource omission paths still preserve or
-reject the missing resource; they must not be reported as successful removal.
+reports omitted Entries as removals. One isolated live Entry omission removed
+its public record while retaining unrelated Entry identities and a selected
+synthetic secret value. No running Service or managed-file pickup was checked.
+Other resource omission paths still preserve or reject the missing resource;
+they must not be reported as successful removal.
 
 Closure requires completing those removal paths under their dependency and
 recovery rules, then proving the selected current candidate changes real
