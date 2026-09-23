@@ -125,26 +125,6 @@ func preserveEnvironmentBlueprintResources(
 		}
 		project.Networks[identity.Name] = network
 	}
-	if len(prior.Configs) != 0 {
-		if project.Configs == nil {
-			project.Configs = make(composetypes.Configs, len(prior.Configs))
-		}
-		for name, config := range prior.Configs {
-			if _, authored := project.Configs[name]; !authored {
-				project.Configs[name] = config
-			}
-		}
-	}
-	if len(prior.Secrets) != 0 {
-		if project.Secrets == nil {
-			project.Secrets = make(composetypes.Secrets, len(prior.Secrets))
-		}
-		for name, secret := range prior.Secrets {
-			if _, authored := project.Secrets[name]; !authored {
-				project.Secrets[name] = secret
-			}
-		}
-	}
 	if project.Volumes == nil {
 		project.Volumes = make(composetypes.Volumes, len(previousVolumes))
 	}

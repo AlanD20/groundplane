@@ -69,8 +69,10 @@ synthetic secret value. A separate running-Service variant removed the managed
 file without restarting the container; its absence reached the new process on
 the next Deploy.
 
-Failure, Abort, recovery and other exposure variants remain untested.
-Other resource omission paths still preserve or reject the missing resource;
+Failure, Abort, recovery and other exposure variants remain untested. Omitted
+Scripts, Backup policy, native Compose configs and native Compose secrets now
+have local reconciliation changes, but no live operator qualification. Service,
+Zone, Route and Attach omissions still preserve or reject the missing resource;
 they must not be reported as successful removal.
 
 Closure requires completing those removal paths under their dependency and

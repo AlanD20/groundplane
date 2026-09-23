@@ -542,10 +542,9 @@ volumes:
 	if _, generated := candidate.Services["router"]; generated {
 		t.Fatal("generated Component Service was adopted into authored desired state")
 	}
-	if candidate.Configs["app-config"].File != "config/app.conf" ||
-		candidate.Secrets["app-secret"].File != "secrets/app.secret" {
+	if len(candidate.Configs) != 0 || len(candidate.Secrets) != 0 {
 		t.Fatalf(
-			"native Config/Secret state was not retained: configs=%#v secrets=%#v",
+			"omitted native Config/Secret state was retained: configs=%#v secrets=%#v",
 			candidate.Configs,
 			candidate.Secrets,
 		)
@@ -687,7 +686,7 @@ func TestPreserveEnvironmentBlueprintResourcesRejectsAmbiguousServiceCandidates(
 	}
 }
 
-func TestPreserveEnvironmentBlueprintResourcesCarriesNativeConfigAndSecretReferences(t *testing.T) {
+func TestPreserveEnvironmentBlueprintResourcesOmitsNativeConfigAndSecretReferences(t *testing.T) {
 	t.Parallel()
 	at := time.Date(2026, 8, 22, 23, 0, 0, 0, time.UTC)
 	serviceID := ids.NewAt(ids.KindService, at, 21)
@@ -702,11 +701,8 @@ func TestPreserveEnvironmentBlueprintResourcesCarriesNativeConfigAndSecretRefere
 	}, nil, true); err != nil {
 		t.Fatalf("preserveEnvironmentBlueprintResources(configs and secrets) error = %v", err)
 	}
-	if config, found := project.Configs["app-config"]; !found || config.File != "config/app.conf" {
-		t.Fatalf("retained Config = %#v, found = %t", config, found)
-	}
-	if secret, found := project.Secrets["app-secret"]; !found || secret.File != "secrets/app.secret" {
-		t.Fatalf("retained Secret = %#v, found = %t", secret, found)
+	if len(project.Configs) != 0 || len(project.Secrets) != 0 {
+		t.Fatalf("omitted Config/Secret state was retained: configs=%#v secrets=%#v", project.Configs, project.Secrets)
 	}
 }
 

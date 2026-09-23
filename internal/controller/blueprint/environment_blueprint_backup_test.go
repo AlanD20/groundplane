@@ -411,7 +411,7 @@ func TestEnvironmentBlueprintBackupValidationResolvesFixedRevisionDependencies(t
 	found := false
 	for _, change := range changes {
 		found = found || change.Resource == "backup" && change.Key == "policy" &&
-			change.Action == apiTypes.BlueprintChangeRetain
+			change.Action == apiTypes.BlueprintChangeRemove
 	}
 	if !found {
 		t.Fatalf("omitted Backup validation changes = %#v", changes)

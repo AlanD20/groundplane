@@ -71,6 +71,10 @@ are [not yet fully implemented](issues/runtime-qualification.md#incomplete-featu
 Validate must describe the actual candidate effect, not imply a removal that
 Apply will retain or reject.
 
+Omitted native Compose `configs` and `secrets` definitions are not copied from
+the prior Blueprint. Companion file bytes are carried forward only when the
+candidate Compose project still references them.
+
 Stable ids are Controller-owned. Authored map keys provide reconciliation
 identity where a field says so, while slugs are renamable labels. In particular:
 

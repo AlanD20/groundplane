@@ -84,6 +84,25 @@ func TestBlueprintDiffReportsOmittedEntryRemoval(t *testing.T) {
 	t.Fatal("omitted Entry was not reported")
 }
 
+// Rationale: Validate must show the Script removal that Apply publishes, not
+// describe an omitted Script as retained.
+func TestBlueprintDiffReportsOmittedScriptRemoval(t *testing.T) {
+	changes := environmentBlueprintChanges(
+		blueprintparser.AuthoringDocument{Scripts: map[string]core.ScriptSpec{"migrate": {}}},
+		blueprintparser.Result{Project: &composetypes.Project{}}, true,
+		testenvironmentprojection.EnvironmentComposeProjection{},
+	)
+	for _, change := range changes {
+		if change.Resource == "script" && change.Key == "migrate" {
+			if change.Action != apiTypes.BlueprintChangeRemove {
+				t.Fatalf("omitted Script action = %s, want remove", change.Action)
+			}
+			return
+		}
+	}
+	t.Fatal("omitted Script was not reported")
+}
+
 // Rationale: review may label a newly created key-only literal as empty, but
 // never infer emptiness from an existing redacted secret declaration.
 func TestBlueprintDiffMarksNewEmptySecretLiteral(t *testing.T) {

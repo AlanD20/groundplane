@@ -503,7 +503,8 @@ func environmentBlueprintChanges(
 				continue
 			}
 			action := apiTypes.BlueprintChangeRetain
-			if resource == "entry" || resource == "component" || resource == "release-group" {
+			if resource == "entry" || resource == "script" || resource == "backup" ||
+				resource == "component" || resource == "release-group" {
 				action = apiTypes.BlueprintChangeRemove
 			}
 			changes = append(changes, apiTypes.EnvironmentBlueprintChange{
