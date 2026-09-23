@@ -101,7 +101,26 @@ func TestLogManagerBackpressuresReplayLargerThanQueueUntilCancellation(t *testin
 		}
 		time.Sleep(time.Millisecond)
 	}
-	for sequence := range records {
+	for sequence := range maxQueuedLogEvents {
+		select {
+		case message := <-manager.Outputs():
+			event := message.GetLogEvent()
+			if event == nil || event.GetLine() != string(rune(sequence)) {
+				t.Fatalf("message %d = %#v, want matching LogEvent", sequence+1, message)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("log manager stopped after %d/%d replay records", sequence, records)
+		}
+	}
+	select {
+	case message := <-manager.Outputs():
+		t.Fatalf("Agent sent beyond its initial credit window: %#v", message)
+	case <-time.After(25 * time.Millisecond):
+	}
+	if err := manager.Grant(&agentpb.LogCredit{RequestId: "request-1", Count: records - maxQueuedLogEvents}); err != nil {
+		t.Fatalf("Grant() error = %v", err)
+	}
+	for sequence := maxQueuedLogEvents; sequence < records; sequence++ {
 		select {
 		case message := <-manager.Outputs():
 			event := message.GetLogEvent()
@@ -162,7 +181,7 @@ func (emptyLogSources) Run(context.Context, chan<- *agentpb.LogEvent) error { re
 func (emptyLogSources) Close() error                                        { return nil }
 
 func validAgentLogSubscribe() *agentpb.LogSubscribe {
-	return &agentpb.LogSubscribe{RequestId: "request-1"}
+	return &agentpb.LogSubscribe{RequestId: "request-1", InitialCredit: maxQueuedLogEvents}
 }
 
 type burstLogSources struct {

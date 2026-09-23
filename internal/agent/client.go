@@ -362,6 +362,9 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 		c.logs.Cancel(cancellation.GetRequestId())
 		return false, nil
 	}
+	if credit := message.GetLogCredit(); credit != nil {
+		return false, c.logs.Grant(credit)
+	}
 	if assignment := message.GetTaskAssignment(); assignment != nil {
 		if assignment.ForwardDeadline == nil || assignment.ForwardDeadline.CheckValid() != nil ||
 			assignment.RecoveryDeadline == nil || assignment.RecoveryDeadline.CheckValid() != nil ||

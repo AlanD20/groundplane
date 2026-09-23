@@ -156,7 +156,7 @@ func (s *Server) serveLogs(w http.ResponseWriter, request *http.Request, kind id
 	}()
 
 	frames := make(chan []byte)
-	go encodeLogFrames(request.Context(), subscription.Events(), frames)
+	go encodeLogFrames(request.Context(), subscription, frames)
 	s.writeSSE(w, request, frames)
 }
 
@@ -233,10 +233,11 @@ func canonicalLogDecimal(value string) bool {
 	return true
 }
 
-func encodeLogFrames(ctx context.Context, events <-chan *agentpb.LogEvent, output chan<- []byte) {
+func encodeLogFrames(ctx context.Context, subscription *agentchannel.LogSubscription, output chan<- []byte) {
 	defer close(output)
 	var sequence uint64
-	for event := range events {
+	var consumed uint32
+	for event := range subscription.Events() {
 		sequence++
 		public, ok := publicLogEvent(sequence, event)
 		if !ok {
@@ -251,6 +252,13 @@ func encodeLogFrames(ctx context.Context, events <-chan *agentpb.LogEvent, outpu
 		case output <- frame:
 		case <-ctx.Done():
 			return
+		}
+		consumed++
+		if consumed == 32 {
+			if subscription.Grant(ctx, consumed) != nil {
+				return
+			}
+			consumed = 0
 		}
 	}
 }

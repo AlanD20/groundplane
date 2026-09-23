@@ -70,6 +70,33 @@ func (subscription *LogSubscription) Cancel(ctx context.Context) {
 	}
 }
 
+func (subscription *LogSubscription) Grant(ctx context.Context, count uint32) error {
+	if subscription == nil || ctx == nil || count == 0 || count > maximumQueuedLogEvents {
+		return errs.New(errs.KindValidationFailed, "log credit is invalid")
+	}
+	command := logCommand{
+		message: &agentpb.ControllerMessage{Payload: &agentpb.ControllerMessage_LogCredit{
+			LogCredit: &agentpb.LogCredit{RequestId: subscription.ID, Count: count},
+		}},
+		result: make(chan error, 1),
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-subscription.state.done:
+		return errs.New(errs.KindStorageUnavailable, "Agent log session ended before credit delivery")
+	case subscription.state.logCommands <- command:
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-subscription.state.done:
+		return errs.New(errs.KindStorageUnavailable, "Agent log session ended during credit delivery")
+	case err := <-command.result:
+		return err
+	}
+}
+
 func (registry *Registry) OpenLogs(
 	ctx context.Context,
 	scope LogScope,
@@ -144,6 +171,7 @@ func (registry *Registry) OpenLogs(
 		message: &agentpb.ControllerMessage{
 			Payload: &agentpb.ControllerMessage_LogSubscribe{LogSubscribe: &agentpb.LogSubscribe{
 				RequestId: requestID, Targets: protobufTargets, Tail: tail, Follow: follow,
+				InitialCredit: maximumQueuedLogEvents,
 			}},
 		},
 		result: make(chan error, 1),

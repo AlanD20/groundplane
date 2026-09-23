@@ -19,14 +19,19 @@ type Subscriptions struct {
 	outputs chan *agentpb.AgentMessage
 
 	mu     sync.Mutex
-	active map[string]context.CancelFunc
+	active map[string]*activeLog
+}
+
+type activeLog struct {
+	cancel  context.CancelFunc
+	credits chan struct{}
 }
 
 func New(reader agentprotocol.LogReader) *Subscriptions {
 	return &Subscriptions{
 		reader:  reader,
 		outputs: make(chan *agentpb.AgentMessage),
-		active:  make(map[string]context.CancelFunc),
+		active:  make(map[string]*activeLog),
 	}
 }
 
@@ -38,7 +43,8 @@ func (manager *Subscriptions) Subscribe(parent context.Context, request *agentpb
 	if request == nil || request.GetRequestId() == "" || manager.reader == nil {
 		return
 	}
-	if request.GetTail() > 1000 || len(request.GetTargets()) > 128 {
+	if request.GetTail() > 1000 || len(request.GetTargets()) > 128 ||
+		request.GetInitialCredit() == 0 || request.GetInitialCredit() > maxQueuedLogEvents {
 		manager.send(
 			parent,
 			logEndMessage(request.GetRequestId(), agentpb.LogEndReason_LOG_END_REASON_AVAILABILITY_FAILED),
@@ -56,22 +62,46 @@ func (manager *Subscriptions) Subscribe(parent context.Context, request *agentpb
 		return
 	}
 	subscriptionContext, cancel := context.WithCancel(parent)
-	manager.active[request.GetRequestId()] = cancel
+	subscription := &activeLog{cancel: cancel, credits: make(chan struct{}, maxQueuedLogEvents)}
+	for range request.GetInitialCredit() {
+		subscription.credits <- struct{}{}
+	}
+	manager.active[request.GetRequestId()] = subscription
 	manager.mu.Unlock()
 
-	go manager.run(subscriptionContext, request)
+	go manager.run(subscriptionContext, request, subscription)
 }
 
 func (manager *Subscriptions) Cancel(requestID string) {
 	manager.mu.Lock()
-	cancel := manager.active[requestID]
+	subscription := manager.active[requestID]
 	manager.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	if subscription != nil {
+		subscription.cancel()
 	}
 }
 
-func (manager *Subscriptions) run(ctx context.Context, request *agentpb.LogSubscribe) {
+func (manager *Subscriptions) Grant(credit *agentpb.LogCredit) error {
+	if credit == nil || credit.GetRequestId() == "" || credit.GetCount() == 0 ||
+		credit.GetCount() > maxQueuedLogEvents {
+		return errs.New(errs.KindValidationFailed, "log credit is invalid")
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	subscription := manager.active[credit.GetRequestId()]
+	if subscription == nil {
+		return nil
+	}
+	if len(subscription.credits)+int(credit.GetCount()) > cap(subscription.credits) {
+		return errs.New(errs.KindStateConflict, "log credit exceeds the subscription window")
+	}
+	for range credit.GetCount() {
+		subscription.credits <- struct{}{}
+	}
+	return nil
+}
+
+func (manager *Subscriptions) run(ctx context.Context, request *agentpb.LogSubscribe, subscription *activeLog) {
 	requestID := request.GetRequestId()
 	released := false
 	defer func() {
@@ -119,8 +149,17 @@ func (manager *Subscriptions) run(ctx context.Context, request *agentpb.LogSubsc
 	done := make(chan error, 1)
 	go collectLogEvents(runContext, incoming, events, sourceDone, done)
 
+loop:
 	for event := range events {
-		if event != nil && !manager.send(runContext, &agentpb.AgentMessage{
+		if event == nil {
+			continue
+		}
+		select {
+		case <-runContext.Done():
+			break loop
+		case <-subscription.credits:
+		}
+		if runContext.Err() != nil || !manager.send(runContext, &agentpb.AgentMessage{
 			Payload: &agentpb.AgentMessage_LogEvent{LogEvent: event},
 		}) {
 			break

@@ -402,6 +402,7 @@ message ControllerMessage {
     ObserveServices observe_services = 14;
     CancelServiceObservation cancel_service_observation = 15;
     BackingHookCheckpointAck backing_hook_checkpoint_ack = 16;
+    LogCredit log_credit = 17;
     TaskEventAck task_event_ack = 22;
   }
 }
@@ -418,10 +419,16 @@ message LogSubscribe {
   repeated LogTarget targets = 2;
   uint32 tail = 3;
   bool follow = 4;
+  uint32 initial_credit = 5;
 }
 
 message LogCancel {
   string request_id = 1;
+}
+
+message LogCredit {
+  string request_id = 1;
+  uint32 count = 2;
 }
 
 message LogReady {
