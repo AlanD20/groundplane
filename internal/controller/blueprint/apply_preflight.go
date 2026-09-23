@@ -68,6 +68,13 @@ func (service *Service) prepareApplyPreflight(
 	if err != nil {
 		return applyPreflight{}, err
 	}
+	if !preserveRoutes {
+		if err := service.rejectUnsupportedBlueprintOmissions(
+			ctx, environmentID, parsed, previous, currentAttaches,
+		); err != nil {
+			return applyPreflight{}, err
+		}
+	}
 	requirements, err := environmentBlueprintRequirements(
 		parsed.Extensions.Requires,
 		parsed.Extensions.Attachments,
