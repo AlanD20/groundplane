@@ -147,7 +147,12 @@ func buildVolumeMutationProjection(
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, nil, nil, err
 	}
-	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
+	candidate.NormalizedCompose, err = composerender.AuthoringComposeVolumes(
+		normalizedArtifact.GetCanonicalYaml(), candidate.Volumes, environment.VolumeDir,
+	)
+	if err != nil {
+		return projectionrecord.EnvironmentComposeProjection{}, nil, nil, err
+	}
 	if request.action == volumeMutationActionRemove {
 		cleanupArtifactID, cleanupErr := taskplanning.StableVolumeCleanupArtifactID(
 			stableIDFromTask(ids.KindConfig, revisionID),

@@ -12,6 +12,7 @@ import (
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 // Rationale: authored Service identities intentionally have no execution labels;
@@ -76,6 +77,18 @@ func TestVolumeMutationPreservesAuthoredServicesWithoutExecutionLabels(t *testin
 				next.Services,
 			) != 1 || next.Services[0].ServiceId != serviceID || len(next.Services[0].ExpectedLabels) != 2 {
 			t.Fatalf("%s changed the authored Service or runtime identity", action)
+		}
+		if action != volumeMutationActionRemove {
+			var authored struct {
+				Volumes map[string]map[string]any `yaml:"volumes"`
+			}
+			if err := yaml.Unmarshal(candidate.NormalizedCompose, &authored); err != nil {
+				t.Fatal(err)
+			}
+			volume := authored.Volumes["data"]
+			if volume["x-gp-slug"] != "data" || volume["driver_opts"] != nil {
+				t.Fatalf("%s stored runtime Volume bind as authored intent: %#v", action, volume)
+			}
 		}
 		candidate.ComposeArtifact, err = proto.Marshal(next)
 		if err != nil {

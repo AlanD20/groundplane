@@ -16,6 +16,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/entry"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -214,7 +215,15 @@ func (service *Service) environmentBlueprintAuthoringDocument(
 	}
 	serviceNames := make(map[string]string)
 	if snapshot.hasHead {
-		input.Compose = append([]byte(nil), snapshot.projection.Record.NormalizedCompose...)
+		var err error
+		input.Compose, err = composerender.AuthoringComposeVolumes(
+			snapshot.projection.Record.NormalizedCompose,
+			snapshot.projection.Record.Volumes,
+			snapshot.environment.Record.VolumeDir,
+		)
+		if err != nil {
+			return blueprintparser.AuthoringDocument{}, err
+		}
 		input.Requires = environmentBlueprintAuthoringRequirements(snapshot.projection.Record)
 		for _, projected := range snapshot.projection.Record.DesiredServices {
 			if projected.EnvironmentID != snapshot.environment.Record.ID || projected.Desired.Name == "" {
@@ -225,7 +234,6 @@ func (service *Service) environmentBlueprintAuthoringDocument(
 			}
 			serviceNames[projected.Desired.ID] = projected.Desired.Name
 		}
-		var err error
 		input.Routes, err = environmentBlueprintAuthoringRoutes(snapshot.projection.Record.DesiredRoutes, serviceNames)
 		if err != nil {
 			return blueprintparser.AuthoringDocument{}, err
