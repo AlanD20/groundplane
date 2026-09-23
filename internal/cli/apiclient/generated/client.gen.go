@@ -1448,6 +1448,7 @@ type Entry struct {
 	//
 	// Examples: /api/v1/Entry.json
 	Schema            *string     `json:"$schema,omitempty"`
+	EmptySecretValue  *bool       `json:"empty_secret_value,omitempty"`
 	Exposure          *[]string   `json:"exposure"`
 	Gid               *int64      `json:"gid,omitempty"`
 	Id                string      `json:"id"`

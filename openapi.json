@@ -1885,6 +1885,9 @@
             "readOnly": true,
             "type": "string"
           },
+          "empty_secret_value": {
+            "type": "boolean"
+          },
           "exposure": {
             "items": {
               "type": "string"

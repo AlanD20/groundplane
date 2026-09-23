@@ -38,6 +38,8 @@ A plain literal remains visible. Secret literals are encrypted; ordinary reads
 do not reveal plaintext. Desired references can resolve to newer values for a
 new operation, but an accepted Task pins exact value generations for its own
 execution and Retry. A later edit must not change an in-flight operation.
+The Entries list marks a secret Entry whose selected value is empty; it does
+not reveal the value or infer emptiness from the redacted source field.
 
 Canonical Environment Blueprint export includes every operator-managed Entry,
 including Entries created through Console, CLI or API actions. Secret literal

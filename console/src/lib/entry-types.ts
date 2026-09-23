@@ -14,4 +14,5 @@ export type EnvironmentEntry = {
   source: EnvironmentEntrySource
   exposure: string[]
   secret: boolean
+  emptySecretValue?: boolean
 }

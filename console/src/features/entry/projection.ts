@@ -50,5 +50,6 @@ export function entryFromAPI(entry: EntryResponse): EnvironmentEntry {
     source,
     exposure: [...entry.exposure],
     secret: entry.secret,
+    emptySecretValue: entry.empty_secret_value,
   };
 }

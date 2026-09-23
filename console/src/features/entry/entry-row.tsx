@@ -11,6 +11,7 @@ export function EntryRow({
   path,
   file,
   secret,
+  emptySecretValue,
   loadValue,
   onEdit,
   onRemove,
@@ -20,6 +21,7 @@ export function EntryRow({
   path?: string;
   file?: boolean;
   secret?: boolean;
+  emptySecretValue?: boolean;
   loadValue?: () => Promise<string>;
   onEdit?: () => void;
   onRemove?: () => void;
@@ -30,6 +32,7 @@ export function EntryRow({
         <span className="truncate font-mono text-sm">{label}</span>
         {file && <Badge variant="muted">file</Badge>}
         {secret && <Badge variant="warning">secret</Badge>}
+        {secret && emptySecretValue && <Badge variant="warning">empty value</Badge>}
       </span>
       <span className="flex items-center gap-2">
         {path && (

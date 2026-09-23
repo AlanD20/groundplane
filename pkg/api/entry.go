@@ -21,6 +21,7 @@ type Entry struct {
 	Source            EntrySource `json:"source"`
 	Exposure          []string    `json:"exposure"` // service names, or ["all"]
 	Secret            bool        `json:"secret"`
+	EmptySecretValue  bool        `json:"empty_secret_value,omitempty"` // True only for an empty selected secret generation.
 	ReconciliationKey string      `json:"reconciliation_key,omitempty"` // Immutable Blueprint key on metadata reads.
 }
 

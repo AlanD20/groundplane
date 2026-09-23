@@ -32,6 +32,7 @@ the next Apply. Existing secret-literal values remain selected when their key
 and source are unchanged; export does not reveal those values. A new key-only
 secret literal starts with an empty value. Set or rotate its value through the
 Entry action, never by putting plaintext into a Blueprint.
+The Console review marks a newly declared key-only secret Entry as empty.
 
 Persistent Volume omission is rejected: use its impact-checked Remove action
 before applying a Blueprint without it. Other resource omissions still have

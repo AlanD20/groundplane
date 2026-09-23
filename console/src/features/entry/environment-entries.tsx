@@ -177,6 +177,7 @@ export function EnvVarsCard({ env }: { env: Environment }) {
         file={entry.type === "file"}
         path={entry.path}
         secret={entry.secret}
+        emptySecretValue={entry.emptySecretValue}
         value={entry.secret ? undefined : (literal ?? entry.source.kind)}
         loadValue={entry.secret ? () => store.revealEntry(entry.id) : undefined}
         onEdit={() => startEdit(entry)}

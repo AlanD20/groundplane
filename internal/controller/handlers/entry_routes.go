@@ -16,6 +16,7 @@ import (
 type EntryReader interface {
 	GetEntry(context.Context, string) (etcdstore.Versioned[entryrecord.Record], error)
 	ListEntries(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[entryrecord.Record], error)
+	SecretValueEmpty(context.Context, entryrecord.Record) (bool, error)
 	RevealEntry(context.Context, string) (string, error)
 }
 

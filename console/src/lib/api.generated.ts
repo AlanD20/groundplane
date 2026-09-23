@@ -2002,6 +2002,7 @@ export interface components {
              * @example /api/v1/Entry.json
              */
             readonly $schema?: string;
+            empty_secret_value?: boolean;
             exposure: string[] | null;
             /** Format: int64 */
             gid?: number;

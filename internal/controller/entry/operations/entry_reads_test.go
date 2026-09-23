@@ -212,6 +212,47 @@ func TestEntryRevealDecryptsSelectedGenerationAndClearsCiphertext(t *testing.T) 
 	}
 }
 
+// Rationale: redacted secret metadata is identical for empty and non-empty values;
+// the list badge must inspect the exact selected generation without returning its bytes.
+func TestEntryEmptySecretStatusUsesSelectedGeneration(t *testing.T) {
+	t.Parallel()
+	protector := secretReadTestProtector(t)
+	for index, value := range []string{"", "entry-password"} {
+		entryID := ids.NewAt(ids.KindEnvEntry, secretReadTestTime(), int64(41+index))
+		generationID := ids.NewAt(ids.KindConfig, secretReadTestTime(), int64(43+index))
+		environmentID := ids.NewAt(ids.KindEnvironment, secretReadTestTime(), 45)
+		envelope, err := protector.Seal(context.Background(), []byte(value))
+		if err != nil {
+			t.Fatal(err)
+		}
+		metadata := envelope.Metadata()
+		repository := &fakeEntryReadRepository{
+			entry: testkeyvalue.Versioned[testentries.Record]{Record: testentries.Record{
+				EnvironmentID: environmentID, CurrentValueGenerationID: generationID,
+				Entry: core.EnvEntry{ID: entryID, Kind: core.EntryKindEnv, Key: "PASSWORD",
+					Source: core.EntrySource{Kind: core.SourceLiteral}, Exposure: []string{"all"}, Secret: true},
+			}},
+			secretValue: testentryvalues.SecretGeneration{
+				EnvironmentID: environmentID, EntryID: entryID, GenerationID: generationID,
+				EnvelopeVersion: uint8(metadata.Version), Cipher: string(metadata.Cipher),
+				DigestAlgorithm: string(metadata.Digest.Algorithm), CiphertextSHA256: metadata.Digest.Value,
+				Ciphertext: envelope.Ciphertext(),
+			},
+		}
+		service, err := NewReadService(repository, protector)
+		if err != nil {
+			t.Fatal(err)
+		}
+		empty, err := service.SecretValueEmpty(context.Background(), repository.entry.Record)
+		if err != nil || empty != (value == "") {
+			t.Fatalf("SecretValueEmpty(%d) = %t, %v", index, empty, err)
+		}
+		if !allBytesZero(repository.secretValue.Ciphertext) {
+			t.Fatal("SecretValueEmpty retained repository ciphertext")
+		}
+	}
+}
+
 // Rationale: the value endpoint is a secret-only exception; allowing it for plain Entries would
 // create a second read representation and blur the accepted desired-state storage boundary.
 func TestEntryRevealRejectsPlainEntry(t *testing.T) {

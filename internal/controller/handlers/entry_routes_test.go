@@ -22,12 +22,13 @@ import (
 )
 
 type fakeEntryReader struct {
-	record          testkeyvalue.Versioned[testentries.Record]
-	page            testkeyvalue.Page[testentries.Record]
-	revealed        string
-	wantEnvironment string
-	wantPage        testkeyvalue.PageRequest
-	listCalls       int
+	record           testkeyvalue.Versioned[testentries.Record]
+	page             testkeyvalue.Page[testentries.Record]
+	revealed         string
+	wantEnvironment  string
+	wantPage         testkeyvalue.PageRequest
+	listCalls        int
+	emptySecretValue bool
 }
 
 type fakeEntryMutator struct {
@@ -108,6 +109,10 @@ func (fake *fakeEntryReader) RevealEntry(_ context.Context, _ string) (string, e
 	return fake.revealed, nil
 }
 
+func (fake *fakeEntryReader) SecretValueEmpty(_ context.Context, _ testentries.Record) (bool, error) {
+	return fake.emptySecretValue, nil
+}
+
 // Rationale: Entry metadata must flatten the accepted fact source on list/detail without leaking
 // selected bytes, while only the explicit value route may return decrypted plaintext.
 func TestEntryRoutesFlattenMetadataAndRevealExplicitly(t *testing.T) {
@@ -130,7 +135,8 @@ func TestEntryRoutesFlattenMetadataAndRevealExplicitly(t *testing.T) {
 		page: testkeyvalue.Page[testentries.Record]{
 			Items: []testkeyvalue.Versioned[testentries.Record]{{Record: record}}, NextCursor: "next",
 		},
-		revealed: "postgres://credential", wantEnvironment: environmentID, wantPage: pageRequest,
+		revealed: "postgres://credential", emptySecretValue: true,
+		wantEnvironment: environmentID, wantPage: pageRequest,
 	}
 	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{Entries: reader})
 
@@ -144,7 +150,8 @@ func TestEntryRoutesFlattenMetadataAndRevealExplicitly(t *testing.T) {
 	if list.Code != http.StatusOK || json.Unmarshal(list.Body.Bytes(), &page) != nil ||
 		reader.listCalls != 1 || len(page.Items) != 1 || page.NextCursor != "next" ||
 		page.Items[0].Source.AttachID != "att_primary" || page.Items[0].Source.GrantAttachID != "att_reporting" ||
-		page.Items[0].Source.Fact != "pg16_URL" || strings.Contains(list.Body.String(), "postgres://credential") {
+		page.Items[0].Source.Fact != "pg16_URL" || !page.Items[0].EmptySecretValue ||
+		strings.Contains(list.Body.String(), "postgres://credential") {
 		t.Fatalf("list response = %d/%s, calls %d, page %#v", list.Code, list.Body.String(), reader.listCalls, page)
 	}
 
@@ -152,7 +159,8 @@ func TestEntryRoutesFlattenMetadataAndRevealExplicitly(t *testing.T) {
 	server.Mux.ServeHTTP(detail, httptest.NewRequest(http.MethodGet, "/api/v1/entries/"+entryID, nil))
 	var shown apiTypes.Entry
 	if detail.Code != http.StatusOK || json.Unmarshal(detail.Body.Bytes(), &shown) != nil ||
-		shown.ID != entryID || shown.Key != "DATABASE_URL" || strings.Contains(detail.Body.String(), "postgres://credential") {
+		shown.ID != entryID || shown.Key != "DATABASE_URL" || !shown.EmptySecretValue ||
+		strings.Contains(detail.Body.String(), "postgres://credential") {
 		t.Fatalf("detail response = %d/%s, shown %#v", detail.Code, detail.Body.String(), shown)
 	}
 

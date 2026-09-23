@@ -103,19 +103,54 @@ func (service *entryReadService) RevealEntry(ctx context.Context, entryID string
 	if !current.Record.Entry.Secret {
 		return "", errs.New(errs.KindValidationFailed, "Entry value reveal requires a secret Entry")
 	}
-	stored, found, err := service.repository.GetSecretEntryValue(
-		ctx,
-		current.Record.Entry.ID,
-		current.Record.CurrentValueGenerationID,
-	)
-	if err != nil {
+	var revealed string
+	if err := service.openSelectedSecretValue(ctx, current.Record, func(plaintext []byte) error {
+		if !utf8.Valid(plaintext) {
+			return errs.New(errs.KindInternal, "Entry plaintext is not valid UTF-8")
+		}
+		revealed = string(plaintext)
+		return nil
+	}); err != nil {
 		return "", err
 	}
+	return revealed, nil
+}
+
+// SecretValueEmpty reports only whether the selected protected generation is empty.
+// It never retains or returns the opened bytes.
+func (service *entryReadService) SecretValueEmpty(
+	ctx context.Context,
+	record entryrecord.Record,
+) (bool, error) {
+	if !record.Entry.Secret {
+		return false, errs.New(errs.KindValidationFailed, "Entry empty-value status requires a secret Entry")
+	}
+	empty := false
+	err := service.openSelectedSecretValue(ctx, record, func(plaintext []byte) error {
+		empty = len(plaintext) == 0
+		return nil
+	})
+	return empty, err
+}
+
+func (service *entryReadService) openSelectedSecretValue(
+	ctx context.Context,
+	record entryrecord.Record,
+	consume secretvalue.PlaintextConsumer,
+) error {
+	stored, found, err := service.repository.GetSecretEntryValue(
+		ctx,
+		record.Entry.ID,
+		record.CurrentValueGenerationID,
+	)
+	if err != nil {
+		return err
+	}
 	defer clear(stored.Ciphertext)
-	if !found || stored.EnvironmentID != current.Record.EnvironmentID ||
-		stored.EntryID != current.Record.Entry.ID ||
-		stored.GenerationID != current.Record.CurrentValueGenerationID {
-		return "", errs.New(errs.KindInternal, "Entry selected secret value generation is missing or mismatched")
+	if !found || stored.EnvironmentID != record.EnvironmentID ||
+		stored.EntryID != record.Entry.ID ||
+		stored.GenerationID != record.CurrentValueGenerationID {
+		return errs.New(errs.KindInternal, "Entry selected secret value generation is missing or mismatched")
 	}
 	envelope, err := secretvalue.Restore(secretvalue.Metadata{
 		Version: secretvalue.EnvelopeVersion(stored.EnvelopeVersion),
@@ -126,19 +161,10 @@ func (service *entryReadService) RevealEntry(ctx context.Context, entryID string
 		},
 	}, stored.Ciphertext)
 	if err != nil {
-		return "", err
+		return err
 	}
-	var revealed string
-	if err := service.protector.Open(ctx, envelope, func(plaintext []byte) error {
-		if !utf8.Valid(plaintext) {
-			return errs.New(errs.KindInternal, "Entry plaintext is not valid UTF-8")
-		}
-		revealed = string(plaintext)
-		return nil
-	}); err != nil {
-		return "", err
-	}
-	return revealed, nil
+	defer envelope.Clear()
+	return service.protector.Open(ctx, envelope, consume)
 }
 
 type durableEntryReadRepository struct {
