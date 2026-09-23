@@ -88,8 +88,12 @@ A Blueprint is the Environment's foundational desired configuration. Adding or
 removing an operator-managed resource in it changes the Environment after Apply;
 Validate previews the change without writing. Persistent Volumes are the
 exception: omission is rejected until the protected Volume Remove action has
-completed. Reusable Project and Platform Secrets are separate resources; an
-Environment Blueprint declares their Entry references, never their values.
+completed. A Backing Zone serving external Attaches also requires its separate
+impact-approved Remove action before omission; the Blueprint's Environment
+revision cannot approve effects on those consumers.
+
+Reusable Project and Platform Secrets are separate resources; an Environment
+Blueprint declares their Entry references, never their values.
 Secret literal Entries carry a key and empty value in authored YAML. Accepted
 work captures exact inputs; Retry and recovery cannot silently use later desired
 state. [Current limitations](capabilities.md) distinguish this contract from

@@ -35,7 +35,12 @@ Entry action, never by putting plaintext into a Blueprint.
 The Console review marks a newly declared key-only secret Entry as empty.
 
 Persistent Volume omission is rejected: use its impact-checked Remove action
-before applying a Blueprint without it. Other resource omissions still have
+before applying a Blueprint without it. If a Backing Zone serves external
+Attaches, use its impact-approved Remove action before omitting it from the
+Blueprint; this Environment's `If-Match` does not approve disruption to those
+consumers.
+
+Other resource omissions still have
 [implementation limits](../issues/runtime-qualification.md#incomplete-features);
 the Console must not promise removal that the Controller retains or rejects.
 

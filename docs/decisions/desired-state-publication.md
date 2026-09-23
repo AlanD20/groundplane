@@ -60,6 +60,10 @@ success; failure retains the visible Service and current head. Removal does not
 cascade through Routes, Attaches, Release Groups, dependencies, Entries,
 Scripts or Volumes. Those references must be changed by their owning actions.
 
+Omitting a Backing Zone with external Attach consumers is rejected until its
+separate impact-approved Remove action completes. The Blueprint's own
+Environment revision cannot authorize effects in other Environments.
+
 Entry metadata selects an immutable value generation. Secret literal bytes stay
 out of listable desired metadata. A Task or retry resolves the exact selected
 generation, not a later current value. Entry deletion removes its generations
