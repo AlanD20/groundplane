@@ -29,15 +29,43 @@ func ProjectZoneProjection(
 	if project == nil || ids.Validate(ownerIDKind, ownerID) != nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Zone projection ownership is invalid")
 	}
-	names, err := composeidentity.OwnedNetworkNames(project)
+	definitions, err := validatedBlueprintZones(project)
 	if err != nil {
 		return nil, err
+	}
+	names := make([]string, len(definitions))
+	for index, definition := range definitions {
+		names[index] = definition.Name
 	}
 	networkIDs, err := composerender.IndexComposeIdentities(ids.KindNetwork, names, identities.Networks)
 	if err != nil {
 		return nil, err
 	}
-	zones := make([]core.Zone, 0, len(names))
+	zones := make([]core.Zone, 0, len(definitions))
+	for _, definition := range definitions {
+		zones = append(zones, core.Zone{
+			ID: networkIDs[definition.Name], Name: definition.Name,
+			Subnet: definition.Subnet, Internal: definition.Internal,
+			OwnerKind: ownerKind, OwnerID: ownerID,
+		})
+	}
+	return zones, nil
+}
+
+type blueprintZoneDefinition struct {
+	Name     string
+	Subnet   string
+	Internal bool
+}
+
+// validatedBlueprintZones shares authored network admission between Validate
+// and Apply without allocating Controller-owned Zone identities.
+func validatedBlueprintZones(project *types.Project) ([]blueprintZoneDefinition, error) {
+	names, err := composeidentity.OwnedNetworkNames(project)
+	if err != nil {
+		return nil, err
+	}
+	definitions := make([]blueprintZoneDefinition, 0, len(names))
 	for _, name := range names {
 		network := project.Networks[name]
 		if (network.Driver != "" && network.Driver != "bridge") || len(network.DriverOpts) != 0 ||
@@ -68,10 +96,9 @@ func ProjectZoneProjection(
 				name,
 			)
 		}
-		zones = append(zones, core.Zone{
-			ID: networkIDs[name], Name: name, Subnet: subnet.String(), Internal: network.Internal,
-			OwnerKind: ownerKind, OwnerID: ownerID,
+		definitions = append(definitions, blueprintZoneDefinition{
+			Name: name, Subnet: subnet.String(), Internal: network.Internal,
 		})
 	}
-	return zones, nil
+	return definitions, nil
 }

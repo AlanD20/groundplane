@@ -7,9 +7,28 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// Rationale: Validate must reject an implicit default network before Apply
+// reaches Zone projection, rather than offering an impossible create preview.
+func TestBlueprintAvailabilityRejectsImplicitZone(t *testing.T) {
+	t.Parallel()
+	project := &types.Project{Networks: types.Networks{"default": {}}}
+	err := ValidateEnvironmentBlueprintAvailability(blueprintparser.Result{Project: project})
+	if kind, _ := errs.KindOf(err); kind != errs.KindValidationFailed {
+		t.Fatalf("implicit Zone admission error = %v, want validation failure", err)
+	}
+	project.Networks["default"] = types.NetworkConfig{
+		Ipam: types.IPAMConfig{Config: []*types.IPAMPool{{Subnet: "10.89.0.0/24"}}},
+	}
+	if err := ValidateEnvironmentBlueprintAvailability(blueprintparser.Result{Project: project}); err != nil {
+		t.Fatalf("explicit Zone rejected: %v", err)
+	}
+}
 
 func TestProjectZoneProjectionRequiresExplicitCanonicalSubnet(t *testing.T) {
 	// Rationale: Zone desired state must contain the operator's reproducible

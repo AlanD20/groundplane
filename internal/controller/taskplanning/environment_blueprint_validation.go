@@ -19,6 +19,9 @@ func ValidateEnvironmentBlueprintAvailability(parsed blueprintparser.Result) err
 			return errs.New(errs.KindValidationFailed, "Blueprint external network ownership is not available yet")
 		}
 	}
+	if _, err := validatedBlueprintZones(parsed.Project); err != nil {
+		return err
+	}
 	for _, volume := range parsed.Project.Volumes {
 		if bool(volume.External) || (volume.Driver != "" && volume.Driver != "local") || len(volume.DriverOpts) != 0 ||
 			!onlyVolumeSlugExtension(volume.Extensions) {

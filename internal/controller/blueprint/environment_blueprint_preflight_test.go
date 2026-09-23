@@ -302,7 +302,7 @@ func TestApplyBlueprintImageFailurePrecedesEveryDurableWrite(t *testing.T) {
 		RootPath:       "compose.yaml",
 		ComposeSources: []string{"compose.yaml"},
 		Files: []core.BlueprintFile{{
-			Path: "compose.yaml", Content: []byte("kind: environment\nschema: 1\nmetadata: {tenant: tenant, project: project, environment: production}\nx-gp-network-pool: 10.40.0.0/16\nservices:\n  api:\n    image: example.invalid/api:1\n    deploy:\n      replicas: 1\n"),
+			Path: "compose.yaml", Content: []byte("kind: environment\nschema: 1\nmetadata: {tenant: tenant, project: project, environment: production}\nx-gp-network-pool: 10.40.0.0/16\nservices:\n  api:\n    image: example.invalid/api:1\n    deploy:\n      replicas: 1\nnetworks:\n  default:\n    ipam:\n      config:\n        - subnet: 10.40.10.0/24\n"),
 		}},
 	}
 	response, err := service.ApplyBlueprint(t.Context(), environmentID, bundle, "", "preflight-no-write")
