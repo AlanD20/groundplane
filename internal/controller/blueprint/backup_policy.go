@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
@@ -42,6 +43,70 @@ type environmentBlueprintBackupPolicySnapshot struct {
 	connectorName  string
 	connectorFound bool
 	found          bool
+}
+
+func environmentBlueprintBackupValidationTargets(
+	snapshot environmentBlueprintSnapshot,
+	parsed blueprintparser.Result,
+	currentAttaches []etcdstore.Versioned[attachrecord.Record],
+) (projectionrecord.EnvironmentComposeProjection, []etcdstore.Versioned[attachrecord.Record], error) {
+	projection := snapshot.projection.Record
+	projection.EnvironmentID = snapshot.environment.Record.ID
+	volumeSlugs, err := environmentBlueprintVolumeSlugs(parsed.Project, projection, snapshot.hasHead)
+	if err != nil {
+		return projectionrecord.EnvironmentComposeProjection{}, nil, err
+	}
+	byKey := make(map[string]projectionrecord.EnvironmentVolumeIdentity, len(projection.Volumes))
+	for _, volume := range projection.Volumes {
+		byKey[volume.Key] = volume
+	}
+	at := snapshot.environment.Record.CreatedAt
+	if at.IsZero() {
+		at = time.Unix(0, 0).UTC()
+	}
+	for key, label := range volumeSlugs {
+		volume, found := byKey[key]
+		if !found {
+			volume = projectionrecord.EnvironmentVolumeIdentity{
+				ID:  ids.DeriveAt(ids.KindVolume, at, snapshot.environment.Record.ID, "validate-volume/"+key),
+				Key: key,
+			}
+		}
+		volume.Slug = label
+		byKey[key] = volume
+	}
+	projection.Volumes = projection.Volumes[:0]
+	for _, volume := range byKey {
+		projection.Volumes = append(projection.Volumes, volume)
+	}
+	attaches := append([]etcdstore.Versioned[attachrecord.Record](nil), currentAttaches...)
+	attachIDs := make(map[string]string, len(attaches)+len(parsed.Extensions.Attachments))
+	for _, attach := range attaches {
+		attachIDs[attach.Record.Name] = attach.Record.ID
+	}
+	for name := range parsed.Extensions.Attachments {
+		if attachIDs[name] == "" {
+			attachIDs[name] = ids.DeriveAt(ids.KindAttach, at, snapshot.environment.Record.ID, "validate-attach/"+name)
+		}
+	}
+	for name, spec := range parsed.Extensions.Attachments {
+		found := false
+		for _, attach := range currentAttaches {
+			found = found || attach.Record.Name == name
+		}
+		if found {
+			continue
+		}
+		credentialID := attachIDs[spec.Credential.Attach]
+		if spec.Credential.Mode == "new" {
+			credentialID = attachIDs[name]
+		}
+		attaches = append(attaches, etcdstore.Versioned[attachrecord.Record]{Record: attachrecord.Record{
+			ID: attachIDs[name], EnvironmentID: snapshot.environment.Record.ID,
+			Name: name, CredentialAttachID: credentialID,
+		}})
+	}
+	return projection, attaches, nil
 }
 
 func (repository *durableRepository) PrepareEnvironmentBlueprintBackupPolicy(

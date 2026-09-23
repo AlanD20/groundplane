@@ -10,7 +10,6 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
 
@@ -23,6 +22,7 @@ import (
 
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
 type environmentBlueprintSnapshot struct {
@@ -132,9 +132,22 @@ func (service *Service) ValidateBlueprint(
 	if err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
+	var currentProject *composetypes.Project
+	if snapshot.hasHead {
+		currentProject, err = composerender.LoadNormalizedEnvironmentProject(ctx, snapshot.projection.Record)
+		if err != nil {
+			return apiTypes.EnvironmentBlueprintValidation{}, err
+		}
+	}
 	return apiTypes.EnvironmentBlueprintValidation{
 		Revision: revision,
-		Changes:  environmentBlueprintChanges(current, parsed, snapshot.hasHead, snapshot.projection.Record),
+		Changes: environmentBlueprintChanges(
+			current,
+			parsed,
+			snapshot.hasHead,
+			snapshot.projection.Record,
+			currentProject,
+		),
 	}, nil
 }
 
@@ -409,6 +422,7 @@ func environmentBlueprintChanges(
 	candidate blueprintparser.Result,
 	hasCurrent bool,
 	projection projectionrecord.EnvironmentComposeProjection,
+	currentProject *composetypes.Project,
 ) []apiTypes.EnvironmentBlueprintChange {
 	currentKeys := make(map[string]map[string]struct{})
 	candidateKeys := make(map[string]map[string]struct{})
@@ -422,6 +436,14 @@ func environmentBlueprintChanges(
 		}
 		for _, volume := range projection.Volumes {
 			addBlueprintResourceKey(currentKeys, "volume", volume.Key)
+		}
+		if currentProject != nil {
+			for key := range currentProject.Configs {
+				addBlueprintResourceKey(currentKeys, "config", key)
+			}
+			for key := range currentProject.Secrets {
+				addBlueprintResourceKey(currentKeys, "secret", key)
+			}
 		}
 	}
 	addBlueprintResourceKey(candidateKeys, "compose", "root")
@@ -479,6 +501,12 @@ func environmentBlueprintChanges(
 	for key := range candidate.Project.Volumes {
 		addBlueprintResourceKey(candidateKeys, "volume", key)
 	}
+	for key := range candidate.Project.Configs {
+		addBlueprintResourceKey(candidateKeys, "config", key)
+	}
+	for key := range candidate.Project.Secrets {
+		addBlueprintResourceKey(candidateKeys, "secret", key)
+	}
 
 	changes := make([]apiTypes.EnvironmentBlueprintChange, 0)
 	for resource, keys := range candidateKeys {
@@ -504,6 +532,7 @@ func environmentBlueprintChanges(
 			}
 			action := apiTypes.BlueprintChangeRetain
 			if resource == "entry" || resource == "script" || resource == "backup" ||
+				resource == "config" || resource == "secret" ||
 				resource == "component" || resource == "release-group" {
 				action = apiTypes.BlueprintChangeRemove
 			}
@@ -529,68 +558,4 @@ func addBlueprintResourceKey(values map[string]map[string]struct{}, resource, ke
 		values[resource] = make(map[string]struct{})
 	}
 	values[resource][key] = struct{}{}
-}
-
-func environmentBlueprintBackupValidationTargets(
-	snapshot environmentBlueprintSnapshot,
-	parsed blueprintparser.Result,
-	currentAttaches []etcdstore.Versioned[attachrecord.Record],
-) (projectionrecord.EnvironmentComposeProjection, []etcdstore.Versioned[attachrecord.Record], error) {
-	projection := snapshot.projection.Record
-	projection.EnvironmentID = snapshot.environment.Record.ID
-	volumeSlugs, err := environmentBlueprintVolumeSlugs(parsed.Project, projection, snapshot.hasHead)
-	if err != nil {
-		return projectionrecord.EnvironmentComposeProjection{}, nil, err
-	}
-	byKey := make(map[string]projectionrecord.EnvironmentVolumeIdentity, len(projection.Volumes))
-	for _, volume := range projection.Volumes {
-		byKey[volume.Key] = volume
-	}
-	at := snapshot.environment.Record.CreatedAt
-	if at.IsZero() {
-		at = time.Unix(0, 0).UTC()
-	}
-	for key, label := range volumeSlugs {
-		volume, found := byKey[key]
-		if !found {
-			volume = projectionrecord.EnvironmentVolumeIdentity{
-				ID:  ids.DeriveAt(ids.KindVolume, at, snapshot.environment.Record.ID, "validate-volume/"+key),
-				Key: key,
-			}
-		}
-		volume.Slug = label
-		byKey[key] = volume
-	}
-	projection.Volumes = projection.Volumes[:0]
-	for _, volume := range byKey {
-		projection.Volumes = append(projection.Volumes, volume)
-	}
-	attaches := append([]etcdstore.Versioned[attachrecord.Record](nil), currentAttaches...)
-	attachIDs := make(map[string]string, len(attaches)+len(parsed.Extensions.Attachments))
-	for _, attach := range attaches {
-		attachIDs[attach.Record.Name] = attach.Record.ID
-	}
-	for name := range parsed.Extensions.Attachments {
-		if attachIDs[name] == "" {
-			attachIDs[name] = ids.DeriveAt(ids.KindAttach, at, snapshot.environment.Record.ID, "validate-attach/"+name)
-		}
-	}
-	for name, spec := range parsed.Extensions.Attachments {
-		found := false
-		for _, attach := range currentAttaches {
-			found = found || attach.Record.Name == name
-		}
-		if found {
-			continue
-		}
-		credentialID := attachIDs[spec.Credential.Attach]
-		if spec.Credential.Mode == "new" {
-			credentialID = attachIDs[name]
-		}
-		attaches = append(attaches, etcdstore.Versioned[attachrecord.Record]{Record: attachrecord.Record{
-			ID: attachIDs[name], EnvironmentID: snapshot.environment.Record.ID,
-			Name: name, CredentialAttachID: credentialID,
-		}})
-	}
-	return projection, attaches, nil
 }
