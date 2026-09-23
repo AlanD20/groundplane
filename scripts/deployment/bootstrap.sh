@@ -5,6 +5,8 @@ retain_recovery=0
 unresolved_task_id=""
 unresolved_task_state=unknown
 native_initialized=0
+cli_stage=""
+cli_activation_pending=0
 export PYTHONDONTWRITEBYTECODE=1
 
 backup_path() {
@@ -77,6 +79,19 @@ restore_path() {
 finish() {
     status=$?
     trap - EXIT HUP INT TERM
+    if test -n "$cli_stage"; then
+        if ! rm -f -- "$cli_stage"; then
+            echo "could not remove owned CLI staging file: $cli_stage" >&2
+            if test "$status" -eq 0; then
+                status=1
+            fi
+        fi
+    fi
+    if test "$status" -ne 0 && test "$cli_activation_pending" -eq 1; then
+        echo "Controller update completed, but CLI activation did not; rerun this installer" >&2
+        echo "CLI candidate retained in $deploy_dir" >&2
+        exit "$status"
+    fi
     if test "$status" -ne 0 && test "$retain_recovery" -eq 1 && test "$rollback" -eq 0; then
         echo "native update failed or remains unresolved; no SSH rollback attempted" >&2
         echo "deployment receipt is retained under /var/lib/groundplane/controller-updates" >&2
@@ -251,9 +266,38 @@ if test "$deployment_mode" = native; then
     if test "$stage_only" -eq 1; then
         exit 0
     fi
+    cli_target=/usr/local/bin/groundplane
+    if test ! -f "$cli_target" || test -L "$cli_target" ||
+        test "$(stat -c '%u:%h:%a' "$cli_target")" != '0:1:755'; then
+        echo "installed CLI is not a root-owned regular executable" >&2
+        exit 1
+    fi
+    if test ! -f "$deploy_dir/groundplane" || test -L "$deploy_dir/groundplane"; then
+        echo "candidate CLI is not a regular file" >&2
+        exit 1
+    fi
+    if ! cmp -s "$deploy_dir/groundplane" "$cli_target"; then
+        cli_stage="/usr/local/bin/groundplane.groundplane-$deploy_id"
+        if test -e "$cli_stage" || test -L "$cli_stage"; then
+            echo "CLI staging path already exists" >&2
+            exit 1
+        fi
+        install -m 0755 -o root -g root "$deploy_dir/groundplane" "$cli_stage"
+        cmp -s "$deploy_dir/groundplane" "$cli_stage"
+        sync -f "$cli_stage"
+    fi
     retain_recovery=1
     python3 "$deploy_dir/controller_update.py" "$release" "groundplane-deploy-$deploy_id" --ensure
     retain_recovery=0
+    cli_activation_pending=1
+    if test -n "$cli_stage"; then
+        mv -fT -- "$cli_stage" "$cli_target"
+        cli_stage=""
+        sync -f /usr/local/bin
+    fi
+    cmp -s "$deploy_dir/groundplane" "$cli_target"
+    cli_activation_pending=0
+    printf 'CLI: current\n'
     exit 0
 fi
 runner_ref=$(publish_image groundplane-runner "$source_runner_image" Runner)

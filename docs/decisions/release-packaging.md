@@ -165,10 +165,14 @@ Agent operations in order without making the second failure roll back an
 already qualified Controller.
 
 Bootstrap installs the recovery executable, guard, and sole persistent unit.
-After that baseline, routine deployment only stages immutable bytes and invokes
-the protected endpoint; it does not rewrite service files, configuration,
-identity, CLI, Runner state, or Agent independently. A private deployment
-receipt retains the release, idempotency key, and accepted Task for explicit
+After that baseline, routine deployment stages immutable bytes and invokes
+the protected endpoint. A successful automatic Controller update then replaces
+the local CLI from the same verified installer bundle. CLI replacement is an
+installer completion step, not authority to repair or roll back a completed
+Controller Task. Stage-only and direct Controller updates leave the CLI alone.
+The installer does not rewrite service files, configuration, identity, Runner
+state, or Agent independently. A private deployment receipt retains the release,
+idempotency key, and accepted Task for explicit
 resume after client interruption. It is not another Task journal.
 
 Current source: [shared release values](../../internal/common/controllerupgrade),

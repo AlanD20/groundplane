@@ -482,6 +482,8 @@ class DeployRollbackTest(unittest.TestCase):
             f"service_was_active={1 if service_was_active else 0}\n"
             f"service_was_enabled={1 if service_was_enabled else 0}\n"
             "retain_recovery=0\n"
+            "cli_stage=\n"
+            "cli_activation_pending=0\n"
             "unresolved_task_id=\n"
             "unresolved_task_state=unknown\n"
             f"{shell_function('restore_path')}\n"

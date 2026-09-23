@@ -1,5 +1,6 @@
 """Rationale: guarded deployments exit before legacy installation and preserve uncertainty."""
 from pathlib import Path
+import os
 import re
 import subprocess
 import tempfile
@@ -31,7 +32,8 @@ class NativeDeployBranchTest(unittest.TestCase):
                 self.assertEqual((binaries / name).read_bytes(), b"immutable predecessor")
                 self.assertEqual((binaries / name).stat().st_mode & 0o777, 0o500)
 
-    def run_branch(self, *, stage_only=False, update_status=0, bootstrap=False):
+    def run_branch(self, *, stage_only=False, update_status=0, bootstrap=False,
+                   activate_status=0, matching_cli=False, candidate_missing=False):
         parent = Path(__file__).resolve().parents[1] / ".tmp" / "test-deploy-native"
         parent.mkdir(mode=0o700, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=parent)
@@ -39,16 +41,28 @@ class NativeDeployBranchTest(unittest.TestCase):
         root = Path(temporary.name)
         bundle = root / "groundplane-deploy-0123456789abcdef0123456789abcdef"
         bundle.mkdir(mode=0o700)
+        if not candidate_missing:
+            (bundle / "groundplane").write_bytes(b"new CLI")
+        cli_target = root / "installed-groundplane"
+        cli_target.write_bytes(b"new CLI" if matching_cli else b"old CLI")
+        cli_target.chmod(0o755)
+        original_cli_inode = cli_target.stat().st_ino
         finish = re.search(r"(?ms)^finish\(\) \{\n.*?^\}\n", deploy.REMOTE_INSTALL).group(0)
         start = deploy.REMOTE_INSTALL.index("deployment_mode=$(python3")
         end = deploy.REMOTE_INSTALL.index("runner_ref=$(publish_image", start)
         branch = deploy.REMOTE_INSTALL[start:end]
+        branch = branch.replace("sync -f /usr/local/bin", f"sync -f {root}")
+        branch = branch.replace("/usr/local/bin/groundplane", str(cli_target))
+        branch = branch.replace("'0:1:755'", f"'{os.geteuid()}:1:755'")
+        branch = branch.replace(" -o root -g root", "")
         script = "\n".join([
             "set -eu", "deploy_dir=$1", "calls=$2",
             "deploy_id=0123456789abcdef0123456789abcdef", "source_agent_image=agent",
-            "rollback=0", "retain_recovery=0", f"stage_only={int(stage_only)}", f"bootstrap={int(bootstrap)}",
+            "rollback=0", "retain_recovery=0", 'cli_stage=""', "cli_activation_pending=0",
+            f"stage_only={int(stage_only)}", f"bootstrap={int(bootstrap)}",
             "publish_image() { echo pinned-agent; }",
             'systemctl() { echo "unexpected systemctl" >&2; exit 90; }',
+            f'mv() {{ if test {activate_status} -ne 0; then return {activate_status}; fi; command mv "$@"; }}',
             'python3() {',
             '  printf "%s\\n" "$*" >> "$calls"',
             '  case "$1" in',
@@ -64,23 +78,25 @@ class NativeDeployBranchTest(unittest.TestCase):
         calls = root / "calls"
         result = subprocess.run(["sh", "-c", script, "--", str(bundle), str(calls)],
                                 capture_output=True, text=True, check=False)
-        return result, bundle, calls.read_text()
+        return result, bundle, calls.read_text(), cli_target, original_cli_inode
 
     # QA: UP-01; real installer branch with fake helpers, not native activation.
     # Rationale: native updates must use the protected Task, never SSH overwrite.
     def test_success_uses_native_task_without_legacy_fallthrough(self):
-        result, bundle, calls = self.run_branch()
+        result, bundle, calls, cli, _ = self.run_branch()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("controller_update.py sha256:", calls)
         self.assertIn("groundplane-deploy-0123456789abcdef0123456789abcdef", calls)
+        self.assertEqual(cli.read_bytes(), b"new CLI")
         self.assertFalse(bundle.exists())
 
     # QA: UP-01; installer branch only, not running Controller state.
     # Rationale: staging may select immutable input but must not start activation.
     def test_stage_only_never_activates(self):
-        result, bundle, calls = self.run_branch(stage_only=True)
+        result, bundle, calls, cli, _ = self.run_branch(stage_only=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("controller_update.py", calls)
+        self.assertEqual(cli.read_bytes(), b"old CLI")
         self.assertFalse(bundle.exists())
 
     # QA: UP-07, UP-11; installer response handling, not product recovery.
@@ -88,16 +104,45 @@ class NativeDeployBranchTest(unittest.TestCase):
     def test_unknown_or_failed_task_retains_bundle_and_never_rolls_back(self):
         for status in (1, 2):
             with self.subTest(status=status):
-                result, bundle, calls = self.run_branch(update_status=status)
+                result, bundle, calls, cli, _ = self.run_branch(update_status=status)
                 self.assertEqual(result.returncode, status, result.stderr)
                 self.assertTrue(bundle.exists())
                 self.assertIn("no SSH rollback attempted", result.stderr)
                 self.assertNotIn("remove-empty", calls)
+                self.assertEqual(cli.read_bytes(), b"old CLI")
+
+    # QA: PKG-02; local installer effects, not a running native update.
+    # Rationale: an incomplete post-Task CLI activation must not report a
+    # successful installation or destroy the previous working CLI.
+    def test_cli_activation_failure_retains_candidate_and_old_cli(self):
+        result, bundle, calls, cli, _ = self.run_branch(activate_status=95)
+        self.assertEqual(result.returncode, 95, result.stderr)
+        self.assertIn("controller_update.py sha256:", calls)
+        self.assertIn("CLI activation did not", result.stderr)
+        self.assertTrue(bundle.exists())
+        self.assertEqual(cli.read_bytes(), b"old CLI")
+
+    # QA: PKG-02; refusal before the protected Controller operation.
+    # Rationale: a missing CLI candidate must not produce a successful
+    # Controller Task followed by a permanently stale local CLI.
+    def test_missing_cli_candidate_refuses_before_controller_update(self):
+        result, bundle, calls, cli, _ = self.run_branch(candidate_missing=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("controller_update.py", calls)
+        self.assertEqual(cli.read_bytes(), b"old CLI")
+
+    # QA: PKG-02; exact reapplication should not churn a matching CLI inode.
+    def test_matching_cli_is_not_replaced(self):
+        result, bundle, calls, cli, original_inode = self.run_branch(matching_cli=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(cli.read_bytes(), b"new CLI")
+        self.assertEqual(cli.stat().st_ino, original_inode)
+        self.assertIn("controller_update.py sha256:", calls)
 
     # QA: UP-03; installer admission only, not host discovery.
     # Rationale: an explicit bootstrap flag cannot bypass native recovery authority.
     def test_native_installation_refuses_bootstrap_override(self):
-        result, bundle, calls = self.run_branch(bootstrap=True)
+        result, bundle, calls, _, _ = self.run_branch(bootstrap=True)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertNotIn("controller_release.py", calls)
         self.assertFalse(bundle.exists())

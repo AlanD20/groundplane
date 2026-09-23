@@ -78,10 +78,11 @@ without pruning existing images or unrelated caches. SIGKILL or a machine crash
 cannot run cleanup. Installed runtime images and files needed by unresolved
 recovery are intentionally retained.
 
-Existing installations skip the Runner build and retain their CLI, Runner, etcd,
-configuration and keys. Builds use the resolved commit's timestamp for image
-metadata; the displayed version includes its commit. Activation still checks exact
-image and binary identities.
+Existing installations skip the Runner build and retain their Runner, etcd,
+configuration and keys. A successful automatic Controller update also installs
+the matching CLI after its protected Task completes. Builds use the resolved
+commit's timestamp for image metadata; the displayed version includes its
+commit. Activation still checks exact image and binary identities.
 
 `--ref` cannot combine with `--version`, `--bundle` or `--sha256`. Scope flags,
 `--stage-only`, `--listen-ip` and initial-only `--config` retain their normal roles.
@@ -112,14 +113,19 @@ Controller update. Inspect each Task's result.
 ## Updates, staging and repeat runs
 
 On an existing guarded installation, the installer stages and follows normal
-protected update Tasks. It does not rerun bootstrap, replace CLI/Runner, rewrite
-configuration or keys, or independently restart etcd and application workloads.
+protected update Tasks. Once a Controller update completes, it atomically replaces
+the local CLI with the bundled version. A failed or unresolved Controller Task
+leaves the old CLI in place. If CLI replacement itself fails, the installer
+reports failure and retains the candidate for a repeat run; it does not claim
+that the completed Controller Task was rolled back. The installer does not rerun
+bootstrap, replace Runner, rewrite configuration or keys, or independently
+restart etcd and application workloads.
 `--config` is rejected on this path. Partial or legacy layouts require explicit
 diagnosis; the installer does not silently repair them.
 
 `--stage-only` requires an existing guarded installation. It prepares a candidate
-without activation so an operator can review it. Activate the printed digest
-through Host's Controller view or the CLI:
+without activating the Controller or replacing the CLI. Activate the printed
+digest through Host's Controller view or the CLI:
 
 ```sh
 groundplane --host PRIVATE_CONTROLLER_URL controller update --release sha256:DIGEST
@@ -128,7 +134,9 @@ groundplane --host PRIVATE_CONTROLLER_URL task show TASK_ID
 
 Replace those values with the private endpoint and actual candidate/Task identity.
 Compatibility is checked again by the running Controller. Staging is not update
-success and does not authorize a changed Agent selection.
+success and does not authorize a changed Agent selection. A manual Controller
+update does not install a CLI; rerun the installer for that release afterward if
+the host CLI should match it.
 
 A repeat of an already completed healthy installation can skip activation after
 checking exact Controller bytes, recovery availability, platform health and Agent
