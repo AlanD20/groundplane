@@ -3,15 +3,17 @@ package app
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
+	"os"
+
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
+	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
-	"io"
-	"log/slog"
-	"os"
 
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/agent/componentaction"
@@ -81,7 +83,7 @@ type agentComposeResources struct {
 }
 
 func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
-	registerAdapters()
+	adaptercompiler.Register()
 	cfg := config.DefaultAgentConfig()
 	if err := config.Load(ctx, configPath, &cfg); err != nil {
 		return nil, err
@@ -266,6 +268,9 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	if err := client.SetScriptRuntime(scripts); err != nil {
+		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
+	}
+	if err := client.SetAdapterCompiler(adaptercompiler.Compile); err != nil {
 		return nil, preferAgentComposeCleanup(err, runtimeResources.Close())
 	}
 	if err := configureAgentDockerReads(ctx, client, runtimeResources); err != nil {

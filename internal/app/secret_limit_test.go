@@ -1,9 +1,10 @@
-package age
+package app
 
 import (
 	"bytes"
 	"testing"
 
+	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -12,13 +13,13 @@ import (
 // durable ciphertext ceiling and decrypts the boundary value exactly.
 func TestMaximumSecretValueFitsDurableCiphertextLimit(t *testing.T) {
 	t.Parallel()
-	keypair, err := GenerateKeypair()
+	keypair, err := ageinfra.GenerateKeypair()
 	if err != nil {
 		t.Fatalf("GenerateKeypair() error = %v", err)
 	}
 	plaintext := bytes.Repeat([]byte{'s'}, apiTypes.MaximumSecretValueBytes)
 	defer clear(plaintext)
-	ciphertext, err := Encrypt(keypair.Recipient, plaintext)
+	ciphertext, err := ageinfra.Encrypt(keypair.Recipient, plaintext)
 	if err != nil {
 		t.Fatalf("Encrypt(maximum Secret value) error = %v", err)
 	}
@@ -26,7 +27,7 @@ func TestMaximumSecretValueFitsDurableCiphertextLimit(t *testing.T) {
 	if len(ciphertext) > 256<<10 {
 		t.Fatalf("Encrypt(maximum Secret value) ciphertext bytes = %d, want <= %d", len(ciphertext), 256<<10)
 	}
-	revealed, err := Decrypt(keypair.Identity, ciphertext)
+	revealed, err := ageinfra.Decrypt(keypair.Identity, ciphertext)
 	if err != nil {
 		t.Fatalf("Decrypt(maximum Secret value) error = %v", err)
 	}

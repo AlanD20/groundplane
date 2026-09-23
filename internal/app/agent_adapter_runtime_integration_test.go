@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/agent"
 	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -119,7 +120,7 @@ func runAdapterProcedure(
 	procedure *agentpb.AdapterProcedure,
 ) agent.TaskResult {
 	t.Helper()
-	registerAdapters()
+	adaptercompiler.Register()
 	plan, err := executionplan.Seal(&agentpb.ExecutionPlan{
 		Schema:           executionplan.SchemaVersion,
 		PlanId:           adapterRuntimePlanID,
@@ -139,6 +140,7 @@ func runAdapterProcedure(
 	}
 
 	pool := agent.NewWorkerPool(1, "/var/lib/groundplane/volumes", fake, nil)
+	pool.SetAdapterCompiler(adaptercompiler.Compile)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {

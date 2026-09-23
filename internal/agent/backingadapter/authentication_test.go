@@ -19,23 +19,23 @@ func TestBackingAuthenticationDecodingIsExplicit(t *testing.T) {
 		{agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD, core.BackingAuthenticationPassword},
 		{agentpb.BackingAuthentication_BACKING_AUTHENTICATION_NONE, core.BackingAuthenticationNone},
 	} {
-		mode, err := decodeBackingAuthentication(test.wire, true)
+		mode, err := DecodeBackingAuthentication(test.wire, true)
 		if err != nil || mode != test.mode {
 			t.Fatalf("decodeBackingAuthentication(%v, true) = %q, %v", test.wire, mode, err)
 		}
 	}
-	mode, err := decodeBackingAuthentication(
+	mode, err := DecodeBackingAuthentication(
 		agentpb.BackingAuthentication_BACKING_AUTHENTICATION_UNSPECIFIED, false,
 	)
 	if err != nil || mode != "" {
 		t.Fatalf("decodeBackingAuthentication(unspecified, false) = %q, %v", mode, err)
 	}
-	if _, err := decodeBackingAuthentication(
+	if _, err := DecodeBackingAuthentication(
 		agentpb.BackingAuthentication_BACKING_AUTHENTICATION_UNSPECIFIED, true,
 	); err == nil {
 		t.Fatal("decodeBackingAuthentication(unset selectable mode) succeeded")
 	}
-	if _, err := decodeBackingAuthentication(
+	if _, err := DecodeBackingAuthentication(
 		agentpb.BackingAuthentication_BACKING_AUTHENTICATION_PASSWORD, false,
 	); err == nil {
 		t.Fatal("decodeBackingAuthentication(explicit unsupported mode) succeeded")

@@ -77,11 +77,11 @@ CI runs the architecture checker directly. The temporary 0.0.1 deferral mechanis
 has been removed: cross-layer integration tests live with application composition,
 while storage-only tests remain with their repositories.
 
-The [baseline](../architecture-baseline.json) still records older, separately
-approved legacy findings, oversized-file ceilings and frozen production totals.
-A passing checker means no violations beyond that baseline, not that all legacy
-debt is gone. Do not expand allowances without approval. Architecture checks do
-not replace behavioral tests or [live qualification](issues/runtime-qualification.md).
+The [baseline](../architecture-baseline.json) retains frozen production totals
+for the application and root etcd packages. Legacy code-pattern/import findings
+and oversized-file allowances have been removed. A passing checker proves only
+these architecture rules; it does not replace behavioral tests or
+[live qualification](issues/runtime-qualification.md).
 
 ## Release and deployment
 

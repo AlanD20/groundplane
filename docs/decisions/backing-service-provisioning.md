@@ -57,6 +57,12 @@ executes only inside the selected backing container. Without a provisioning
 hook, Custom Attach is network-only; Custom has neither database grants nor
 managed Backup support.
 
+The application composition layer resolves the compiled built-in adapter
+catalog for Agent execution. The Agent receives only a bounded sequence of
+closed operations and validates each before running it; Agent modules do not
+depend on the adapter registry. The sealed Task still pins the adapter identity
+and procedure input for replay.
+
 Creating a dependent changes only the selected consumer's network membership.
 Detaching a dependent removes only that edge. Detaching an owner is blocked
 while dependent credential references remain; once clear, it revokes any

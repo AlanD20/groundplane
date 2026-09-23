@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"sort"
+
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
@@ -17,8 +19,6 @@ import (
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"reflect"
-	"sort"
 )
 
 func (repository *TaskRepository) prepareComponentTaskRetry(
@@ -210,7 +210,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		if decodeErr != nil {
 			return componentTaskChange{}, decodeErr
 		}
-		if !reflect.DeepEqual(active, candidate.Current) {
+		if !componentrecord.EqualRecord(active, candidate.Current) {
 			return componentTaskChange{}, errs.New(
 				errs.KindStateConflict,
 				"active Component no longer matches retry base",
@@ -272,7 +272,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		if reserveErr != nil {
 			return componentTaskChange{}, reserveErr
 		}
-		if !reflect.DeepEqual(registry, replacement) {
+		if !networkreservations.EqualComponentAddressRegistry(registry, replacement) {
 			registries[next.ZoneID()] = replacement
 			changedRegistries[next.ZoneID()] = struct{}{}
 		}
@@ -401,7 +401,7 @@ func componentRetryProjectionMatches(
 			if component.Desired.ID != candidate.Candidate.Desired.ID {
 				continue
 			}
-			if !reflect.DeepEqual(component, candidate.Candidate) {
+			if !componentrecord.EqualRecord(component, candidate.Candidate) {
 				return false
 			}
 			matched = true

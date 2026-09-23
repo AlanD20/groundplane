@@ -1,7 +1,6 @@
 package taskplanning
 
 import (
-	"reflect"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -102,7 +101,7 @@ func ReconcileBlueprintComponents(
 		if present {
 			config = blueprintComponentConfig(kind, spec)
 		}
-		if !present || (active.Enabled == spec.Enabled && reflect.DeepEqual(active.Config, config)) {
+		if !present || (active.Enabled == spec.Enabled && core.EqualComponentConfig(active.Config, config)) {
 			if active.Enabled && !active.Healthy {
 				candidate := cloneBlueprintComponent(active)
 				candidate.PinnedIPv4 = ""

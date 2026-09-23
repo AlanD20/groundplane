@@ -38,6 +38,12 @@ generation use the same `huma.API.OpenAPI()` object; there is no shadow registry
 for handwritten routes. Framework types stop at the transport boundary and
 RFC 7807 remains the public error envelope.
 
+Huma's schema registry requires a Go `reflect.Type`. Route registration may
+pass `reflect.TypeFor[T]()` directly to that registry; this is type metadata,
+not runtime model conversion. The architecture gate permits only that exact
+registration shape in HTTP handlers and still rejects other production
+reflection.
+
 The deterministic OpenAPI 3.1 document is committed at
 [openapi.json](../../openapi.json). It generates the Go client at
 [client.gen.go](../../internal/cli/apiclient/generated/client.gen.go) and the
@@ -46,6 +52,12 @@ runtime-free Console contract at
 layer retains idempotency, timeout, streaming, and problem-response policy;
 the Console retains its runtime request policy. Generated files are never
 edited.
+
+The CLI's Cobra execution context carries its scoped App, and an HTTP request
+context carries the streaming lifecycle that admitted it. Those two private
+keys are installed and recovered by their owning boundary; the architecture
+gate permits only those exact context assertions. They do not authorize
+general dynamic model recovery.
 
 Generator versions are exact repository dependencies. Generation emits the
 document before both clients, and drift is a delivery failure. Only live typed

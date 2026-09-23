@@ -5,11 +5,6 @@ package agent
 import (
 	"context"
 	"errors"
-	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
-	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
-	logstream "github.com/AlanD20/groundplane/internal/agent/logstream"
-	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 	"log/slog"
 	"math/rand/v2"
@@ -19,6 +14,13 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
+	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	logstream "github.com/AlanD20/groundplane/internal/agent/logstream"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
@@ -70,51 +72,13 @@ type Client struct {
 	compose                *composeruntime.Runtime
 	environmentDirectories *directoryruntime.Runtime
 	materializer           *filematerialization.Runtime
+	adapterCompiler        backingadapter.Compiler
 	componentActions       ComponentActionRuntime
 	hostResolution         HostResolutionRuntime
 	scriptRuntime          ScriptRuntime
 	images                 WorkloadImageResolver
 	observer               ServiceObserver
 	logs                   *logstream.Subscriptions
-}
-
-func (c *Client) SetComponentActionRuntime(runtime ComponentActionRuntime) error {
-	if c == nil || runtime == nil {
-		return errs.New(errs.KindValidationFailed, "agent: Component action runtime is required")
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.started || c.pool != nil {
-		return errs.New(errs.KindStateConflict, "agent: Component action runtime cannot change after start")
-	}
-	c.componentActions = runtime
-	return nil
-}
-
-func (c *Client) SetHostResolutionRuntime(runtime HostResolutionRuntime) error {
-	if c == nil || runtime == nil {
-		return errs.New(errs.KindValidationFailed, "agent: host resolution runtime is required")
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.started || c.pool != nil {
-		return errs.New(errs.KindStateConflict, "agent: host resolution runtime cannot change after start")
-	}
-	c.hostResolution = runtime
-	return nil
-}
-
-func (c *Client) SetScriptRuntime(runtime ScriptRuntime) error {
-	if c == nil || runtime == nil {
-		return errs.New(errs.KindValidationFailed, "agent: Script runtime is required")
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.started || c.pool != nil {
-		return errs.New(errs.KindStateConflict, "agent: Script runtime cannot change after start")
-	}
-	c.scriptRuntime = runtime
-	return nil
 }
 
 func NewClient(
@@ -295,6 +259,9 @@ func (c *Client) startWorkerPool(ctx context.Context, size int) (context.CancelF
 	}
 	if c.componentActions != nil {
 		pool.SetComponentActionRuntime(c.componentActions)
+	}
+	if c.adapterCompiler != nil {
+		pool.SetAdapterCompiler(c.adapterCompiler)
 	}
 	if c.hostResolution != nil {
 		pool.SetHostResolutionRuntime(c.hostResolution)

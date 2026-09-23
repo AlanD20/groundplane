@@ -4,10 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
-	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -15,48 +13,46 @@ import (
 const maximumCompiledAdapterSteps = 16
 
 type Runtime struct {
-	runner runner.Runner
+	runner   runner.Runner
+	compiler Compiler
 }
+
+// Step is one operation compiled by the application's trusted, closed adapter
+// catalog. The Agent validates each operation again before executing it.
+type Step struct {
+	Op       string
+	Database string
+	Program  string
+	Args     []string
+	Stdin    []byte
+}
+
+type Compiler func(*agentpb.AdapterProcedure) ([]Step, error)
 
 type StepResult struct {
 	ExitCode int32
 }
 
-func New(taskRunner runner.Runner) *Runtime {
-	return &Runtime{runner: taskRunner}
+func New(taskRunner runner.Runner, compiler Compiler) *Runtime {
+	return &Runtime{runner: taskRunner, compiler: compiler}
 }
 
 func (runtime *Runtime) ExecuteStep(
 	ctx context.Context,
 	step *agentpb.ExecutionStep,
 ) (StepResult, error) {
-	if runtime == nil || runtime.runner == nil {
+	if runtime == nil || runtime.runner == nil || runtime.compiler == nil {
 		return StepResult{}, errs.New(errs.KindInternal, "agent: adapter runtime is not configured")
 	}
 	procedure := step.GetAdapterProcedure()
 	if procedure == nil {
 		return StepResult{}, errs.New(errs.KindInternal, "agent: adapter procedure is required")
 	}
-	adapter, found := adapters.Get(procedure.AdapterKey)
-	if !found || adapter.Custom() {
-		return StepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter procedure is not registered")
+	compiled, err := runtime.compiler(procedure)
+	defer clearSteps(compiled)
+	if err != nil {
+		return StepResult{}, err
 	}
-	authentication, err := decodeBackingAuthentication(
-		procedure.Authentication, adapter.SupportsAuthenticationModes(),
-	)
-	if err != nil || authentication == core.BackingAuthenticationNone {
-		return StepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter authentication mode is invalid")
-	}
-	params := adapters.Input{
-		Authentication: authentication,
-		Database:       procedure.Database,
-		Role:           procedure.Role,
-		Password:       append([]byte(nil), procedure.Password...),
-		GrantOn:        procedure.GrantOn,
-	}
-	defer clear(params.Password)
-	compiled := compileAdapterProcedure(adapter, procedure.Phase, params)
-	defer adapters.ClearSteps(compiled)
 	if len(compiled) == 0 || len(compiled) > maximumCompiledAdapterSteps {
 		return StepResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -88,25 +84,6 @@ func (runtime *Runtime) ExecuteStep(
 	return result, nil
 }
 
-func compileAdapterProcedure(
-	adapter adapters.Adapter,
-	phase agentpb.AdapterProcedurePhase,
-	params adapters.Input,
-) []adapters.Step {
-	switch phase {
-	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION:
-		return adapter.ProvisionSteps(params)
-	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_GRANT:
-		return adapter.GrantSteps(params)
-	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_REVOKE:
-		return adapter.RevokeSteps(params)
-	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_DETACH:
-		return adapter.DetachSteps(params)
-	default:
-		return nil
-	}
-}
-
 func (runtime *Runtime) BackingContainer(ctx context.Context, runtimeServiceID string) (string, error) {
 	if ids.Validate(ids.KindService, runtimeServiceID) != nil &&
 		ids.Validate(ids.KindComponent, runtimeServiceID) != nil {
@@ -132,9 +109,9 @@ func (runtime *Runtime) BackingContainer(ctx context.Context, runtimeServiceID s
 	return containers[0], nil
 }
 
-func adapterCommand(step adapters.Step) (string, []string, []byte, error) {
+func adapterCommand(step Step) (string, []string, []byte, error) {
 	switch step.Op {
-	case adapters.StepSQL:
+	case "sql":
 		if step.Database == "" || step.Program != "" || len(step.Args) != 0 || len(step.Stdin) == 0 {
 			return "", nil, nil, errs.New(errs.KindValidationFailed, "agent: compiled SQL operation is invalid")
 		}
@@ -142,7 +119,7 @@ func adapterCommand(step adapters.Step) (string, []string, []byte, error) {
 			"--no-psqlrc", "--username", "postgres", "--dbname", step.Database,
 			"--set", "ON_ERROR_STOP=1",
 		}, step.Stdin, nil
-	case adapters.StepExec:
+	case "exec":
 		if step.Database != "" || !validCompiledProgram(step.Program) {
 			return "", nil, nil, errs.New(errs.KindValidationFailed, "agent: compiled exec operation is invalid")
 		}
@@ -154,6 +131,14 @@ func adapterCommand(step adapters.Step) (string, []string, []byte, error) {
 		return step.Program, append([]string(nil), step.Args...), step.Stdin, nil
 	default:
 		return "", nil, nil, errs.New(errs.KindValidationFailed, "agent: compiled adapter operation is unsupported")
+	}
+}
+
+func clearSteps(steps []Step) {
+	for index := range steps {
+		clear(steps[index].Stdin)
+		steps[index].Stdin = nil
+		steps[index].Args = nil
 	}
 }
 

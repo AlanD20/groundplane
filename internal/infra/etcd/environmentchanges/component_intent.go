@@ -1,13 +1,13 @@
 package environmentchanges
 
 import (
+	"net/netip"
+	"sort"
+	"time"
+
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"net/netip"
-	"reflect"
-	"sort"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -153,7 +153,7 @@ func ValidateComponentTaskIntent(intent ComponentTaskIntent) error {
 			return errs.New(errs.KindValidationFailed, "Component candidate kind is duplicated")
 		}
 		seenKinds[current.Kind] = struct{}{}
-		if reflect.DeepEqual(candidate.Current, candidate.Candidate) &&
+		if componentrecord.EqualRecord(candidate.Current, candidate.Candidate) &&
 			(!candidate.Current.Desired.Enabled || candidate.Current.Runtime.Healthy) {
 			return errs.New(errs.KindValidationFailed, "Component candidate does not change active state")
 		}

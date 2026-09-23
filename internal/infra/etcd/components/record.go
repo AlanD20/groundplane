@@ -1,10 +1,11 @@
 package components
 
 import (
+	"net/netip"
+	"slices"
+
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"net/netip"
-	"reflect"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -66,7 +67,8 @@ func ReplaceDesired(record Record, desired core.Component) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	if !reflect.DeepEqual(desired.GeneratedServices, projected.GeneratedServices) ||
+	if (desired.GeneratedServices == nil) != (projected.GeneratedServices == nil) ||
+		!slices.Equal(desired.GeneratedServices, projected.GeneratedServices) ||
 		desired.PinnedIPv4 != projected.PinnedIPv4 || desired.Healthy != projected.Healthy {
 		return Record{}, errs.New(
 			errs.KindValidationFailed,

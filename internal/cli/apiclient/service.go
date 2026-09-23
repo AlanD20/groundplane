@@ -3,13 +3,11 @@ package apiclient
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
-	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (c *Client) CreateService(ctx context.Context, input apiTypes.ServiceCreate) (apiTypes.Service, error) {
@@ -17,7 +15,7 @@ func (c *Client) CreateService(ctx context.Context, input apiTypes.ServiceCreate
 	if err != nil {
 		return apiTypes.Service{}, err
 	}
-	body, err := generatedServiceBody[generated.ServiceCreateJSONRequestBody](input)
+	body, err := serviceCreateBody(input)
 	if err != nil {
 		return apiTypes.Service{}, err
 	}
@@ -106,7 +104,7 @@ func (c *Client) EditService(ctx context.Context, id string, input apiTypes.Serv
 	if err != nil {
 		return apiTypes.Service{}, err
 	}
-	body, err := generatedServiceBody[generated.ServiceEditJSONRequestBody](input)
+	body, err := serviceEditBody(input)
 	if err != nil {
 		return apiTypes.Service{}, err
 	}
@@ -161,10 +159,7 @@ func (c *Client) DeployService(
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	body, err := generatedServiceBody[generated.ServiceDeployJSONRequestBody](input)
-	if err != nil {
-		return apiTypes.TaskAccepted{}, err
-	}
+	body := serviceDeployBody(input)
 	path := "/api/v1/services/" + id + "/deploy"
 	response, err := client.ServiceDeployWithResponse(
 		ctx, id, &generated.ServiceDeployParams{IdempotencyKey: ids.NewULID()}, body,
@@ -189,10 +184,7 @@ func (c *Client) RollbackService(
 	if err != nil {
 		return apiTypes.TaskAccepted{}, err
 	}
-	body, err := generatedServiceBody[generated.ServiceRollbackJSONRequestBody](input)
-	if err != nil {
-		return apiTypes.TaskAccepted{}, err
-	}
+	body := serviceRollbackBody(input)
 	path := "/api/v1/services/" + id + "/rollback"
 	response, err := client.ServiceRollbackWithResponse(
 		ctx, id, &generated.ServiceRollbackParams{IdempotencyKey: ids.NewULID()}, body,
@@ -266,19 +258,6 @@ func (c *Client) DestroyService(ctx context.Context, id string) (apiTypes.TaskAc
 		return apiTypes.TaskAccepted{}, err
 	}
 	return generatedTaskAccepted(http.MethodPost, path, response.Body, response.JSON202)
-}
-
-func generatedServiceBody[Body any](input any) (Body, error) {
-	var body Body
-	encoded, err := json.Marshal(input)
-	if err != nil {
-		return body, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(encoded)
-	if err := json.Unmarshal(encoded, &body); err != nil {
-		return body, errs.Wrap(errs.KindInternal, err)
-	}
-	return body, nil
 }
 
 func decodeServiceResponse(method string, path string, body []byte) (apiTypes.Service, error) {

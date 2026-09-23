@@ -2,6 +2,9 @@ package etcd
 
 import (
 	"context"
+	"sort"
+	"time"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -15,9 +18,6 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"reflect"
-	"sort"
-	"time"
 )
 
 func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
@@ -139,7 +139,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		if decodeErr != nil {
 			return componentTaskChange{}, decodeErr
 		}
-		if !reflect.DeepEqual(active, candidate.Current) {
+		if !componentrecord.EqualRecord(active, candidate.Current) {
 			return componentTaskChange{}, errs.New(
 				errs.KindStateConflict,
 				"active Component no longer matches candidate base",

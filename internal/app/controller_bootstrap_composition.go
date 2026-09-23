@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
@@ -43,7 +44,7 @@ func newControllerBootstrapComposition(
 	ctx context.Context,
 	configPath string,
 ) (controllerBootstrapComposition, error) {
-	registerAdapters()
+	adaptercompiler.Register()
 	componentCatalog, err := componentregistration.EnvironmentCatalog()
 	if err != nil {
 		return controllerBootstrapComposition{}, fmt.Errorf(

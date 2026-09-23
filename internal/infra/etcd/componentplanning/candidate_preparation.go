@@ -2,6 +2,9 @@ package componentplanning
 
 import (
 	"context"
+	"sort"
+	"time"
+
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -11,9 +14,6 @@ import (
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
-	"reflect"
-	"sort"
-	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -224,7 +224,7 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		}
 		current, desiredZone := desiredZones[zoneID]
 		if !desiredZone || change.Current.Revision != current.Revision ||
-			!reflect.DeepEqual(change.Current.Record, current.Record) {
+			change.Current.Record != current.Record {
 			return ComponentTaskPreparation{}, errs.New(
 				errs.KindStateConflict,
 				"Component candidate desired Zone changed",
@@ -278,7 +278,7 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 		if decodeErr != nil {
 			return ComponentTaskPreparation{}, decodeErr
 		}
-		if !reflect.DeepEqual(stored, input.Current.Record) {
+		if !componentrecord.EqualRecord(stored, input.Current.Record) {
 			return ComponentTaskPreparation{}, errs.New(errs.KindStateConflict, "active Component snapshot changed")
 		}
 	}
@@ -491,7 +491,7 @@ func ValidateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 			return errs.New(errs.KindValidationFailed, "Component candidate address evidence is invalid")
 		}
 		if _, wanted := wantZones[zoneID]; !wanted ||
-			address.Mutates == reflect.DeepEqual(address.Current.Record, address.Next) {
+			address.Mutates == networkreservations.EqualComponentAddressRegistry(address.Current.Record, address.Next) {
 			return errs.New(errs.KindValidationFailed, "Component candidate address transition is invalid")
 		}
 		previousZoneID = zoneID

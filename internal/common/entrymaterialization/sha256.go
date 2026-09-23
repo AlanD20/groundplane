@@ -29,7 +29,7 @@ type sha256Hasher struct {
 }
 
 // NewHasher returns a fresh wipe-capable SHA-256 state.
-func NewHasher() Hasher {
+func NewHasher() *sha256Hasher {
 	return &sha256Hasher{state: [8]uint32{
 		0x6a09e667,
 		0xbb67ae85,

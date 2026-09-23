@@ -113,6 +113,8 @@ owned by the command source and [API/CLI conventions](api-cli.md).
   or implementation-recovery aliases. Nullable values with meaningful zero values
   use pointers. Error messages start lowercase.
 - No `goto`, implicit `init()` wiring, or reflection without an accepted decision.
+  Huma schema registration is the narrow accepted reflection boundary in
+  [the API decision](decisions/api-and-console.md#generated-human-api-contract).
   No untyped model/validator fields; unavoidable standard-library boundaries are
   not permission to propagate `any` internally.
 - Use address literals or a pointer helper, not `new(T)` for pointer construction.

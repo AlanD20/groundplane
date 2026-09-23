@@ -3,6 +3,10 @@ package agent
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"sort"
+	"sync"
+
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	backupsecrettransfer "github.com/AlanD20/groundplane/internal/agent/backupsecrettransfer"
 	checkpointmailbox "github.com/AlanD20/groundplane/internal/agent/checkpointmailbox"
@@ -12,9 +16,6 @@ import (
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"log/slog"
-	"sort"
-	"sync"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -93,10 +94,14 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		backingHookCheckpoints: checkpointmailbox.NewBackingHookInbox(),
 		volumeCheckpoints:      checkpointmailbox.NewVolumeInbox(),
 		taskEventAcks:          &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
-		adapter:                backingadapter.New(taskRunner),
+		adapter:                backingadapter.New(taskRunner, nil),
 	}
 	pool.executeStep = pool.runStep
 	return pool
+}
+
+func (p *WorkerPool) SetAdapterCompiler(compiler backingadapter.Compiler) {
+	p.adapter = backingadapter.New(p.runner, compiler)
 }
 
 func NewWorkerPoolWithRuntimes(

@@ -3,11 +3,13 @@ package apiclient
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (c *Client) ListReleaseGroups(
@@ -71,9 +73,13 @@ func (c *Client) AddReleaseGroup(
 	if err != nil {
 		return apiTypes.ReleaseGroup{}, err
 	}
-	body, err := generatedServiceBody[generated.ReleaseGroupAddJSONRequestBody](input)
-	if err != nil {
-		return apiTypes.ReleaseGroup{}, err
+	body := generated.ReleaseGroupAddJSONRequestBody{
+		EnvironmentId: input.EnvironmentID,
+		Name:          input.Name,
+		ServiceIds:    optionalServiceStrings(input.ServiceIDs),
+		Order:         optionalServiceStrings(input.Order),
+		Tag:           optionalServiceString(input.Tag),
+		OnFailure:     optionalServiceString(string(input.OnFailure)),
 	}
 	response, err := client.ReleaseGroupAddWithResponse(
 		ctx,
@@ -98,16 +104,16 @@ func (c *Client) EditReleaseGroup(
 	if err != nil {
 		return apiTypes.ReleaseGroup{}, err
 	}
-	body, err := generatedServiceBody[generated.ReleaseGroupEditJSONRequestBody](input)
+	body, err := json.Marshal(input)
 	if err != nil {
-		return apiTypes.ReleaseGroup{}, err
+		return apiTypes.ReleaseGroup{}, errs.Wrap(errs.KindInternal, err)
 	}
 	path := "/api/v1/release-groups/" + id
-	response, err := client.ReleaseGroupEditWithResponse(
+	response, err := client.ReleaseGroupEditWithBodyWithResponse(
 		ctx,
 		id,
 		&generated.ReleaseGroupEditParams{IdempotencyKey: ids.NewULID()},
-		body,
+		"application/json", bytes.NewReader(body),
 	)
 	if err != nil {
 		return apiTypes.ReleaseGroup{}, generatedCallError(ctx, http.MethodPatch, path, err)

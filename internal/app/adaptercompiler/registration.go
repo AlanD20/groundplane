@@ -1,4 +1,4 @@
-package app
+package adaptercompiler
 
 import (
 	"github.com/AlanD20/groundplane/internal/adapters"
@@ -7,7 +7,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
 )
 
-func registerAdapters() {
+// Register installs the closed built-in catalog at process composition.
+func Register() {
 	if _, registered := adapters.Get("postgres:16"); !registered {
 		postgres16.Register()
 	}

@@ -6,9 +6,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// decodeBackingAuthentication validates the closed wire enum against the
+// DecodeBackingAuthentication validates the closed wire enum against the
 // selected adapter before any Agent effect is compiled.
-func decodeBackingAuthentication(
+func DecodeBackingAuthentication(
 	authentication agentpb.BackingAuthentication,
 	supported bool,
 ) (core.BackingAuthentication, error) {

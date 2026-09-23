@@ -44,7 +44,7 @@ type Request struct {
 	Method         string
 	Path           string
 	Query          map[string]string
-	Body           any
+	encodeBody     func() ([]byte, error)
 	IdempotencyKey string
 	ExpectedStatus int
 }
@@ -70,8 +70,10 @@ func (c *Client) NewRequest(method, path string, query map[string]string, body a
 		Method:         strings.ToUpper(method),
 		Path:           path,
 		Query:          query,
-		Body:           body,
 		ExpectedStatus: expectedStatus,
+	}
+	if body != nil {
+		request.encodeBody = func() ([]byte, error) { return json.Marshal(body) }
 	}
 	if requiresIdempotencyKey(request.Method, request.Path) {
 		request.IdempotencyKey = ids.NewULID()
@@ -81,9 +83,8 @@ func (c *Client) NewRequest(method, path string, query map[string]string, body a
 
 // Do sends a BaseURL-relative request with optional query params and a JSON
 // body, and decodes exactly one JSON response document into out (nil to
-// discard the body). Request.Body/out are `any` here for the
-// same reason json.Marshal/json.Decoder.Decode are — this is a generic
-// transport helper, not a model field.
+// discard the body). Untyped JSON input stays at the constructor boundary;
+// Request retains only a deferred encoder so reusing it preserves the body.
 //
 // A non-success response is decoded as RFC 7807 problem+json and returned as
 // an *errs.Error carrying the same Code the Controller sent — see
@@ -119,8 +120,8 @@ func (c *Client) Do(ctx context.Context, request Request, out any) error {
 
 	var reader io.Reader
 	contentType := ""
-	if request.Body != nil {
-		b, err := json.Marshal(request.Body)
+	if request.encodeBody != nil {
+		b, err := request.encodeBody()
 		if err != nil {
 			return errs.Wrap(errs.KindInternal, fmt.Errorf("apiclient: marshal body: %w", err))
 		}

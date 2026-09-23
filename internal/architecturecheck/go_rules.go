@@ -156,6 +156,9 @@ func checkUnsafeMappings(unit *parsedGoFile, packageInfo *goPackage) []Finding {
 		switch value := node.(type) {
 		case *ast.TypeAssertExpr:
 			if subject := localConcreteSubject(value.Type, packageInfo.concrete); subject != "" {
+				if isOwnedContextRecovery(unit.file.rel, subject, value.X) {
+					break
+				}
 				position := unit.fset.Position(value.Pos())
 				findings = append(
 					findings,
@@ -218,6 +221,34 @@ func checkUnsafeMappings(unit *parsedGoFile, packageInfo *goPackage) []Finding {
 	})
 	findings = append(findings, checkJSONRoundTrips(unit)...)
 	return findings
+}
+
+// These two request-scoped values cross framework context APIs that return
+// any. Both keys and their concrete values are owned by the same boundary.
+func isOwnedContextRecovery(path, subject string, expression ast.Expr) bool {
+	key := ""
+	switch {
+	case path == "internal/cli/root.go" && subject == "App":
+		key = "appKey"
+	case path == "internal/controller/handlers/http_lifecycle.go" && subject == "httpLifecycle":
+		key = "lifecycleContextKey"
+	default:
+		return false
+	}
+	call, ok := expression.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return false
+	}
+	method, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || method.Sel.Name != "Value" {
+		return false
+	}
+	keyValue, ok := call.Args[0].(*ast.CompositeLit)
+	if !ok {
+		return false
+	}
+	keyType, ok := keyValue.Type.(*ast.Ident)
+	return ok && keyType.Name == key
 }
 
 func localConcreteSubject(expression ast.Expr, concrete map[string]struct{}) string {

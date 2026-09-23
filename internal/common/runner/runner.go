@@ -12,13 +12,14 @@ package runner
 import (
 	"context"
 	"errors"
-	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"io"
 	"log/slog"
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/AlanD20/groundplane/internal/common/postgresidentity"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // RunCmdOpts is every Run/Stream call's input: one shape, no
@@ -126,13 +127,12 @@ type OSRunner struct {
 	signalGroup    func(int) error
 }
 
-func New(logger *slog.Logger) Runner {
+func New(logger *slog.Logger) *OSRunner {
 	return &OSRunner{Logger: logger, binaryCommands: productionBinaryCommands}
 }
 
-// NewBinary returns only the raw-output capability. New deliberately retains
-// its established Runner return type for source compatibility.
-func NewBinary(logger *slog.Logger) BinaryRunner {
+// NewBinary constructs the runner with the typed binary-output capability.
+func NewBinary(logger *slog.Logger) *OSRunner {
 	return &OSRunner{Logger: logger, binaryCommands: productionBinaryCommands}
 }
 
