@@ -136,7 +136,7 @@ export function BackupsCard({ env }: { env: Environment }) {
           </p>
         )}
         {!backup.enabled && (
-          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+          <p className="mx-4 my-3 rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
             Backups are <span className="font-medium">off</span> for this
             environment — nothing is scheduled or backed up.
             {configured

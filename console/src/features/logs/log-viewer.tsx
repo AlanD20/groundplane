@@ -21,10 +21,25 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
   const outputRef = useRef<HTMLDivElement>(null)
   const pinnedToEnd = useRef(true)
   const abortRef = useRef<AbortController | null>(null)
+  const pendingEvents = useRef<TransientLogEvent[]>([])
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushEvents = () => {
+    if (flushTimer.current !== null) {
+      clearTimeout(flushTimer.current)
+      flushTimer.current = null
+    }
+    const batch = pendingEvents.current
+    pendingEvents.current = []
+    if (batch.length > 0) {
+      setEvents((current) => [...current, ...batch].slice(-1000))
+    }
+  }
 
   const stop = () => {
     abortRef.current?.abort()
     abortRef.current = null
+    flushEvents()
     setStreaming(false)
   }
 
@@ -38,13 +53,18 @@ export function LogViewer({ target, label = 'Logs' }: { target: LogTarget; label
     setError(null)
     setStreaming(true)
     void store.watchLogs(target, { tail, follow, signal: controller.signal }, (event) => {
-      setEvents((current) => [...current.slice(-999), event])
+      if (controller.signal.aborted) return
+      pendingEvents.current.push(event)
+      if (flushTimer.current === null) {
+        flushTimer.current = setTimeout(flushEvents, 50)
+      }
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted) {
         setError(reason instanceof Error ? reason.message : 'Log stream failed')
       }
     }).finally(() => {
       if (abortRef.current === controller) {
+        flushEvents()
         abortRef.current = null
         setStreaming(false)
       }
