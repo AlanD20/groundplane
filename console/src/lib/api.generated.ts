@@ -2106,7 +2106,8 @@ export interface components {
         };
         EnvironmentBlueprintChange: {
             /** @enum {string} */
-            action: "create" | "update" | "retain";
+            action: "create" | "update" | "retain" | "remove";
+            empty_secret_value?: boolean;
             key: string;
             resource: string;
         };

@@ -39,6 +39,13 @@ do not reveal plaintext. Desired references can resolve to newer values for a
 new operation, but an accepted Task pins exact value generations for its own
 execution and Retry. A later edit must not change an in-flight operation.
 
+Canonical Environment Blueprint export includes every operator-managed Entry,
+including Entries created through Console, CLI or API actions. Secret literal
+values are always blank in that document. An unchanged key-only declaration
+retains its selected value; a new one starts empty. Set or rotate secret values
+through the Entry action, not Blueprint YAML. A reusable Project or Platform
+Secret is a separate resource and appears only as an Entry reference.
+
 ## Applying changes
 
 Entry create, edit and bulk-upsert capture the acknowledged running workloads

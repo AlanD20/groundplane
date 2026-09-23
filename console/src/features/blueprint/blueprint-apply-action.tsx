@@ -5,6 +5,7 @@ import { Select } from '@/components/ui/select'
 import { useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { ArrowDown, ArrowUp, FileArchive, FolderOpen, Plus, Trash2, Upload } from 'lucide-react'
 import { TaskRunnerDialog } from '@/components/common/task-runner-dialog'
+import { BlueprintReview } from '@/features/blueprint/blueprint-review'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
@@ -13,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useStore } from '@/lib/store'
 import type { Environment } from '@/lib/types'
+import type { BlueprintValidationResponse } from './api'
 import {
   BLUEPRINT_BUNDLE_LIMITS,
   createBlueprintApplyRequest,
@@ -28,6 +30,11 @@ type InterpolationEntry = BlueprintInterpolation & {
   id: number
 }
 
+type PreparedBlueprint = {
+  request: BlueprintApplyRequest
+  validation: BlueprintValidationResponse
+}
+
 export function BlueprintApplyAction({ environment, workspace }: { environment: Environment; workspace: string }) {
   const store = useStore()
   const [open, setOpen] = useState(false)
@@ -39,7 +46,9 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
   const entrySequence = useRef(0)
   const [reading, setReading] = useState(false)
   const [readError, setReadError] = useState('')
-  const [prepared, setPrepared] = useState<BlueprintApplyRequest | null>(null)
+  const [reviewError, setReviewError] = useState('')
+  const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null)
+  const [reviewing, setReviewing] = useState(false)
   const [completed, setCompleted] = useState(false)
 
   const sortedFiles = files
@@ -54,6 +63,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
     event.currentTarget.value = ''
     setReading(true)
     setReadError('')
+    setReviewError('')
     setRootPath('')
     setComposeSources([])
     setSourceCandidate('')
@@ -94,10 +104,21 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
     setEntries((current) => [...current, { id: entrySequence.current, key: '', value: '' }])
   }
 
-  function prepareApply() {
+  async function prepareApply() {
     if (errors.length > 0 || reading) return
     setCompleted(false)
-    setPrepared(createBlueprintApplyRequest(files, rootPath, composeSources, entries))
+    setReviewing(true)
+    setReviewError('')
+    try {
+      const request = createBlueprintApplyRequest(files, rootPath, composeSources, entries)
+      const current = await store.getBlueprint(environment.id)
+      const validation = await store.validateBlueprint(environment.id, request, current.revision)
+      setPrepared({ request, validation })
+    } catch (cause) {
+      setReviewError(cause instanceof Error ? cause.message : 'Blueprint validation failed.')
+    } finally {
+      setReviewing(false)
+    }
   }
 
   function reset() {
@@ -108,6 +129,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
     setEntries([])
     entrySequence.current = 0
     setReadError('')
+    setReviewError('')
     setPrepared(null)
     setCompleted(false)
   }
@@ -232,10 +254,11 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
           </section>
 
           {errors.length > 0 && files.length > 0 && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"><p className="mb-1 text-xs font-medium text-destructive">Resolve before applying</p><ul className="space-y-1 text-xs text-destructive">{errors.map((error) => <li key={error}>· {error}</li>)}</ul></div>}
+          {reviewError && <p role="alert" className="text-xs text-destructive">{reviewError}</p>}
 
           <div className="flex justify-end gap-2 border-t border-border pt-4">
             <Button variant="outline" onClick={closeEditor}>Cancel</Button>
-            <Button disabled={reading || errors.length > 0} onClick={prepareApply}><Upload /> Review Apply task</Button>
+            <Button disabled={reading || reviewing || errors.length > 0} onClick={() => void prepareApply()}><Upload /> {reviewing ? 'Validating…' : 'Review Apply task'}</Button>
           </div>
         </DrawerContent>
       </Drawer>
@@ -249,7 +272,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
             else setPrepared(null)
           }}
           title={`Apply Blueprint · ${environment.name}`}
-          description="Validate and atomically commit the closed Blueprint bundle, then schedule reconciliation."
+          description="Confirm the validated changes. Apply requires the reviewed base revision to remain current."
           type="update"
           target={environment.id}
           workspace={workspace}
@@ -260,14 +283,14 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
             { label: 'Atomically commit normalized desired state', state: 'pending' },
             { label: 'Schedule environment reconciliation', state: 'pending' },
           ]}
-          review={<div className="rounded-lg border border-border bg-surface p-3 text-xs"><p><span className="text-muted-foreground">Root </span><code>{prepared.manifest.root}</code></p><p><span className="text-muted-foreground">Sources </span>{prepared.manifest.compose_sources.length}</p><p><span className="text-muted-foreground">Files </span>{prepared.manifest.files.length} · {formatBlueprintBytes(prepared.manifest.files.reduce((sum, file) => sum + file.size, 0))}</p><p><span className="text-muted-foreground">Interpolation keys </span>{Object.keys(prepared.manifest.interpolation).join(', ') || 'none'}</p></div>}
-          startLabel="Apply Blueprint"
+          review={<><div className="rounded-lg border border-border bg-surface p-3 text-xs"><p><span className="text-muted-foreground">Root </span><code>{prepared.request.manifest.root}</code></p><p><span className="text-muted-foreground">Sources </span>{prepared.request.manifest.compose_sources.length}</p><p><span className="text-muted-foreground">Files </span>{prepared.request.manifest.files.length} · {formatBlueprintBytes(prepared.request.manifest.files.reduce((sum, file) => sum + file.size, 0))}</p><p><span className="text-muted-foreground">Interpolation keys </span>{Object.keys(prepared.request.manifest.interpolation).join(', ') || 'none'}</p></div><BlueprintReview validation={prepared.validation} /></>}
+          startLabel="Confirm and apply"
           onDispatch={async () => {
-            const accepted = await store.applyBlueprint(environment.id, prepared)
+            const accepted = await store.applyBlueprint(environment.id, prepared.request, prepared.validation.revision)
             setCompleted(true)
             return accepted.task_id
           }}
-          variant="drawer"
+          variant="dialog"
         />
       )}
     </>

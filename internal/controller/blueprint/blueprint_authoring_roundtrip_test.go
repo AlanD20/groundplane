@@ -87,10 +87,16 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 			EnvironmentID:     environmentID,
 			RevisionID:        revisionID,
 			NormalizedCompose: normalized,
-			Entries: []testentries.Record{{BlueprintKey: "settings", Entry: core.EnvEntry{
-				Kind: core.EntryKindFile, Path: "config/settings", Exposure: []string{"web"}, Secret: true, UID: &uid, GID: &gid,
-				Source: core.EntrySource{Kind: core.SourceSecretRef, SecretRef: secretID},
-			}}},
+			Entries: []testentries.Record{
+				{BlueprintKey: "settings", Entry: core.EnvEntry{
+					Kind: core.EntryKindFile, Path: "config/settings", Exposure: []string{"web"}, Secret: true, UID: &uid, GID: &gid,
+					Source: core.EntrySource{Kind: core.SourceSecretRef, SecretRef: secretID},
+				}},
+				{Entry: core.EnvEntry{
+					Kind: core.EntryKindEnv, Key: "TOKEN", Exposure: []string{"web"}, Secret: true,
+					Source: core.EntrySource{Kind: core.SourceLiteral},
+				}},
+			},
 		},
 	}
 	service := &Service{repository: repository, releaseGroups: planner}
@@ -111,6 +117,8 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 		reparsed.Extensions.Entries["settings"].Source.SecretRef != secretID ||
 		reparsed.Extensions.Entries["settings"].Path != "config/settings" ||
 		!reparsed.Extensions.Entries["settings"].Secret ||
+		!reparsed.Extensions.Entries["TOKEN"].Secret ||
+		reparsed.Extensions.Entries["TOKEN"].Source.Literal != "" ||
 		reparsed.Extensions.Entries["settings"].UID == nil || *reparsed.Extensions.Entries["settings"].UID != uid ||
 		reparsed.Extensions.Entries["settings"].GID == nil || *reparsed.Extensions.Entries["settings"].GID != gid {
 		t.Fatal("authoring changed desired decisions or managed-file source")

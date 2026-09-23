@@ -1,6 +1,7 @@
 package scriptdefinition
 
 import (
+	entryauthoring "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/core"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
@@ -42,7 +43,7 @@ func authoringExecution(
 		key, count := "", 0
 		for _, entry := range entries {
 			if entry.Entry.ID == id && entry.EnvironmentID == script.EnvironmentID {
-				key, count = entry.BlueprintKey, count+1
+				key, count = entryauthoring.BlueprintKey(entry), count+1
 			}
 		}
 		if count != 1 || key == "" {

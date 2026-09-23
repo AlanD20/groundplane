@@ -36,10 +36,10 @@ variables. Bundle validation is side-effect free.
 Read-only bind sources may refer only to bundled non-secret content materialized
 below the stable Environment directory. Writable binds, arbitrary host paths,
 sockets, devices, and traversal are rejected. Secret content cannot use ordinary
-companion files or interpolation. A structured secret Entry literal is an explicit
-write-only input; normalization moves its bytes into encrypted value generations
-and canonical export does not reveal it. Secret references remain the reusable
-alternative. See the [Entry grammar](../blueprint.md#x-gp-entry).
+companion files or interpolation. A Blueprint secret Entry literal is key-only
+and starts with an empty protected value; the separate Entry action sets or
+rotates its value. Canonical export never reveals it. Secret references remain
+the reusable alternative. See the [Entry grammar](../blueprint.md#x-gp-entry).
 
 Normalized desired records are the sole reconciliation authority. The immutable
 submitted bundle is retained only for audit and deterministic reparse

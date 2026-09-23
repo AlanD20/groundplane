@@ -287,6 +287,11 @@ func parseRoot(content []byte) (core.Envelope, Extensions, []byte, error) {
 
 func normalizeEntries(entries map[string]core.EntrySpec) (map[string]core.EntrySpec, error) {
 	for key, spec := range entries {
+		if spec.Secret && spec.Source.Literal != "" {
+			return nil, validationError(
+				"Blueprint secret Entry values must be empty; set the value through the Entry action",
+			)
+		}
 		projected, err := core.ProjectEntrySpec(key, spec, "ev_00000000000000000000000000")
 		if err != nil {
 			return nil, validationError(err.Error())

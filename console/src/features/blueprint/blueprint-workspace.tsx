@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/ui/code-editor";
 import { BlueprintApplyAction } from "@/features/blueprint/blueprint-apply-action";
+import { BlueprintReview } from "@/features/blueprint/blueprint-review";
 import {
   createBlueprintTextApplyRequest,
   type BlueprintApplyRequest,
@@ -238,8 +239,9 @@ export function BlueprintWorkspace({
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Omitted existing resources are retained. Destruction remains
-            available only through each resource's explicit Remove action.
+            Review the validation result before applying. Omitted Blueprint
+            Entries are removed; other resource omissions may be retained or
+            rejected until their removal workflows are supported.
           </p>
         </CardContent>
       </Card>
@@ -253,7 +255,7 @@ export function BlueprintWorkspace({
             if (dispatched) void load();
           }}
           title={`Apply Blueprint · ${environment.name}`}
-          description="Apply the validated document only if its base revision is still current."
+          description="Confirm the validated changes. Apply requires the reviewed base revision to remain current."
           type="update"
           target={environment.id}
           workspace={workspace}
@@ -263,22 +265,8 @@ export function BlueprintWorkspace({
             { label: "Publish canonical desired revision", state: "pending" },
             { label: "Schedule Environment reconciliation", state: "pending" },
           ]}
-          review={
-            <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border bg-surface p-3 text-xs">
-              {(prepared.validation.changes ?? []).map((change) => (
-                <div
-                  key={`${change.resource}:${change.key}:${change.action}`}
-                  className="flex gap-2"
-                >
-                  <Badge variant="outline">{change.action}</Badge>
-                  <code>
-                    {change.resource}/{change.key}
-                  </code>
-                </div>
-              ))}
-            </div>
-          }
-          startLabel="Apply Blueprint"
+          review={<BlueprintReview validation={prepared.validation} />}
+          startLabel="Confirm and apply"
           onDispatch={async () => {
             const accepted = await store.applyBlueprint(
               environment.id,
@@ -288,7 +276,7 @@ export function BlueprintWorkspace({
             setDispatched(true);
             return accepted.task_id;
           }}
-          variant="drawer"
+          variant="dialog"
         />
       )}
     </>

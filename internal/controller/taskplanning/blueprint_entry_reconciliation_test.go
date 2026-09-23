@@ -9,7 +9,10 @@ import (
 	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 )
 
-func TestReconcileBlueprintEntriesPreservesIdentityAndRemovesOnlyBlueprintOwnedRecords(t *testing.T) {
+// Rationale: Blueprint export includes direct Entries, so Apply must adopt
+// included direct Entries without losing their value generation and remove
+// omitted Entries regardless of which operator surface created them.
+func TestReconcileBlueprintEntriesAdoptsDirectAndRemovesOmittedRecords(t *testing.T) {
 	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 1)
 	direct, err := testentries.NewRecord(environmentID, core.EnvEntry{
@@ -41,21 +44,28 @@ func TestReconcileBlueprintEntriesPreservesIdentityAndRemovesOnlyBlueprintOwnedR
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Current) != 2 || len(got.Values) != 1 || len(got.Removed) != 1 ||
-		got.Removed[0].Entry.ID != removed.Entry.ID {
+	if len(got.Current) != 1 || len(got.Values) != 1 || len(got.Removed) != 2 {
 		t.Fatalf("reconciliation = %#v", got)
 	}
-	foundDirect := false
-	for _, record := range got.Current {
-		foundDirect = foundDirect || record.Entry.ID == direct.Entry.ID
-	}
-	if !foundDirect {
-		t.Fatal("direct Entry was not preserved")
+	for _, record := range got.Removed {
+		if record.Entry.ID != direct.Entry.ID && record.Entry.ID != removed.Entry.ID {
+			t.Fatalf("unexpected removed Entry = %#v", record)
+		}
 	}
 	got, err = ReconcileBlueprintEntries(environmentID, map[string]core.EntrySpec{
-		"APP_MODE": {
+		"DIRECT": {
+			Kind: core.EntryKindEnv, Source: core.EntrySourceSpec{Literal: "kept"}, Exposure: []string{"all"},
+		},
+	}, []testentries.Record{direct}, allocate)
+	if err != nil || len(got.Current) != 1 || len(got.Values) != 0 || len(got.Removed) != 0 ||
+		got.Current[0].Entry.ID != direct.Entry.ID || got.Current[0].CurrentValueGenerationID != direct.CurrentValueGenerationID ||
+		got.Current[0].BlueprintKey != "DIRECT" {
+		t.Fatalf("direct Entry adoption = %#v, %v", got, err)
+	}
+	got, err = ReconcileBlueprintEntries(environmentID, map[string]core.EntrySpec{
+		"DIRECT": {
 			Kind:     core.EntryKindEnv,
-			Source:   core.EntrySourceSpec{Literal: "production"},
+			Source:   core.EntrySourceSpec{Literal: "kept"},
 			Exposure: []string{"all"},
 		},
 	}, got.Current, allocate)

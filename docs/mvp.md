@@ -81,11 +81,19 @@ uploaded formatting.
 Saving Service configuration does not deploy it. Runtime intent is separate:
 Start selects running, Stop selects stopped, and Destroy selects absent while
 retaining configuration. Blueprint edits preserve existing runtime intent.
-Remove is an explicit dependency-checked operation.
+Removal remains dependency-checked whether requested directly or by Blueprint
+omission.
 
-Omitting an existing resource from a Blueprint retains it. Omission never deletes
-or renames. Validation is read-only. Accepted work captures its exact inputs;
-Retry and recovery cannot silently use later desired state.
+A Blueprint is the Environment's foundational desired configuration. Adding or
+removing an operator-managed resource in it changes the Environment after Apply;
+Validate previews the change without writing. Persistent Volumes are the
+exception: omission is rejected until the protected Volume Remove action has
+completed. Reusable Project and Platform Secrets are separate resources; an
+Environment Blueprint declares their Entry references, never their values.
+Secret literal Entries carry a key and empty value in authored YAML. Accepted
+work captures exact inputs; Retry and recovery cannot silently use later desired
+state. [Current limitations](capabilities.md) distinguish this contract from
+unfinished removal paths.
 
 Resource-level latest-wins reconciliation is an accepted design, not a completed
 runtime capability. Until connected and qualified, its design must not be

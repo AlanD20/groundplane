@@ -63,16 +63,13 @@ Apply automatically cancelling older work.
 
 ## Identity, omission, and removal
 
-**Implementation discrepancy:** current Entry reconciliation can select omitted
-Blueprint-owned Entries for removal. Until corrected and qualified, do not rely
-on omission being harmless: retain existing Entry keys in submitted documents.
-This contradicts the intended rule below; it does not authorize implicit deletion.
-See [remaining qualification](issues/runtime-qualification.md#blueprint-entry-omission).
-
-Blueprints are non-destructive by omission. Leaving an existing resource out
-retains it; omission never means delete or rename. Use the resource's explicit,
-protected Remove action. If Groundplane cannot preserve identity unambiguously,
-Apply fails instead of guessing.
+An Environment Blueprint declares operator-managed resources. Removing an Entry
+key removes that Entry from the Environment on Apply. Directly created Entries
+appear in canonical export too. Persistent Volumes are different: omitting one
+is rejected until its protected Remove action completes. Other omission paths
+are [not yet fully implemented](issues/runtime-qualification.md#incomplete-features);
+Validate must describe the actual candidate effect, not imply a removal that
+Apply will retain or reject.
 
 Stable ids are Controller-owned. Authored map keys provide reconciliation
 identity where a field says so, while slugs are renamable labels. In particular:
@@ -87,8 +84,9 @@ identity where a field says so, while slugs are renamable labels. In particular:
 
 For Entries, source and exposure may change without changing identity. Kind,
 destination, file ownership, and secret-storage class are not in-place identity
-edits. Directly managed and Component-owned Entries are retained alongside
-Blueprint-owned Entries.
+edits. A direct env Entry initially uses its destination key for Blueprint
+identity; a direct file Entry uses `file:` followed by its relative path.
+Generated Component configuration is not an operator-authored Entry.
 
 ## Closed bundle input
 
@@ -425,11 +423,11 @@ Groundplane never exposes an Entry merely because a Service has an Attach.
 Script Entry grants are also limited to Entries already exposed to that
 Script's associated Service.
 
-A nonempty literal submitted with `secret: true` becomes a protected value
-generation; plaintext is cleared from normalized desired metadata. Canonical
-export therefore cannot reveal or reproduce the literal and represents that
-source without its value. Reapplying that canonical form preserves the current
-generation; submitting a new nonempty literal rotates it. Prefer
+A secret literal in a Blueprint has an empty `source.literal`; nonempty secret
+plaintext is rejected. A new key-only secret Entry creates an empty protected
+value generation. Canonical export shows its key and source kind, never the
+selected value. Reapplying the same key-only declaration preserves an existing
+generation, including one later set through the Entry action. Prefer
 `secret_ref` when the same credential should be reusable as a Secret resource.
 
 See [Storage and Entries](features/storage-and-entries.md) for lifecycle and

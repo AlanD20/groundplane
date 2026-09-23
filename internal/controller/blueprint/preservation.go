@@ -23,6 +23,24 @@ func environmentBlueprintServiceNames(project *composetypes.Project) map[string]
 	return names
 }
 
+func requireExplicitBlueprintVolumes(
+	project *composetypes.Project,
+	volumes []projectionrecord.EnvironmentVolumeIdentity,
+) error {
+	if project == nil {
+		return errs.New(errs.KindInternal, "Blueprint Compose project is missing")
+	}
+	for _, volume := range volumes {
+		if _, included := project.Volumes[volume.Key]; !included {
+			return errs.New(
+				errs.KindResourceInUse,
+				"Blueprint omits an existing Volume; use its protected Remove action first",
+			)
+		}
+	}
+	return nil
+}
+
 func preserveEnvironmentBlueprintServiceExtensions(
 	submitted map[string]core.ServiceExtensionSpec,
 	submittedServiceNames map[string]struct{},

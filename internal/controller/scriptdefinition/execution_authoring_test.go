@@ -59,7 +59,13 @@ func TestAuthoringScriptExecutionResolvesStableIDsToKeys(t *testing.T) {
 		t.Fatal("export aliased stored context")
 	}
 
-	for _, name := range []string{"missing volume", "missing entry", "foreign entry", "no Blueprint key"} {
+	entries[0].BlueprintKey = ""
+	directResult, err := Authoring([]testkeyvalue.Versioned[testscripts.Record]{{Record: record}}, volumes, entries)
+	if err != nil || !reflect.DeepEqual(directResult["setup-hook"].Execution.Entries, []string{"SETUP_INPUT"}) {
+		t.Fatalf("direct Entry grant export = %#v, %v", directResult["setup-hook"].Execution, err)
+	}
+
+	for _, name := range []string{"missing volume", "missing entry", "foreign entry"} {
 		t.Run(name, func(t *testing.T) {
 			selectedVolumes, selectedEntries := volumes, append([]testentries.Record(nil), entries...)
 			switch name {
@@ -69,8 +75,6 @@ func TestAuthoringScriptExecutionResolvesStableIDsToKeys(t *testing.T) {
 				selectedEntries = nil
 			case "foreign entry":
 				selectedEntries[0].EnvironmentID = ids.NewAt(ids.KindEnvironment, at, 4)
-			case "no Blueprint key":
-				selectedEntries[0].BlueprintKey = ""
 			}
 			if _, err := Authoring([]testkeyvalue.Versioned[testscripts.Record]{{Record: record}}, selectedVolumes, selectedEntries); err == nil {
 				t.Fatal("silently dropped an unrepresentable grant")

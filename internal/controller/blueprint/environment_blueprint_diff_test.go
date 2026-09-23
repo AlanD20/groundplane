@@ -48,3 +48,61 @@ func TestBlueprintDiffRecognizesExistingNativeResources(t *testing.T) {
 		}
 	}
 }
+
+// Rationale: a persistent Volume needs its protected removal Task; validating
+// a Blueprint without it must fail before Apply can silently preserve it.
+func TestBlueprintRequiresExplicitVolumeRemoval(t *testing.T) {
+	volumes := []testenvironmentprojection.EnvironmentVolumeIdentity{{Key: "data"}}
+	if err := requireExplicitBlueprintVolumes(&composetypes.Project{}, volumes); err == nil {
+		t.Fatal("omitted persistent Volume was accepted")
+	}
+	if err := requireExplicitBlueprintVolumes(&composetypes.Project{
+		Volumes: composetypes.Volumes{"data": {}},
+	}, volumes); err != nil {
+		t.Fatalf("included persistent Volume was rejected: %v", err)
+	}
+}
+
+// Rationale: Console and CLI Validate must reveal the destructive Entry effect
+// that Apply will execute, including one first created through a direct action.
+func TestBlueprintDiffReportsOmittedEntryRemoval(t *testing.T) {
+	changes := environmentBlueprintChanges(
+		blueprintparser.AuthoringDocument{Entries: map[string]core.EntrySpec{
+			"TOKEN": {Kind: core.EntryKindEnv, Secret: true},
+		}},
+		blueprintparser.Result{Project: &composetypes.Project{}}, true,
+		testenvironmentprojection.EnvironmentComposeProjection{},
+	)
+	for _, change := range changes {
+		if change.Resource == "entry" && change.Key == "TOKEN" {
+			if change.Action != apiTypes.BlueprintChangeRemove {
+				t.Fatalf("omitted Entry action = %s, want remove", change.Action)
+			}
+			return
+		}
+	}
+	t.Fatal("omitted Entry was not reported")
+}
+
+// Rationale: review may label a newly created key-only literal as empty, but
+// never infer emptiness from an existing redacted secret declaration.
+func TestBlueprintDiffMarksNewEmptySecretLiteral(t *testing.T) {
+	changes := environmentBlueprintChanges(
+		blueprintparser.AuthoringDocument{},
+		blueprintparser.Result{
+			Project: &composetypes.Project{},
+			Extensions: blueprintparser.Extensions{Entries: map[string]core.EntrySpec{
+				"TOKEN": {Kind: core.EntryKindEnv, Secret: true, Source: core.EntrySourceSpec{}},
+			}},
+		}, false, testenvironmentprojection.EnvironmentComposeProjection{},
+	)
+	for _, change := range changes {
+		if change.Resource == "entry" && change.Key == "TOKEN" {
+			if change.Action != apiTypes.BlueprintChangeCreate || !change.EmptySecretValue {
+				t.Fatalf("new secret Entry preview = %#v", change)
+			}
+			return
+		}
+	}
+	t.Fatal("new secret Entry was not reported")
+}

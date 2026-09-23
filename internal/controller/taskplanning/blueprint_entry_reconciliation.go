@@ -6,6 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/core"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,9 +23,9 @@ type BlueprintEntryReconciliation struct {
 	Removed []entryrecord.Record
 }
 
-// ReconcileBlueprintEntries owns only records previously authored through
-// x-gp-entry. Direct and component-owned Entries have no BlueprintKey and are
-// preserved. Omission removes an authored record from the next projection.
+// ReconcileBlueprintEntries reconciles every operator-managed Environment
+// Entry. Direct Entries are adopted by their destination-derived authored key;
+// omission removes them from the next projection.
 func ReconcileBlueprintEntries(
 	environmentID string,
 	authored map[string]core.EntrySpec,
@@ -46,17 +47,20 @@ func ReconcileBlueprintEntries(
 				"durable Blueprint Entry state is inconsistent",
 			)
 		}
-		if record.BlueprintKey == "" {
-			result.Current = append(result.Current, record)
-			continue
+		key := entry.BlueprintKey(record)
+		if key == "" {
+			return BlueprintEntryReconciliation{}, errs.New(
+				errs.KindInternal,
+				"durable Entry has no Blueprint identity",
+			)
 		}
-		if _, duplicate := currentByKey[record.BlueprintKey]; duplicate {
+		if _, duplicate := currentByKey[key]; duplicate {
 			return BlueprintEntryReconciliation{}, errs.New(
 				errs.KindInternal,
 				"durable Blueprint Entry key is duplicated",
 			)
 		}
-		currentByKey[record.BlueprintKey] = record
+		currentByKey[key] = record
 	}
 	keys := make([]string, 0, len(authored))
 	for key := range authored {

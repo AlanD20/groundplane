@@ -2227,9 +2227,13 @@
             "enum": [
               "create",
               "update",
-              "retain"
+              "retain",
+              "remove"
             ],
             "type": "string"
+          },
+          "empty_secret_value": {
+            "type": "boolean"
           },
           "key": {
             "type": "string"

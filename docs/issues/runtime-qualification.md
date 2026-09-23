@@ -58,17 +58,18 @@ evidence; private HTTP alone is not enough.
 
 ## Incomplete features
 
-### Blueprint Entry omission
+### Blueprint removal
 
-Source review during documentation migration found that
-[Entry reconciliation](../../internal/controller/taskplanning/blueprint_entry_reconciliation.go)
-selects omitted Blueprint-owned Entries for removal and can treat identity changes
-as replacements. This conflicts with the accepted non-destructive omission rule.
-No execution was run and no production fix was attempted. Operators must retain
-existing Entry keys rather than rely on omission being harmless.
+The accepted Blueprint contract now removes omitted operator-managed resources,
+except persistent Volumes, which require their protected Remove action. Entry
+export and reconciliation include directly created Entries, and validation
+reports omitted Entries as removals. This implementation has local checks but
+no live removal qualification. Other resource omission paths still preserve or
+reject the missing resource; they must not be reported as successful removal.
 
-Closure requires an explicitly authorized behavior correction and its bounded
-proof; documentation must not silently redefine removal as intended behavior.
+Closure requires completing those removal paths under their dependency and
+recovery rules, then proving the selected current candidate changes real
+Environment state without orphaning data or unrelated resources.
 
 ### Other limits
 

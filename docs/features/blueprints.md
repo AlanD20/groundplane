@@ -17,27 +17,31 @@ blocks. Drafts stay local until explicitly submitted.
 Read the desired revision before Validate or Apply and send that exact quoted
 `If-Match`. A stale revision fails without writes. Revision zero means no
 desired head. Validate parses the same input as Apply but creates no Task,
-revision or host effect; its diff is create, update or retain.
+revision or host effect; its diff is create, update, remove or retain.
 
 Apply publishes one reconcile Task with immutable inputs. Follow its outcome;
 acceptance does not imply successful application. Required workload images must
 already exist in the host Docker daemon.
 
-## Retention and identity
+## Removal and identity
 
-The intended rule is that omission retains existing resources, never deletes or
-renames them. **Current Entry reconciliation conflicts with this rule:** it can
-select omitted Blueprint-owned Entries for removal. Retain existing Entry keys
-until this [implementation gap](../issues/runtime-qualification.md#blueprint-entry-omission)
-is corrected and qualified.
+The Blueprint is the Environment's foundational intention. Adding or removing an
+operator-managed Entry changes its Environment configuration when Apply succeeds.
+Directly created Entries also appear in canonical export and are reconciled by
+the next Apply. Existing secret-literal values remain selected when their key
+and source are unchanged; export does not reveal those values. A new key-only
+secret literal starts with an empty value. Set or rotate its value through the
+Entry action, never by putting plaintext into a Blueprint.
 
-Use the explicit protected Remove operation to delete a resource. Ambiguous
-preservation fails instead of guessing.
+Persistent Volume omission is rejected: use its impact-checked Remove action
+before applying a Blueprint without it. Other resource omissions still have
+[implementation limits](../issues/runtime-qualification.md#incomplete-features);
+the Console must not promise removal that the Controller retains or rejects.
 
 Blueprint Entry keys identify their reconciliation identity, separately from
 destination env keys or file paths. Source/exposure edits retain the Entry id;
 type, destination, file ownership and secret-storage class are not in-place
-identity edits. Direct and Component-owned Entries are preserved.
+identity edits. Generated Component configuration is not an operator-authored Entry.
 
 Existing Service runtime intent remains separate: applying a Blueprint must not
 restart a deliberately stopped or destroyed Service merely because its definition

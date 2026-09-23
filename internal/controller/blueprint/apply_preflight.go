@@ -59,6 +59,11 @@ func (service *Service) prepareApplyPreflight(
 	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return applyPreflight{}, err
 	}
+	if hasProjection && !preserveRoutes {
+		if err := requireExplicitBlueprintVolumes(parsed.Project, previousProjection.Record.Volumes); err != nil {
+			return applyPreflight{}, err
+		}
+	}
 	currentAttaches, attachReadRevision, err := service.listBlueprintAttaches(ctx, environmentID)
 	if err != nil {
 		return applyPreflight{}, err

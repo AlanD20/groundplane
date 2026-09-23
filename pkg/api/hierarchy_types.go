@@ -105,12 +105,14 @@ const (
 	BlueprintChangeCreate BlueprintChangeAction = "create"
 	BlueprintChangeUpdate BlueprintChangeAction = "update"
 	BlueprintChangeRetain BlueprintChangeAction = "retain"
+	BlueprintChangeRemove BlueprintChangeAction = "remove"
 )
 
 type EnvironmentBlueprintChange struct {
-	Resource string                `json:"resource"`
-	Key      string                `json:"key"`
-	Action   BlueprintChangeAction `json:"action" enum:"create,update,retain"`
+	Resource         string                `json:"resource"`
+	Key              string                `json:"key"`
+	Action           BlueprintChangeAction `json:"action" enum:"create,update,retain,remove"`
+	EmptySecretValue bool                  `json:"empty_secret_value,omitempty"`
 }
 
 type EnvironmentBlueprintValidation struct {

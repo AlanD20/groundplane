@@ -325,6 +325,7 @@ func (e ComponentEnableRequestConfig1Credential1Mode) Valid() bool {
 // Defines values for EnvironmentBlueprintChangeAction.
 const (
 	EnvironmentBlueprintChangeActionCreate EnvironmentBlueprintChangeAction = "create"
+	EnvironmentBlueprintChangeActionRemove EnvironmentBlueprintChangeAction = "remove"
 	EnvironmentBlueprintChangeActionRetain EnvironmentBlueprintChangeAction = "retain"
 	EnvironmentBlueprintChangeActionUpdate EnvironmentBlueprintChangeAction = "update"
 )
@@ -333,6 +334,8 @@ const (
 func (e EnvironmentBlueprintChangeAction) Valid() bool {
 	switch e {
 	case EnvironmentBlueprintChangeActionCreate:
+		return true
+	case EnvironmentBlueprintChangeActionRemove:
 		return true
 	case EnvironmentBlueprintChangeActionRetain:
 		return true
@@ -1550,9 +1553,10 @@ type Environment struct {
 
 // EnvironmentBlueprintChange defines model for EnvironmentBlueprintChange.
 type EnvironmentBlueprintChange struct {
-	Action   EnvironmentBlueprintChangeAction `json:"action"`
-	Key      string                           `json:"key"`
-	Resource string                           `json:"resource"`
+	Action           EnvironmentBlueprintChangeAction `json:"action"`
+	EmptySecretValue *bool                            `json:"empty_secret_value,omitempty"`
+	Key              string                           `json:"key"`
+	Resource         string                           `json:"resource"`
 }
 
 // EnvironmentBlueprintChangeAction defines model for EnvironmentBlueprintChange.Action.

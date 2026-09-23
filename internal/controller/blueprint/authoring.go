@@ -104,6 +104,11 @@ func (service *Service) ValidateBlueprint(
 	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
+	if snapshot.hasHead {
+		if err := requireExplicitBlueprintVolumes(parsed.Project, snapshot.projection.Record.Volumes); err != nil {
+			return apiTypes.EnvironmentBlueprintValidation{}, err
+		}
+	}
 	if parsed.Extensions.Backup != nil {
 		attaches, readRevision, err := service.listBlueprintAttaches(ctx, environmentID)
 		if err != nil {
@@ -471,9 +476,14 @@ func environmentBlueprintChanges(
 			if _, exists := currentKeys[resource][key]; exists {
 				action = apiTypes.BlueprintChangeUpdate
 			}
-			changes = append(changes, apiTypes.EnvironmentBlueprintChange{
+			change := apiTypes.EnvironmentBlueprintChange{
 				Resource: resource, Key: key, Action: action,
-			})
+			}
+			if resource == "entry" && action == apiTypes.BlueprintChangeCreate {
+				spec := candidate.Extensions.Entries[key]
+				change.EmptySecretValue = spec.Secret && spec.Source.SecretRef == "" && spec.Source.Fact == nil
+			}
+			changes = append(changes, change)
 		}
 	}
 	for resource, keys := range currentKeys {
@@ -481,8 +491,12 @@ func environmentBlueprintChanges(
 			if _, included := candidateKeys[resource][key]; included {
 				continue
 			}
+			action := apiTypes.BlueprintChangeRetain
+			if resource == "entry" {
+				action = apiTypes.BlueprintChangeRemove
+			}
 			changes = append(changes, apiTypes.EnvironmentBlueprintChange{
-				Resource: resource, Key: key, Action: apiTypes.BlueprintChangeRetain,
+				Resource: resource, Key: key, Action: action,
 			})
 		}
 	}

@@ -34,17 +34,20 @@ func BlueprintProjection(
 	return records, nil
 }
 
-// BlueprintAuthoring emits only Blueprint-owned desired fields, never values
-// from the private Entry generation store or generated runtime state.
+// BlueprintAuthoring includes every operator-managed Environment Entry. Direct
+// Entries use their destination as the initial authored key; Apply can then
+// claim that key without changing their stable id or selected value generation.
+// Private Entry generation bytes are never read here.
 func BlueprintAuthoring(
 	records []entryrecord.Record,
 ) (map[string]core.EntrySpec, error) {
 	result := make(map[string]core.EntrySpec)
 	for _, record := range records {
-		if record.BlueprintKey == "" {
-			continue
+		key := BlueprintKey(record)
+		if key == "" {
+			return nil, errs.New(errs.KindInternal, "Environment Entry has no Blueprint identity")
 		}
-		if _, duplicate := result[record.BlueprintKey]; duplicate {
+		if _, duplicate := result[key]; duplicate {
 			return nil, errs.New(errs.KindInternal, "Environment Blueprint Entry key is duplicated")
 		}
 		entry := record.Entry
@@ -53,10 +56,24 @@ func BlueprintAuthoring(
 			SecretRef: entry.Source.SecretRef,
 			Fact:      entry.Source.Fact,
 		}
-		result[record.BlueprintKey] = core.EntrySpec{
+		result[key] = core.EntrySpec{
 			Kind: entry.Kind, Path: entry.Path, UID: entry.UID, GID: entry.GID,
 			Source: source, Exposure: append([]string(nil), entry.Exposure...), Secret: entry.Secret,
 		}
 	}
 	return result, nil
+}
+
+// BlueprintKey returns the stable authored key used to adopt a direct Entry.
+func BlueprintKey(record entryrecord.Record) string {
+	if record.BlueprintKey != "" {
+		return record.BlueprintKey
+	}
+	if record.Entry.Kind == core.EntryKindEnv {
+		return record.Entry.Key
+	}
+	if record.Entry.Kind == core.EntryKindFile && record.Entry.Path != "" {
+		return "file:" + record.Entry.Path
+	}
+	return ""
 }
