@@ -182,15 +182,16 @@ func proveRetainedBlueprintProducer(
 	prepared, err := producer.Prepare(
 		ctx,
 		blueprintrelease.PrepareInput{
-			Workloads:      workloads,
-			VolumeRoot:     "/var/lib/groundplane/vol",
-			Projection:     projection,
-			Memberships:    memberships,
-			Task:           task,
-			ServiceChanges: changes,
-			Artifact:       artifact,
-			CreatedAt:      task.CreatedAt,
-			AllocateNamed:  func(kind ids.Kind, name string) string { return ids.DeriveAt(kind, task.CreatedAt, task.ID, name) },
+			DesiredRevisionID: projection.RevisionID,
+			Workloads:         workloads,
+			VolumeRoot:        "/var/lib/groundplane/vol",
+			Projection:        projection,
+			Memberships:       memberships,
+			Task:              task,
+			ServiceChanges:    changes,
+			Artifact:          artifact,
+			CreatedAt:         task.CreatedAt,
+			AllocateNamed:     func(kind ids.Kind, name string) string { return ids.DeriveAt(kind, task.CreatedAt, task.ID, name) },
 		},
 	)
 	if err != nil {

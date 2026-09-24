@@ -175,7 +175,7 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		prepared, err := producer.Prepare(ctx, blueprintrelease.PrepareInput{Workloads: workloads,
+		prepared, err := producer.Prepare(ctx, blueprintrelease.PrepareInput{DesiredRevisionID: projection.RevisionID, Workloads: workloads,
 			VolumeRoot: "/var/lib/groundplane/vol", Task: task, Projection: projection, Tenant: tenant,
 			Project: fixture.Project, Environment: environment, Memberships: memberships, PrefixSteps: prefix,
 			ServiceChanges: changes, Artifact: artifact, CreatedAt: task.CreatedAt,

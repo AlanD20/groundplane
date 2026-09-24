@@ -69,23 +69,24 @@ func NewService(
 }
 
 type PrepareInput struct {
-	IntendedAttaches []etcdstore.Versioned[attachrecord.Record]
-	Workloads        WorkloadPreparation
-	VolumeRoot       string
-	Tenant           etcdstore.Versioned[hierarchyrecord.TenantRecord]
-	Project          etcdstore.Versioned[hierarchyrecord.ProjectRecord]
-	Environment      etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	Projection       projectionrecord.EnvironmentComposeProjection
-	ServiceChanges   []blueprints.EnvironmentBlueprintServiceChange
-	Memberships      NormalizedServiceMemberships
-	Scripts          []scriptrecord.Record
-	ReleaseGroups    map[string]core.ReleaseGroupSpec
-	Task             etcd.TaskRecord
-	PrefixSteps      []*agentpb.ExecutionStep
-	ComponentSteps   []*agentpb.ExecutionStep
-	Artifact         *agentpb.ComposeArtifact
-	AllocateNamed    func(ids.Kind, string) string
-	CreatedAt        time.Time
+	DesiredRevisionID string
+	IntendedAttaches  []etcdstore.Versioned[attachrecord.Record]
+	Workloads         WorkloadPreparation
+	VolumeRoot        string
+	Tenant            etcdstore.Versioned[hierarchyrecord.TenantRecord]
+	Project           etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	Environment       etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	Projection        projectionrecord.EnvironmentComposeProjection
+	ServiceChanges    []blueprints.EnvironmentBlueprintServiceChange
+	Memberships       NormalizedServiceMemberships
+	Scripts           []scriptrecord.Record
+	ReleaseGroups     map[string]core.ReleaseGroupSpec
+	Task              etcd.TaskRecord
+	PrefixSteps       []*agentpb.ExecutionStep
+	ComponentSteps    []*agentpb.ExecutionStep
+	Artifact          *agentpb.ComposeArtifact
+	AllocateNamed     func(ids.Kind, string) string
+	CreatedAt         time.Time
 }
 
 type Prepared struct {
@@ -98,7 +99,10 @@ func (prepared Prepared) Abandon(ctx context.Context) error { return prepared.Pu
 
 func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepared, error) {
 	if ctx == nil || service == nil || service.ledger == nil || service.plans == nil || input.AllocateNamed == nil ||
-		input.Task.ID == "" || input.Task.OperationID == "" || input.Projection.RevisionID != input.Task.ID ||
+		input.Task.ID == "" || input.Task.OperationID == "" ||
+		ids.Validate(ids.KindTask, input.DesiredRevisionID) != nil ||
+		input.Projection.RevisionID != input.DesiredRevisionID ||
+		input.Task.Params[blueprints.EnvironmentDesiredRevisionParam] != input.DesiredRevisionID ||
 		!input.CreatedAt.Equal(input.CreatedAt.UTC()) {
 		return Prepared{}, errs.New(errs.KindValidationFailed, "Blueprint Release preparation is invalid")
 	}
@@ -219,7 +223,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 			CandidateWorkload: workload, Tag: tag, Strategy: domain.StrategyRecreate,
 			OnFailure:     domain.OnFailure(candidate.Record.Desired.OnFailure.WithDefault()),
 			RenderInputID: artifactID, CreatedAt: input.CreatedAt,
-			Actor: "operator", OriginatingTaskID: task.ID,
+			Actor: "operator", OriginatingTaskID: input.DesiredRevisionID,
 			Workspace: domain.Workspace{Kind: domain.WorkspaceTenant, TenantID: input.Tenant.Record.ID,
 				ProjectID: input.Project.Record.ID, EnvironmentID: input.Environment.Record.ID},
 		}

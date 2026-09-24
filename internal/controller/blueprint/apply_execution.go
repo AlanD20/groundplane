@@ -481,10 +481,11 @@ func (service *Service) applyBlueprintOnce(
 	}
 	task.ManagedComponentTeardownSources = componentPreparation.ManagedComponentTeardownSources()
 	preparedRelease, err := service.blueprintReleases.Prepare(ctx, blueprintrelease.PrepareInput{
-		IntendedAttaches: preparedAttaches.effective,
-		Workloads:        workloads,
-		VolumeRoot:       service.volumeRoot,
-		Tenant:           tenant, Project: project, Environment: environment,
+		DesiredRevisionID: taskID,
+		IntendedAttaches:  preparedAttaches.effective,
+		Workloads:         workloads,
+		VolumeRoot:        service.volumeRoot,
+		Tenant:            tenant, Project: project, Environment: environment,
 		Projection: projection, ServiceChanges: serviceChanges, Memberships: releaseMemberships,
 		Scripts:       reconciledScripts.Current,
 		ReleaseGroups: effectiveReleaseGroups, Task: task,

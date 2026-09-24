@@ -229,8 +229,9 @@ func proveFullMixedProducer(
 		t.Fatal(err)
 	}
 	prepared, err := producer.Prepare(ctx, blueprintrelease.PrepareInput{
-		Scripts:   hooks,
-		Workloads: workloads, VolumeRoot: "/var/lib/groundplane/vol", Task: task, Projection: projection,
+		DesiredRevisionID: projection.RevisionID,
+		Scripts:           hooks,
+		Workloads:         workloads, VolumeRoot: "/var/lib/groundplane/vol", Task: task, Projection: projection,
 		Tenant:  tenant,
 		Project: fixture.Project, Environment: fixture.Environment, Memberships: memberships, ServiceChanges: changes,
 		Artifact: artifact, CreatedAt: task.CreatedAt, AllocateNamed: func(kind ids.Kind, purpose string) string {

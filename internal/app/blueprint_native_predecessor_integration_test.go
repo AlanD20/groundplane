@@ -159,7 +159,7 @@ func proveNativeCandidatePreparation(
 	}
 	prepared, err := producer.Prepare(
 		ctx,
-		blueprintrelease.PrepareInput{Workloads: workloads, VolumeRoot: "/var/lib/groundplane/vol", Task: task,
+		blueprintrelease.PrepareInput{DesiredRevisionID: projection.RevisionID, Workloads: workloads, VolumeRoot: "/var/lib/groundplane/vol", Task: task,
 			Projection: projection, Tenant: tenant, Project: fixture.Project, Environment: fixture.Environment, Memberships: memberships,
 			ServiceChanges: changes, Artifact: artifact, CreatedAt: task.CreatedAt, AllocateNamed: func(kind ids.Kind, purpose string) string {
 				return ids.DeriveAt(kind, task.CreatedAt, task.ID, purpose)

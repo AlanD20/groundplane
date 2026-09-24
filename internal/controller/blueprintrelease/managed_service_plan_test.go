@@ -257,11 +257,12 @@ func testPrepareManagedService(
 	prepared, err := producer.Prepare(
 		context.Background(),
 		PrepareInput{
-			VolumeRoot:     "/var/lib/groundplane/vol",
-			Projection:     projection,
-			Memberships:    memberships,
-			Task:           task,
-			ServiceChanges: changes,
+			DesiredRevisionID: projection.RevisionID,
+			VolumeRoot:        "/var/lib/groundplane/vol",
+			Projection:        projection,
+			Memberships:       memberships,
+			Task:              task,
+			ServiceChanges:    changes,
 			PrefixSteps: []*agentpb.ExecutionStep{
 				prefix,
 			},

@@ -87,6 +87,7 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 		t.Fatalf("BuildNormalizedServiceMemberships() error = %v", err)
 	}
 	taskID := ids.NewAt(ids.KindTask, at, 207)
+	desiredRevisionID := ids.NewAt(ids.KindTask, at, 210)
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, at, 208),
 		Executor: testtaskjournal.TaskExecutorAgent, PlanID: planID,
@@ -94,15 +95,16 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 		Params: map[string]string{
 			taskcontract.EnvironmentBlueprintProcedureParam: string(
 				taskcontract.BlueprintComposeProcedureNone,
-			), testblueprints.EnvironmentDesiredRevisionParam: taskID,
+			), testblueprints.EnvironmentDesiredRevisionParam: desiredRevisionID,
 		},
 		TimeoutSeconds: 120,
 	}
 	prepared, err := service.Prepare(context.Background(), PrepareInput{
-		VolumeRoot: "/var/lib/groundplane/vol",
+		DesiredRevisionID: desiredRevisionID,
+		VolumeRoot:        "/var/lib/groundplane/vol",
 		Projection: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID:     environmentID,
-			RevisionID:        task.ID,
+			RevisionID:        desiredRevisionID,
 			NormalizedCompose: []byte("services: {}\n"),
 		},
 		Memberships: memberships,
@@ -115,7 +117,8 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
-	if len(prepared.Plan.GetSteps()) != 2 || len(prepared.Task.Steps) != 2 ||
+	if prepared.Task.ID != taskID || prepared.Task.Params[testblueprints.EnvironmentDesiredRevisionParam] != desiredRevisionID ||
+		len(prepared.Plan.GetSteps()) != 2 || len(prepared.Task.Steps) != 2 ||
 		prepared.Plan.Steps[0].GetMaterializeFile() == nil ||
 		prepared.Plan.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
 		prepared.Task.Params[taskcontract.EnvironmentBlueprintProcedureParam] != string(
@@ -399,11 +402,13 @@ func TestPrepareRejectsChangedOrNewServiceMissingFromSealedProjection(t *testing
 				Target:           environmentID,
 				Params: map[string]string{
 					taskcontract.EnvironmentBlueprintProcedureParam: string(taskcontract.BlueprintComposeProcedureNone),
+					testblueprints.EnvironmentDesiredRevisionParam:  ids.NewAt(ids.KindTask, at, int64(510+len(name))),
 				},
 				TimeoutSeconds: 120,
 			}
 			prepared, prepareErr := releaseService.Prepare(context.Background(), PrepareInput{
-				VolumeRoot: "/var/lib/groundplane/vol",
+				DesiredRevisionID: task.ID,
+				VolumeRoot:        "/var/lib/groundplane/vol",
 				Projection: testenvironmentprojection.EnvironmentComposeProjection{
 					EnvironmentID:     environmentID,
 					RevisionID:        task.ID,
