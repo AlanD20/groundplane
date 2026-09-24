@@ -2,6 +2,7 @@ package blueprintunits
 
 import (
 	"context"
+	"math"
 	"slices"
 	"strings"
 
@@ -154,13 +155,13 @@ func PrepareMutation(
 		len(applied)+len(executions) == 0 {
 		return MutationPlan{}, invalidRecord()
 	}
-	knownApplied := make(map[ResourceKey]int64, len(snapshot.Applied))
+	knownApplied := make(map[ResourceKey]etcdstore.Versioned[AppliedRecord], len(snapshot.Applied))
 	for _, versioned := range snapshot.Applied {
 		if versioned.Record.EnvironmentID != snapshot.EnvironmentID ||
 			validateApplied(versioned.Record) != nil || versioned.Revision <= 0 {
 			return MutationPlan{}, invalidRecord()
 		}
-		knownApplied[versioned.Record.Target] = versioned.Revision
+		knownApplied[versioned.Record.Target] = versioned
 	}
 	knownExecutions := make(map[string]etcdstore.Versioned[ExecutionRecord], len(snapshot.Executions))
 	for _, versioned := range snapshot.Executions {
@@ -190,16 +191,18 @@ func PrepareMutation(
 		}
 		seenApplied[change.Target] = true
 		key := AppliedKey(snapshot.EnvironmentID, change.Target)
-		plan.conditions = append(plan.conditions, etcdstore.Condition{Key: key, ModRevision: knownApplied[change.Target]})
+		current, exists := knownApplied[change.Target]
+		plan.conditions = append(plan.conditions, etcdstore.Condition{Key: key, ModRevision: current.Revision})
 		if change.Next == nil {
-			if knownApplied[change.Target] == 0 {
+			if !exists {
 				plan.Clear()
 				return MutationPlan{}, invalidRecord()
 			}
 			plan.mutations = append(plan.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 			continue
 		}
-		if change.Next.EnvironmentID != snapshot.EnvironmentID || change.Next.Target != change.Target {
+		if change.Next.EnvironmentID != snapshot.EnvironmentID || change.Next.Target != change.Target ||
+			!validAppliedAdvance(exists, *change.Next, knownExecutions) {
 			plan.Clear()
 			return MutationPlan{}, invalidRecord()
 		}
@@ -241,6 +244,36 @@ func PrepareMutation(
 		plan.mutations = append(plan.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	}
 	return plan, nil
+}
+
+func validAppliedAdvance(
+	exists bool, next AppliedRecord, executions map[string]etcdstore.Versioned[ExecutionRecord],
+) bool {
+	if next.SourceTaskID == "" {
+		return !exists && next.State == Absent
+	}
+	execution, found := executions[next.SourcePlanID]
+	if !found || execution.Record.TaskID != next.SourceTaskID || execution.Record.Epoch <= 0 ||
+		execution.Record.Epoch > math.MaxUint32 || uint32(execution.Record.Epoch) != next.ExecutionEpoch ||
+		!slices.Contains(execution.Record.Unit.Writes, next.Target) {
+		return false
+	}
+	switch next.State {
+	case Applied:
+		return !execution.Record.Unit.Removal && next.Target == execution.Record.Unit.Target &&
+			next.Fingerprint == execution.Record.Unit.Fingerprint
+	case Absent:
+		return execution.Record.Unit.Removal && next.Target == execution.Record.Unit.Target
+	case Diverged, Uncertain:
+		for _, affected := range next.AffectedWrites {
+			if !slices.Contains(execution.Record.Unit.Writes, affected) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 func validExecutionAdvance(headTaskID string, current ExecutionRecord, exists bool, next ExecutionRecord) bool {

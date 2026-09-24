@@ -73,6 +73,19 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 		[]blueprintunits.ExecutionChange{{PlanID: planID, Next: &rewritten}}); err == nil {
 		t.Fatal("existing child plan was rewritten")
 	}
+	if _, err := blueprintunits.PrepareMutation(loaded,
+		[]blueprintunits.AppliedChange{{Target: service, Next: &absent}}, nil); err == nil {
+		t.Fatal("existing resource was declared initially absent again")
+	}
+	forged := blueprintunits.AppliedRecord{
+		EnvironmentID: environmentID, Target: service, State: blueprintunits.Applied,
+		Fingerprint: execution.Unit.Fingerprint, SourceTaskID: childID, SourcePlanID: planID,
+		SourceAssignment: ids.NewAt(ids.KindAssignment, now, 36), ExecutionEpoch: 1,
+	}
+	if _, err := blueprintunits.PrepareMutation(loaded,
+		[]blueprintunits.AppliedChange{{Target: service, Next: &forged}}, nil); err == nil {
+		t.Fatal("pending child supplied an applied receipt without an execution epoch")
+	}
 	stale, err := store.Transact(ctx, plan.Conditions(), plan.Mutations())
 	if err != nil || stale.Succeeded {
 		t.Fatalf("stale unit claim repeated = %#v, %v", stale, err)
@@ -105,5 +118,66 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 	if _, err := blueprintunits.PrepareMutation(newSnapshot, nil,
 		[]blueprintunits.ExecutionChange{{PlanID: planID, Next: &next}}); err == nil {
 		t.Fatal("pending child from an older Blueprint head was admitted to run")
+	}
+	newParentID, err := idempotencyrecord.DecodeTaskReference(newHead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newExecution := execution
+	newExecution.ParentTaskID = newParentID
+	newExecution.TaskID = ids.NewAt(ids.KindTask, now, 37)
+	newExecution.PlanID = ids.NewAt(ids.KindPlan, now, 38)
+	newExecution.Unit.Fingerprint = strings.Repeat("c", 64)
+	replace, err := blueprintunits.PrepareMutation(newSnapshot, nil, []blueprintunits.ExecutionChange{
+		{PlanID: planID}, {PlanID: newExecution.PlanID, Next: &newExecution},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replace.Clear()
+	if tx, err := store.Transact(ctx, replace.Conditions(), replace.Mutations()); err != nil || !tx.Succeeded {
+		t.Fatalf("replace obsolete pending child = %#v, %v", tx, err)
+	}
+	newPending, err := ledger.Load(ctx, environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newRunning := newExecution
+	newRunning.State, newRunning.Epoch = blueprintunits.Running, 1
+	start, err := blueprintunits.PrepareMutation(newPending, nil,
+		[]blueprintunits.ExecutionChange{{PlanID: newRunning.PlanID, Next: &newRunning}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer start.Clear()
+	if tx, err := store.Transact(ctx, start.Conditions(), start.Mutations()); err != nil || !tx.Succeeded {
+		t.Fatalf("start latest child = %#v, %v", tx, err)
+	}
+	runningSnapshot, err := ledger.Load(ctx, environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := blueprintunits.PrepareMutation(runningSnapshot,
+		[]blueprintunits.AppliedChange{{Target: service, Next: &forged}}, nil); err == nil {
+		t.Fatal("obsolete child supplied the latest applied receipt")
+	}
+	acknowledged := forged
+	acknowledged.Fingerprint = newExecution.Unit.Fingerprint
+	acknowledged.SourceTaskID = newExecution.TaskID
+	acknowledged.SourcePlanID = newExecution.PlanID
+	ack, err := blueprintunits.PrepareMutation(runningSnapshot,
+		[]blueprintunits.AppliedChange{{Target: service, Next: &acknowledged}},
+		[]blueprintunits.ExecutionChange{{PlanID: newExecution.PlanID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ack.Clear()
+	if tx, err := store.Transact(ctx, ack.Conditions(), ack.Mutations()); err != nil || !tx.Succeeded {
+		t.Fatalf("acknowledge latest child = %#v, %v", tx, err)
+	}
+	settled, err := ledger.Load(ctx, environmentID)
+	if err != nil || len(settled.Executions) != 0 || len(settled.Applied) != 1 ||
+		settled.Applied[0].Record.Fingerprint != newExecution.Unit.Fingerprint {
+		t.Fatalf("settled child receipt = %#v, %v", settled, err)
 	}
 }
