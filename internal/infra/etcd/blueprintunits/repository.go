@@ -37,6 +37,7 @@ type Snapshot struct {
 	HeadRevision  int64
 	Epoch         EpochRecord
 	EpochRevision int64
+	Desired       *etcdstore.Versioned[DesiredPlan]
 	Applied       []etcdstore.Versioned[AppliedRecord]
 	Executions    []etcdstore.Versioned[ExecutionRecord]
 	ReadRevision  int64
@@ -51,11 +52,12 @@ func (repository *Repository) Load(ctx context.Context, environmentID string) (S
 	}
 	headKey := blueprints.EnvironmentBlueprintHeadKey(environmentID)
 	epochKey := EpochKey(environmentID)
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{headKey, epochKey}})
+	desiredKey := DesiredPlanKey(environmentID)
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{headKey, epochKey, desiredKey}})
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 2 || read.Values[0] == nil {
+	if read == nil || read.ReadRevision <= 0 || len(read.Values) != 3 || read.Values[0] == nil {
 		return Snapshot{}, errs.New(errs.KindStateConflict, "Environment Blueprint head is unavailable")
 	}
 	defer etcdstore.ClearValues(read.Values)
@@ -73,6 +75,16 @@ func (repository *Repository) Load(ctx context.Context, environmentID string) (S
 			return Snapshot{}, corruptRecord()
 		}
 		snapshot.EpochRevision = read.Values[1].ModRevision
+	}
+	if read.Values[2] != nil {
+		desired, decodeErr := DecodeDesiredPlan(read.Values[2].Value)
+		if decodeErr != nil || desired.EnvironmentID != environmentID ||
+			(snapshot.EpochRevision == 0 || read.Values[2].ModRevision > snapshot.EpochRevision) {
+			return Snapshot{}, corruptRecord()
+		}
+		snapshot.Desired = &etcdstore.Versioned[DesiredPlan]{
+			Record: desired, Revision: read.Values[2].ModRevision, ReadRevision: snapshot.ReadRevision,
+		}
 	}
 	for _, prefix := range []string{AppliedPrefix(environmentID), ExecutionPrefix(environmentID)} {
 		start := ""

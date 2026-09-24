@@ -13,6 +13,7 @@ import (
 )
 
 const recordPrefix = "/v1/runtime/blueprint-units/"
+const maximumDesiredPlanBytes = 1 << 20
 
 type ResourceKey struct {
 	Kind ids.Kind `json:"kind"`
@@ -79,8 +80,22 @@ type EpochRecord struct {
 	Sequence      uint64 `json:"sequence"`
 }
 
+// DesiredPlan is the current parent's durable effective-input selection.
+// Complete distinguishes an intentional empty plan from one still awaiting
+// facts produced by an earlier unit in the same Apply.
+type DesiredPlan struct {
+	EnvironmentID string `json:"environment_id"`
+	ParentTaskID  string `json:"parent_task_id"`
+	Complete      bool   `json:"complete"`
+	Units         []Unit `json:"units,omitempty"`
+}
+
 func EpochKey(environmentID string) string {
 	return recordPrefix + environmentID + "/epoch"
+}
+
+func DesiredPlanKey(environmentID string) string {
+	return recordPrefix + environmentID + "/desired"
 }
 
 func AppliedPrefix(environmentID string) string {
@@ -112,6 +127,45 @@ func DecodeEpoch(value []byte) (EpochRecord, error) {
 		return EpochRecord{}, corruptRecord()
 	}
 	return record, nil
+}
+
+func EncodeDesiredPlan(record DesiredPlan) ([]byte, error) {
+	if !validDesiredPlan(record) {
+		return nil, invalidRecord()
+	}
+	value, err := recordcodec.Encode("blueprint-unit-desired-plan", record)
+	if err != nil {
+		return nil, err
+	}
+	if len(value) > maximumDesiredPlanBytes {
+		clear(value)
+		return nil, invalidRecord()
+	}
+	return value, nil
+}
+
+func DecodeDesiredPlan(value []byte) (DesiredPlan, error) {
+	if len(value) > maximumDesiredPlanBytes {
+		return DesiredPlan{}, corruptRecord()
+	}
+	record, err := recordcodec.Decode[DesiredPlan](value, "blueprint-unit-desired-plan")
+	if err != nil || !validDesiredPlan(record) {
+		return DesiredPlan{}, corruptRecord()
+	}
+	return record, nil
+}
+
+func validDesiredPlan(record DesiredPlan) bool {
+	if ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil ||
+		ids.Validate(ids.KindTask, record.ParentTaskID) != nil {
+		return false
+	}
+	for index, unit := range record.Units {
+		if !validUnit(unit) || index > 0 && compareKey(record.Units[index-1].Target, unit.Target) >= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func EncodeApplied(record AppliedRecord) ([]byte, error) {

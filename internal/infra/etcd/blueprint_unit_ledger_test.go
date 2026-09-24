@@ -182,3 +182,74 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 		t.Fatalf("settled child receipt = %#v, %v", settled, err)
 	}
 }
+
+// Rationale: one Apply may produce Attach facts before its remaining units can
+// be fixed. An incomplete plan is not an empty successful plan, and sealing
+// must fence both the current head and the earlier planning epoch.
+func TestBlueprintDesiredUnitPlanSealsAfterFactDependentExpansion(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	ledger, err := blueprintunits.NewRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := taskJournalTime()
+	environmentID := ids.NewAt(ids.KindEnvironment, now, 70)
+	parentID := ids.NewAt(ids.KindTask, now, 71)
+	headValue, err := idempotencyrecord.EncodeTaskReference(parentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tx, err := store.Transact(ctx, nil, []etcdstore.Mutation{{
+		Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headValue,
+	}}); err != nil || !tx.Succeeded {
+		t.Fatalf("seed desired head = %#v, %v", tx, err)
+	}
+	initial, err := ledger.Load(ctx, environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	attach := blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: ids.NewAt(ids.KindAttach, now, 72)}
+	service := blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.NewAt(ids.KindService, now, 73)}
+	first := blueprintunits.DesiredPlan{
+		EnvironmentID: environmentID, ParentTaskID: parentID,
+		Units: []blueprintunits.Unit{{Target: attach, Writes: []blueprintunits.ResourceKey{attach}, Fingerprint: strings.Repeat("a", 64)}},
+	}
+	prepared, err := blueprintunits.PrepareDesiredPlan(initial, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer prepared.Clear()
+	if tx, err := store.Transact(ctx, prepared.Conditions(), prepared.Mutations()); err != nil || !tx.Succeeded {
+		t.Fatalf("publish incomplete plan = %#v, %v", tx, err)
+	}
+	loaded, err := ledger.Load(ctx, environmentID)
+	if err != nil || loaded.Desired == nil || loaded.Desired.Record.Complete || len(loaded.Desired.Record.Units) != 1 {
+		t.Fatalf("incomplete plan = %#v, %v", loaded.Desired, err)
+	}
+	final := first
+	final.Complete = true
+	final.Units = append(append([]blueprintunits.Unit(nil), first.Units...), blueprintunits.Unit{
+		Target: service, Writes: []blueprintunits.ResourceKey{service}, Fingerprint: strings.Repeat("b", 64),
+		After: []blueprintunits.ResourceKey{attach},
+	})
+	sealed, err := blueprintunits.PrepareDesiredPlan(loaded, final)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sealed.Clear()
+	if tx, err := store.Transact(ctx, sealed.Conditions(), sealed.Mutations()); err != nil || !tx.Succeeded {
+		t.Fatalf("seal expanded plan = %#v, %v", tx, err)
+	}
+	if tx, err := store.Transact(ctx, prepared.Conditions(), prepared.Mutations()); err != nil || tx.Succeeded {
+		t.Fatalf("stale plan overwrote expansion = %#v, %v", tx, err)
+	}
+	current, err := ledger.Load(ctx, environmentID)
+	if err != nil || current.Desired == nil || !current.Desired.Record.Complete ||
+		len(current.Desired.Record.Units) != 2 {
+		t.Fatalf("sealed plan = %#v, %v", current.Desired, err)
+	}
+	if _, err := blueprintunits.PrepareDesiredPlan(current, first); err == nil {
+		t.Fatal("sealed plan was reopened")
+	}
+}
