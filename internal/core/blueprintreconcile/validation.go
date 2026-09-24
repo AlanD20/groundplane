@@ -107,7 +107,7 @@ func normalizeExecution(input Execution) (Execution, error) {
 }
 
 func normalizeUnit(input Unit) (Unit, error) {
-	if !validKey(input.Target) || input.Fingerprint == (Fingerprint{}) {
+	if !validKey(input.Target) || input.Removal == (input.Fingerprint != (Fingerprint{})) {
 		return Unit{}, invalidSnapshot("blueprint reconciliation effective input is invalid")
 	}
 	var err error

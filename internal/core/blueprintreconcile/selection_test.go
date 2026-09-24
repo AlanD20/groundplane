@@ -92,6 +92,30 @@ func TestSelectionUsesAppliedResultsAndRequiresKnownEffects(t *testing.T) {
 	}
 }
 
+// Rationale: Blueprint omission must schedule a protected removal from an
+// applied resource, wait for an older writer to stop, and finish only after
+// absence is acknowledged; dropping it from Desired would do none of these.
+func TestOmissionSelectsRemovalOnlyAfterConflictingWorkSettles(t *testing.T) {
+	service := testKey(ids.KindService, 35)
+	old := testUnit(service, "old-input")
+	remove := Unit{Target: service, Removal: true, Writes: []ResourceKey{service}}
+	input := Snapshot{Desired: []Unit{remove}, Applied: []AppliedUnit{testApplied(old)}}
+	assertKeys(t, "remove applied Service", mustSelect(t, input).Ready, service)
+	running := testExecution(old, Running, 36)
+	input.Executions = []Execution{running}
+	selected := mustSelect(t, input)
+	assertIDs(t, "cancel old writer", selected.CancelRunning, running.PlanID)
+	assertKeys(t, "wait to remove", selected.Waiting, service)
+	input.Executions = nil
+	input.Applied[0] = AppliedUnit{Target: service, State: Absent}
+	assertKeys(t, "verified absence", mustSelect(t, input).Satisfied, service)
+	remove.Fingerprint = old.Fingerprint
+	input.Desired[0] = remove
+	if _, err := Select(input); err == nil {
+		t.Fatal("removal with a present-input fingerprint was accepted")
+	}
+}
+
 // Rationale: unresolved shared-file effects fence every consumer, including one
 // ordered before the uncertain owner and one whose own inputs otherwise match.
 func TestUncertainEffectsBlockSharedResourcesButNotUnrelatedWork(t *testing.T) {

@@ -22,7 +22,10 @@ type ResourceKey struct {
 // access sets; After names other desired units whose inputs must be applied
 // before this unit starts. Ordering dependencies alone do not alter Fingerprint.
 type Unit struct {
-	Target      ResourceKey
+	Target ResourceKey
+	// Removal is generated from an omitted, previously owned resource. It has
+	// a zero Fingerprint and is satisfied only by acknowledged absence.
+	Removal     bool
 	Fingerprint Fingerprint
 	Reads       []ResourceKey
 	Writes      []ResourceKey
@@ -73,9 +76,10 @@ type Execution struct {
 	State  ExecutionState
 }
 
-// Snapshot contains one validated latest desired set and a consistent read of
-// applied and unfinished execution state. Publication identity/revision fences
-// belong to its persistence caller; this value is not execution authorization.
+// Snapshot contains one validated latest desired set, including generated
+// removal units for omitted owned resources, and a consistent read of applied
+// and unfinished execution state. Publication identity/revision fences belong
+// to its persistence caller; this value is not execution authorization.
 type Snapshot struct {
 	Desired    []Unit
 	Applied    []AppliedUnit

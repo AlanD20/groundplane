@@ -37,7 +37,9 @@ func Select(input Snapshot) (Selection, error) {
 	trusted := make(map[ResourceKey]bool, len(snapshot.Desired))
 	for _, unit := range snapshot.Desired {
 		prior := applied[unit.Target]
-		trusted[unit.Target] = prior.State == Applied && prior.Fingerprint == unit.Fingerprint &&
+		matches := unit.Removal && prior.State == Absent ||
+			!unit.Removal && prior.State == Applied && prior.Fingerprint == unit.Fingerprint
+		trusted[unit.Target] = matches &&
 			!touchesResources(unit, uncertain) && !touchesResources(unit, diverged)
 	}
 	result := Selection{}
@@ -157,7 +159,7 @@ func intersects(left, right []ResourceKey) bool {
 }
 
 func sameUnit(left, right Unit) bool {
-	return left.Target == right.Target && left.Fingerprint == right.Fingerprint &&
+	return left.Target == right.Target && left.Removal == right.Removal && left.Fingerprint == right.Fingerprint &&
 		slices.Equal(
 			left.Reads,
 			right.Reads,

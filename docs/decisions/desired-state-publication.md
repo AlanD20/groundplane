@@ -77,6 +77,8 @@ that all must execute. Accepted publications receive an internal ordering token.
 Planning compares resource-level effective inputs with successfully applied
 inputs and groups inseparable effects into private execution units with exact
 read, write and predecessor claims.
+An omitted owned resource becomes a removal unit; only acknowledged absence
+satisfies it. Merely dropping it from the desired document cannot prove cleanup.
 
 One operator-visible Blueprint Apply Task owns those units. Each unit executes
 as a hidden system Agent child Task so it can use the existing durable claim,
