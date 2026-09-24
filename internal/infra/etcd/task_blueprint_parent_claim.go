@@ -2,10 +2,12 @@ package etcd
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -36,14 +38,15 @@ func (repository *TaskRepository) ClaimNextBlueprintParent(
 		}
 		activeKey := taskjournal.TaskActiveOperationKey(candidate.task.OperationID)
 		claimKey := taskjournal.BlueprintParentClaimKey(candidate.task.ID)
+		headKey := blueprints.EnvironmentBlueprintHeadKey(candidate.task.Owner.EnvironmentID)
 		companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{activeKey, claimKey}, Revision: candidate.readRevision,
+			Keys: []string{activeKey, claimKey, headKey}, Revision: candidate.readRevision,
 		})
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, false, err
 		}
-		if companions == nil || len(companions.Values) != 2 || companions.Values[0] == nil ||
-			companions.Values[1] != nil {
+		if companions == nil || len(companions.Values) != 3 || companions.Values[0] == nil ||
+			companions.Values[1] != nil || companions.Values[2] == nil {
 			return etcdstore.Versioned[TaskRecord]{}, false, errs.New(
 				errs.KindInternal, "queued Blueprint parent claim authority is inconsistent",
 			)
@@ -53,6 +56,25 @@ func (repository *TaskRepository) ClaimNextBlueprintParent(
 			return etcdstore.Versioned[TaskRecord]{}, false, errs.New(
 				errs.KindInternal, "Blueprint parent active operation changed",
 			)
+		}
+		headTaskID, err := idempotencyrecord.DecodeTaskReference(companions.Values[2].Value)
+		if err != nil {
+			return etcdstore.Versioned[TaskRecord]{}, false, err
+		}
+		if headTaskID != candidate.task.ID {
+			retired, retireErr := repository.retireSupersededBlueprintParent(
+				ctx, candidate, companions.Values[0], companions.Values[2], assignedAt,
+			)
+			if retireErr != nil {
+				return etcdstore.Versioned[TaskRecord]{}, false, retireErr
+			}
+			if !retired {
+				conflicts++
+				if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {
+					return etcdstore.Versioned[TaskRecord]{}, false, err
+				}
+			}
+			continue
 		}
 		running, err := TransitionTaskStatus(
 			candidate.task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, assignedAt,
@@ -74,6 +96,7 @@ func (repository *TaskRepository) ClaimNextBlueprintParent(
 			{Key: taskjournal.TaskStorageKey(running.ID), ModRevision: candidate.taskValue.ModRevision},
 			{Key: activeKey, ModRevision: companions.Values[0].ModRevision},
 			{Key: claimKey},
+			{Key: headKey, ModRevision: companions.Values[2].ModRevision},
 		}
 		mutations := []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(running.ID), Value: runningValue},
@@ -97,6 +120,91 @@ func (repository *TaskRepository) ClaimNextBlueprintParent(
 			Record: running, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 		}, true, nil
 	}
+}
+
+// A pending parent has never owned an Agent effect. Retiring it clears the
+// queue and active-operation claim while preserving its Task and replay record.
+func (repository *TaskRepository) retireSupersededBlueprintParent(
+	ctx context.Context,
+	candidate taskClaimCandidate,
+	active, head *etcdstore.KeyValue,
+	at time.Time,
+) (bool, error) {
+	task := candidate.task
+	if task.idempotencyMarker == nil {
+		return false, errs.New(errs.KindInternal, "Blueprint parent marker locator is missing")
+	}
+	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, at)
+	if err != nil {
+		return false, err
+	}
+	prepared, markerKey, retentionKey, err := prepareTerminalTaskMarker(terminal, terminal.Status, *terminal.FinishedAt)
+	if err != nil {
+		return false, err
+	}
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{markerKey, retentionKey}, Revision: candidate.readRevision,
+	})
+	if err != nil {
+		return false, err
+	}
+	if read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] != nil {
+		return false, errs.New(errs.KindInternal, "pending Blueprint parent marker is inconsistent")
+	}
+	defer etcdstore.ClearValues(read.Values)
+	if err := validateTaskLifecycleCompanions(task, active, read.Values[0]); err != nil {
+		return false, err
+	}
+	prepared, err = hydrateTerminalTaskMarker(prepared, read.Values[0].Value)
+	if err != nil {
+		return false, err
+	}
+	defer clear(prepared.Intent.Ciphertext)
+	defer clear(prepared.Response.Body)
+	terminalValue, err := EncodeTaskRecord(terminal)
+	if err != nil {
+		return false, err
+	}
+	defer clear(terminalValue)
+	markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(prepared)
+	if err != nil {
+		return false, err
+	}
+	defer clear(markerValue)
+	retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+	if err != nil {
+		return false, errs.Wrap(errs.KindInternal, err)
+	}
+	defer clear(retentionValue)
+	taskRetentionKey, taskRetentionValue, err := prepareTaskRetentionIndex(terminal)
+	if err != nil {
+		return false, err
+	}
+	defer clear(taskRetentionValue)
+	conditions := []etcdstore.Condition{
+		{Key: candidate.queued.Key, ModRevision: candidate.queued.ModRevision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: candidate.taskValue.ModRevision},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID), ModRevision: active.ModRevision},
+		{Key: taskjournal.BlueprintParentClaimKey(task.ID)},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(task.Owner.EnvironmentID), ModRevision: head.ModRevision},
+		{Key: markerKey, ModRevision: read.Values[0].ModRevision},
+		{Key: retentionKey},
+		{Key: taskRetentionKey},
+	}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: terminalValue},
+		{Type: etcdstore.MutationDelete, Key: candidate.queued.Key},
+		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
+		{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
+		{Type: etcdstore.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
+	}
+	transaction, err := repository.store.Transact(ctx, conditions, mutations)
+	etcdstore.ClearValues(transaction.FailureReads)
+	if err != nil {
+		return false, err
+	}
+	return transaction.Succeeded, nil
 }
 
 // ListBlueprintParentClaims returns every nonterminal coordinator claim at one
