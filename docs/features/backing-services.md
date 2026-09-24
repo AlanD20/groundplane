@@ -111,16 +111,12 @@ Controller encrypts stored fact values. Detach receives the saved provisioning
 facts. Lifecycle hooks cannot rotate consumer credentials by returning facts.
 GP removes its private temporary result files on success and failure.
 
-For this implementation, create new hook-based credential owners through
-standalone Attach, then reference their ready facts or reuse that owner from a
-Blueprint. Blueprint creation of a new custom Attach requiring an attach or
-detach hook is deferred. A single Blueprint apply cannot both produce new
-custom-hook facts and use them in configuration files:
-the files' contents are sealed before execution, while hook output is known
-only after execution. Reject that combination before publishing changes, with
-guidance to finish the Attach first. Existing ready Attach facts remain usable.
-Single-apply support is deferred; it requires a separately designed change to
-Task execution and interruption handling, not a mutable-plan workaround.
+The accepted Blueprint behavior permits a new hook-based credential owner and
+dependent configuration in one Apply. The hook must finish and its exact facts
+must be captured before GP builds dependent files. This path is not available
+yet: create the owner through a standalone Attach, wait until it is ready,
+then reference its facts or reuse it from a Blueprint. Existing ready Attach
+facts remain usable.
 
 ### Attach identity and credential reuse
 

@@ -56,10 +56,15 @@ is still present.
 ## Hooks and partial failure
 
 Setup and migration hooks follow [Script rules](setup-scripts.md).
-For Custom backing hooks, first finish a standalone Attach before using its newly
-produced facts. A single Apply cannot create that hook-based owner and consume
-its new output in already-sealed files. Ready facts and credential reuse remain
-usable; see [Custom backing hooks](backing-services.md).
+The accepted Apply behavior can create a Custom backing Attach, wait for its
+hook to produce facts, then build dependent Entry files and Service work from
+those facts in the same Apply. The authored input remains fixed; only facts
+produced by that Apply may extend its effective plan. A failed hook leaves its
+dependent work pending or failed rather than substituting later values.
+
+This same-Apply path is not implemented yet. Today, create the Custom Attach
+separately and wait until it is ready before a Blueprint uses its facts or
+credential owner. See [Custom backing hooks](backing-services.md).
 
 Retry/recovery use the captured input, not the latest desired document.
 Partial failure must remain visible. Pinned configuration recovery is limited to

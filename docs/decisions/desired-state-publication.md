@@ -88,6 +88,15 @@ The parent records each child's verified result and remains nonterminal while
 any required unit is running or has unknown effects. A child terminal status
 alone cannot mark the parent successful or release its resource claims.
 
+Some effective inputs depend on facts from a Custom backing Attach created by
+the same Apply. Seal the operator's authored decisions at publication, then
+build dependent runtime files only after that Attach's hook has completed and
+its exact output has been captured. The parent's durable unit plan may expand
+while waiting for those facts and must be sealed before successful completion.
+Reconciliation fences each expansion against the current head and planning
+epoch. A failed or superseded hook cannot be replaced with facts from another
+revision, and an empty unsealed plan is never evidence of success.
+
 When newer valid input makes an older unit obsolete:
 
 - an undispatched unit loses dispatch authority atomically;

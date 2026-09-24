@@ -84,9 +84,9 @@ Environment state without orphaning data or unrelated resources.
 - Latest-wins Blueprint reconciliation has an accepted design but lacks complete
   publication, late planning, handoff and runtime integration. BP-13/14/15 cannot
   pass until that work is explicitly authorized and delivered.
-- New Custom hook owners require standalone Attach before their facts can be
-  used in Blueprint-generated files. Single-apply fact production/consumption is
-  deferred. Hook execution and Secret retention still need live qualification.
+- The accepted same-Apply Custom hook path is not implemented: a new owner
+  still requires standalone Attach before a Blueprint can use its facts.
+  Hook execution and Secret retention still need live qualification.
 - Backup/Restore remains incomplete and deferred; Valkey's safe source and restore
   format are undecided. Metadata CRUD is not recovery evidence.
 - Runner isolation, token handoff and host lifecycle remain incomplete against the

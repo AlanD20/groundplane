@@ -371,11 +371,12 @@ x-gp-attachments:
 An Attach makes facts available; it does not inject them. Use `x-gp-entry` to
 select a fact and its destination.
 
-For a Custom backing adapter with hooks, first complete a standalone Attach.
-One Blueprint Apply cannot create a hook-based credential owner and consume its
-newly produced facts in already-sealed Entries. Facts from an already-ready
-Attach and existing credential reuse remain valid. Hook syntax and output are
-owned by [Backing services](features/backing-services.md).
+For the current implementation of a Custom backing adapter with hooks, first
+complete a standalone Attach before referencing its new facts or credential
+owner. The accepted same-Apply behavior is not available yet. Facts from an
+already-ready Attach and existing credential reuse remain valid. Hook behavior
+and the implementation limit are owned by
+[Backing services](features/backing-services.md).
 
 Valkey authentication is an immutable Backing-instance choice made explicitly
 when that Backing Service is created: `username_password`, `password`, or
