@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,8 +16,18 @@ func (service *Service) rejectUnsupportedBlueprintOmissions(
 	ctx context.Context,
 	environmentID string,
 	parsed blueprintparser.Result,
+	currentServices []etcdstore.Versioned[servicerecord.ServiceRecord],
 	currentAttaches []etcdstore.Versioned[attachrecord.Record],
 ) error {
+	for _, service := range currentServices {
+		if _, present := parsed.Project.Services[service.Record.Desired.Name]; !present {
+			return errs.Newf(
+				errs.KindResourceInUse,
+				"Blueprint omits existing Service %s; protected removal is not yet available through Apply",
+				service.Record.Desired.Name,
+			)
+		}
+	}
 	currentZones, err := service.listBlueprintZones(ctx, environmentID)
 	if err != nil {
 		return err

@@ -68,9 +68,13 @@ func (service *Service) prepareApplyPreflight(
 	if err != nil {
 		return applyPreflight{}, err
 	}
+	preflightServices, err := service.listBlueprintServices(ctx, environmentID)
+	if err != nil {
+		return applyPreflight{}, err
+	}
 	if !preserveRoutes {
 		if err := service.rejectUnsupportedBlueprintOmissions(
-			ctx, environmentID, parsed, currentAttaches,
+			ctx, environmentID, parsed, preflightServices, currentAttaches,
 		); err != nil {
 			return applyPreflight{}, err
 		}
@@ -100,10 +104,6 @@ func (service *Service) prepareApplyPreflight(
 		); err != nil {
 			return applyPreflight{}, err
 		}
-	}
-	preflightServices, err := service.listBlueprintServices(ctx, environmentID)
-	if err != nil {
-		return applyPreflight{}, err
 	}
 	preflightExtensions := cloneEnvironmentBlueprintServiceExtensions(parsed.ServiceExtensions)
 	if preserveRoutes {

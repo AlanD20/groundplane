@@ -110,11 +110,18 @@ func (service *Service) ValidateBlueprint(
 			return apiTypes.EnvironmentBlueprintValidation{}, err
 		}
 	}
+	services, err := service.listBlueprintServices(ctx, environmentID)
+	if err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
+	attaches, readRevision, err := service.listBlueprintAttaches(ctx, environmentID)
+	if err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
+	if err := service.rejectUnsupportedBlueprintOmissions(ctx, environmentID, parsed, services, attaches); err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
 	if parsed.Extensions.Backup != nil {
-		attaches, readRevision, err := service.listBlueprintAttaches(ctx, environmentID)
-		if err != nil {
-			return apiTypes.EnvironmentBlueprintValidation{}, err
-		}
 		validationProjection, validationAttaches, err := environmentBlueprintBackupValidationTargets(
 			snapshot, parsed, attaches,
 		)
