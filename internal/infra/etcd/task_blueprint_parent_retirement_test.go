@@ -18,8 +18,8 @@ import (
 // Rationale: an overtaken running Apply remains visible until its private
 // effects are settled; only then may the parent and replay marker retire.
 func TestRetireSupersededBlueprintParentRequiresSettledChildren(t *testing.T) {
-	for _, unsettled := range []bool{true, false} {
-		t.Run(map[bool]string{true: "unsettled", false: "settled"}[unsettled], func(t *testing.T) {
+	for _, state := range []string{"running", "uncertain", "settled"} {
+		t.Run(state, func(t *testing.T) {
 			ctx := context.Background()
 			store := newMemoryTaskStore()
 			repository, err := newTaskRepository(store)
@@ -70,30 +70,46 @@ func TestRetireSupersededBlueprintParentRequiresSettledChildren(t *testing.T) {
 				{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(parent.Owner.EnvironmentID), Value: newHeadRef},
 				{Type: testkeyvalue.MutationPut, Key: markerKey, Value: markerValue},
 			}
-			if unsettled {
+			if state != "settled" {
 				target := blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.NewAt(ids.KindService, now, 43)}
-				execution := blueprintunits.ExecutionRecord{
-					EnvironmentID: parent.Owner.EnvironmentID,
-					ParentTaskID:  parent.ID,
-					TaskID:        ids.NewAt(ids.KindTask, now, 44),
-					PlanID:        ids.NewAt(ids.KindPlan, now, 45), Epoch: 1,
-					Unit:  blueprintunits.Unit{Target: target, Fingerprint: strings.Repeat("a", 64), Writes: []blueprintunits.ResourceKey{target}},
-					State: blueprintunits.Running,
-				}
-				executionValue, err := blueprintunits.EncodeExecution(execution)
-				if err != nil {
-					t.Fatal(err)
-				}
 				epochValue, err := blueprintunits.EncodeEpoch(blueprintunits.EpochRecord{
 					EnvironmentID: parent.Owner.EnvironmentID, Sequence: 1,
 				})
 				if err != nil {
 					t.Fatal(err)
 				}
-				mutations = append(mutations,
-					testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: blueprintunits.ExecutionKey(parent.Owner.EnvironmentID, execution.PlanID), Value: executionValue},
-					testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: blueprintunits.EpochKey(parent.Owner.EnvironmentID), Value: epochValue},
-				)
+				mutations = append(mutations, testkeyvalue.Mutation{
+					Type: testkeyvalue.MutationPut, Key: blueprintunits.EpochKey(parent.Owner.EnvironmentID), Value: epochValue,
+				})
+				if state == "running" {
+					execution := blueprintunits.ExecutionRecord{
+						EnvironmentID: parent.Owner.EnvironmentID, ParentTaskID: parent.ID,
+						TaskID: ids.NewAt(ids.KindTask, now, 44), PlanID: ids.NewAt(ids.KindPlan, now, 45), Epoch: 1,
+						Unit:  blueprintunits.Unit{Target: target, Fingerprint: strings.Repeat("a", 64), Writes: []blueprintunits.ResourceKey{target}},
+						State: blueprintunits.Running,
+					}
+					executionValue, err := blueprintunits.EncodeExecution(execution)
+					if err != nil {
+						t.Fatal(err)
+					}
+					mutations = append(mutations, testkeyvalue.Mutation{
+						Type: testkeyvalue.MutationPut, Key: blueprintunits.ExecutionKey(parent.Owner.EnvironmentID, execution.PlanID), Value: executionValue,
+					})
+				} else {
+					uncertain := blueprintunits.AppliedRecord{
+						EnvironmentID: parent.Owner.EnvironmentID, Target: target, State: blueprintunits.Uncertain,
+						AffectedWrites: []blueprintunits.ResourceKey{target}, ParentTaskID: parent.ID,
+						SourceTaskID: ids.NewAt(ids.KindTask, now, 44), SourcePlanID: ids.NewAt(ids.KindPlan, now, 45),
+						SourceAssignment: ids.NewAt(ids.KindAssignment, now, 46), ExecutionEpoch: 1,
+					}
+					appliedValue, err := blueprintunits.EncodeApplied(uncertain)
+					if err != nil {
+						t.Fatal(err)
+					}
+					mutations = append(mutations, testkeyvalue.Mutation{
+						Type: testkeyvalue.MutationPut, Key: blueprintunits.AppliedKey(parent.Owner.EnvironmentID, target), Value: appliedValue,
+					})
+				}
 			}
 			seed, err := store.Transact(ctx, nil, mutations)
 			if err != nil || !seed.Succeeded {
@@ -102,7 +118,7 @@ func TestRetireSupersededBlueprintParentRequiresSettledChildren(t *testing.T) {
 			retired, err := repository.RetireSupersededBlueprintParent(
 				ctx, parent.Owner.EnvironmentID, parent.ID, now.Add(2*time.Second),
 			)
-			if unsettled {
+			if state != "settled" {
 				if kind, ok := errs.KindOf(err); !ok || kind != errs.KindResourceInUse {
 					t.Fatalf("unsettled child retirement error = %v", err)
 				}

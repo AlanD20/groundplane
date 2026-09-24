@@ -45,6 +45,7 @@ type AppliedRecord struct {
 	State            AppliedState  `json:"state"`
 	Fingerprint      string        `json:"fingerprint,omitempty"`
 	AffectedWrites   []ResourceKey `json:"affected_writes,omitempty"`
+	ParentTaskID     string        `json:"parent_task_id,omitempty"`
 	SourceTaskID     string        `json:"source_task_id,omitempty"`
 	SourcePlanID     string        `json:"source_plan_id,omitempty"`
 	SourceAssignment string        `json:"source_assignment,omitempty"`
@@ -149,11 +150,12 @@ func validateApplied(record AppliedRecord) error {
 		return invalidRecord()
 	}
 	if record.SourceTaskID == "" {
-		if record.SourcePlanID != "" || record.SourceAssignment != "" || record.ExecutionEpoch != 0 ||
+		if record.ParentTaskID != "" || record.SourcePlanID != "" || record.SourceAssignment != "" || record.ExecutionEpoch != 0 ||
 			record.State != Absent {
 			return invalidRecord()
 		}
-	} else if ids.Validate(ids.KindTask, record.SourceTaskID) != nil ||
+	} else if ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
+		ids.Validate(ids.KindTask, record.SourceTaskID) != nil || record.ParentTaskID == record.SourceTaskID ||
 		ids.Validate(ids.KindPlan, record.SourcePlanID) != nil ||
 		ids.Validate(ids.KindAssignment, record.SourceAssignment) != nil || record.ExecutionEpoch == 0 {
 		return invalidRecord()

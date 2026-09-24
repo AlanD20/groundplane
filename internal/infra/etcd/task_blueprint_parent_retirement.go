@@ -46,6 +46,11 @@ func (repository *TaskRepository) RetireSupersededBlueprintParent(
 			return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindResourceInUse, "Blueprint parent has unsettled child effects")
 		}
 	}
+	for _, applied := range snapshot.Applied {
+		if applied.Record.ParentTaskID == taskID && applied.Record.State == blueprintunits.Uncertain {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindResourceInUse, "Blueprint parent has unknown child effects")
+		}
+	}
 	taskKey := taskjournal.TaskStorageKey(taskID)
 	claimKey := taskjournal.BlueprintParentClaimKey(taskID)
 	read, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{

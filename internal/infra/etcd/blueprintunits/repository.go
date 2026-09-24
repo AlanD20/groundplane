@@ -253,7 +253,8 @@ func validAppliedAdvance(
 		return !exists && next.State == Absent
 	}
 	execution, found := executions[next.SourcePlanID]
-	if !found || execution.Record.TaskID != next.SourceTaskID || execution.Record.Epoch <= 0 ||
+	if !found || execution.Record.ParentTaskID != next.ParentTaskID ||
+		execution.Record.TaskID != next.SourceTaskID || execution.Record.Epoch <= 0 ||
 		execution.Record.Epoch > math.MaxUint32 || uint32(execution.Record.Epoch) != next.ExecutionEpoch ||
 		!slices.Contains(execution.Record.Unit.Writes, next.Target) {
 		return false

@@ -79,7 +79,7 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 	}
 	forged := blueprintunits.AppliedRecord{
 		EnvironmentID: environmentID, Target: service, State: blueprintunits.Applied,
-		Fingerprint: execution.Unit.Fingerprint, SourceTaskID: childID, SourcePlanID: planID,
+		Fingerprint: execution.Unit.Fingerprint, ParentTaskID: parentID, SourceTaskID: childID, SourcePlanID: planID,
 		SourceAssignment: ids.NewAt(ids.KindAssignment, now, 36), ExecutionEpoch: 1,
 	}
 	if _, err := blueprintunits.PrepareMutation(loaded,
@@ -163,6 +163,7 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 	}
 	acknowledged := forged
 	acknowledged.Fingerprint = newExecution.Unit.Fingerprint
+	acknowledged.ParentTaskID = newExecution.ParentTaskID
 	acknowledged.SourceTaskID = newExecution.TaskID
 	acknowledged.SourcePlanID = newExecution.PlanID
 	ack, err := blueprintunits.PrepareMutation(runningSnapshot,
