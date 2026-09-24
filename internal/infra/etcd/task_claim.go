@@ -103,6 +103,13 @@ func (repository *TaskRepository) claimNextTask(
 			}
 			continue
 		}
+		childConditions, childMutations, childReady, err := repository.prepareBlueprintChildClaim(ctx, task)
+		if err != nil {
+			return TaskAssignment{}, false, err
+		}
+		if !childReady {
+			return TaskAssignment{}, false, nil
+		}
 		running, err := TransitionTaskStatus(
 			task,
 			taskjournal.TaskStatusPending,
@@ -142,6 +149,8 @@ func (repository *TaskRepository) claimNextTask(
 			{Type: etcdstore.MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
 			{Type: etcdstore.MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
 		}
+		conditions = append(conditions, childConditions...)
+		mutations = append(mutations, childMutations...)
 		hookInputConditions, err := repository.backingHookInputClaimConditions(ctx, task, candidate.readRevision)
 		if err != nil {
 			etcdstore.ClearMutationValues(mutations)
@@ -361,6 +370,13 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 			if task.ID != taskID || task.Executor != executor || task.Status != taskjournal.TaskStatusPending ||
 				task.idempotencyMarker == nil && !isMarkerlessHierarchyDeletionAgentChild(task) {
 				return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "queued Task is not claimable")
+			}
+			currentChild, err := repository.blueprintChildHeadAtRevision(ctx, task, revision)
+			if err != nil {
+				return taskClaimCandidate{}, false, err
+			}
+			if !currentChild {
+				continue
 			}
 			environmentID, materializes, err := taskEnvironmentWriter(task)
 			if err != nil {
