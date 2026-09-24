@@ -499,15 +499,13 @@ func (repository *TaskRepository) acknowledgeTask(
 		defer rotationChange.clear()
 		conditions = append(conditions, rotationChange.conditions...)
 		mutations = append(mutations, rotationChange.mutations...)
-		conditions, mutations, err = mergeBlueprintCandidateTerminalChange(
-			conditions, mutations, blueprintCandidateChange,
-		)
-		if err != nil {
+		clearPrepared := func() {
 			journal.clearPrimary()
 			clear(taskRetentionValue)
 			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
+			clearScriptTaskChange(scriptChange)
 			clearRouteTaskChange(routeChange)
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
@@ -515,6 +513,28 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearPlatformComponentTaskChange(platformComponentChange)
 			clearConnectorTaskChange(connectorChange)
 			clearRunnerTaskChange(runnerChange)
+		}
+		conditions, mutations, err = mergeBlueprintCandidateTerminalChange(
+			conditions, mutations, blueprintCandidateChange,
+		)
+		if err != nil {
+			clearPrepared()
+			return etcdstore.Versioned[TaskRecord]{}, err
+		}
+		childConditions, childMutations, err := repository.prepareBlueprintChildReceipt(
+			ctx, task, assignment, terminalStatus, blueprintCandidateChange.applies,
+		)
+		if err != nil {
+			clearPrepared()
+			return etcdstore.Versioned[TaskRecord]{}, err
+		}
+		childChange := blueprintCandidateTerminalChange{
+			applies: len(childConditions) != 0, conditions: childConditions, mutations: childMutations,
+		}
+		defer childChange.clear()
+		conditions, mutations, err = mergeBlueprintCandidateTerminalChange(conditions, mutations, childChange)
+		if err != nil {
+			clearPrepared()
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
@@ -530,18 +550,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			connectorChange.applies,
 		)
 		if err != nil {
-			journal.clearPrimary()
-			clear(taskRetentionValue)
-			clear(environmentValue)
-			clearAttachTaskChange(attachChange)
-			clearSecretTaskChange(secretChange)
-			clearRouteTaskChange(routeChange)
-			clearServiceTaskChange(serviceChange)
-			clearBackingZoneTaskChange(backingZoneChange)
-			clearComponentTaskChange(componentChange)
-			clearPlatformComponentTaskChange(platformComponentChange)
-			clearConnectorTaskChange(connectorChange)
-			clearRunnerTaskChange(runnerChange)
+			clearPrepared()
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		var environmentEpochValue []byte
@@ -562,18 +571,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			mutations,
 			terminalScriptSourceRelease.advance,
 		)
-		journal.clearPrimary()
-		clear(taskRetentionValue)
-		clear(environmentValue)
-		clearAttachTaskChange(attachChange)
-		clearSecretTaskChange(secretChange)
-		clearRouteTaskChange(routeChange)
-		clearServiceTaskChange(serviceChange)
-		clearBackingZoneTaskChange(backingZoneChange)
-		clearComponentTaskChange(componentChange)
-		clearPlatformComponentTaskChange(platformComponentChange)
-		clearConnectorTaskChange(connectorChange)
-		clearRunnerTaskChange(runnerChange)
+		clearPrepared()
 		clear(environmentEpochValue)
 		environmentBinding.Clear()
 		if err != nil {

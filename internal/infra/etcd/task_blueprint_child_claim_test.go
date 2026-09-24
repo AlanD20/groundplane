@@ -59,6 +59,14 @@ func TestBlueprintChildAssignmentFencesCurrentParentAndPendingUnit(t *testing.T)
 			child.Params = map[string]string{testtaskjournal.TaskBlueprintParentParam: parent.ID}
 			childMarker := pendingTaskMarker(child)
 			child.idempotencyMarker = cloneIdempotencyLocator(&childMarker.Locator)
+			childMarkerValue, err := testidempotency.EncodeIdempotencyMarker(childMarker)
+			if err != nil {
+				t.Fatal(err)
+			}
+			childMarkerKey, err := testidempotency.IdempotencyMarkerKey(childMarker.Locator)
+			if err != nil {
+				t.Fatal(err)
+			}
 			childValue, err := EncodeTaskRecord(child)
 			if err != nil {
 				t.Fatal(err)
@@ -97,6 +105,7 @@ func TestBlueprintChildAssignmentFencesCurrentParentAndPendingUnit(t *testing.T)
 				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(child.ID), Value: childValue},
 				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskQueueKey(child.Executor, child.ID), Value: childRef},
 				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskActiveOperationKey(child.OperationID), Value: childRef},
+				{Type: testkeyvalue.MutationPut, Key: childMarkerKey, Value: childMarkerValue},
 				{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headRef},
 				{Type: testkeyvalue.MutationPut, Key: blueprintunits.ExecutionKey(environmentID, child.PlanID), Value: executionValue},
 				{Type: testkeyvalue.MutationPut, Key: blueprintunits.EpochKey(environmentID), Value: epochValue},
@@ -146,6 +155,29 @@ func TestBlueprintChildAssignmentFencesCurrentParentAndPendingUnit(t *testing.T)
 			if current && (assignment.Task.Record.ID != child.ID || persisted.State != blueprintunits.Running ||
 				persisted.Epoch != 1 || stored.Values[1] != nil) {
 				t.Fatalf("current child authority = %#v, %#v", assignment, persisted)
+			}
+			if current {
+				_, err := repository.AcknowledgeTask(
+					ctx, agentID, 1, child.ID, assignment.Assignment.Record.AssignmentID,
+					testtaskjournal.TaskStatusFailed,
+					testtaskjournal.TaskResultRecord{
+						Kind: testtaskjournal.TaskResultCompose, ExitCode: 1,
+						Diagnostic: testtaskjournal.TaskResultDiagnosticComposeFailed,
+					},
+					now.Add(3*time.Second),
+				)
+				if err != nil {
+					t.Fatalf("acknowledge failed child = %v", err)
+				}
+				ledger, err := blueprintunits.NewRepository(store)
+				if err != nil {
+					t.Fatal(err)
+				}
+				snapshot, err := ledger.Load(ctx, environmentID)
+				if err != nil || len(snapshot.Executions) != 1 ||
+					snapshot.Executions[0].Record.State != blueprintunits.Draining {
+					t.Fatalf("failed child effect claim = %#v, %v", snapshot, err)
+				}
 			}
 			if !current && (assignment.Task.Record.ID != ordinaryID ||
 				persisted.State != blueprintunits.Pending || stored.Values[1] == nil) {
