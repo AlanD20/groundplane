@@ -12,7 +12,10 @@ import (
 // alone never counts as an applied result.
 func Select(snapshot Snapshot) (blueprintreconcile.Selection, error) {
 	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID {
-		return blueprintreconcile.Selection{}, errs.New(errs.KindStateConflict, "current Blueprint unit plan is unavailable")
+		return blueprintreconcile.Selection{}, errs.New(
+			errs.KindStateConflict,
+			"current Blueprint unit plan is unavailable",
+		)
 	}
 	desired := snapshot.Desired.Record.Units
 	input := blueprintreconcile.Snapshot{

@@ -417,7 +417,11 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	page, err := repository.ListTasksByScope(ctx, TaskListScope{Kind: TaskListScopeGlobal}, testkeyvalue.PageRequest{Limit: 1})
+	page, err := repository.ListTasksByScope(
+		ctx,
+		TaskListScope{Kind: TaskListScopeGlobal},
+		testkeyvalue.PageRequest{Limit: 1},
+	)
 	if err != nil {
 		t.Fatalf("ListTasks(first page) error = %v", err)
 	}
@@ -428,7 +432,11 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	third.ID = ids.NewAt(ids.KindTask, taskJournalTime().Add(2*time.Second), 33)
 	third.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), 34)
 	seedTaskRepositoryRunningTask(t, store, third)
-	secondPage, err := repository.ListTasksByScope(ctx, TaskListScope{Kind: TaskListScopeGlobal}, testkeyvalue.PageRequest{Limit: 1, Cursor: page.NextCursor})
+	secondPage, err := repository.ListTasksByScope(
+		ctx,
+		TaskListScope{Kind: TaskListScopeGlobal},
+		testkeyvalue.PageRequest{Limit: 1, Cursor: page.NextCursor},
+	)
 	if err != nil {
 		t.Fatalf("ListTasks(second page) error = %v", err)
 	}

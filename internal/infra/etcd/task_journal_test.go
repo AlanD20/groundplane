@@ -515,7 +515,9 @@ func TestBlueprintParentTaskCannotMasqueradeAsExecutableWork(t *testing.T) {
 		t.Fatalf("valid Blueprint parent: %v", err)
 	}
 	withStep := cloneTaskRecord(parent)
-	withStep.Steps = []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: taskJournalStepID()}}
+	withStep.Steps = []testtaskjournal.TaskStepRecord{
+		{Kind: testtaskjournal.TaskStepOperation, ID: taskJournalStepID()},
+	}
 	if err := ValidateTaskRecord(withStep); err == nil {
 		t.Fatal("Blueprint parent carried Agent steps")
 	}

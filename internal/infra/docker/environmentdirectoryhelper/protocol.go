@@ -207,13 +207,12 @@ func executeDirectoryMutation(
 	step *agentpb.ExecutionStep,
 ) (ManagedVolumeDirectoryRemoveResult, error) {
 	if create := step.GetEnvironmentDirectoryCreate(); create != nil {
-		return ManagedVolumeDirectoryRemoveResult{
-				Complete: true,
-			}, creator.Create(
-				ctx,
-				volumeRoot,
-				create.ExpectedVolumeDir,
-			)
+		result := ManagedVolumeDirectoryRemoveResult{Complete: true}
+		return result, creator.Create(
+			ctx,
+			volumeRoot,
+			create.ExpectedVolumeDir,
+		)
 	}
 	if remove := step.GetEnvironmentDirectoryRemove(); remove != nil {
 		remover, ok := creator.(DirectoryRemover)
@@ -223,13 +222,12 @@ func executeDirectoryMutation(
 				"Environment directory remover is not configured",
 			)
 		}
-		return ManagedVolumeDirectoryRemoveResult{
-				Complete: true,
-			}, remover.Remove(
-				ctx,
-				volumeRoot,
-				remove.ExpectedVolumeDir,
-			)
+		result := ManagedVolumeDirectoryRemoveResult{Complete: true}
+		return result, remover.Remove(
+			ctx,
+			volumeRoot,
+			remove.ExpectedVolumeDir,
+		)
 	}
 	ensure := step.GetManagedVolumeDirectoriesEnsure()
 	managedCreator, ok := creator.(ManagedVolumeDirectoryCreator)
@@ -272,16 +270,15 @@ func executeDirectoryMutation(
 		for _, volumeID := range ensure.VolumeIds {
 			volumes = append(volumes, ManagedVolume{ID: volumeID, Key: byID[volumeID]})
 		}
-		return ManagedVolumeDirectoryRemoveResult{
-				Complete: true,
-			}, managedCreator.EnsureManagedVolumes(
-				ctx,
-				ManagedVolumeEnsureRequest{
-					TaskID: request.TaskId, OperationID: request.OperationId,
-					IntentSHA256: append([]byte(nil), ensure.IntentSha256...), VolumeRoot: volumeRoot,
-					VolumeDir: artifact.AuthorizedVolumeDir, Volumes: volumes,
-				},
-			)
+		result := ManagedVolumeDirectoryRemoveResult{Complete: true}
+		return result, managedCreator.EnsureManagedVolumes(
+			ctx,
+			ManagedVolumeEnsureRequest{
+				TaskID: request.TaskId, OperationID: request.OperationId,
+				IntentSHA256: append([]byte(nil), ensure.IntentSha256...), VolumeRoot: volumeRoot,
+				VolumeDir: artifact.AuthorizedVolumeDir, Volumes: volumes,
+			},
+		)
 	}
 	return ManagedVolumeDirectoryRemoveResult{}, errs.New(
 		errs.KindInternal,

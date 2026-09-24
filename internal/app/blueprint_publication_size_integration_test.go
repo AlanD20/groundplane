@@ -175,13 +175,16 @@ func TestBlueprintRunningUpdateBoundedPublication(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		prepared, err := producer.Prepare(ctx, blueprintrelease.PrepareInput{DesiredRevisionID: projection.RevisionID, Workloads: workloads,
-			VolumeRoot: "/var/lib/groundplane/vol", Task: task, Projection: projection, Tenant: tenant,
-			Project: fixture.Project, Environment: environment, Memberships: memberships, PrefixSteps: prefix,
-			ServiceChanges: changes, Artifact: artifact, CreatedAt: task.CreatedAt,
-			AllocateNamed: func(kind ids.Kind, purpose string) string {
-				return ids.DeriveAt(kind, task.CreatedAt, task.ID, purpose)
-			}})
+		prepared, err := producer.Prepare(
+			ctx,
+			blueprintrelease.PrepareInput{DesiredRevisionID: projection.RevisionID, Workloads: workloads,
+				VolumeRoot: "/var/lib/groundplane/vol", Task: task, Projection: projection, Tenant: tenant,
+				Project: fixture.Project, Environment: environment, Memberships: memberships, PrefixSteps: prefix,
+				ServiceChanges: changes, Artifact: artifact, CreatedAt: task.CreatedAt,
+				AllocateNamed: func(kind ids.Kind, purpose string) string {
+					return ids.DeriveAt(kind, task.CreatedAt, task.ID, purpose)
+				}},
+		)
 		if err != nil {
 			t.Fatalf("pass%d real producer publication: %v", pass, err)
 		}

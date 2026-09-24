@@ -70,15 +70,9 @@ func blueprintComponentChainFixture() (*agentpb.ExecutionStep, map[string]*agent
 			WaitHealthy: &agentpb.WaitHealthy{ArtifactId: "compose", ServiceIds: []string{"service"}},
 		},
 	}
-	return action, map[string]*agentpb.ComposeArtifact{
-			"compose": artifact,
-		}, []*agentpb.ExecutionStep{
-			materialize,
-			apply,
-			post,
-			health,
-			action,
-		}
+	artifacts := map[string]*agentpb.ComposeArtifact{"compose": artifact}
+	steps := []*agentpb.ExecutionStep{materialize, apply, post, health, action}
+	return action, artifacts, steps
 }
 
 func TestBlueprintComponentIdentityThroughGlobalBarriers(t *testing.T) {

@@ -30,7 +30,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		child.Actor != taskjournal.TaskActorSystem || child.Executor != taskjournal.TaskExecutorAgent ||
 		child.Status != taskjournal.TaskStatusPending || child.idempotencyMarker != nil ||
 		child.Owner.EnvironmentID == "" || child.PlanID == "" {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "Blueprint child identity is invalid")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint child identity is invalid",
+		)
 	}
 	if marker.Kind != idempotency.IdempotencyMarkerTask ||
 		marker.State != idempotency.IdempotencyMarkerPending || marker.TaskID != child.ID ||
@@ -39,7 +42,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		(child.IdempotencyKey != "" && child.IdempotencyKey != marker.Locator.Key) ||
 		!marker.CreatedAt.Equal(child.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		idempotency.ValidateIdempotencyMarker(marker) != nil {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "Blueprint child marker is invalid")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint child marker is invalid",
+		)
 	}
 	child = cloneTaskRecord(child)
 	if child.IdempotencyKey == "" {
@@ -59,7 +65,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	}
 	if snapshot.HeadTaskID != parentID || snapshot.Desired == nil ||
 		snapshot.Desired.Record.ParentTaskID != parentID {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint child parent is no longer current")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint child parent is no longer current",
+		)
 	}
 	selected, err := blueprintunits.Select(snapshot)
 	if err != nil {
@@ -67,7 +76,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	}
 	if !slices.Contains(selected.Ready, blueprintreconcile.ResourceKey{Kind: unit.Target.Kind, ID: unit.Target.ID}) ||
 		!desiredBlueprintUnitMatches(snapshot.Desired.Record.Units, unit) {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint unit is not ready for execution")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint unit is not ready for execution",
+		)
 	}
 	parentKey := taskjournal.TaskStorageKey(parentID)
 	claimKey := taskjournal.BlueprintParentClaimKey(parentID)
@@ -78,7 +90,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
 	if parentRead == nil || len(parentRead.Values) != 2 || parentRead.Values[0] == nil || parentRead.Values[1] == nil {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent claim is unavailable")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint parent claim is unavailable",
+		)
 	}
 	defer keyvalue.ClearValues(parentRead.Values)
 	parent, err := DecodeTaskRecord(parentRead.Values[0].Value)
@@ -128,11 +143,24 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		keyvalue.Condition{Key: taskjournal.TaskQueueKey(child.Executor, child.ID)},
 		keyvalue.Condition{Key: markerKey},
 	)
-	mutations := append(claim.Mutations(),
+	mutations := append(
+		claim.Mutations(),
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: taskjournal.TaskStorageKey(child.ID), Value: childValue},
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: taskjournal.TaskOperationIndexKey(child.OperationID, child.ID), Value: reference},
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: taskjournal.TaskActiveOperationKey(child.OperationID), Value: reference},
-		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: taskjournal.TaskQueueKey(child.Executor, child.ID), Value: reference},
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(child.OperationID, child.ID),
+			Value: reference,
+		},
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   taskjournal.TaskActiveOperationKey(child.OperationID),
+			Value: reference,
+		},
+		keyvalue.Mutation{
+			Type:  keyvalue.MutationPut,
+			Key:   taskjournal.TaskQueueKey(child.Executor, child.ID),
+			Value: reference,
+		},
 		keyvalue.Mutation{Type: keyvalue.MutationPut, Key: markerKey, Value: markerValue},
 	)
 	indexKeys, err := taskJournalIndexKeys(child)

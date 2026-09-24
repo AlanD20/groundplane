@@ -22,7 +22,10 @@ func (repository *TaskRepository) CompleteBlueprintParent(
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindTask, taskID) != nil {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "Blueprint parent identity is invalid")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint parent identity is invalid",
+		)
 	}
 	if err := recordcodec.ValidateTimestamp("Blueprint parent completion", at); err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
@@ -37,14 +40,23 @@ func (repository *TaskRepository) CompleteBlueprintParent(
 	}
 	if snapshot.HeadTaskID != taskID || snapshot.Desired == nil ||
 		snapshot.Desired.Record.ParentTaskID != taskID || !snapshot.Desired.Record.Complete {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent has no sealed current plan")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint parent has no sealed current plan",
+		)
 	}
 	if len(snapshot.Executions) != 0 {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindResourceInUse, "Blueprint parent has unsettled unit effects")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindResourceInUse,
+			"Blueprint parent has unsettled unit effects",
+		)
 	}
 	for _, applied := range snapshot.Applied {
 		if applied.Record.State == blueprintunits.Uncertain || applied.Record.State == blueprintunits.Diverged {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindResourceInUse, "Blueprint has unresolved unit effects")
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindResourceInUse,
+				"Blueprint has unresolved unit effects",
+			)
 		}
 	}
 	selection, err := blueprintunits.Select(snapshot)
@@ -55,7 +67,10 @@ func (repository *TaskRepository) CompleteBlueprintParent(
 		len(selection.Ready)+len(selection.Waiting)+len(selection.ResolveEffects)+
 			len(selection.CancelPending)+len(selection.CancelRunning)+
 			len(selection.ContinuePending)+len(selection.ContinueRunning) != 0 {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent has unfinished desired units")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint parent has unfinished desired units",
+		)
 	}
 	return repository.terminalizeBlueprintParent(ctx, snapshot, taskID, taskjournal.TaskStatusCompleted, at)
 }

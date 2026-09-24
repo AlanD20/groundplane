@@ -36,10 +36,12 @@ func (publication InitialPublication) Records() (Runtime, Attempt, Progress, err
 		)
 	}
 	runtime := publication.runtime
-	return runtime, Attempt{
-			OperationID: runtime.OperationID, OriginTaskID: runtime.OriginTaskID,
-			TaskID: runtime.OriginTaskID, Ordinal: 1, CreatedAt: runtime.CreatedAt,
-		}, Progress{
-			OperationID: runtime.OperationID, NextRequestOrdinal: 1, UpdatedAt: runtime.CreatedAt,
-		}, nil
+	attempt := Attempt{
+		OperationID: runtime.OperationID, OriginTaskID: runtime.OriginTaskID,
+		TaskID: runtime.OriginTaskID, Ordinal: 1, CreatedAt: runtime.CreatedAt,
+	}
+	progress := Progress{
+		OperationID: runtime.OperationID, NextRequestOrdinal: 1, UpdatedAt: runtime.CreatedAt,
+	}
+	return runtime, attempt, progress, nil
 }

@@ -41,9 +41,17 @@ func TestBlueprintParentClaimSurvivesRestartWithoutAgentAssignment(t *testing.T)
 	}
 	seed, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
 		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: value},
-		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskActiveOperationKey(task.OperationID),
+			Value: reference,
+		},
 		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(task.Owner.EnvironmentID), Value: reference},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintHeadKey(task.Owner.EnvironmentID),
+			Value: reference,
+		},
 	})
 	if err != nil || !seed.Succeeded {
 		t.Fatalf("seed Blueprint parent = %#v, %v", seed, err)
@@ -53,7 +61,8 @@ func TestBlueprintParentClaimSurvivesRestartWithoutAgentAssignment(t *testing.T)
 		claimed.Record.Status != testtaskjournal.TaskStatusRunning {
 		t.Fatalf("claim Blueprint parent = %#v, %t, %v", claimed, found, err)
 	}
-	if _, found, err := repository.ClaimNextTask(ctx, ids.NewAt(ids.KindAgent, now, 22), 1, now.Add(time.Second)); err != nil || found {
+	if _, found, err := repository.ClaimNextTask(ctx, ids.NewAt(ids.KindAgent, now, 22), 1, now.Add(time.Second)); err != nil ||
+		found {
 		t.Fatalf("Agent claimed Blueprint parent: %t, %v", found, err)
 	}
 	restarted, err := newTaskRepository(store)
@@ -112,9 +121,17 @@ func TestBlueprintParentClaimRetiresSupersededPendingTask(t *testing.T) {
 	}
 	seed, err := store.Transact(ctx, nil, []testkeyvalue.Mutation{
 		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testtaskjournal.TaskActiveOperationKey(task.OperationID),
+			Value: reference,
+		},
 		{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(task.Owner.EnvironmentID), Value: newHead},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintHeadKey(task.Owner.EnvironmentID),
+			Value: newHead,
+		},
 		{Type: testkeyvalue.MutationPut, Key: markerKey, Value: markerValue},
 	})
 	if err != nil || !seed.Succeeded {

@@ -193,7 +193,9 @@ func PrepareMutation(
 			{Key: blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID), ModRevision: snapshot.HeadRevision},
 			{Key: EpochKey(snapshot.EnvironmentID), ModRevision: snapshot.EpochRevision},
 		},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: EpochKey(snapshot.EnvironmentID), Value: epochValue}},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: EpochKey(snapshot.EnvironmentID), Value: epochValue},
+		},
 	}
 	seenApplied := make(map[ResourceKey]bool, len(applied))
 	for _, change := range applied {

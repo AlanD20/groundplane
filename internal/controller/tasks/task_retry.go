@@ -194,7 +194,11 @@ func (service *taskRetryService) retryTask(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if taskjournal.IsBlueprintChild(source.Record.Params) {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", sourceTaskID)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
+			errs.KindTaskNotFound,
+			"task not found: %s",
+			sourceTaskID,
+		)
 	}
 	if source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(

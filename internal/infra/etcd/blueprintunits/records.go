@@ -204,7 +204,8 @@ func validateApplied(record AppliedRecord) error {
 		return invalidRecord()
 	}
 	if record.SourceTaskID == "" {
-		if record.ParentTaskID != "" || record.SourcePlanID != "" || record.SourceAssignment != "" || record.ExecutionEpoch != 0 ||
+		if record.ParentTaskID != "" || record.SourcePlanID != "" || record.SourceAssignment != "" ||
+			record.ExecutionEpoch != 0 ||
 			record.State != Absent {
 			return invalidRecord()
 		}

@@ -48,6 +48,30 @@ type blueprintChildPublication struct {
 	mutations  []keyvalue.Mutation
 }
 
+func (publication blueprintChildPublication) bind(
+	conditions []keyvalue.Condition, mutations []keyvalue.Mutation,
+	previous idempotencyPlanClassifier,
+) ([]keyvalue.Condition, []keyvalue.Mutation, idempotencyPlanClassifier) {
+	base := len(conditions)
+	conditions = append(conditions, publication.conditions...)
+	mutations = append(mutations, publication.mutations...)
+	classify := func(revision int64, values []*keyvalue.KeyValue) error {
+		if len(values) != base+len(publication.conditions) {
+			return errs.New(errs.KindInternal, "Blueprint child compare evidence is incomplete")
+		}
+		if err := previous(revision, values[:base]); err != nil {
+			return err
+		}
+		for _, value := range values[base:] {
+			if value != nil {
+				return errs.New(errs.KindStateConflict, "Blueprint child publication collided")
+			}
+		}
+		return nil
+	}
+	return conditions, mutations, classify
+}
+
 func (publication *blueprintChildPublication) clear() {
 	keyvalue.ClearMutationValues(publication.mutations)
 }
@@ -65,7 +89,10 @@ func prepareBlueprintChildPublication(
 		marker.TaskID != child.ID || marker.Kind != idempotency.IdempotencyMarkerTask ||
 		marker.State != idempotency.IdempotencyMarkerPending ||
 		idempotency.ValidateIdempotencyMarker(marker) != nil {
-		return blueprintChildPublication{}, errs.New(errs.KindValidationFailed, "Blueprint child publication is invalid")
+		return blueprintChildPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint child publication is invalid",
+		)
 	}
 	if err := ValidateTaskRecord(child); err != nil {
 		return blueprintChildPublication{}, err
@@ -76,7 +103,10 @@ func prepareBlueprintChildPublication(
 	}
 	parentMarkerKey, err := idempotency.IdempotencyMarkerKey(parentMarker.Locator)
 	if err != nil || markerKey == parentMarkerKey {
-		return blueprintChildPublication{}, errs.New(errs.KindValidationFailed, "Blueprint child marker conflicts with parent")
+		return blueprintChildPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint child marker conflicts with parent",
+		)
 	}
 	taskValue, err := EncodeTaskRecord(child)
 	if err != nil {
@@ -104,7 +134,11 @@ func prepareBlueprintChildPublication(
 		},
 		mutations: []keyvalue.Mutation{
 			{Type: keyvalue.MutationPut, Key: taskjournal.TaskStorageKey(child.ID), Value: taskValue},
-			{Type: keyvalue.MutationPut, Key: taskjournal.TaskOperationIndexKey(child.OperationID, child.ID), Value: reference},
+			{
+				Type:  keyvalue.MutationPut,
+				Key:   taskjournal.TaskOperationIndexKey(child.OperationID, child.ID),
+				Value: reference,
+			},
 			{Type: keyvalue.MutationPut, Key: taskjournal.TaskActiveOperationKey(child.OperationID), Value: reference},
 			{Type: keyvalue.MutationPut, Key: taskjournal.TaskQueueKey(child.Executor, child.ID), Value: reference},
 			{Type: keyvalue.MutationPut, Key: markerKey, Value: markerValue},

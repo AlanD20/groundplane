@@ -117,8 +117,10 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
 	}
-	if prepared.Task.ID != taskID || prepared.Task.Params[testblueprints.EnvironmentDesiredRevisionParam] != desiredRevisionID ||
-		len(prepared.Plan.GetSteps()) != 2 || len(prepared.Task.Steps) != 2 ||
+	if prepared.Task.ID != taskID ||
+		prepared.Task.Params[testblueprints.EnvironmentDesiredRevisionParam] != desiredRevisionID ||
+		len(prepared.Plan.GetSteps()) != 2 ||
+		len(prepared.Task.Steps) != 2 ||
 		prepared.Plan.Steps[0].GetMaterializeFile() == nil ||
 		prepared.Plan.Steps[1].GetManagedVolumeDirectoriesEnsure() == nil ||
 		prepared.Task.Params[taskcontract.EnvironmentBlueprintProcedureParam] != string(

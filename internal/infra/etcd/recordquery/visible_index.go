@@ -70,7 +70,10 @@ func ListVisibleIndex[T any](
 				if value == nil {
 					etcdstore.ClearValues(primaries.Values)
 					ClearRangeKeyValues(indexed.Values)
-					return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index references a missing primary record")
+					return etcdstore.Page[T]{}, errs.New(
+						errs.KindInternal,
+						"owner index references a missing primary record",
+					)
 				}
 				record, decodeErr := decode(value.Value)
 				if decodeErr != nil {
@@ -81,7 +84,10 @@ func ListVisibleIndex[T any](
 				if identity(record) != idsByIndex[index] || !matches(record) {
 					etcdstore.ClearValues(primaries.Values)
 					ClearRangeKeyValues(indexed.Values)
-					return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index does not match its primary record")
+					return etcdstore.Page[T]{}, errs.New(
+						errs.KindInternal,
+						"owner index does not match its primary record",
+					)
 				}
 				if !visible(record) {
 					continue

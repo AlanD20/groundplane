@@ -146,13 +146,15 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 				errs.KindStateConflict, "Blueprint closing report changed",
 			)
 		}
-		return report, etcdstore.Condition{
-				Key:         key,
-				ModRevision: value.ModRevision,
-			}, etcdstore.Mutation{
-				Type: etcdstore.MutationDelete,
-				Key:  key,
-			}, nil
+		condition := etcdstore.Condition{
+			Key:         key,
+			ModRevision: value.ModRevision,
+		}
+		mutation := etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  key,
+		}
+		return report, condition, mutation, nil
 	}
 	if value != nil {
 		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, taskassignments.CorruptTaskAssignment()
@@ -170,13 +172,15 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, err
 	}
 	encoded, err := recordcodec.Encode(scriptClosingReportEnvelope(task), report)
-	return report, etcdstore.Condition{
-			Key: key,
-		}, etcdstore.Mutation{
-			Type:  etcdstore.MutationPut,
-			Key:   key,
-			Value: encoded,
-		}, err
+	condition := etcdstore.Condition{
+		Key: key,
+	}
+	mutation := etcdstore.Mutation{
+		Type:  etcdstore.MutationPut,
+		Key:   key,
+		Value: encoded,
+	}
+	return report, condition, mutation, err
 }
 
 func (repository *TaskRepository) resumeScriptClosingReport(

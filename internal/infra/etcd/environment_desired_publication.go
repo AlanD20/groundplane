@@ -329,8 +329,16 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			Key:   taskjournal.TaskOperationIndexKey(publicTask.OperationID, publicTask.ID),
 			Value: reference,
 		},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(publicTask.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(publicTask.Executor, publicTask.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskActiveOperationKey(publicTask.OperationID),
+			Value: reference,
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskQueueKey(publicTask.Executor, publicTask.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{
@@ -533,24 +541,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		}
 		defer childPublication.clear()
 		privateMarkerKey = childPublication.markerKey
-		base := len(conditions)
-		conditions = append(conditions, childPublication.conditions...)
-		mutations = append(mutations, childPublication.mutations...)
-		previous := classified
-		classified = func(revision int64, values []*etcdstore.KeyValue) error {
-			if len(values) != base+len(childPublication.conditions) {
-				return errs.New(errs.KindInternal, "Blueprint child compare evidence is incomplete")
-			}
-			if err := previous(revision, values[:base]); err != nil {
-				return err
-			}
-			for _, value := range values[base:] {
-				if value != nil {
-					return errs.New(errs.KindStateConflict, "Blueprint child publication collided")
-				}
-			}
-			return nil
-		}
+		conditions, mutations, classified = childPublication.bind(conditions, mutations, classified)
 	}
 	classifier := func(revision int64, values []*etcdstore.KeyValue) error {
 		if conflict := classified(revision, values); conflict != nil {

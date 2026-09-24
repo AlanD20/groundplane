@@ -213,7 +213,9 @@ func TestBlueprintDesiredUnitPlanSealsAfterFactDependentExpansion(t *testing.T) 
 	service := blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.NewAt(ids.KindService, now, 73)}
 	first := blueprintunits.DesiredPlan{
 		EnvironmentID: environmentID, ParentTaskID: parentID,
-		Units: []blueprintunits.Unit{{Target: attach, Writes: []blueprintunits.ResourceKey{attach}, Fingerprint: strings.Repeat("a", 64)}},
+		Units: []blueprintunits.Unit{
+			{Target: attach, Writes: []blueprintunits.ResourceKey{attach}, Fingerprint: strings.Repeat("a", 64)},
+		},
 	}
 	prepared, err := blueprintunits.PrepareDesiredPlan(initial, first)
 	if err != nil {

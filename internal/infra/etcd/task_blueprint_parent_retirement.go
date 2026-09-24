@@ -22,7 +22,10 @@ func (repository *TaskRepository) RetireSupersededBlueprintParent(
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindTask, taskID) != nil {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "Blueprint parent identity is invalid")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint parent identity is invalid",
+		)
 	}
 	if err := recordcodec.ValidateTimestamp("Blueprint parent retirement", at); err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
@@ -40,12 +43,18 @@ func (repository *TaskRepository) RetireSupersededBlueprintParent(
 	}
 	for _, execution := range snapshot.Executions {
 		if execution.Record.ParentTaskID == taskID {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindResourceInUse, "Blueprint parent has unsettled child effects")
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindResourceInUse,
+				"Blueprint parent has unsettled child effects",
+			)
 		}
 	}
 	for _, applied := range snapshot.Applied {
 		if applied.Record.ParentTaskID == taskID && applied.Record.State == blueprintunits.Uncertain {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindResourceInUse, "Blueprint parent has unknown child effects")
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindResourceInUse,
+				"Blueprint parent has unknown child effects",
+			)
 		}
 	}
 	return repository.terminalizeBlueprintParent(ctx, snapshot, taskID, taskjournal.TaskStatusAborted, at)

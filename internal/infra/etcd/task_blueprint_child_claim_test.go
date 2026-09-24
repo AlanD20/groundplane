@@ -79,7 +79,11 @@ func TestBlueprintChildAssignmentFencesCurrentParentAndPendingUnit(t *testing.T)
 			execution := blueprintunits.ExecutionRecord{
 				EnvironmentID: environmentID, ParentTaskID: parent.ID, TaskID: child.ID,
 				PlanID: child.PlanID, State: blueprintunits.Pending,
-				Unit: blueprintunits.Unit{Target: target, Fingerprint: strings.Repeat("a", 64), Writes: []blueprintunits.ResourceKey{target}},
+				Unit: blueprintunits.Unit{
+					Target:      target,
+					Fingerprint: strings.Repeat("a", 64),
+					Writes:      []blueprintunits.ResourceKey{target},
+				},
 			}
 			executionValue, err := blueprintunits.EncodeExecution(execution)
 			if err != nil {
@@ -101,13 +105,33 @@ func TestBlueprintChildAssignmentFencesCurrentParentAndPendingUnit(t *testing.T)
 			}
 			mutations := []testkeyvalue.Mutation{
 				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(parent.ID), Value: parentValue},
-				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.BlueprintParentClaimKey(parent.ID), Value: parentRef},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testtaskjournal.BlueprintParentClaimKey(parent.ID),
+					Value: parentRef,
+				},
 				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(child.ID), Value: childValue},
-				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskQueueKey(child.Executor, child.ID), Value: childRef},
-				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskActiveOperationKey(child.OperationID), Value: childRef},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testtaskjournal.TaskQueueKey(child.Executor, child.ID),
+					Value: childRef,
+				},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testtaskjournal.TaskActiveOperationKey(child.OperationID),
+					Value: childRef,
+				},
 				{Type: testkeyvalue.MutationPut, Key: childMarkerKey, Value: childMarkerValue},
-				{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headRef},
-				{Type: testkeyvalue.MutationPut, Key: blueprintunits.ExecutionKey(environmentID, child.PlanID), Value: executionValue},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testblueprints.EnvironmentBlueprintHeadKey(environmentID),
+					Value: headRef,
+				},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   blueprintunits.ExecutionKey(environmentID, child.PlanID),
+					Value: executionValue,
+				},
 				{Type: testkeyvalue.MutationPut, Key: blueprintunits.EpochKey(environmentID), Value: epochValue},
 			}
 			ordinaryID := ""
@@ -126,10 +150,23 @@ func TestBlueprintChildAssignmentFencesCurrentParentAndPendingUnit(t *testing.T)
 					t.Fatal(err)
 				}
 				ordinaryID = ordinary.ID
-				mutations = append(mutations,
-					testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(ordinary.ID), Value: ordinaryValue},
-					testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskQueueKey(ordinary.Executor, ordinary.ID), Value: ordinaryRef},
-					testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskActiveOperationKey(ordinary.OperationID), Value: ordinaryRef},
+				mutations = append(
+					mutations,
+					testkeyvalue.Mutation{
+						Type:  testkeyvalue.MutationPut,
+						Key:   testtaskjournal.TaskStorageKey(ordinary.ID),
+						Value: ordinaryValue,
+					},
+					testkeyvalue.Mutation{
+						Type:  testkeyvalue.MutationPut,
+						Key:   testtaskjournal.TaskQueueKey(ordinary.Executor, ordinary.ID),
+						Value: ordinaryRef,
+					},
+					testkeyvalue.Mutation{
+						Type:  testkeyvalue.MutationPut,
+						Key:   testtaskjournal.TaskActiveOperationKey(ordinary.OperationID),
+						Value: ordinaryRef,
+					},
 				)
 			}
 			seed, err := store.Transact(ctx, nil, mutations)

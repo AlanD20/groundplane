@@ -32,7 +32,12 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	parent.Target = parent.Owner.EnvironmentID
 	parent.Params = map[string]string{blueprints.EnvironmentDesiredRevisionParam: parent.ID}
 	parent.Steps = nil
-	parent, err = TransitionTaskStatus(parent, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, now.Add(time.Second))
+	parent, err = TransitionTaskStatus(
+		parent,
+		taskjournal.TaskStatusPending,
+		taskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +50,11 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.NewAt(ids.KindService, now, 82)}
-	unit := blueprintunits.Unit{Target: service, Fingerprint: strings.Repeat("b", 64), Writes: []blueprintunits.ResourceKey{service}}
+	unit := blueprintunits.Unit{
+		Target:      service,
+		Fingerprint: strings.Repeat("b", 64),
+		Writes:      []blueprintunits.ResourceKey{service},
+	}
 	plan, err := blueprintunits.EncodeDesiredPlan(blueprintunits.DesiredPlan{
 		EnvironmentID: parent.Owner.EnvironmentID, ParentTaskID: parent.ID, Complete: true,
 		Units: []blueprintunits.Unit{unit},
@@ -53,7 +62,9 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	epoch, err := blueprintunits.EncodeEpoch(blueprintunits.EpochRecord{EnvironmentID: parent.Owner.EnvironmentID, Sequence: 1})
+	epoch, err := blueprintunits.EncodeEpoch(
+		blueprintunits.EpochRecord{EnvironmentID: parent.Owner.EnvironmentID, Sequence: 1},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

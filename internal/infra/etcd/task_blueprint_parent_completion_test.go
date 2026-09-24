@@ -32,7 +32,12 @@ func TestCompleteBlueprintParentRequiresSealedSatisfiedPlan(t *testing.T) {
 	parent.Steps = nil
 	marker := pendingTaskMarker(parent)
 	parent.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	parent, err = TransitionTaskStatus(parent, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, now.Add(time.Second))
+	parent, err = TransitionTaskStatus(
+		parent,
+		taskjournal.TaskStatusPending,
+		taskjournal.TaskStatusRunning,
+		now.Add(time.Second),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +72,11 @@ func TestCompleteBlueprintParentRequiresSealedSatisfiedPlan(t *testing.T) {
 		{Type: keyvalue.MutationPut, Key: taskjournal.TaskStorageKey(parent.ID), Value: parentValue},
 		{Type: keyvalue.MutationPut, Key: taskjournal.BlueprintParentClaimKey(parent.ID), Value: parentRef},
 		{Type: keyvalue.MutationPut, Key: taskjournal.TaskActiveOperationKey(parent.OperationID), Value: parentRef},
-		{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(parent.Owner.EnvironmentID), Value: parentRef},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(parent.Owner.EnvironmentID),
+			Value: parentRef,
+		},
 		{Type: keyvalue.MutationPut, Key: blueprintunits.DesiredPlanKey(parent.Owner.EnvironmentID), Value: planValue},
 		{Type: keyvalue.MutationPut, Key: blueprintunits.EpochKey(parent.Owner.EnvironmentID), Value: epochValue},
 		{Type: keyvalue.MutationPut, Key: markerKey, Value: markerValue},
@@ -95,7 +104,12 @@ func TestCompleteBlueprintParentRequiresSealedSatisfiedPlan(t *testing.T) {
 	}); err != nil || !tx.Succeeded {
 		t.Fatalf("seal plan = %#v, %v", tx, err)
 	}
-	completed, err := repository.CompleteBlueprintParent(ctx, parent.Owner.EnvironmentID, parent.ID, now.Add(3*time.Second))
+	completed, err := repository.CompleteBlueprintParent(
+		ctx,
+		parent.Owner.EnvironmentID,
+		parent.ID,
+		now.Add(3*time.Second),
+	)
 	if err != nil || completed.Record.Status != taskjournal.TaskStatusCompleted {
 		t.Fatalf("complete sealed parent = %#v, %v", completed, err)
 	}

@@ -65,9 +65,21 @@ func TestRetireSupersededBlueprintParentRequiresSettledChildren(t *testing.T) {
 			}
 			mutations := []testkeyvalue.Mutation{
 				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskStorageKey(parent.ID), Value: parentValue},
-				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.BlueprintParentClaimKey(parent.ID), Value: parentRef},
-				{Type: testkeyvalue.MutationPut, Key: testtaskjournal.TaskActiveOperationKey(parent.OperationID), Value: parentRef},
-				{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(parent.Owner.EnvironmentID), Value: newHeadRef},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testtaskjournal.BlueprintParentClaimKey(parent.ID),
+					Value: parentRef,
+				},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testtaskjournal.TaskActiveOperationKey(parent.OperationID),
+					Value: parentRef,
+				},
+				{
+					Type:  testkeyvalue.MutationPut,
+					Key:   testblueprints.EnvironmentBlueprintHeadKey(parent.Owner.EnvironmentID),
+					Value: newHeadRef,
+				},
 				{Type: testkeyvalue.MutationPut, Key: markerKey, Value: markerValue},
 			}
 			if state != "settled" {
@@ -85,7 +97,11 @@ func TestRetireSupersededBlueprintParentRequiresSettledChildren(t *testing.T) {
 					execution := blueprintunits.ExecutionRecord{
 						EnvironmentID: parent.Owner.EnvironmentID, ParentTaskID: parent.ID,
 						TaskID: ids.NewAt(ids.KindTask, now, 44), PlanID: ids.NewAt(ids.KindPlan, now, 45), Epoch: 1,
-						Unit:  blueprintunits.Unit{Target: target, Fingerprint: strings.Repeat("a", 64), Writes: []blueprintunits.ResourceKey{target}},
+						Unit: blueprintunits.Unit{
+							Target:      target,
+							Fingerprint: strings.Repeat("a", 64),
+							Writes:      []blueprintunits.ResourceKey{target},
+						},
 						State: blueprintunits.Running,
 					}
 					executionValue, err := blueprintunits.EncodeExecution(execution)
@@ -124,7 +140,8 @@ func TestRetireSupersededBlueprintParentRequiresSettledChildren(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || retired.Record.Status != testtaskjournal.TaskStatusAborted || retired.Record.FinishedAt == nil {
+			if err != nil || retired.Record.Status != testtaskjournal.TaskStatusAborted ||
+				retired.Record.FinishedAt == nil {
 				t.Fatalf("retire settled parent = %#v, %v", retired, err)
 			}
 			read, err := store.GetMany(ctx, testkeyvalue.GetManyRequest{Keys: []string{

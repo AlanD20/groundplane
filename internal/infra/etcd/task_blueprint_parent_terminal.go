@@ -29,7 +29,10 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
 	if read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent claim is unavailable")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint parent claim is unavailable",
+		)
 	}
 	task, err := DecodeTaskRecord(read.Values[0].Value)
 	if err != nil || validateBlueprintParentClaimTask(task) != nil || task.Owner.EnvironmentID != environmentID ||
@@ -38,7 +41,10 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 	}
 	claimTaskID, err := idempotency.DecodeTaskReference(read.Values[1].Value)
 	if err != nil || claimTaskID != taskID {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Blueprint parent claim reference is inconsistent")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindInternal,
+			"Blueprint parent claim reference is inconsistent",
+		)
 	}
 	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusRunning, status, at)
 	if err != nil {
@@ -57,7 +63,10 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 	}
 	if companions == nil || len(companions.Values) != 3 || companions.Values[0] == nil ||
 		companions.Values[1] == nil || companions.Values[2] != nil {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Blueprint parent lifecycle records are inconsistent")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindInternal,
+			"Blueprint parent lifecycle records are inconsistent",
+		)
 	}
 	defer keyvalue.ClearValues(companions.Values)
 	if err := validateTaskLifecycleCompanions(task, companions.Values[0], companions.Values[1]); err != nil {
@@ -118,7 +127,10 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
 	if !transaction.Succeeded {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent terminalization raced")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint parent terminalization raced",
+		)
 	}
 	return keyvalue.Versioned[TaskRecord]{
 		Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision,
