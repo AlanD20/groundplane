@@ -10,6 +10,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -496,6 +498,41 @@ func validTaskRecord(now time.Time) TaskRecord {
 	task.Params = map[string]string{"name": "migrate"}
 	task.Steps = []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: taskJournalStepID()}}
 	return task
+}
+
+// Rationale: a visible Blueprint parent is a coordinator, not an Agent or
+// serial native Controller execution; it must not carry child-only effects.
+func TestBlueprintParentTaskCannotMasqueradeAsExecutableWork(t *testing.T) {
+	now := taskJournalTime()
+	parent := validTaskRecord(now)
+	parent.Executor = testtaskjournal.TaskExecutorBlueprint
+	parent.Owner.ProjectID = ids.NewAt(ids.KindProject, now, 5)
+	parent.Owner.EnvironmentID = ids.NewAt(ids.KindEnvironment, now, 6)
+	parent.Target = parent.Owner.EnvironmentID
+	parent.Params = map[string]string{testblueprints.EnvironmentDesiredRevisionParam: parent.ID}
+	parent.Steps = nil
+	if err := ValidateTaskRecord(parent); err != nil {
+		t.Fatalf("valid Blueprint parent: %v", err)
+	}
+	withStep := cloneTaskRecord(parent)
+	withStep.Steps = []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: taskJournalStepID()}}
+	if err := ValidateTaskRecord(withStep); err == nil {
+		t.Fatal("Blueprint parent carried Agent steps")
+	}
+	wrongRevision := cloneTaskRecord(parent)
+	wrongRevision.Params[testblueprints.EnvironmentDesiredRevisionParam] = ids.NewAt(ids.KindTask, now, 7)
+	if err := ValidateTaskRecord(wrongRevision); err == nil {
+		t.Fatal("Blueprint parent selected another desired revision")
+	}
+	assignment := testtaskassignments.TaskAssignmentRecord{
+		AssignmentID: ids.NewAt(ids.KindAssignment, now, 8), TaskID: parent.ID,
+		Executor: testtaskjournal.TaskExecutorBlueprint, ClaimedTaskRevision: 1,
+		AssignedAt: now, Deadline: now.Add(time.Minute), RecoveryDeadline: now.Add(2 * time.Minute),
+		ExecutionMode: testtaskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
+	}
+	if _, err := testtaskassignments.EncodeTaskAssignment(assignment); err == nil {
+		t.Fatal("Blueprint parent obtained an Agent/native Task assignment")
+	}
 }
 
 // Rationale: retention cleanup is an honest internal Agent Task and remains a

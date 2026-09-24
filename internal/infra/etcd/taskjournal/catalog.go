@@ -32,11 +32,14 @@ type TaskExecutor string
 const (
 	TaskExecutorAgent      TaskExecutor = "agent"
 	TaskExecutorController TaskExecutor = "controller"
+	// Blueprint parents are coordinated independently of the serial native
+	// Controller runner. Their Agent child Tasks use TaskExecutorAgent.
+	TaskExecutorBlueprint TaskExecutor = "blueprint"
 )
 
 func ValidExecutor(executor TaskExecutor) bool {
 	switch executor {
-	case TaskExecutorAgent, TaskExecutorController:
+	case TaskExecutorAgent, TaskExecutorController, TaskExecutorBlueprint:
 		return true
 	default:
 		return false

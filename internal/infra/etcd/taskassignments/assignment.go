@@ -129,7 +129,8 @@ func DecodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 
 func validateTaskAssignment(record TaskAssignmentRecord) error {
 	if recordcodec.ValidateID(ids.KindAssignment, record.AssignmentID) != nil ||
-		recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil || !taskjournal.ValidExecutor(record.Executor) ||
+		recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
+		(record.Executor != taskjournal.TaskExecutorAgent && record.Executor != taskjournal.TaskExecutorController) ||
 		record.ClaimedTaskRevision <= 0 ||
 		record.ExecutionEpoch == 0 ||
 		recordcodec.ValidateTimestamp("task assignment assigned_at", record.AssignedAt) != nil ||

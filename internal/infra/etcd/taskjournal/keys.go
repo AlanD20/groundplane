@@ -108,10 +108,14 @@ func ControllerTaskClaimKey(taskID string) string {
 }
 
 func TaskExecutionClaimKey(executor TaskExecutor, agentID string, taskID string) string {
-	if executor == TaskExecutorController {
+	switch executor {
+	case TaskExecutorController:
 		return ControllerTaskClaimKey(taskID)
+	case TaskExecutorAgent:
+		return TaskAssignmentKey(agentID, taskID)
+	default:
+		return ""
 	}
-	return TaskAssignmentKey(agentID, taskID)
 }
 
 func TaskAssignmentScopePrefix(agentID string) string {

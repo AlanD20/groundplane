@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	environmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -46,6 +47,14 @@ func ValidateTaskRecord(record TaskRecord) error {
 	}
 	if !taskjournal.ValidTaskType(record.Type) {
 		return errs.New(errs.KindValidationFailed, "task type is not in the durable task catalog")
+	}
+	if record.Executor == taskjournal.TaskExecutorBlueprint &&
+		(record.Type != taskjournal.TaskUpdate || record.Actor != taskjournal.TaskActorOperator ||
+			record.Owner.EnvironmentID == "" || record.Target != record.Owner.EnvironmentID ||
+			record.Params[blueprints.EnvironmentDesiredRevisionParam] != record.ID ||
+			len(record.Steps) != 0 || len(record.Materializations) != 0 ||
+			record.Configuration != nil || record.EntryRuntime != nil || record.Result != nil) {
+		return errs.New(errs.KindValidationFailed, "Blueprint parent Task shape is invalid")
 	}
 	if record.Type == taskjournal.TaskBackupPrune && record.Actor != taskjournal.TaskActorSystem {
 		return errs.New(errs.KindValidationFailed, "backup_prune task actor must be system")

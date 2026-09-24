@@ -51,7 +51,8 @@ func validateTaskAcknowledgement(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
-	if !taskjournal.ValidExecutor(executor) || recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
+	if (executor != taskjournal.TaskExecutorAgent && executor != taskjournal.TaskExecutorController) ||
+		recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
 		!taskjournal.IsTerminalTaskStatus(terminalStatus) ||
 		(executor == taskjournal.TaskExecutorAgent && (recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0 ||
 			recordcodec.ValidateID(ids.KindAssignment, assignmentID) != nil || result == nil)) ||

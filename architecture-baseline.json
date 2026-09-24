@@ -12,7 +12,7 @@
     },
     {
       "path": "internal/infra/etcd",
-      "lines": 62475
+      "lines": 62485
     }
   ],
   "legacy_findings": []

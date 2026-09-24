@@ -44,7 +44,7 @@ func (repository *TaskRepository) claimNextTask(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return TaskAssignment{}, false, err
 	}
-	if !taskjournal.ValidExecutor(executor) ||
+	if executor != taskjournal.TaskExecutorAgent && executor != taskjournal.TaskExecutorController ||
 		(executor == taskjournal.TaskExecutorAgent && (recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0)) ||
 		(executor == taskjournal.TaskExecutorController && (agentID != "" || agentGeneration != 0)) {
 		return TaskAssignment{}, false, errs.New(errs.KindValidationFailed, "task execution claim identity is invalid")
