@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
-	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,15 +15,18 @@ func (service *Service) rejectUnsupportedBlueprintOmissions(
 	ctx context.Context,
 	environmentID string,
 	parsed blueprintparser.Result,
-	previous composeidentity.Snapshot,
 	currentAttaches []etcdstore.Versioned[attachrecord.Record],
 ) error {
-	for _, network := range previous.Networks {
-		if _, present := parsed.Project.Networks[network.Name]; !present {
+	currentZones, err := service.listBlueprintZones(ctx, environmentID)
+	if err != nil {
+		return err
+	}
+	for _, zone := range currentZones {
+		if _, present := parsed.Project.Networks[zone.Record.Desired.Name]; !present {
 			return errs.Newf(
 				errs.KindResourceInUse,
 				"Blueprint omits existing Zone %s; protected removal is not yet available through Apply",
-				network.Name,
+				zone.Record.Desired.Name,
 			)
 		}
 	}

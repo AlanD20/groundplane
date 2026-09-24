@@ -70,7 +70,7 @@ func (service *Service) prepareApplyPreflight(
 	}
 	if !preserveRoutes {
 		if err := service.rejectUnsupportedBlueprintOmissions(
-			ctx, environmentID, parsed, previous, currentAttaches,
+			ctx, environmentID, parsed, currentAttaches,
 		); err != nil {
 			return applyPreflight{}, err
 		}
