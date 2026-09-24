@@ -71,6 +71,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemova
 		task,
 		marker,
 		repository.transactions,
+		nil,
 	)
 }
 

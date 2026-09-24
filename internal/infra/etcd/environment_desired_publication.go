@@ -46,8 +46,13 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 	blueprintTransactions environmentBlueprintTransactionStore,
+	runtime *blueprintTaskPair,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
-	if err := validateEnvironmentDesiredPublication(ctx, project, environment, expectedHeadRevision, claim, revision, projection, task, marker); err != nil {
+	publicTask := task
+	if runtime != nil {
+		publicTask = runtime.parent
+	}
+	if err := validateEnvironmentDesiredPublication(ctx, project, environment, expectedHeadRevision, claim, revision, projection, publicTask, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := groupstore.ValidateReleaseGroupBlueprintPreparedMutation(releaseGroupPreparation, environment.Record.ID); err != nil {
@@ -59,6 +64,11 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err := releasePublication.validate(environment.Record.ID, task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	if runtime != nil {
+		if err := validateBlueprintTaskPair(claim, environment.Record.ID, task, marker, *runtime); err != nil {
+			return IdempotencyTransactionResult{}, err
+		}
+	}
 	// Apply assembles independently captured Release sources. Direct Entry
 	// capture uses the Environment epoch below; other direct mutations retain
 	// their sealed desired baseline. None can publish Blueprint Release changes.
@@ -68,11 +78,27 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		}
 	}
 	task = cloneTaskRecord(task)
-	if task.IdempotencyKey == "" {
-		task.IdempotencyKey = marker.Locator.Key
+	publicTask = cloneTaskRecord(publicTask)
+	if runtime == nil {
+		if task.IdempotencyKey == "" {
+			task.IdempotencyKey = marker.Locator.Key
+		}
+		task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+		publicTask = task
+	} else {
+		if publicTask.IdempotencyKey == "" {
+			publicTask.IdempotencyKey = marker.Locator.Key
+		}
+		publicTask.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+		if task.IdempotencyKey == "" {
+			task.IdempotencyKey = runtime.childMarker.Locator.Key
+		}
+		task.idempotencyMarker = cloneIdempotencyLocator(&runtime.childMarker.Locator)
 	}
-	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
 	if err := ValidateTaskRecord(task); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if err := ValidateTaskRecord(publicTask); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -199,7 +225,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		)
 	}
 	publication, err := repository.prepareEnvironmentBlueprintPublication(
-		ctx, claim, revision, projection, task, marker, expectedHeadRevision,
+		ctx, claim, revision, projection, publicTask, marker, expectedHeadRevision,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -229,12 +255,15 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clearTaskMaterializationProjectionChange(pinChange)
-	taskValue, err := EncodeTaskRecord(task)
+	if runtime == nil {
+		publicTask = task
+	}
+	taskValue, err := EncodeTaskRecord(publicTask)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(publicTask.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -280,10 +309,10 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 
 	conditions := []etcdstore.Condition{
-		{Key: taskjournal.TaskStorageKey(task.ID)},
-		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
-		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(publicTask.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(publicTask.OperationID, publicTask.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(publicTask.OperationID)},
+		{Key: taskjournal.TaskQueueKey(publicTask.Executor, publicTask.ID)},
 		{
 			Key:         blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -294,14 +323,14 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Key: networkreservations.ZonePoolRegistryKey(revision.EnvironmentID), ModRevision: zonePool.CurrentRevision()},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(publicTask.ID), Value: taskValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Key:   taskjournal.TaskOperationIndexKey(publicTask.OperationID, publicTask.ID),
 			Value: reference,
 		},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(publicTask.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(publicTask.Executor, publicTask.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{
@@ -360,7 +389,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			return errs.Newf(
 				errs.KindStateConflict,
 				"operation %s already has active task %s",
-				task.OperationID,
+				publicTask.OperationID,
 				activeTaskID,
 			)
 		}
@@ -496,6 +525,33 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	conditions, mutations, classified = entryPublication.bind(conditions, mutations, classified)
 	conditions, mutations, classified = bindRecoverySecretPinPublication(pinChange, conditions, mutations, classified)
+	privateMarkerKey := ""
+	if runtime != nil {
+		childPublication, childErr := prepareBlueprintChildPublication(ctx, task, runtime.childMarker, marker)
+		if childErr != nil {
+			return IdempotencyTransactionResult{}, childErr
+		}
+		defer childPublication.clear()
+		privateMarkerKey = childPublication.markerKey
+		base := len(conditions)
+		conditions = append(conditions, childPublication.conditions...)
+		mutations = append(mutations, childPublication.mutations...)
+		previous := classified
+		classified = func(revision int64, values []*etcdstore.KeyValue) error {
+			if len(values) != base+len(childPublication.conditions) {
+				return errs.New(errs.KindInternal, "Blueprint child compare evidence is incomplete")
+			}
+			if err := previous(revision, values[:base]); err != nil {
+				return err
+			}
+			for _, value := range values[base:] {
+				if value != nil {
+					return errs.New(errs.KindStateConflict, "Blueprint child publication collided")
+				}
+			}
+			return nil
+		}
+	}
 	classifier := func(revision int64, values []*etcdstore.KeyValue) error {
 		if conflict := classified(revision, values); conflict != nil {
 			return conflict
@@ -512,12 +568,14 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		taskTenant,
 		project,
 		effectiveEnvironment,
-		taskjournal.TaskActorOperator,
+		publicTask.Actor,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classifier)
+	plan, err := newTaskIdempotencyMutationPlanAllowingPrivateMarker(
+		publicTask, initiation, conditions, mutations, classifier, privateMarkerKey,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

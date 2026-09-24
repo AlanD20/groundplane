@@ -48,7 +48,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
 		componentPreparation, attachPreparation, blueprintplanning.BlueprintBackupPolicyPreparation{},
 		BlueprintScriptPublication{}, BlueprintReleasePublication{},
-		BlueprintRequirementGate{}, VolumeRemovalBackupPolicyPreparation{}, nil, task, marker, nil,
+		BlueprintRequirementGate{}, VolumeRemovalBackupPolicyPreparation{}, nil, task, marker, nil, nil,
 	)
 }
 
@@ -88,6 +88,6 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 		project, environment, expectedHeadRevision, claim, revision, projection,
 		zoneChanges, serviceChanges, routeChanges, releaseGroupPreparation,
 		componentPreparation, attachPreparation, backupPreparation, scriptPublication, releasePublication,
-		requirementGate, VolumeRemovalBackupPolicyPreparation{}, nil, task, marker, repository.transactions,
+		requirementGate, VolumeRemovalBackupPolicyPreparation{}, nil, task, marker, repository.transactions, nil,
 	)
 }

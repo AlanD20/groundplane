@@ -584,6 +584,7 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 		fixture.Task,
 		fixture.Marker,
 		fixture.store,
+		nil,
 	)
 }
 
