@@ -45,13 +45,18 @@ func Select(input Snapshot) (Selection, error) {
 	result := Selection{}
 	held := make([]Unit, 0, len(snapshot.Executions)+len(snapshot.Desired))
 	continuing := make(map[ResourceKey]bool)
+	continuingPending := make(map[ResourceKey]bool)
 	for _, execution := range snapshot.Executions {
 		latest, exists := desired[execution.Unit.Target]
 		required := exists && sameUnit(latest, execution.Unit)
 		switch execution.State {
 		case Pending:
-			if !required {
+			if !required || trusted[execution.Unit.Target] {
 				result.CancelPending = append(result.CancelPending, execution.PlanID)
+			} else {
+				result.ContinuePending = append(result.ContinuePending, execution.PlanID)
+				continuingPending[execution.Unit.Target] = true
+				held = append(held, execution.Unit)
 			}
 		case Running:
 			held = append(held, execution.Unit)
@@ -66,7 +71,7 @@ func Select(input Snapshot) (Selection, error) {
 		}
 	}
 	for _, unit := range snapshot.Desired {
-		if continuing[unit.Target] {
+		if continuing[unit.Target] || continuingPending[unit.Target] {
 			continue
 		}
 		if conflictsAny(unit, held) {

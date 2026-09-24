@@ -34,6 +34,36 @@ func TestLatestInputSkipsPendingWorkAndWaitsForConflictingExecution(t *testing.T
 	}
 }
 
+// Rationale: a matching queued child is already owned work. Returning it as
+// Ready would publish a duplicate, while ignoring its claims would admit an
+// overlapping unit before the queued child reaches the Agent.
+func TestMatchingPendingUnitIsReusedAndReservesItsWrites(t *testing.T) {
+	shared := testKey(ids.KindEnvEntry, 5)
+	service := testUnit(testKey(ids.KindService, 6), "service")
+	service.Writes = append(service.Writes, shared)
+	route := testUnit(testKey(ids.KindRoute, 7), "route")
+	route.Reads = []ResourceKey{shared}
+	pending := testExecution(service, Pending, 8)
+	input := Snapshot{
+		Desired: []Unit{service, route},
+		Applied: []AppliedUnit{
+			{Target: service.Target, State: Absent},
+			{Target: route.Target, State: Absent},
+		},
+		Executions: []Execution{pending},
+	}
+	selected := mustSelect(t, input)
+	assertIDs(t, "reuse pending", selected.ContinuePending, pending.PlanID)
+	assertKeys(t, "wait for pending write", selected.Waiting, route.Target)
+	if len(selected.Ready) != 0 || len(selected.CancelPending) != 0 {
+		t.Fatal("matching pending unit was duplicated or cancelled")
+	}
+	input.Applied[0] = testApplied(service)
+	selected = mustSelect(t, input)
+	assertIDs(t, "drop redundant pending", selected.CancelPending, pending.PlanID)
+	assertKeys(t, "unblock independent reader", selected.Ready, route.Target)
+}
+
 // Rationale: rejecting invalid input must not produce cancellation instructions.
 func TestInvalidLatestInputCannotCancelRunningWork(t *testing.T) {
 	api := testKey(ids.KindService, 10)

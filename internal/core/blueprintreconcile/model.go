@@ -93,5 +93,6 @@ type Selection struct {
 	ResolveEffects  []ResourceKey
 	CancelPending   []string
 	CancelRunning   []string
+	ContinuePending []string
 	ContinueRunning []string
 }
