@@ -162,13 +162,13 @@ func PrepareMutation(
 		}
 		knownApplied[versioned.Record.Target] = versioned.Revision
 	}
-	knownExecutions := make(map[string]int64, len(snapshot.Executions))
+	knownExecutions := make(map[string]etcdstore.Versioned[ExecutionRecord], len(snapshot.Executions))
 	for _, versioned := range snapshot.Executions {
 		if versioned.Record.EnvironmentID != snapshot.EnvironmentID ||
 			validateExecution(versioned.Record) != nil || versioned.Revision <= 0 {
 			return MutationPlan{}, invalidRecord()
 		}
-		knownExecutions[versioned.Record.PlanID] = versioned.Revision
+		knownExecutions[versioned.Record.PlanID] = versioned
 	}
 	epoch := EpochRecord{EnvironmentID: snapshot.EnvironmentID, Sequence: snapshot.Epoch.Sequence + 1}
 	epochValue, err := EncodeEpoch(epoch)
@@ -218,16 +218,18 @@ func PrepareMutation(
 		}
 		seenExecutions[change.PlanID] = true
 		key := ExecutionKey(snapshot.EnvironmentID, change.PlanID)
-		plan.conditions = append(plan.conditions, etcdstore.Condition{Key: key, ModRevision: knownExecutions[change.PlanID]})
+		current, exists := knownExecutions[change.PlanID]
+		plan.conditions = append(plan.conditions, etcdstore.Condition{Key: key, ModRevision: current.Revision})
 		if change.Next == nil {
-			if knownExecutions[change.PlanID] == 0 {
+			if !exists {
 				plan.Clear()
 				return MutationPlan{}, invalidRecord()
 			}
 			plan.mutations = append(plan.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 			continue
 		}
-		if change.Next.EnvironmentID != snapshot.EnvironmentID || change.Next.PlanID != change.PlanID {
+		if change.Next.EnvironmentID != snapshot.EnvironmentID || change.Next.PlanID != change.PlanID ||
+			!validExecutionAdvance(snapshot.HeadTaskID, current.Record, exists, *change.Next) {
 			plan.Clear()
 			return MutationPlan{}, invalidRecord()
 		}
@@ -239,4 +241,27 @@ func PrepareMutation(
 		plan.mutations = append(plan.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	}
 	return plan, nil
+}
+
+func validExecutionAdvance(headTaskID string, current ExecutionRecord, exists bool, next ExecutionRecord) bool {
+	if !exists {
+		return next.ParentTaskID == headTaskID && next.State == Pending
+	}
+	if current.EnvironmentID != next.EnvironmentID || current.ParentTaskID != next.ParentTaskID ||
+		current.TaskID != next.TaskID || current.PlanID != next.PlanID ||
+		current.Unit.Target != next.Unit.Target || current.Unit.Removal != next.Unit.Removal ||
+		current.Unit.Fingerprint != next.Unit.Fingerprint ||
+		!slices.Equal(current.Unit.Reads, next.Unit.Reads) ||
+		!slices.Equal(current.Unit.Writes, next.Unit.Writes) ||
+		!slices.Equal(current.Unit.After, next.Unit.After) {
+		return false
+	}
+	switch current.State {
+	case Pending:
+		return next.ParentTaskID == headTaskID && next.State == Running && next.Epoch > 0
+	case Running:
+		return next.State == Draining && next.Epoch == current.Epoch
+	default:
+		return false
+	}
 }

@@ -67,6 +67,12 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 		len(loaded.Executions) != 1 || loaded.Executions[0].Record.TaskID != childID {
 		t.Fatalf("durable unit claim = %#v, %v", loaded, err)
 	}
+	rewritten := execution
+	rewritten.Unit.Fingerprint = strings.Repeat("b", 64)
+	if _, err := blueprintunits.PrepareMutation(loaded, nil,
+		[]blueprintunits.ExecutionChange{{PlanID: planID, Next: &rewritten}}); err == nil {
+		t.Fatal("existing child plan was rewritten")
+	}
 	stale, err := store.Transact(ctx, plan.Conditions(), plan.Mutations())
 	if err != nil || stale.Succeeded {
 		t.Fatalf("stale unit claim repeated = %#v, %v", stale, err)
@@ -91,5 +97,13 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 	overtaken, err := store.Transact(ctx, fromLatest.Conditions(), fromLatest.Mutations())
 	if err != nil || overtaken.Succeeded {
 		t.Fatalf("overtaken unit claim committed = %#v, %v", overtaken, err)
+	}
+	newSnapshot, err := ledger.Load(ctx, environmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := blueprintunits.PrepareMutation(newSnapshot, nil,
+		[]blueprintunits.ExecutionChange{{PlanID: planID, Next: &next}}); err == nil {
+		t.Fatal("pending child from an older Blueprint head was admitted to run")
 	}
 }
