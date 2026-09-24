@@ -536,6 +536,29 @@ func (repository *TaskRepository) AbortPendingTask(
 			mutations = environmentBinding.Mutations()
 			environmentEpochValue = mutations[len(mutations)-1].Value
 		}
+		childCancellation, err := repository.preparePendingBlueprintChildAbort(ctx, current.Record)
+		if err != nil {
+			clear(terminalValue)
+			clear(markerValue)
+			clear(retentionValue)
+			clear(taskRetentionValue)
+			clear(environmentValue)
+			etcdstore.ClearMutationValues(zoneMutations)
+			clearAttachTaskChange(attachChange)
+			clearSecretTaskChange(secretChange)
+			clearRouteTaskChange(routeChange)
+			clearServiceTaskChange(serviceChange)
+			clearBackingZoneTaskChange(backingZoneChange)
+			clearComponentTaskChange(componentChange)
+			clearPlatformComponentTaskChange(platformComponentChange)
+			clearConnectorTaskChange(connectorChange)
+			clearRunnerTaskChange(runnerChange)
+			clear(environmentEpochValue)
+			environmentBinding.Clear()
+			return etcdstore.Versioned[TaskRecord]{}, err
+		}
+		conditions = append(conditions, childCancellation.Conditions()...)
+		mutations = append(mutations, childCancellation.Mutations()...)
 		transaction, err := repository.transactZoneRemovalTaskLifecycle(
 			ctx, current.Record, zoneRemovalTransactionFailedAcknowledgement, conditions, mutations,
 		)
@@ -557,6 +580,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		blueprintAbortChange.clear()
 		clear(environmentEpochValue)
 		environmentBinding.Clear()
+		childCancellation.Clear()
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}

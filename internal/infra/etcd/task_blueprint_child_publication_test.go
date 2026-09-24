@@ -112,4 +112,22 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	if err != nil || read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
 		t.Fatalf("child queue and terminal marker = %#v, %v", read, err)
 	}
+	newHead := ids.NewAt(ids.KindTask, now, 86)
+	newHeadRef, err := idempotency.EncodeTaskReference(newHead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tx, err := store.Transact(ctx, nil, []keyvalue.Mutation{{
+		Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(parent.Owner.EnvironmentID), Value: newHeadRef,
+	}}); err != nil || !tx.Succeeded {
+		t.Fatalf("supersede desired head = %#v, %v", tx, err)
+	}
+	aborted, err := repository.AbortPendingTask(ctx, child.ID, now.Add(2*time.Second))
+	if err != nil || aborted.Record.Status != taskjournal.TaskStatusAborted {
+		t.Fatalf("abort unassigned child = %#v, %v", aborted, err)
+	}
+	snapshot, err = ledger.Load(ctx, parent.Owner.EnvironmentID)
+	if err != nil || len(snapshot.Executions) != 0 {
+		t.Fatalf("withdrawn child claim = %#v, %v", snapshot.Executions, err)
+	}
 }
