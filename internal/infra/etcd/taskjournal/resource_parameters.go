@@ -26,6 +26,7 @@ const (
 	TaskHierarchyDeletionActionKindParam = "hierarchy_deletion_action_kind"
 	TaskHierarchyDeletionProcedureParam  = "hierarchy_deletion_typed_procedure"
 	TaskHierarchyDeletionInputParam      = "hierarchy_deletion_input_digest"
+	TaskBlueprintParentParam             = "blueprint_parent_task_id"
 	TaskComposeArtifactParam             = "compose_artifact_id"
 	TaskEntryEnvironmentParam            = "entry_environment_id"
 	TaskEntryTenantSlugParam             = "entry_tenant_slug"

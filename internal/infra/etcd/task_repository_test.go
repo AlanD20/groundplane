@@ -417,7 +417,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newTaskRepository() error = %v", err)
 	}
-	page, err := repository.ListTasks(ctx, testkeyvalue.PageRequest{Limit: 1})
+	page, err := repository.ListTasksByScope(ctx, TaskListScope{Kind: TaskListScopeGlobal}, testkeyvalue.PageRequest{Limit: 1})
 	if err != nil {
 		t.Fatalf("ListTasks(first page) error = %v", err)
 	}
@@ -428,7 +428,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	third.ID = ids.NewAt(ids.KindTask, taskJournalTime().Add(2*time.Second), 33)
 	third.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), 34)
 	seedTaskRepositoryRunningTask(t, store, third)
-	secondPage, err := repository.ListTasks(ctx, testkeyvalue.PageRequest{Limit: 1, Cursor: page.NextCursor})
+	secondPage, err := repository.ListTasksByScope(ctx, TaskListScope{Kind: TaskListScopeGlobal}, testkeyvalue.PageRequest{Limit: 1, Cursor: page.NextCursor})
 	if err != nil {
 		t.Fatalf("ListTasks(second page) error = %v", err)
 	}
@@ -465,6 +465,42 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	}
 	if len(replay.Events) != 1 || replay.Revision != snapshot.Revision {
 		t.Fatalf("ListTaskEvents(fixed) = %#v, want first snapshot", replay)
+	}
+}
+
+// Rationale: private Blueprint unit Tasks must not break a fixed-revision
+// operator page or consume a visible page slot between two public Tasks.
+func TestTaskRepositoryPaginatesPastBlueprintChildren(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryTaskStore()
+	now := taskJournalTime()
+	first := validTaskRecord(now)
+	child := validTaskRecord(now.Add(time.Second))
+	child.Actor = testtaskjournal.TaskActorSystem
+	child.Params[testtaskjournal.TaskBlueprintParentParam] = first.ID
+	last := validTaskRecord(now.Add(2 * time.Second))
+	for _, task := range []TaskRecord{first, child, last} {
+		seedTaskRepositoryTask(t, store, task)
+	}
+	repository, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []TaskListScope{
+		{Kind: TaskListScopeGlobal},
+		{Kind: TaskListScopePlatformWorkspace},
+	} {
+		page, err := repository.ListTasksByScope(ctx, scope, testkeyvalue.PageRequest{Limit: 1})
+		if err != nil || len(page.Items) != 1 || page.Items[0].Record.ID != first.ID || page.NextCursor == "" {
+			t.Fatalf("first %v page = %#v, %v", scope, page, err)
+		}
+		next, err := repository.ListTasksByScope(ctx, scope, testkeyvalue.PageRequest{
+			Limit: 1, Cursor: page.NextCursor,
+		})
+		if err != nil || len(next.Items) != 1 || next.Items[0].Record.ID != last.ID ||
+			next.NextCursor != "" || next.Revision != page.Revision {
+			t.Fatalf("second %v page = %#v, %v", scope, next, err)
+		}
 	}
 }
 

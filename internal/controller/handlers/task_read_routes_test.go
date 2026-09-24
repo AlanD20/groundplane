@@ -266,6 +266,27 @@ func TestTaskShowReturnsTaskNotFoundProblem(t *testing.T) {
 	}
 }
 
+// Rationale: knowing an internal unit Task id must not expose its private
+// execution journal through the public Task detail route.
+func TestTaskShowHidesBlueprintChild(t *testing.T) {
+	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	childID := ids.NewAt(ids.KindTask, now, 1)
+	queries := &fakeTaskQueries{task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{
+		ID: childID,
+		Params: map[string]string{
+			testtaskjournal.TaskBlueprintParentParam: ids.NewAt(ids.KindTask, now, 2),
+		},
+	}}}
+	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	server.tasks = queries
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/"+childID, nil)
+	response := httptest.NewRecorder()
+	server.Mux.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || queries.eventsTaskID != "" {
+		t.Fatalf("child Task show = %d, events read %q", response.Code, queries.eventsTaskID)
+	}
+}
+
 // QA: TASK-01; route projection over a fake page, not persisted ordering or fixed-revision pagination.
 // Rationale: both aliases must forward identical scope/page inputs and expose
 // the same Task identity, owner, actor, timeline and continuation cursor.

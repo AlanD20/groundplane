@@ -45,6 +45,13 @@ func (opener repositoryTaskEventStreamOpener) OpenTaskEventStream(
 	taskID string,
 	after uint64,
 ) (taskEventRunner, error) {
+	task, err := opener.repository.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if taskjournal.IsBlueprintChild(task.Record.Params) {
+		return nil, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
+	}
 	return opener.repository.OpenTaskEventStream(ctx, taskID, after)
 }
 

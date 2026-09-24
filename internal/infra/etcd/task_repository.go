@@ -275,11 +275,8 @@ func (repository *TaskRepository) GetSystemTaskInitiation(
 	return newInheritedTaskInitiation(parent, taskjournal.TaskActorSystem)
 }
 
-func (repository *TaskRepository) ListTasks(
-	ctx context.Context,
-	request etcdstore.PageRequest,
-) (etcdstore.Page[TaskRecord], error) {
-	return repository.ListTasksByScope(ctx, TaskListScope{Kind: TaskListScopeGlobal}, request)
+func visibleOperatorTask(record TaskRecord) bool {
+	return !taskjournal.IsBlueprintChild(record.Params)
 }
 
 // ListTasksByScope returns the selected immutable journal at one fixed MVCC
@@ -300,9 +297,9 @@ func (repository *TaskRepository) ListTasksByScope(
 				"global task scope cannot contain an id",
 			)
 		}
-		page, err := recordquery.ListPrimary(
+		page, err := recordquery.ListFilteredPrimary(
 			ctx, repository.store, "tasks", "global", "-", taskjournal.TaskPrefix, ids.KindTask,
-			request, DecodeTaskRecord, identity, func(TaskRecord) bool { return true },
+			request, DecodeTaskRecord, identity, visibleOperatorTask,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopePlatformWorkspace:
@@ -312,10 +309,11 @@ func (repository *TaskRepository) ListTasksByScope(
 				"platform task workspace scope cannot contain an id",
 			)
 		}
-		page, err := recordquery.ListIndex(
+		page, err := recordquery.ListVisibleIndex(
 			ctx, repository.store, "tasks", "workspace", "platform", taskjournal.TaskWorkspacePlatformPrefix,
 			taskjournal.TaskStorageKey, ids.KindTask, request, DecodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform },
+			visibleOperatorTask,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeTenantWorkspace:
@@ -325,7 +323,7 @@ func (repository *TaskRepository) ListTasksByScope(
 				"tenant task workspace scope is invalid",
 			)
 		}
-		page, err := recordquery.ListIndex(
+		page, err := recordquery.ListVisibleIndex(
 			ctx, repository.store, "tasks", "workspace", scope.ID,
 			taskjournal.TaskWorkspaceTenantPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
 			DecodeTaskRecord, identity,
@@ -333,6 +331,7 @@ func (repository *TaskRepository) ListTasksByScope(
 				return record.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant &&
 					record.Owner.TenantID == scope.ID
 			},
+			visibleOperatorTask,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeProject:
@@ -350,7 +349,7 @@ func (repository *TaskRepository) ListTasksByScope(
 			request,
 			DecodeTaskRecord,
 			identity,
-			func(record TaskRecord) bool { return record.Owner.ProjectID == scope.ID },
+			func(record TaskRecord) bool { return visibleOperatorTask(record) && record.Owner.ProjectID == scope.ID },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeEnvironment:
@@ -360,11 +359,12 @@ func (repository *TaskRepository) ListTasksByScope(
 				"environment task scope is invalid",
 			)
 		}
-		page, err := recordquery.ListIndex(
+		page, err := recordquery.ListVisibleIndex(
 			ctx, repository.store, "tasks", "environment", scope.ID,
 			taskjournal.TaskEnvironmentIndexPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
 			DecodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.EnvironmentID == scope.ID },
+			visibleOperatorTask,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	default:

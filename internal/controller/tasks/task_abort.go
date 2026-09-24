@@ -69,6 +69,9 @@ func (service *taskAbortService) AbortTask(
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
+		if taskjournal.IsBlueprintChild(current.Record.Params) {
+			return idempotencyrecord.IdempotencyResponse{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
+		}
 		if current.Record.Type == taskjournal.TaskBackupPrune {
 			return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
 				errs.KindTaskNotAbortable,

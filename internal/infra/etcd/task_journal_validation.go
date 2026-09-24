@@ -38,6 +38,9 @@ func ValidateTaskRecord(record TaskRecord) error {
 	if !taskjournal.ValidActor(record.Actor) {
 		return errs.New(errs.KindValidationFailed, "task actor is invalid")
 	}
+	if err := taskjournal.ValidateBlueprintChild(record.ID, record.Actor, record.Executor, record.Params); err != nil {
+		return err
+	}
 	if !taskjournal.ValidExecutor(record.Executor) {
 		return errs.New(errs.KindValidationFailed, "task executor is invalid")
 	}

@@ -193,6 +193,9 @@ func (service *taskRetryService) retryTask(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	if taskjournal.IsBlueprintChild(source.Record.Params) {
+		return idempotencyrecord.IdempotencyResponse{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", sourceTaskID)
+	}
 	if source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindTaskNotRetryable, "Controller update requires a fresh explicit release selection after recovery",

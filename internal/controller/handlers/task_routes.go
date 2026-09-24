@@ -197,6 +197,9 @@ func (s *Server) showTask(ctx context.Context, request *taskShowInput) (*taskOut
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
 	}
+	if taskjournal.IsBlueprintChild(task.Record.Params) {
+		return nil, errs.Newf(errs.KindTaskNotFound, "task not found: %s", request.ID)
+	}
 	events, err := s.tasks.ListTaskEvents(ctx, task.Record.ID, task.ReadRevision)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)
