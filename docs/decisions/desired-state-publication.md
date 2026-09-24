@@ -78,6 +78,14 @@ Planning compares resource-level effective inputs with successfully applied
 inputs and groups inseparable effects into private execution units with exact
 read, write and predecessor claims.
 
+One operator-visible Blueprint Apply Task owns those units. Each unit executes
+as a hidden system Agent child Task so it can use the existing durable claim,
+abort and recovery machinery. Child identity is not an operator action: Task
+lists, direct reads, Retry, Abort and event streams expose only the parent.
+The parent records each child's verified result and remains nonterminal while
+any required unit is running or has unknown effects. A child terminal status
+alone cannot mark the parent successful or release its resource claims.
+
 When newer valid input makes an older unit obsolete:
 
 - an undispatched unit loses dispatch authority atomically;
