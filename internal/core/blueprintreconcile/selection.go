@@ -46,12 +46,20 @@ func Select(input Snapshot) (Selection, error) {
 	held := make([]Unit, 0, len(snapshot.Executions)+len(snapshot.Desired))
 	continuing := make(map[ResourceKey]bool)
 	continuingPending := make(map[ResourceKey]bool)
+	// Running and draining epochs own their claims before any queued work is
+	// considered. A queued duplicate cannot be dispatched beside an older
+	// matching execution just because its plan id sorts first.
+	for _, execution := range snapshot.Executions {
+		if execution.State != Pending {
+			held = append(held, execution.Unit)
+		}
+	}
 	for _, execution := range snapshot.Executions {
 		latest, exists := desired[execution.Unit.Target]
 		required := exists && sameUnit(latest, execution.Unit)
 		switch execution.State {
 		case Pending:
-			if !required || trusted[execution.Unit.Target] {
+			if !required || trusted[execution.Unit.Target] || conflictsAny(execution.Unit, held) {
 				result.CancelPending = append(result.CancelPending, execution.PlanID)
 			} else {
 				result.ContinuePending = append(result.ContinuePending, execution.PlanID)
@@ -59,15 +67,12 @@ func Select(input Snapshot) (Selection, error) {
 				held = append(held, execution.Unit)
 			}
 		case Running:
-			held = append(held, execution.Unit)
 			if required {
 				result.ContinueRunning = append(result.ContinueRunning, execution.PlanID)
 				continuing[execution.Unit.Target] = true
 			} else {
 				result.CancelRunning = append(result.CancelRunning, execution.PlanID)
 			}
-		case Draining:
-			held = append(held, execution.Unit)
 		}
 	}
 	for _, unit := range snapshot.Desired {

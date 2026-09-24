@@ -64,6 +64,23 @@ func TestMatchingPendingUnitIsReusedAndReservesItsWrites(t *testing.T) {
 	assertKeys(t, "unblock independent reader", selected.Ready, route.Target)
 }
 
+// Rationale: a queued duplicate cannot run beside an already claimed matching
+// unit, regardless of their plan-id order. The older claim must settle first.
+func TestMatchingPendingUnitCannotOverlapRunningOwner(t *testing.T) {
+	unit := testUnit(testKey(ids.KindService, 9), "same-input")
+	pending := testExecution(unit, Pending, 10)
+	running := testExecution(unit, Running, 11)
+	selected := mustSelect(t, Snapshot{
+		Desired: []Unit{unit}, Applied: []AppliedUnit{{Target: unit.Target, State: Absent}},
+		Executions: []Execution{pending, running},
+	})
+	assertIDs(t, "cancel duplicate", selected.CancelPending, pending.PlanID)
+	assertIDs(t, "retain running owner", selected.ContinueRunning, running.PlanID)
+	if len(selected.Ready)+len(selected.ContinuePending) != 0 {
+		t.Fatal("queued duplicate was admitted beside the running owner")
+	}
+}
+
 // Rationale: rejecting invalid input must not produce cancellation instructions.
 func TestInvalidLatestInputCannotCancelRunningWork(t *testing.T) {
 	api := testKey(ids.KindService, 10)
