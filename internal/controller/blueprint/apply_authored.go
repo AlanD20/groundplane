@@ -199,6 +199,14 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	attachInputGenerations, err := service.prepareAuthoredAttachInputGenerations(
+		ctx, environmentID, claim.RevisionID, parsed.Extensions.Attachments,
+		desiredServices, preflight.currentAttaches, owned, allocator,
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	defer clearAuthoredAttachInputGenerations(attachInputGenerations)
 	staged, err := desiredrevision.Stage(ctx, service.repository, desiredrevision.StageInput{
 		Claim: claim, Blueprint: desiredrevision.BlueprintRevision(environmentID, claim.TaskID, claim.CreatedAt, bundle),
 		DesiredInput: desired,
@@ -210,7 +218,8 @@ func (service *Service) applyAuthoredOnce(
 	return desiredrevision.PublishAuthored(ctx, service.repository, service.idempotency, desiredrevision.PublishAuthoredInput{
 		Project: baseline.project, Environment: baseline.environment,
 		ExpectedHeadRevision: baseline.expectedHeadRevision,
-		Staged:               staged, OwnedIdentities: owned, Evidence: evidence, Locator: locator, Parent: parent,
+		Staged:               staged, OwnedIdentities: owned, AttachInputGenerations: attachInputGenerations,
+		Evidence: evidence, Locator: locator, Parent: parent,
 	})
 }
 

@@ -21,14 +21,15 @@ import (
 // files or host effects already exist. The coordinator publishes private unit
 // Tasks only after this head and parent are atomically visible.
 type BlueprintAuthoredPublication struct {
-	Project              keyvalue.Versioned[hierarchy.ProjectRecord]
-	Environment          keyvalue.Versioned[hierarchy.EnvironmentRecord]
-	ExpectedHeadRevision int64
-	Claim                blueprints.EnvironmentBlueprintStageClaim
-	DesiredInput         projectionrecord.EnvironmentDesiredInput
-	OwnedIdentities      projectionrecord.EnvironmentOwnedIdentities
-	Parent               TaskRecord
-	Marker               idempotency.IdempotencyMarker
+	Project                keyvalue.Versioned[hierarchy.ProjectRecord]
+	Environment            keyvalue.Versioned[hierarchy.EnvironmentRecord]
+	ExpectedHeadRevision   int64
+	Claim                  blueprints.EnvironmentBlueprintStageClaim
+	DesiredInput           projectionrecord.EnvironmentDesiredInput
+	OwnedIdentities        projectionrecord.EnvironmentOwnedIdentities
+	AttachInputGenerations []BlueprintAttachInputGenerationPublication
+	Parent                 TaskRecord
+	Marker                 idempotency.IdempotencyMarker
 }
 
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAuthoredRevision(
@@ -145,13 +146,6 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	}
 	conditions = append(conditions, initialAbsence.Conditions()...)
 	mutations = append(mutations, initialAbsence.Mutations()...)
-	baseCount := len(conditions)
-	classifier := func(_ int64, values []*keyvalue.KeyValue) error {
-		if len(values) < baseCount {
-			return errs.New(errs.KindInternal, "Blueprint authored publication compare evidence is incomplete")
-		}
-		return errs.New(errs.KindStateConflict, "Blueprint authored publication raced")
-	}
 	tenant, err := loadConnectorTaskInitiationTenantAtRevision(
 		ctx, repository.store, project, project.ReadRevision,
 	)
@@ -162,15 +156,34 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	plan, err := newTaskIdempotencyMutationPlan(parent, initiation, conditions, mutations, classifier)
+	attachInputs, err := repository.prepareBlueprintAttachInputGenerations(
+		ctx, parent, input.AttachInputGenerations,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	defer attachInputs.clear()
+	conditions = append(conditions, attachInputs.conditions...)
+	mutations = append(mutations, attachInputs.mutations...)
+	baseCount := len(conditions)
+	classifier := func(_ int64, values []*keyvalue.KeyValue) error {
+		if len(values) < baseCount {
+			return errs.New(errs.KindInternal, "Blueprint authored publication compare evidence is incomplete")
+		}
+		return errs.New(errs.KindStateConflict, "Blueprint authored publication raced")
+	}
+	plan, err := newTaskIdempotencyMutationPlan(parent, initiation, conditions, mutations, classifier)
+	if err != nil {
+		return attachInputs.finish(ctx, repository.store, parent.ID, IdempotencyTransactionResult{}, err)
 	}
 	idempotencyRepository, err := NewIdempotencyRepository(repository.store)
 	if err != nil {
-		return IdempotencyTransactionResult{}, err
+		return attachInputs.finish(ctx, repository.store, parent.ID, IdempotencyTransactionResult{}, err)
 	}
-	return idempotencyRepository.applyEnvironmentBlueprint(ctx, input.Marker, plan, repository.transactions)
+	result, publicationErr := idempotencyRepository.applyEnvironmentBlueprint(
+		ctx, input.Marker, plan, repository.transactions,
+	)
+	return attachInputs.finish(ctx, repository.store, parent.ID, result, publicationErr)
 }
 
 func newbornBlueprintUnitTargets(

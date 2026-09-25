@@ -62,14 +62,15 @@ func (publication StagedPublication) consumeAuthored(
 }
 
 type PublishAuthoredInput struct {
-	Project              keyvalue.Versioned[hierarchy.ProjectRecord]
-	Environment          keyvalue.Versioned[hierarchy.EnvironmentRecord]
-	ExpectedHeadRevision int64
-	Staged               StagedPublication
-	OwnedIdentities      projectionrecord.EnvironmentOwnedIdentities
-	Evidence             Evidence
-	Locator              idempotency.IdempotencyLocator
-	Parent               etcd.TaskRecord
+	Project                keyvalue.Versioned[hierarchy.ProjectRecord]
+	Environment            keyvalue.Versioned[hierarchy.EnvironmentRecord]
+	ExpectedHeadRevision   int64
+	Staged                 StagedPublication
+	OwnedIdentities        projectionrecord.EnvironmentOwnedIdentities
+	AttachInputGenerations []etcd.BlueprintAttachInputGenerationPublication
+	Evidence               Evidence
+	Locator                idempotency.IdempotencyLocator
+	Parent                 etcd.TaskRecord
 }
 
 func PublishAuthored(
@@ -114,7 +115,8 @@ func PublishAuthored(
 			Project: input.Project, Environment: input.Environment,
 			ExpectedHeadRevision: input.ExpectedHeadRevision,
 			Claim:                claim, DesiredInput: desired, OwnedIdentities: input.OwnedIdentities,
-			Parent: input.Parent, Marker: marker,
+			AttachInputGenerations: input.AttachInputGenerations,
+			Parent:                 input.Parent, Marker: marker,
 		},
 	)
 	var resolution requestidempotency.Resolution
