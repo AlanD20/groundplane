@@ -108,6 +108,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		ctx,
 		repository.store,
 		input.Projection,
+		input.Claim.SourceKind,
 		input.ExpectedHeadRevision,
 		fence.ReadRevision(),
 	)

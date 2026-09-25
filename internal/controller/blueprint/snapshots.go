@@ -209,7 +209,10 @@ func (service *Service) listBlueprintEntries(
 				for _, record := range authored {
 					key := entrycontroller.BlueprintKey(record)
 					if flatID, exists := entriesByKey[key]; exists && flatID != record.Entry.ID {
-						return nil, errs.New(errs.KindStateConflict, "Blueprint Entry identity conflicts with a retained record")
+						// An identity-changing Apply can select its replacement before
+						// the prior flat record is cleaned up. Reconciliation must use
+						// the head's ID; the old effect remains owned by the unit ledger.
+						delete(entriesByID, flatID)
 					}
 					entriesByID[record.Entry.ID] = etcdstore.Versioned[entryrecord.Record]{
 						Record: record, Revision: desired.Revision, ReadRevision: desired.ReadRevision,

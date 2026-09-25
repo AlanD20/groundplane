@@ -199,6 +199,8 @@ func prepareRouteHeadPublication(
 				errs.KindStateConflict, "Route desired identity predecessor changed",
 			)
 		}
+		ownedIdentities.Attaches = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Attaches...)
+		ownedIdentities.Scripts = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Scripts...)
 		ownedIdentities, err = projectionrecord.RetainOwnedIdentityBirths(ownedIdentities, previous.Record)
 		if err != nil {
 			clearRouteHeadPublication(publication)
@@ -419,6 +421,8 @@ func validateRouteRemovalCandidateIdentities(
 	if err != nil {
 		return 0, err
 	}
+	expected.Attaches = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Attaches...)
+	expected.Scripts = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Scripts...)
 	expected, err = projectionrecord.RetainOwnedIdentityBirths(expected, previous.Record)
 	if err != nil {
 		return 0, err

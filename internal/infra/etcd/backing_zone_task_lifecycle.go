@@ -155,7 +155,15 @@ func (repository *TaskRepository) prepareBackingZoneTaskAcknowledgement(
 		conditions, mutations, err := repository.prepareZoneRemovalAcknowledgement(
 			ctx, task, terminalStatus, terminalAt, revision,
 		)
-		return backingZoneTaskChange{applies: true, conditions: conditions, mutations: mutations}, err
+		values := make([][]byte, 0, len(mutations))
+		for _, mutation := range mutations {
+			if mutation.Type == etcdstore.MutationPut {
+				values = append(values, mutation.Value)
+			}
+		}
+		return backingZoneTaskChange{
+			applies: true, conditions: conditions, mutations: mutations, values: values,
+		}, err
 	}
 	_, err := taskOwnsBackingZoneCascade(task)
 	return backingZoneTaskChange{}, err

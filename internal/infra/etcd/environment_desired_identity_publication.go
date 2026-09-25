@@ -19,6 +19,7 @@ func prepareEnvironmentDesiredIdentityPublication(
 	ctx context.Context,
 	store hierarchyStore,
 	projection projectionrecord.EnvironmentComposeProjection,
+	sourceKind blueprints.EnvironmentBlueprintSourceKind,
 	expectedHeadRevision int64,
 	readRevision int64,
 ) (environmentDesiredIdentityPublication, error) {
@@ -47,6 +48,10 @@ func prepareEnvironmentDesiredIdentityPublication(
 				errs.KindStateConflict,
 				"Environment desired identity predecessor changed",
 			)
+		}
+		if sourceKind == blueprints.EnvironmentBlueprintSourceMutation {
+			ownedIdentities.Attaches = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Attaches...)
+			ownedIdentities.Scripts = append([]projectionrecord.OwnedIdentity(nil), previous.Record.Scripts...)
 		}
 		ownedIdentities, err = projectionrecord.RetainOwnedIdentityBirths(ownedIdentities, previous.Record)
 		if err != nil {

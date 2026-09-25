@@ -4,12 +4,8 @@ import (
 	"slices"
 
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	"github.com/AlanD20/groundplane/internal/core"
-	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,9 +20,9 @@ func authoredOwnedIdentities(
 	volumeSlugs map[string]string,
 	entries []entryrecord.Record,
 	routes []projectionrecord.EnvironmentRouteProjection,
-	attaches []attachrecord.Record,
-	components []componentrecord.Record,
-	scripts []scriptrecord.Record,
+	attaches []composeidentity.Resource,
+	components []composeidentity.Resource,
+	scripts []composeidentity.Resource,
 ) (projectionrecord.EnvironmentOwnedIdentities, error) {
 	result := projectionrecord.EnvironmentOwnedIdentities{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: generation,
@@ -73,43 +69,15 @@ func authoredOwnedIdentities(
 	if err != nil {
 		return projectionrecord.EnvironmentOwnedIdentities{}, err
 	}
-	attachResources := make([]composeidentity.Resource, len(attaches))
-	for index, attach := range attaches {
-		if attach.EnvironmentID != environmentID {
-			return projectionrecord.EnvironmentOwnedIdentities{}, errs.New(errs.KindInternal, "Attach identity has wrong Environment")
-		}
-		attachResources[index] = composeidentity.Resource{ID: attach.ID, Name: attach.Name}
-	}
-	result.Attaches, err = carryOwnedIdentities(attachResources, previous.Attaches, revisionID, nil, nil)
+	result.Attaches, err = carryOwnedIdentities(attaches, previous.Attaches, revisionID, nil, nil)
 	if err != nil {
 		return projectionrecord.EnvironmentOwnedIdentities{}, err
 	}
-	componentResources := make([]composeidentity.Resource, len(components))
-	for index, component := range components {
-		if component.Desired.Owner != core.ComponentOwnerEnvironment ||
-			component.Desired.OwnerID != environmentID {
-			return projectionrecord.EnvironmentOwnedIdentities{}, errs.New(errs.KindInternal, "Component identity has wrong Environment")
-		}
-		componentResources[index] = composeidentity.Resource{
-			ID: component.Desired.ID, Name: string(component.Desired.Kind),
-		}
-	}
-	result.Components, err = carryOwnedIdentities(componentResources, previous.Components, revisionID, nil, nil)
+	result.Components, err = carryOwnedIdentities(components, previous.Components, revisionID, nil, nil)
 	if err != nil {
 		return projectionrecord.EnvironmentOwnedIdentities{}, err
 	}
-	scriptResources := make([]composeidentity.Resource, len(scripts))
-	for index, script := range scripts {
-		if script.EnvironmentID != environmentID {
-			return projectionrecord.EnvironmentOwnedIdentities{}, errs.New(errs.KindInternal, "Script identity has wrong Environment")
-		}
-		name, keyErr := scriptrecord.BlueprintAuthoringKey(script)
-		if keyErr != nil {
-			return projectionrecord.EnvironmentOwnedIdentities{}, keyErr
-		}
-		scriptResources[index] = composeidentity.Resource{ID: script.Desired.ID, Name: name}
-	}
-	result.Scripts, err = carryOwnedIdentities(scriptResources, previous.Scripts, revisionID, nil, nil)
+	result.Scripts, err = carryOwnedIdentities(scripts, previous.Scripts, revisionID, nil, nil)
 	if err != nil {
 		return projectionrecord.EnvironmentOwnedIdentities{}, err
 	}

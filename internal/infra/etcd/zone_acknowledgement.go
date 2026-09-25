@@ -139,20 +139,35 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	if err != nil {
 		return nil, nil, err
 	}
+	identityPublication, err := prepareEnvironmentDesiredIdentityPublication(
+		ctx,
+		repository.store,
+		intent.CandidateProjection,
+		intent.Claim.SourceKind,
+		intent.DesiredHeadRevision,
+		readRevision,
+	)
+	if err != nil {
+		clear(publication.publishedDescriptor)
+		return nil, nil, err
+	}
 	headValue, err := idempotencyrecord.EncodeTaskReference(intent.Claim.RevisionID)
 	if err != nil {
 		clear(publication.publishedDescriptor)
+		identityPublication.clear()
 		return nil, nil, err
 	}
 	projectionValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(intent.CandidateProjection)
 	if err != nil {
 		clear(publication.publishedDescriptor)
+		identityPublication.clear()
 		clear(headValue)
 		return nil, nil, err
 	}
 	nextPool, err := pool.Release(zone)
 	if err != nil {
 		clear(publication.publishedDescriptor)
+		identityPublication.clear()
 		clear(headValue)
 		clear(projectionValue)
 		return nil, nil, err
@@ -166,15 +181,19 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		etcdstore.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		etcdstore.Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	)
+	conditions = append(conditions, identityPublication.conditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
-		{Type: etcdstore.MutationPut, Key: keys[4], Value: headValue},
-		{Type: etcdstore.MutationPut, Key: keys[5], Value: projectionValue},
-		{Type: etcdstore.MutationDelete, Key: keys[3]},
-		{Type: etcdstore.MutationDelete, Key: keys[0]},
-		{Type: etcdstore.MutationDelete, Key: keys[6]},
 	}
+	mutations = append(mutations, identityPublication.mutations...)
+	mutations = append(mutations,
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[4], Value: headValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[5], Value: projectionValue},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[3]},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[6]},
+	)
 	if state.Values[2] != nil {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[2]})
 	}

@@ -187,6 +187,7 @@ func (service *Service) applyBlueprintOnce(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
+	desiredInput.Input.ServiceExtensions = cloneEnvironmentBlueprintServiceExtensions(serviceExtensions)
 	desiredServices, err := taskplanning.ProjectServiceProjection(
 		parsed.Project,
 		changes.Current,

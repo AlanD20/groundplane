@@ -215,6 +215,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		ctx,
 		repository.store,
 		projection,
+		claim.SourceKind,
 		expectedHeadRevision,
 		fence.ReadRevision(),
 	)

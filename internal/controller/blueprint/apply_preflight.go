@@ -13,6 +13,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"sort"
 )
@@ -31,6 +32,7 @@ type applyPreflight struct {
 }
 
 type applyPreflightSource struct {
+	authored           bool
 	environment        etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	project            etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	tenant             etcdstore.Versioned[hierarchyrecord.TenantRecord]
@@ -51,6 +53,7 @@ func (service *Service) prepareApplyPreflight(
 ) (applyPreflight, error) {
 	projection := baseline.previousProjection.Record
 	return service.prepareApplyPreflightFromSource(ctx, environmentID, bundle, applyPreflightSource{
+		authored:    true,
 		environment: baseline.environment, project: baseline.project, tenant: baseline.tenant,
 		previousFiles: projection.RuntimeFiles, previousVolumes: projection.Volumes,
 		previousExtensions: projection.ServiceExtensions, previous: baseline.previous,
@@ -126,11 +129,14 @@ func (service *Service) prepareApplyPreflightFromSource(
 	if err != nil {
 		return applyPreflight{}, err
 	}
-	preflightServices, err := service.listBlueprintServices(ctx, environmentID)
-	if err != nil {
-		return applyPreflight{}, err
+	var preflightServices []etcdstore.Versioned[servicerecord.ServiceRecord]
+	if !source.authored {
+		preflightServices, err = service.listBlueprintServices(ctx, environmentID)
+		if err != nil {
+			return applyPreflight{}, err
+		}
 	}
-	if !preserveRoutes {
+	if !preserveRoutes && !source.authored {
 		if err := service.rejectUnsupportedBlueprintOmissions(
 			ctx, environmentID, parsed, preflightServices, currentAttaches,
 		); err != nil {
@@ -175,13 +181,16 @@ func (service *Service) prepareApplyPreflightFromSource(
 			return applyPreflight{}, err
 		}
 	}
-	workloads, err := service.blueprintReleases.PreflightBlueprint(ctx, blueprintrelease.BlueprintPreflightInput{
-		EnvironmentID: environmentID, Project: parsed.Project, PriorProject: priorProject,
-		PreviousIdentities: source.previous, ServiceExtensions: preflightExtensions,
-		CurrentServices: preflightServices, AuthoredGroups: parsed.Extensions.ReleaseGroups,
-	})
-	if err != nil {
-		return applyPreflight{}, err
+	var workloads blueprintrelease.WorkloadPreparation
+	if !source.authored {
+		workloads, err = service.blueprintReleases.PreflightBlueprint(ctx, blueprintrelease.BlueprintPreflightInput{
+			EnvironmentID: environmentID, Project: parsed.Project, PriorProject: priorProject,
+			PreviousIdentities: source.previous, ServiceExtensions: preflightExtensions,
+			CurrentServices: preflightServices, AuthoredGroups: parsed.Extensions.ReleaseGroups,
+		})
+		if err != nil {
+			return applyPreflight{}, err
+		}
 	}
 
 	return applyPreflight{

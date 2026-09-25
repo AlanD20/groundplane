@@ -174,20 +174,38 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err
 	}
+	identityPublication, err := prepareEnvironmentDesiredIdentityPublication(
+		ctx,
+		repository.store,
+		intent.CandidateProjection,
+		intent.Claim.SourceKind,
+		intent.ExpectedHeadRevision,
+		revision,
+	)
+	if err != nil {
+		clear(publication.publishedDescriptor)
+		clearRouteTaskChange(change)
+		return routeTaskChange{}, err
+	}
 	headReference, err := idempotencyrecord.EncodeTaskReference(intent.Claim.RevisionID)
 	if err != nil {
 		clear(publication.publishedDescriptor)
+		identityPublication.clear()
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err
 	}
 	candidateValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(intent.CandidateProjection)
 	if err != nil {
 		clear(publication.publishedDescriptor)
+		identityPublication.clear()
 		clear(headReference)
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err
 	}
 	change.values = append(change.values, publication.publishedDescriptor, headReference, candidateValue)
+	for _, mutation := range identityPublication.mutations {
+		change.values = append(change.values, mutation.Value)
+	}
 	change.conditions = append(
 		change.conditions,
 		etcdstore.Condition{
@@ -197,6 +215,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		etcdstore.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		etcdstore.Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	)
+	change.conditions = append(change.conditions, identityPublication.conditions...)
 	change.mutations = append(
 		change.mutations,
 		etcdstore.Mutation{
@@ -205,6 +224,10 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 			Value: publication.publishedDescriptor,
 		},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
+	)
+	change.mutations = append(change.mutations, identityPublication.mutations...)
+	change.mutations = append(
+		change.mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[2], Value: headReference},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[3], Value: candidateValue},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
