@@ -140,6 +140,12 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	if err := service.validateAuthoredExistingAttaches(
+		ctx, environmentID, claim.TaskID, parsed.Extensions.Attachments,
+		desiredServices, preflight.currentAttaches,
+	); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	currentEntries, err := service.listBlueprintEntries(ctx, environmentID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
