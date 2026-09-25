@@ -17,7 +17,8 @@ func ValidateEnvironmentBlueprintStageClaim(claim EnvironmentBlueprintStageClaim
 	if ids.Validate(ids.KindTask, "task_"+claim.DescriptorID) != nil ||
 		ids.Validate(ids.KindEnvironment, claim.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, claim.RevisionID) != nil || ids.Validate(ids.KindTask, claim.TaskID) != nil ||
-		claim.BaselineHeadRevision < 0 || claim.RenderGeneration == 0 || claim.ProjectionSchema == 0 ||
+		claim.BaselineHeadRevision < 0 || claim.RenderGeneration == 0 ||
+		claim.ProjectionSchema != EnvironmentDesiredInputSchema ||
 		!ValidBlueprintRecordTime(claim.CreatedAt) || idempotencyrecord.ValidateProtectedIntent(claim.Intent) != nil {
 		return errs.New(errs.KindValidationFailed, "Blueprint staging claim is invalid")
 	}

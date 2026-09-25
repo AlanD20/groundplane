@@ -72,5 +72,10 @@ func (repository *TaskRepository) CompleteBlueprintParent(
 			"Blueprint parent has unfinished desired units",
 		)
 	}
+	if requested, err := repository.BlueprintParentAbortRequested(ctx, taskID); err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
+	} else if requested {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent abort was requested")
+	}
 	return repository.terminalizeBlueprintParent(ctx, snapshot, taskID, taskjournal.TaskStatusCompleted, at)
 }

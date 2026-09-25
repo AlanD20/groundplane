@@ -11,8 +11,9 @@ func BuildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 	if err := ValidateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return EnvironmentBlueprintStreams{}, err
 	}
-	if request.Projection.EnvironmentID != claim.EnvironmentID ||
-		request.Projection.RevisionID != claim.RevisionID || zeroDigest(request.DependencyDigest) {
+	if request.DesiredInput.EnvironmentID != claim.EnvironmentID ||
+		request.DesiredInput.RevisionID != claim.RevisionID ||
+		request.DesiredInput.RenderGeneration != claim.RenderGeneration || zeroDigest(request.DependencyDigest) {
 		return EnvironmentBlueprintStreams{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint staging input does not match its claim",
@@ -44,7 +45,7 @@ func BuildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 			return EnvironmentBlueprintStreams{}, err
 		}
 	}
-	projection, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(request.Projection)
+	projection, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(request.DesiredInput)
 	if err != nil {
 		clear(audit)
 		return EnvironmentBlueprintStreams{}, err
@@ -54,15 +55,18 @@ func BuildEnvironmentBlueprintStreams(request EnvironmentBlueprintStageRequest) 
 		clear(projection)
 		return EnvironmentBlueprintStreams{}, errs.New(
 			errs.KindValidationFailed,
-			"Blueprint normalized projection exceeds the 2 MiB ceiling",
+			"Blueprint normalized desired input exceeds the 2 MiB ceiling",
 		)
 	}
 	auditDigest := sha256.Sum256(audit)
 	projectionDigest := sha256.Sum256(projection)
-	projectionResources := len(request.Projection.DesiredZones) + len(request.Projection.DesiredServices) +
-		len(request.Projection.DesiredRoutes) + len(request.Projection.Volumes) +
-		len(request.Projection.VolumeMounts) + len(request.Projection.Components) +
-		len(request.Projection.Entries)
+	input := request.DesiredInput.Input
+	projectionResources := len(input.RuntimeFiles) + len(input.ServiceExtensions) + len(input.Requires) +
+		len(input.Attachments) + len(input.Entries) + len(input.Routes) + len(input.Scripts) +
+		len(input.Components) + len(input.ReleaseGroups)
+	if input.Backup != nil {
+		projectionResources++
+	}
 	descriptor := EnvironmentBlueprintStageDescriptor{
 		Claim: claim, State: EnvironmentBlueprintStageOpen, Bound: true,
 		AuditChunks: ChunkCount32(len(audit)), AuditBytes: uint64(len(audit)), AuditSHA256: auditDigest,

@@ -18,6 +18,18 @@ func EnvironmentBlueprintRootKey(environmentID string, revisionID string) string
 	return EnvironmentBlueprintRevisionPrefixFinal(environmentID, revisionID) + "root"
 }
 
+// EnvironmentBlueprintEffectiveProjectionKey addresses the immutable runtime
+// projection compiled for one exact desired revision after all required facts
+// exist. The Environment desired head remains the only selector; this record is
+// derived execution input and never a second desired-state pointer.
+func EnvironmentBlueprintEffectiveProjectionKey(environmentID string, revisionID string) string {
+	return EnvironmentBlueprintRevisionPrefixFinal(environmentID, revisionID) + "effective-projection"
+}
+
+func EnvironmentBlueprintOwnedIdentitiesKey(environmentID string, revisionID string) string {
+	return EnvironmentBlueprintRevisionPrefixFinal(environmentID, revisionID) + "owned-identities"
+}
+
 func EnvironmentBlueprintChunkKeyFor(environmentID, revisionID string, family uint8, index uint32) string {
 	familyName := "audit"
 	if family == EnvironmentBlueprintChunkProjection {

@@ -110,13 +110,24 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	previousRevisionID := ""
+	if hasHead {
+		previousRevisionID = head.Record.RevisionID
+	}
+	desiredInput, err := controllerrevision.DeriveCurrentMutationDesiredInput(
+		ctx, service.repository, environment.Record.ID, previousRevisionID, candidate,
+		environment.Record.NetworkPool, func(*core.BlueprintDesiredInput) error { return nil },
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	audit := &blueprints.EnvironmentServiceMutationAudit{
 		Action: action, BaseRevisionID: projection.Record.RevisionID,
 		ServiceID: record.Desired.ID, Request: &request,
 	}
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim, Mutation: &blueprints.EnvironmentDesiredMutationAudit{Service: audit},
-		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
+		DesiredInput: desiredInput, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -165,7 +176,7 @@ func (service *serviceMutationService) claimServiceDesiredRevision(
 			CandidateTaskID: candidateRevisionID, Locator: locator, Intent: evidence.durable,
 			BaselineHeadRevision: expectedHeadRevision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
 			RenderGeneration: projection.RenderGeneration,
-			ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
+			ProjectionSchema: blueprints.EnvironmentDesiredInputSchema, CreatedAt: createdAt,
 		},
 	)
 	if err != nil {
@@ -186,7 +197,7 @@ func (service *serviceMutationService) claimServiceDesiredRevision(
 		claim.Locator != locator || claim.BaselineHeadRevision != expectedHeadRevision ||
 		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		claim.RenderGeneration != projection.RenderGeneration ||
-		claim.ProjectionSchema != blueprints.EnvironmentDesiredProjectionSchema {
+		claim.ProjectionSchema != blueprints.EnvironmentDesiredInputSchema {
 		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindStateConflict,
 			"Service staged baseline changed",

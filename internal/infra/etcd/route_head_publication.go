@@ -1,9 +1,11 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -71,19 +73,23 @@ func prepareRouteHeadPublication(
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
+	desiredInput, err := routeHeadDesiredInput(ctx, store, current, candidate, expectedHeadRevision)
+	if err != nil {
+		return routeHeadPublication{}, err
+	}
 	claim := blueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID:  strings.TrimPrefix(task.ID, string(ids.KindTask)+"_"),
 		EnvironmentID: candidate.EnvironmentID, RevisionID: task.ID, TaskID: task.ID,
 		Locator: marker.Locator, Intent: marker.Intent,
 		BaselineHeadRevision: expectedHeadRevision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema,
+		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: blueprints.EnvironmentDesiredInputSchema,
 		CreatedAt: task.CreatedAt,
 	}
 	if err := blueprints.ValidateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return routeHeadPublication{}, err
 	}
 	streams, err := blueprints.BuildEnvironmentBlueprintStreams(blueprints.EnvironmentBlueprintStageRequest{
-		Claim: claim, Mutation: &audit, Projection: candidate, DependencyDigest: digest,
+		Claim: claim, Mutation: &audit, DesiredInput: desiredInput, DependencyDigest: digest,
 	})
 	if err != nil {
 		return routeHeadPublication{}, err
@@ -163,6 +169,78 @@ func prepareRouteHeadPublication(
 	publication.mutations = append(publication.mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID), Value: rootValue,
 	})
+	effectiveValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(candidate)
+	if err != nil {
+		clearRouteHeadPublication(publication)
+		return routeHeadPublication{}, err
+	}
+	effectiveKey := blueprints.EnvironmentBlueprintEffectiveProjectionKey(claim.EnvironmentID, claim.RevisionID)
+	publication.values = append(publication.values, effectiveValue)
+	publication.conditions = append(publication.conditions, etcdstore.Condition{Key: effectiveKey})
+	publication.mutations = append(publication.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: effectiveKey, Value: effectiveValue,
+	})
+	ownedIdentities, err := projectionrecord.OwnedIdentitiesFromProjection(candidate)
+	if err != nil {
+		clearRouteHeadPublication(publication)
+		return routeHeadPublication{}, err
+	}
+	if expectedHeadRevision != 0 {
+		previous, found, readErr := blueprints.ReadCurrentOwnedIdentities(
+			ctx, store, candidate.EnvironmentID, expectedHeadRevision,
+		)
+		if readErr != nil {
+			clearRouteHeadPublication(publication)
+			return routeHeadPublication{}, readErr
+		}
+		if !found || previous.Revision != expectedHeadRevision {
+			clearRouteHeadPublication(publication)
+			return routeHeadPublication{}, errs.New(
+				errs.KindStateConflict, "Route desired identity predecessor changed",
+			)
+		}
+		ownedIdentities, err = projectionrecord.RetainOwnedIdentityBirths(ownedIdentities, previous.Record)
+		if err != nil {
+			clearRouteHeadPublication(publication)
+			return routeHeadPublication{}, err
+		}
+	}
+	identityValue, err := projectionrecord.EncodeEnvironmentOwnedIdentities(ownedIdentities)
+	if err != nil {
+		clearRouteHeadPublication(publication)
+		return routeHeadPublication{}, err
+	}
+	identityKey := blueprints.EnvironmentBlueprintOwnedIdentitiesKey(claim.EnvironmentID, claim.RevisionID)
+	publication.values = append(publication.values, identityValue)
+	publication.conditions = append(publication.conditions, etcdstore.Condition{Key: identityKey})
+	publication.mutations = append(publication.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: identityKey, Value: identityValue,
+	})
+	newbornTargets := newbornBlueprintUnitTargets(ownedIdentities, claim.RevisionID)
+	if !publishHead && len(newbornTargets) != 0 {
+		clearRouteHeadPublication(publication)
+		return routeHeadPublication{}, errs.New(
+			errs.KindValidationFailed,
+			"Route removal candidate cannot introduce desired resource identities",
+		)
+	}
+	if publishHead {
+		initialAbsence, prepareErr := blueprintunits.PrepareInitialAbsencePublication(
+			claim.EnvironmentID,
+			claim.RevisionID,
+			newbornTargets,
+		)
+		if prepareErr != nil {
+			clearRouteHeadPublication(publication)
+			return routeHeadPublication{}, prepareErr
+		}
+		absenceMutations := initialAbsence.Mutations()
+		publication.conditions = append(publication.conditions, initialAbsence.Conditions()...)
+		publication.mutations = append(publication.mutations, absenceMutations...)
+		for _, mutation := range absenceMutations {
+			publication.values = append(publication.values, mutation.Value)
+		}
+	}
 	if publishHead {
 		reference, referenceErr := idempotencyrecord.EncodeTaskReference(task.ID)
 		if referenceErr != nil {
@@ -243,12 +321,18 @@ func prepareRouteHeadCandidate(
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
+	desiredInput, err := routeHeadDesiredInput(
+		ctx, store, intent.CurrentProjection, candidate, intent.CurrentProjectionRevision,
+	)
+	if err != nil {
+		return routeHeadPublication{}, err
+	}
 	audit := blueprints.EnvironmentDesiredMutationAudit{Route: &blueprints.EnvironmentRouteMutationAudit{
 		Action: blueprints.EnvironmentRouteMutationRemove, BaseRevisionID: intent.CurrentProjection.RevisionID,
 		RouteID: intent.RouteID,
 	}}
 	streams, err := blueprints.BuildEnvironmentBlueprintStreams(blueprints.EnvironmentBlueprintStageRequest{
-		Claim: descriptor.Claim, Mutation: &audit, Projection: candidate, DependencyDigest: digest,
+		Claim: descriptor.Claim, Mutation: &audit, DesiredInput: desiredInput, DependencyDigest: digest,
 	})
 	if err != nil {
 		return routeHeadPublication{}, err
@@ -268,6 +352,16 @@ func prepareRouteHeadCandidate(
 		) || currentRevisionID != intent.CurrentProjection.RevisionID {
 		return routeHeadPublication{}, errs.New(errs.KindStateConflict, "Route desired staging evidence changed")
 	}
+	identityRevision, err := validateRouteRemovalCandidateIdentities(
+		ctx,
+		store,
+		intent,
+		candidate,
+		revision,
+	)
+	if err != nil {
+		return routeHeadPublication{}, err
+	}
 	published := descriptor
 	published.State = blueprints.EnvironmentBlueprintStagePublished
 	published.UpdatedAt = blueprints.NextBlueprintProgressTime(descriptor.UpdatedAt)
@@ -286,6 +380,13 @@ func prepareRouteHeadCandidate(
 			{Key: rootKey, ModRevision: state.Values[1].ModRevision},
 			{Key: headKey, ModRevision: state.Values[2].ModRevision},
 			{Key: removalrecord.EnvironmentLockKey(intent.EnvironmentID)},
+			{
+				Key: blueprints.EnvironmentBlueprintOwnedIdentitiesKey(
+					intent.EnvironmentID,
+					candidate.RevisionID,
+				),
+				ModRevision: identityRevision,
+			},
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: descriptorKey, Value: descriptorValue},
@@ -293,6 +394,68 @@ func prepareRouteHeadCandidate(
 		},
 		values: [][]byte{descriptorValue, reference},
 	}, nil
+}
+
+func validateRouteRemovalCandidateIdentities(
+	ctx context.Context,
+	store hierarchyStore,
+	intent environmentchanges.RouteRemovalIntent,
+	candidate projectionrecord.EnvironmentComposeProjection,
+	revision int64,
+) (int64, error) {
+	previous, found, err := blueprints.ReadCurrentOwnedIdentities(
+		ctx,
+		store,
+		intent.EnvironmentID,
+		revision,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if !found || previous.Revision != intent.CurrentProjectionRevision {
+		return 0, errs.New(errs.KindStateConflict, "Route removal identity predecessor changed")
+	}
+	expected, err := projectionrecord.OwnedIdentitiesFromProjection(candidate)
+	if err != nil {
+		return 0, err
+	}
+	expected, err = projectionrecord.RetainOwnedIdentityBirths(expected, previous.Record)
+	if err != nil {
+		return 0, err
+	}
+	if len(newbornBlueprintUnitTargets(expected, candidate.RevisionID)) != 0 {
+		return 0, errs.New(
+			errs.KindValidationFailed,
+			"Route removal candidate cannot introduce desired resource identities",
+		)
+	}
+	stored, found, err := blueprints.ReadOwnedIdentitiesRevision(
+		ctx,
+		store,
+		intent.EnvironmentID,
+		candidate.RevisionID,
+		revision,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if !found {
+		return 0, errs.New(errs.KindStateConflict, "Route removal desired identities are unavailable")
+	}
+	expectedValue, err := projectionrecord.EncodeEnvironmentOwnedIdentities(expected)
+	if err != nil {
+		return 0, err
+	}
+	defer clear(expectedValue)
+	storedValue, err := projectionrecord.EncodeEnvironmentOwnedIdentities(stored.Record)
+	if err != nil {
+		return 0, err
+	}
+	defer clear(storedValue)
+	if !bytes.Equal(expectedValue, storedValue) {
+		return 0, errs.New(errs.KindStateConflict, "Route removal desired identities changed")
+	}
+	return stored.Revision, nil
 }
 
 func validateCompletedRouteHeadReplay(
@@ -368,6 +531,15 @@ func validateCompletedRouteHeadReplay(
 	}
 	defer clear(encoded)
 	projectionDigest := sha256.Sum256(encoded)
+	desired, desiredFound, err := blueprints.ReadCurrentDesiredInput(ctx, store, environmentID, revision)
+	if err != nil || !desiredFound {
+		return errs.New(errs.KindStateConflict, "Route removal desired input is unavailable")
+	}
+	desiredBytes, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(desired.Record)
+	if err != nil {
+		return err
+	}
+	defer clear(desiredBytes)
 	dependencyDigest, err := blueprints.EnvironmentBlueprintDependencyDigest(projection)
 	if err != nil {
 		return err
@@ -381,7 +553,9 @@ func validateCompletedRouteHeadReplay(
 			descriptor,
 		) || headRevisionID != candidateRevisionID ||
 		selected.Revision != state.Values[2].ModRevision || projection.EnvironmentID != environmentID || projection.RevisionID != candidateRevisionID ||
-		uint64(len(encoded)) != descriptor.ProjectionBytes || projectionDigest != descriptor.ProjectionSHA256 ||
+		uint64(len(desiredBytes)) != descriptor.ProjectionBytes ||
+		sha256.Sum256(desiredBytes) != descriptor.ProjectionSHA256 ||
+		projectionDigest != descriptor.DependencyDigest ||
 		dependencyDigest != descriptor.DependencyDigest {
 		return errs.New(errs.KindStateConflict, "Route removal completed replay candidate changed")
 	}

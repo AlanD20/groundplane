@@ -52,6 +52,10 @@ type ReadRepository interface {
 
 type MutationRepository interface {
 	ReadRepository
+	GetEnvironmentDesiredInput(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
 	PublishEnvironmentVolumeRemovalWithTask(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],

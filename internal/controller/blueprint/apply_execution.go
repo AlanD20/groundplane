@@ -119,6 +119,16 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	operatorInput, err := blueprintparser.BuildDesiredInput(parsed, normalizedCompose, runtimeFiles)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	desiredInput, err := projectionrecord.NewEnvironmentDesiredInput(
+		environmentID, claim.RevisionID, generation, operatorInput,
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	volumeSlugs, err := environmentBlueprintVolumeSlugs(
 		parsed.Project,
 		previousProjection.Record,
@@ -453,7 +463,7 @@ func (service *Service) applyBlueprintOnce(
 	defer backupPreparation.Clear()
 	projection.Backup = backup
 	stagedPublication, err := desiredrevision.Stage(ctx, service.repository, desiredrevision.StageInput{
-		Claim: claim, Blueprint: revision, Projection: projection,
+		Claim: claim, Blueprint: revision, DesiredInput: desiredInput, Projection: projection,
 	})
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

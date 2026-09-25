@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -26,6 +27,18 @@ type store interface {
 }
 
 type Repository struct{ store store }
+
+func (repository *Repository) GetEnvironmentDesiredInput(
+	ctx context.Context, environmentID string,
+) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error) {
+	return blueprints.ReadCurrentDesiredInput(ctx, repository.store, environmentID, 0)
+}
+
+func (repository *Repository) GetEnvironmentDesiredInputRevision(
+	ctx context.Context, environmentID, revisionID string,
+) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error) {
+	return blueprints.ReadDesiredInputRevision(ctx, repository.store, environmentID, revisionID, 0)
+}
 
 func NewRepository(backend etcdstore.Store) (*Repository, error) { return newRepository(backend) }
 func newRepository(backend store) (*Repository, error) {

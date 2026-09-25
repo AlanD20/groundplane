@@ -462,40 +462,20 @@ func loadScriptExecutionDesiredProjection(
 	if selectedRevisionID == "" {
 		selectedRevisionID = headRevisionID
 	}
-	rootValue, err := scriptexecutions.ScriptExecutionValueAt(
-		ctx, store, blueprints.EnvironmentBlueprintRootKey(environmentID, selectedRevisionID), revision,
+	selected, found, err := blueprints.ReadEffectiveProjectionRevisionAt(
+		ctx, store, environmentID, selectedRevisionID, revision,
 	)
 	if err != nil {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, err
 	}
-	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(rootValue.Value)
-	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != selectedRevisionID {
-		return etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{},
-			projectionrecord.CorruptEnvironmentComposeProjection()
-	}
-	keys := make([]string, int(seal.ProjectionChunks))
-	for index := range keys {
-		keys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(
-			environmentID, selectedRevisionID, blueprints.EnvironmentBlueprintChunkProjection, uint32(index),
-		)
-	}
-	stream, readRevision, err := blueprints.ReadStreamAtRevision(ctx, store, seal, "projection", keys, revision)
-	if err != nil {
-		return etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, err
-	}
-	defer clear(stream)
-	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(stream)
-	if err != nil || readRevision != revision || projection.EnvironmentID != environmentID ||
-		projection.RevisionID != selectedRevisionID {
+	if !found || selected.ReadRevision != revision || selected.Record.EnvironmentID != environmentID ||
+		selected.Record.RevisionID != selectedRevisionID {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{},
 			projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	head := etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{
 		Record:   blueprints.EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: headRevisionID},
 		Revision: headValue.ModRevision, ReadRevision: revision,
-	}
-	selected := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
-		Record: projection, Revision: rootValue.ModRevision, ReadRevision: revision,
 	}
 	return head, selected, nil
 }

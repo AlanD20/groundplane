@@ -141,23 +141,17 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal staged revision changed")
 	}
-	chunkKeys := make([]string, seal.ProjectionChunks)
-	for index := range chunkKeys {
-		chunkKeys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(intent.EnvironmentID, desired.RevisionID,
-			blueprints.EnvironmentBlueprintChunkProjection, uint32(index))
-	}
-	projectionValue, _, err := blueprints.ReadStreamAtRevision(ctx, repository.store,
-		seal,
-		"projection",
-		chunkKeys,
-		revision,
+	selected, found, err := blueprints.ReadEffectiveProjectionRevisionAt(
+		ctx, repository.store, intent.EnvironmentID, desired.RevisionID, revision,
 	)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	defer clear(projectionValue)
-	candidate, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(projectionValue)
-	if err != nil || candidate.EnvironmentID != intent.EnvironmentID || candidate.RevisionID != desired.RevisionID ||
+	if !found {
+		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal effective projection is unavailable")
+	}
+	candidate := selected.Record
+	if candidate.EnvironmentID != intent.EnvironmentID || candidate.RevisionID != desired.RevisionID ||
 		candidate.RenderGeneration != desired.RenderGeneration {
 		return routeTaskChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 	}

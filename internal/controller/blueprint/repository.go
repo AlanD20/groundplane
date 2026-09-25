@@ -42,6 +42,24 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentDesiredInput(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
+	GetEnvironmentDesiredInputRevision(
+		context.Context,
+		string,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
+	GetEnvironmentOwnedIdentities(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities], bool, error)
+	GetEnvironmentOwnedIdentitiesRevision(
+		context.Context,
+		string,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities], bool, error)
 	FindEnvironmentVolume(
 		context.Context,
 		string,
@@ -79,6 +97,10 @@ type environmentBlueprintRepository interface {
 		blueprints.EnvironmentBlueprintStageRequest,
 	) (blueprints.EnvironmentBlueprintSeal, error)
 	AbandonEnvironmentBlueprintStage(context.Context, blueprints.EnvironmentBlueprintStageClaim) error
+	PublishEnvironmentBlueprintAuthoredRevision(
+		context.Context,
+		etcd.BlueprintAuthoredPublication,
+	) (etcd.IdempotencyTransactionResult, error)
 	PublishEnvironmentBlueprintDesiredRevision(
 		context.Context,
 		netip.Prefix,
@@ -177,6 +199,11 @@ func (repository *durableRepository) BlueprintEntryValueGenerationExists(
 	value, found, err := repository.values.GetPlain(ctx, record.Entry.ID, record.CurrentValueGenerationID)
 	defer clear(value.Content)
 	return found && value.EnvironmentID == record.EnvironmentID, err
+}
+func (repository *durableRepository) GetEnvironmentDesiredInput(
+	ctx context.Context, environmentID string,
+) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error) {
+	return repository.desired.GetEnvironmentDesiredInput(ctx, environmentID)
 }
 func (repository *durableRepository) CreateBlueprintEntryValueGeneration(
 	ctx context.Context,

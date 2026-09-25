@@ -21,6 +21,21 @@ type Record struct {
 	CurrentValueGenerationID string        `json:"current_value_generation_id"`
 }
 
+// BlueprintIdentityKey is the stable authored label for an Entry, including
+// direct Entries that have not yet been claimed by a Blueprint Apply.
+func BlueprintIdentityKey(record Record) string {
+	if record.BlueprintKey != "" {
+		return record.BlueprintKey
+	}
+	if record.Entry.Kind == core.EntryKindEnv {
+		return record.Entry.Key
+	}
+	if record.Entry.Kind == core.EntryKindFile && record.Entry.Path != "" {
+		return "file:" + record.Entry.Path
+	}
+	return ""
+}
+
 func NewRecord(
 	environmentID string,
 	entry core.EnvEntry,

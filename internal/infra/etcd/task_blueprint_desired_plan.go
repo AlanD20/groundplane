@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -64,6 +65,12 @@ func (repository *TaskRepository) PublishBlueprintDesiredPlan(
 			errs.KindStateConflict, "Blueprint parent claim changed",
 		)
 	}
+	desiredRevisionID := parent.Params[blueprints.EnvironmentDesiredRevisionParam]
+	if ids.Validate(ids.KindTask, desiredRevisionID) != nil {
+		return keyvalue.Versioned[blueprintunits.DesiredPlan]{}, errs.New(
+			errs.KindStateConflict, "Blueprint parent desired revision is invalid",
+		)
+	}
 	encoded, err := blueprintunits.EncodeDesiredPlan(desired)
 	if err != nil {
 		return keyvalue.Versioned[blueprintunits.DesiredPlan]{}, err
@@ -77,6 +84,11 @@ func (repository *TaskRepository) PublishBlueprintDesiredPlan(
 		matched := bytes.Equal(current, encoded)
 		clear(current)
 		if matched {
+			if !blueprintDesiredPlanHasAuthority(snapshot, desired) {
+				return keyvalue.Versioned[blueprintunits.DesiredPlan]{}, errs.New(
+					errs.KindStateConflict, "Blueprint desired plan lacks initial absence authority",
+				)
+			}
 			return *snapshot.Desired, nil
 		}
 	}
@@ -88,6 +100,7 @@ func (repository *TaskRepository) PublishBlueprintDesiredPlan(
 	conditions := append(plan.Conditions(),
 		keyvalue.Condition{Key: parentKey, ModRevision: read.Values[0].ModRevision},
 		keyvalue.Condition{Key: claimKey, ModRevision: read.Values[1].ModRevision},
+		keyvalue.Condition{Key: taskjournal.BlueprintParentAbortKey(parentID)},
 	)
 	result, err := repository.store.Transact(ctx, conditions, plan.Mutations())
 	keyvalue.ClearValues(result.FailureReads)
@@ -102,4 +115,19 @@ func (repository *TaskRepository) PublishBlueprintDesiredPlan(
 	return keyvalue.Versioned[blueprintunits.DesiredPlan]{
 		Record: desired, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
+}
+
+func blueprintDesiredPlanHasAuthority(
+	snapshot blueprintunits.Snapshot, desired blueprintunits.DesiredPlan,
+) bool {
+	applied := make(map[blueprintunits.ResourceKey]bool, len(snapshot.Applied))
+	for _, versioned := range snapshot.Applied {
+		applied[versioned.Record.Target] = true
+	}
+	for _, unit := range desired.Units {
+		if !applied[unit.Target] {
+			return false
+		}
+	}
+	return true
 }

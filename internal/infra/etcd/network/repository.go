@@ -78,6 +78,17 @@ func (repository *Repository) StageEnvironmentBlueprintRevision(
 	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
 }
 
+func (repository *Repository) GetEnvironmentDesiredInput(
+	ctx context.Context, environmentID string,
+) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error) {
+	if repository.desired == nil {
+		return etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput]{}, false, errs.New(
+			errs.KindInternal, "Network desired revision persistence is not configured",
+		)
+	}
+	return repository.desired.GetEnvironmentDesiredInput(ctx, environmentID)
+}
+
 func (repository *Repository) PublishEnvironmentZoneDesiredRevisionDirect(
 	ctx context.Context,
 	input etcd.EnvironmentZoneDesiredPublication,

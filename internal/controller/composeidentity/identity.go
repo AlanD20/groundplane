@@ -64,7 +64,7 @@ func ReconcileOwned(
 	if err != nil {
 		return Changes{}, err
 	}
-	volumeNames, err := ownedVolumeNames(project)
+	volumeNames, err := OwnedVolumeNames(project)
 	if err != nil {
 		return Changes{}, err
 	}
@@ -139,7 +139,7 @@ func OwnedNetworkNames(project *composetypes.Project) ([]string, error) {
 	return names, nil
 }
 
-func ownedVolumeNames(project *composetypes.Project) ([]string, error) {
+func OwnedVolumeNames(project *composetypes.Project) ([]string, error) {
 	names := make([]string, 0, len(project.Volumes))
 	for name, volume := range project.Volumes {
 		if volume.External {

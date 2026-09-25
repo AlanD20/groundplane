@@ -25,12 +25,20 @@ func environmentBlueprintVolumeSlugs(
 	previous projectionrecord.EnvironmentComposeProjection,
 	hasPrevious bool,
 ) (map[string]string, error) {
+	return environmentBlueprintVolumeSlugsFromVolumes(project, previous.Volumes, hasPrevious)
+}
+
+func environmentBlueprintVolumeSlugsFromVolumes(
+	project *composetypes.Project,
+	previous []projectionrecord.EnvironmentVolumeIdentity,
+	hasPrevious bool,
+) (map[string]string, error) {
 	if project == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Compose project is missing")
 	}
-	previousByKey := make(map[string]string, len(previous.Volumes))
+	previousByKey := make(map[string]string, len(previous))
 	if hasPrevious {
-		for _, volume := range previous.Volumes {
+		for _, volume := range previous {
 			previousByKey[volume.Key] = volume.Slug
 		}
 	}

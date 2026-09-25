@@ -77,28 +77,8 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			return IdempotencyTransactionResult{}, err
 		}
 	}
-	task = cloneTaskRecord(task)
-	publicTask = cloneTaskRecord(publicTask)
-	if runtime == nil {
-		if task.IdempotencyKey == "" {
-			task.IdempotencyKey = marker.Locator.Key
-		}
-		task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-		publicTask = task
-	} else {
-		if publicTask.IdempotencyKey == "" {
-			publicTask.IdempotencyKey = marker.Locator.Key
-		}
-		publicTask.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-		if task.IdempotencyKey == "" {
-			task.IdempotencyKey = runtime.childMarker.Locator.Key
-		}
-		task.idempotencyMarker = cloneIdempotencyLocator(&runtime.childMarker.Locator)
-	}
-	if err := ValidateTaskRecord(task); err != nil {
-		return IdempotencyTransactionResult{}, err
-	}
-	if err := ValidateTaskRecord(publicTask); err != nil {
+	task, publicTask, err := prepareEnvironmentDesiredTaskIdentities(task, marker, runtime)
+	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
@@ -231,6 +211,17 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(publication.publishedDescriptor)
+	identityPublication, err := prepareEnvironmentDesiredIdentityPublication(
+		ctx,
+		repository.store,
+		projection,
+		expectedHeadRevision,
+		fence.ReadRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer identityPublication.clear()
 
 	// Only Apply or an explicit file writer acknowledges configuration. Sharing
 	// desired publication does not grant a metadata/Volume Task file authority.
@@ -353,6 +344,9 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		},
 	}
 	zonePoolConditionIndex := len(conditions) - 1
+	identityConditionOffset := len(conditions)
+	conditions = append(conditions, identityPublication.conditions...)
+	mutations = append(mutations, identityPublication.mutations...)
 	poolRegistryConditionIndex := -1
 	if poolChange.Changed() {
 		poolRegistryConditionIndex = len(conditions)
@@ -404,6 +398,11 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		for _, index := range []int{0, 1, 3} {
 			if values[index] != nil {
 				return errs.New(errs.KindInternal, "Environment desired publication collided with durable Task state")
+			}
+		}
+		for index := identityConditionOffset; index < identityConditionOffset+len(identityPublication.conditions); index++ {
+			if values[index] != nil {
+				return errs.New(errs.KindInternal, "Environment desired publication collided with identity authority")
 			}
 		}
 		for _, index := range []int{4, 5, 6} {

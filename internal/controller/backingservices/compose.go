@@ -59,6 +59,25 @@ func backingComposeProject(
 	return project
 }
 
+// backingDesiredComposeProject excludes runtime-owned aliases and generated
+// Environment file paths from the immutable operator input. Those are derived
+// again when the backing workload is rendered.
+func backingDesiredComposeProject(
+	spec adapters.CreationSpec,
+	zone core.Zone,
+	volume *core.Volume,
+	environment hierarchyrecord.EnvironmentRecord,
+) *composetypes.Project {
+	project := backingComposeProject(spec, "", zone, volume, environment)
+	service := project.Services[spec.ServiceName]
+	service.EnvFiles = nil
+	if network := service.Networks[zone.Name]; network != nil {
+		network.Aliases = nil
+	}
+	project.Services[spec.ServiceName] = service
+	return project
+}
+
 // Compiled adapter commands are runtime shell inputs, never Compose template
 // inputs. Escape once at this serialization boundary without changing the spec.
 func backingComposeShell(command []string) []string {

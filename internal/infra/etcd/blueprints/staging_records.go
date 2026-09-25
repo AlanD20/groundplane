@@ -36,7 +36,7 @@ type EnvironmentBlueprintSourceKind uint8
 const (
 	EnvironmentBlueprintSourceApply EnvironmentBlueprintSourceKind = iota + 1
 	EnvironmentBlueprintSourceMutation
-	EnvironmentDesiredProjectionSchema uint16 = 1
+	EnvironmentDesiredInputSchema uint16 = 2
 )
 
 type EnvironmentBlueprintStageState uint8
@@ -104,7 +104,7 @@ type EnvironmentBlueprintStageRequest struct {
 	Claim            EnvironmentBlueprintStageClaim
 	Blueprint        *EnvironmentBlueprintRevision
 	Mutation         *EnvironmentDesiredMutationAudit
-	Projection       projectionrecord.EnvironmentComposeProjection
+	DesiredInput     projectionrecord.EnvironmentDesiredInput
 	DependencyDigest [sha256.Size]byte
 }
 

@@ -35,6 +35,9 @@ func PrepareDesiredPlan(snapshot Snapshot, next DesiredPlan) (MutationPlan, erro
 		}
 		currentRevision = current.Revision
 	}
+	if err := validateInitialAbsenceAuthority(snapshot, next); err != nil {
+		return MutationPlan{}, err
+	}
 	epochValue, err := EncodeEpoch(EpochRecord{
 		EnvironmentID: snapshot.EnvironmentID, Sequence: snapshot.Epoch.Sequence + 1,
 	})
@@ -46,7 +49,7 @@ func PrepareDesiredPlan(snapshot Snapshot, next DesiredPlan) (MutationPlan, erro
 		clear(epochValue)
 		return MutationPlan{}, err
 	}
-	return MutationPlan{
+	plan := MutationPlan{
 		conditions: []etcdstore.Condition{
 			{Key: blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID), ModRevision: snapshot.HeadRevision},
 			{Key: EpochKey(snapshot.EnvironmentID), ModRevision: snapshot.EpochRevision},
@@ -56,5 +59,6 @@ func PrepareDesiredPlan(snapshot Snapshot, next DesiredPlan) (MutationPlan, erro
 			{Type: etcdstore.MutationPut, Key: EpochKey(snapshot.EnvironmentID), Value: epochValue},
 			{Type: etcdstore.MutationPut, Key: DesiredPlanKey(snapshot.EnvironmentID), Value: desiredValue},
 		},
-	}, nil
+	}
+	return plan, nil
 }

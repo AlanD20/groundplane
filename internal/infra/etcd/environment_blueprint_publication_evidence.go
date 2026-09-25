@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"crypto/sha256"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -27,6 +28,20 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
+	return repository.prepareEnvironmentBlueprintPublicationWithDigest(
+		ctx, claim, revision, digest, task, marker, expectedHeadRevision,
+	)
+}
+
+func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublicationWithDigest(
+	ctx context.Context,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	revision blueprints.EnvironmentDesiredRevisionIdentity,
+	digest [sha256.Size]byte,
+	task TaskRecord,
+	marker idempotencyrecord.IdempotencyMarker,
+	expectedHeadRevision int64,
+) (environmentBlueprintPublicationEvidence, error) {
 	if err := blueprints.ValidateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}

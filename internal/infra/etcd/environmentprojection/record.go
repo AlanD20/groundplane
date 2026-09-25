@@ -42,7 +42,9 @@ type ManagedComponentRuntimeSource struct {
 	ArtifactSHA256 string             `json:"source_artifact_sha256"`
 }
 
-// EnvironmentComposeProjection is the sorted durable input for one Environment render.
+// EnvironmentComposeProjection is one complete effective runtime projection.
+// It is valid only after every fact required to render its Compose artifact is
+// captured. Desired publication uses EnvironmentDesiredInput instead.
 type EnvironmentComposeProjection struct {
 	EnvironmentID                  string                                       `json:"environment_id"`
 	RevisionID                     string                                       `json:"blueprint_revision_id"`

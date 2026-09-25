@@ -137,6 +137,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	conditions := append(claim.Conditions(),
 		keyvalue.Condition{Key: parentKey, ModRevision: parentRead.Values[0].ModRevision},
 		keyvalue.Condition{Key: claimKey, ModRevision: parentRead.Values[1].ModRevision},
+		keyvalue.Condition{Key: taskjournal.BlueprintParentAbortKey(parentID)},
 		keyvalue.Condition{Key: taskjournal.TaskStorageKey(child.ID)},
 		keyvalue.Condition{Key: taskjournal.TaskOperationIndexKey(child.OperationID, child.ID)},
 		keyvalue.Condition{Key: taskjournal.TaskActiveOperationKey(child.OperationID)},

@@ -49,15 +49,15 @@ func environmentBlueprintBackupValidationTargets(
 	snapshot environmentBlueprintSnapshot,
 	parsed blueprintparser.Result,
 	currentAttaches []etcdstore.Versioned[attachrecord.Record],
-) (projectionrecord.EnvironmentComposeProjection, []etcdstore.Versioned[attachrecord.Record], error) {
-	projection := snapshot.projection.Record
-	projection.EnvironmentID = snapshot.environment.Record.ID
-	volumeSlugs, err := environmentBlueprintVolumeSlugs(parsed.Project, projection, snapshot.hasHead)
+) ([]projectionrecord.EnvironmentVolumeIdentity, []etcdstore.Versioned[attachrecord.Record], error) {
+	volumeSlugs, err := environmentBlueprintVolumeSlugsFromVolumes(
+		parsed.Project, snapshot.volumes, snapshot.hasHead,
+	)
 	if err != nil {
-		return projectionrecord.EnvironmentComposeProjection{}, nil, err
+		return nil, nil, err
 	}
-	byKey := make(map[string]projectionrecord.EnvironmentVolumeIdentity, len(projection.Volumes))
-	for _, volume := range projection.Volumes {
+	byKey := make(map[string]projectionrecord.EnvironmentVolumeIdentity, len(snapshot.volumes))
+	for _, volume := range snapshot.volumes {
 		byKey[volume.Key] = volume
 	}
 	at := snapshot.environment.Record.CreatedAt
@@ -75,9 +75,9 @@ func environmentBlueprintBackupValidationTargets(
 		volume.Slug = label
 		byKey[key] = volume
 	}
-	projection.Volumes = projection.Volumes[:0]
+	volumes := make([]projectionrecord.EnvironmentVolumeIdentity, 0, len(byKey))
 	for _, volume := range byKey {
-		projection.Volumes = append(projection.Volumes, volume)
+		volumes = append(volumes, volume)
 	}
 	attaches := append([]etcdstore.Versioned[attachrecord.Record](nil), currentAttaches...)
 	attachIDs := make(map[string]string, len(attaches)+len(parsed.Extensions.Attachments))
@@ -106,7 +106,7 @@ func environmentBlueprintBackupValidationTargets(
 			Name: name, CredentialAttachID: credentialID,
 		}})
 	}
-	return projection, attaches, nil
+	return volumes, attaches, nil
 }
 
 func (repository *durableRepository) PrepareEnvironmentBlueprintBackupPolicy(
@@ -159,7 +159,9 @@ func (service *Service) prepareEnvironmentBlueprintBackup(
 	}
 	sources := make([]blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput, len(authored.Sources))
 	for index, source := range authored.Sources {
-		targetID, err := resolveEnvironmentBlueprintBackupTarget(environmentID, source, projection, attaches.effective)
+		targetID, err := resolveEnvironmentBlueprintBackupTarget(
+			environmentID, source, projection.Volumes, attaches.effective,
+		)
 		if err != nil {
 			return nil, blueprintplanning.BlueprintBackupPolicyPreparation{}, err
 		}
@@ -209,7 +211,7 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 	environmentID string,
 	readRevision int64,
 	authored *core.BackupSpec,
-	projection projectionrecord.EnvironmentComposeProjection,
+	volumes []projectionrecord.EnvironmentVolumeIdentity,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 ) error {
 	if authored == nil {
@@ -220,7 +222,7 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 	}
 	sources := make([]blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput, len(authored.Sources))
 	for index, source := range authored.Sources {
-		targetID, err := resolveEnvironmentBlueprintBackupTarget(environmentID, source, projection, attaches)
+		targetID, err := resolveEnvironmentBlueprintBackupTarget(environmentID, source, volumes, attaches)
 		if err != nil {
 			return err
 		}
@@ -242,7 +244,7 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 func resolveEnvironmentBlueprintBackupTarget(
 	environmentID string,
 	source core.BackupSourceSpec,
-	projection projectionrecord.EnvironmentComposeProjection,
+	volumes []projectionrecord.EnvironmentVolumeIdentity,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 ) (string, error) {
 	switch source.Kind {
@@ -251,7 +253,7 @@ func resolveEnvironmentBlueprintBackupTarget(
 			return environmentID, nil
 		}
 	case core.BackupSourceVolume:
-		for _, volume := range projection.Volumes {
+		for _, volume := range volumes {
 			if volume.Slug == source.Ref {
 				return volume.ID, nil
 			}
@@ -270,64 +272,4 @@ func resolveEnvironmentBlueprintBackupTarget(
 		}
 	}
 	return "", errs.New(errs.KindValidationFailed, "Blueprint Backup source label was not found")
-}
-
-func (service *Service) environmentBlueprintAuthoringBackup(
-	ctx context.Context,
-	snapshot environmentBlueprintSnapshot,
-	attaches []etcdstore.Versioned[attachrecord.Record],
-) (*core.BackupSpec, error) {
-	if service.backups == nil {
-		return nil, nil
-	}
-	stored, err := service.backups.GetEnvironmentBlueprintBackupPolicySnapshot(
-		ctx, snapshot.environment.Record.ID, 0,
-	)
-	if err != nil || !stored.found {
-		return nil, err
-	}
-	configured := stored.policy.Frequency != "" || stored.policy.Keep != 0 ||
-		stored.policy.Encryption != "" || stored.policy.ConnectorID != "" || len(stored.sources) != 0
-	if !configured {
-		return nil, nil
-	}
-	if stored.policy.Enabled && !stored.connectorFound {
-		return nil, errs.New(errs.KindInternal, "enabled Blueprint Backup Connector is missing")
-	}
-	result := &core.BackupSpec{
-		Enabled: stored.policy.Enabled, Frequency: stored.policy.Frequency,
-		Keep: stored.policy.Keep, Encryption: stored.policy.Encryption,
-		Sources: make([]core.BackupSourceSpec, len(stored.sources)),
-	}
-	if stored.connectorFound {
-		result.Connector = stored.connectorName
-	}
-	attachNames := make(map[string]string, len(attaches))
-	for _, attach := range attaches {
-		attachNames[attach.Record.ID] = attach.Record.Name
-	}
-	volumeSlugs := make(map[string]string)
-	if snapshot.hasHead {
-		for _, volume := range snapshot.projection.Record.Volumes {
-			volumeSlugs[volume.ID] = volume.Slug
-		}
-	}
-	for index, source := range stored.sources {
-		ref := ""
-		switch source.Kind {
-		case core.BackupSourceConfig:
-			if source.TargetID != snapshot.environment.Record.ID {
-				return nil, errs.New(errs.KindInternal, "Blueprint Backup config source is corrupt")
-			}
-		case core.BackupSourceAttach:
-			ref = attachNames[source.TargetID]
-		case core.BackupSourceVolume:
-			ref = volumeSlugs[source.TargetID]
-		}
-		if source.Kind != core.BackupSourceConfig && ref == "" {
-			return nil, errs.New(errs.KindInternal, "Blueprint Backup source target is missing")
-		}
-		result.Sources[index] = core.BackupSourceSpec{Kind: source.Kind, Ref: ref}
-	}
-	return result, nil
 }

@@ -30,6 +30,10 @@ const (
 )
 
 type zoneCreationRepository interface {
+	GetEnvironmentDesiredInput(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentComposeProjection(
@@ -328,6 +332,14 @@ func (service *zoneCreationService) createZoneOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	desiredInput, err := desiredrevision.DeriveCurrentMutationDesiredInput(
+		ctx, service.repository, environment.Record.ID, projection.Record.RevisionID,
+		candidate, environment.Record.NetworkPool,
+		func(*core.BlueprintDesiredInput) error { return nil },
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
 		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Zone: &blueprints.EnvironmentZoneMutationAudit{
@@ -337,7 +349,7 @@ func (service *zoneCreationService) createZoneOnce(
 				EnvironmentID: input.EnvironmentID, Name: input.Name, Subnet: input.Subnet, Internal: input.Internal,
 			},
 		}},
-		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
+		DesiredInput: desiredInput, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

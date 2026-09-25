@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
@@ -141,19 +142,22 @@ func (service *Service) listBlueprintEntries(
 	ctx context.Context,
 	environmentID string,
 ) ([]etcdstore.Versioned[entryrecord.Record], error) {
-	entriesByID := make(map[string]etcdstore.Versioned[entryrecord.Record])
-	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
+	desired, found, err := service.repository.GetEnvironmentDesiredInput(ctx, environmentID)
 	if err != nil {
 		return nil, err
 	}
-	if found {
-		for _, record := range projection.Record.Entries {
-			entriesByID[record.Entry.ID] = etcdstore.Versioned[entryrecord.Record]{
-				Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
-			}
-		}
+	identities, hasIdentities, err := service.repository.GetEnvironmentOwnedIdentities(ctx, environmentID)
+	if err != nil {
+		return nil, err
 	}
+	if found != hasIdentities || found && (identities.Revision != desired.Revision ||
+		identities.Record.RevisionID != desired.Record.RevisionID) {
+		return nil, errs.New(errs.KindStateConflict, "Blueprint Entry identity snapshot changed")
+	}
+	entriesByID := make(map[string]etcdstore.Versioned[entryrecord.Record])
+	entriesByKey := make(map[string]string)
 	cursor := ""
+	readRevision := int64(0)
 	for {
 		page, err := service.repository.ListEntries(
 			ctx,
@@ -163,12 +167,55 @@ func (service *Service) listBlueprintEntries(
 		if err != nil {
 			return nil, err
 		}
+		if readRevision == 0 {
+			readRevision = page.Revision
+		} else if page.Revision != readRevision {
+			return nil, errs.New(errs.KindStateConflict, "Blueprint Entry snapshot changed while listing")
+		}
 		for _, item := range page.Items {
-			if _, projected := entriesByID[item.Record.Entry.ID]; !projected {
-				entriesByID[item.Record.Entry.ID] = item
+			key := entrycontroller.BlueprintKey(item.Record)
+			if key == "" {
+				return nil, errs.New(errs.KindInternal, "Environment Entry has no Blueprint identity")
 			}
+			if priorID, duplicate := entriesByKey[key]; duplicate && priorID != item.Record.Entry.ID {
+				return nil, errs.New(errs.KindStateConflict, "Blueprint Entry identity is duplicated")
+			}
+			entriesByKey[key] = item.Record.Entry.ID
+			entriesByID[item.Record.Entry.ID] = item
 		}
 		if page.NextCursor == "" {
+			current, currentFound, err := service.repository.GetEnvironmentDesiredInput(ctx, environmentID)
+			if err != nil {
+				return nil, err
+			}
+			if currentFound != found || found && (current.Revision != desired.Revision ||
+				current.Record.RevisionID != desired.Record.RevisionID) {
+				return nil, errs.New(errs.KindStateConflict, "Environment desired input changed while listing Entries")
+			}
+			currentIdentities, currentIdentitiesFound, err := service.repository.GetEnvironmentOwnedIdentities(ctx, environmentID)
+			if err != nil {
+				return nil, err
+			}
+			if currentIdentitiesFound != hasIdentities || hasIdentities &&
+				(currentIdentities.Revision != identities.Revision ||
+					currentIdentities.Record.RevisionID != identities.Record.RevisionID) {
+				return nil, errs.New(errs.KindStateConflict, "Environment Entry identities changed while listing")
+			}
+			if found {
+				authored, err := authoredEntryRecords(desired.Record, identities.Record)
+				if err != nil {
+					return nil, err
+				}
+				for _, record := range authored {
+					key := entrycontroller.BlueprintKey(record)
+					if flatID, exists := entriesByKey[key]; exists && flatID != record.Entry.ID {
+						return nil, errs.New(errs.KindStateConflict, "Blueprint Entry identity conflicts with a retained record")
+					}
+					entriesByID[record.Entry.ID] = etcdstore.Versioned[entryrecord.Record]{
+						Record: record, Revision: desired.Revision, ReadRevision: desired.ReadRevision,
+					}
+				}
+			}
 			entries := make([]etcdstore.Versioned[entryrecord.Record], 0, len(entriesByID))
 			for _, item := range entriesByID {
 				entries = append(entries, item)

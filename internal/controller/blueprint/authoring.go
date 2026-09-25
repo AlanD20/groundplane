@@ -2,21 +2,16 @@ package blueprint
 
 import (
 	"context"
-	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 
-	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
-
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
-	"github.com/AlanD20/groundplane/internal/controller/entry"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 
@@ -30,7 +25,9 @@ type environmentBlueprintSnapshot struct {
 	project     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	head        etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]
-	projection  etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
+	desired     etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput]
+	identities  etcdstore.Versioned[projectionrecord.EnvironmentOwnedIdentities]
+	volumes     []projectionrecord.EnvironmentVolumeIdentity
 	hasHead     bool
 }
 
@@ -106,7 +103,7 @@ func (service *Service) ValidateBlueprint(
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
 	if snapshot.hasHead {
-		if err := requireExplicitBlueprintVolumes(parsed.Project, snapshot.projection.Record.Volumes); err != nil {
+		if err := requireExplicitBlueprintVolumes(parsed.Project, snapshot.volumes); err != nil {
 			return apiTypes.EnvironmentBlueprintValidation{}, err
 		}
 	}
@@ -122,7 +119,7 @@ func (service *Service) ValidateBlueprint(
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
 	if parsed.Extensions.Backup != nil {
-		validationProjection, validationAttaches, err := environmentBlueprintBackupValidationTargets(
+		validationVolumes, validationAttaches, err := environmentBlueprintBackupValidationTargets(
 			snapshot, parsed, attaches,
 		)
 		if err != nil {
@@ -130,7 +127,7 @@ func (service *Service) ValidateBlueprint(
 		}
 		if err := service.validateEnvironmentBlueprintBackup(
 			ctx, environmentID, readRevision, parsed.Extensions.Backup,
-			validationProjection, validationAttaches,
+			validationVolumes, validationAttaches,
 		); err != nil {
 			return apiTypes.EnvironmentBlueprintValidation{}, err
 		}
@@ -141,7 +138,9 @@ func (service *Service) ValidateBlueprint(
 	}
 	var currentProject *composetypes.Project
 	if snapshot.hasHead {
-		currentProject, err = composerender.LoadNormalizedEnvironmentProject(ctx, snapshot.projection.Record)
+		currentProject, err = composerender.LoadNormalizedEnvironmentDesiredProject(
+			ctx, snapshot.desired.Record, snapshot.identities.Record,
+		)
 		if err != nil {
 			return apiTypes.EnvironmentBlueprintValidation{}, err
 		}
@@ -152,7 +151,6 @@ func (service *Service) ValidateBlueprint(
 			current,
 			parsed,
 			snapshot.hasHead,
-			snapshot.projection.Record,
 			currentProject,
 		),
 	}, nil
@@ -188,21 +186,41 @@ func (service *Service) loadEnvironmentBlueprintSnapshot(
 	if err != nil {
 		return environmentBlueprintSnapshot{}, err
 	}
-	projection, hasProjection, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
+	desired, hasDesired, err := service.repository.GetEnvironmentDesiredInput(ctx, environmentID)
 	if err != nil {
 		return environmentBlueprintSnapshot{}, err
 	}
-	if hasHead != hasProjection || hasHead &&
-		(head.Record.EnvironmentID != environmentID || projection.Record.EnvironmentID != environmentID ||
-			head.Record.RevisionID != projection.Record.RevisionID) {
+	identities, hasIdentities, err := service.repository.GetEnvironmentOwnedIdentities(ctx, environmentID)
+	if err != nil {
+		return environmentBlueprintSnapshot{}, err
+	}
+	if hasHead != hasDesired || hasHead != hasIdentities || hasHead &&
+		(head.Record.EnvironmentID != environmentID || head.Revision <= 0 ||
+			desired.Revision != head.Revision || identities.Revision != head.Revision ||
+			desired.Record.EnvironmentID != environmentID || identities.Record.EnvironmentID != environmentID ||
+			desired.Record.RevisionID != head.Record.RevisionID ||
+			identities.Record.RevisionID != head.Record.RevisionID ||
+			desired.Record.RenderGeneration != identities.Record.RenderGeneration) {
 		return environmentBlueprintSnapshot{}, errs.New(
-			errs.KindInternal,
-			"Environment Blueprint desired head is inconsistent",
+			errs.KindStateConflict,
+			"Environment Blueprint desired snapshot changed",
 		)
+	}
+	volumes := []projectionrecord.EnvironmentVolumeIdentity(nil)
+	if hasHead {
+		if _, err := authoredOwnedIdentitySnapshot(ctx, desired.Record, identities.Record); err != nil {
+			return environmentBlueprintSnapshot{}, err
+		}
+		volumes = make([]projectionrecord.EnvironmentVolumeIdentity, len(identities.Record.Volumes))
+		for index, identity := range identities.Record.Volumes {
+			volumes[index] = projectionrecord.EnvironmentVolumeIdentity{
+				ID: identity.ID, Key: identity.Name, Slug: identity.Slug,
+			}
+		}
 	}
 	return environmentBlueprintSnapshot{
 		tenant: tenant, project: project, environment: environment,
-		head: head, projection: projection, hasHead: hasHead,
+		head: head, desired: desired, identities: identities, volumes: volumes, hasHead: hasHead,
 	}, nil
 }
 
@@ -217,7 +235,7 @@ func environmentBlueprintRevision(
 }
 
 func (service *Service) environmentBlueprintAuthoringDocument(
-	ctx context.Context,
+	_ context.Context,
 	snapshot environmentBlueprintSnapshot,
 ) (blueprintparser.AuthoringDocument, error) {
 	input := blueprintparser.AuthoringDocument{
@@ -233,218 +251,52 @@ func (service *Service) environmentBlueprintAuthoringDocument(
 		NetworkPool: snapshot.environment.Record.NetworkPool,
 		Compose:     []byte("services: {}\n"),
 	}
-	serviceNames := make(map[string]string)
-	if snapshot.hasHead {
-		var err error
-		input.Compose, err = composerender.AuthoringComposeVolumes(
-			snapshot.projection.Record.NormalizedCompose,
-			snapshot.projection.Record.Volumes,
-			snapshot.environment.Record.VolumeDir,
-		)
-		if err != nil {
-			return blueprintparser.AuthoringDocument{}, err
-		}
-		input.Requires = environmentBlueprintAuthoringRequirements(snapshot.projection.Record)
-		for _, projected := range snapshot.projection.Record.DesiredServices {
-			if projected.EnvironmentID != snapshot.environment.Record.ID || projected.Desired.Name == "" {
-				return blueprintparser.AuthoringDocument{}, errs.New(
-					errs.KindInternal,
-					"Environment Blueprint Service projection is invalid",
-				)
-			}
-			serviceNames[projected.Desired.ID] = projected.Desired.Name
-		}
-		input.Routes, err = environmentBlueprintAuthoringRoutes(snapshot.projection.Record.DesiredRoutes, serviceNames)
-		if err != nil {
-			return blueprintparser.AuthoringDocument{}, err
-		}
-		input.Entries, err = entry.BlueprintAuthoring(snapshot.projection.Record.Entries)
-		if err != nil {
-			return blueprintparser.AuthoringDocument{}, err
-		}
-		input.Components, err = environmentBlueprintAuthoringComponents(snapshot.projection.Record.Components)
-		if err != nil {
-			return blueprintparser.AuthoringDocument{}, err
-		}
+	if !snapshot.hasHead {
+		return input, nil
 	}
-	scripts, _, err := service.listBlueprintScripts(ctx, snapshot.environment.Record.ID, service.repository)
-	if err != nil {
-		return blueprintparser.AuthoringDocument{}, err
-	}
-	input.Scripts, err = scriptdefinition.Authoring(
-		scripts,
-		snapshot.projection.Record.Volumes,
-		snapshot.projection.Record.Entries,
+	desired := core.CloneBlueprintDesiredInput(snapshot.desired.Record.Input)
+	compose, err := composerender.AuthoringComposeVolumes(
+		desired.NormalizedCompose, snapshot.volumes, snapshot.environment.Record.VolumeDir,
 	)
 	if err != nil {
 		return blueprintparser.AuthoringDocument{}, err
 	}
-	attaches, _, err := service.listBlueprintAttaches(ctx, snapshot.environment.Record.ID)
-	if err != nil {
-		return blueprintparser.AuthoringDocument{}, err
-	}
-	input.Attachments, err = service.environmentBlueprintAuthoringAttachments(ctx, attaches, serviceNames)
-	if err != nil {
-		return blueprintparser.AuthoringDocument{}, err
-	}
-	input.Backup, err = service.environmentBlueprintAuthoringBackup(ctx, snapshot, attaches)
-	if err != nil {
-		return blueprintparser.AuthoringDocument{}, err
-	}
-	input.ReleaseGroups, err = service.releaseGroups.AuthoringSpecs(
-		ctx,
-		snapshot.environment.Record.ID,
-		serviceNames,
-	)
-	if err != nil {
-		return blueprintparser.AuthoringDocument{}, err
-	}
+	input.NetworkPool = desired.NetworkPool
+	input.Compose = compose
+	input.Requires = desired.Requires
+	input.Attachments = desired.Attachments
+	input.Entries = desired.Entries
+	input.Routes = desired.Routes
+	input.Scripts = desired.Scripts
+	input.Components = desired.Components
+	input.Backup = desired.Backup
+	input.ReleaseGroups = desired.ReleaseGroups
 	return input, nil
-}
-
-func environmentBlueprintAuthoringRequirements(
-	projection projectionrecord.EnvironmentComposeProjection,
-) []core.Requirement {
-	return projection.BlueprintRequirements.Clone().Authored
-}
-
-func environmentBlueprintAuthoringRoutes(
-	routes []projectionrecord.EnvironmentRouteProjection,
-	serviceNames map[string]string,
-) ([]core.RouteSpec, error) {
-	result := make([]core.RouteSpec, len(routes))
-	for index, projected := range routes {
-		name, found := serviceNames[projected.Desired.TargetServiceID]
-		if !found {
-			return nil, errs.New(errs.KindInternal, "Environment Blueprint Route target is missing")
-		}
-		result[index] = core.RouteSpec{
-			Hostname:   projected.Desired.Host,
-			Path:       projected.Desired.Path,
-			Target:     name,
-			TargetPort: projected.Desired.TargetPort,
-			Exposure:   projected.Desired.Exposure,
-		}
-	}
-	return result, nil
-}
-
-func environmentBlueprintAuthoringComponents(
-	records []componentrecord.Record,
-) (map[string]core.ComponentSpec, error) {
-	result := make(map[string]core.ComponentSpec)
-	for _, record := range records {
-		if !record.Desired.Enabled {
-			continue
-		}
-		var capability core.ComponentCapability
-		spec := core.ComponentSpec{Implementation: record.Desired.Kind, Enabled: record.Desired.Enabled}
-		switch record.Desired.Kind {
-		case core.ComponentKindIngressCaddy:
-			capability = core.ComponentCapabilityHTTPRouter
-			if record.Desired.Config.Caddy != nil {
-				spec.Settings.ZoneIDs = append([]string(nil), record.Desired.Config.Caddy.ZoneIDs...)
-				spec.Settings.Alias = record.Desired.Config.Caddy.Alias
-				spec.ImplementationConfig.CaddyfileTemplate =
-					record.Desired.Config.Caddy.CaddyfileTemplate
-			}
-		case core.ComponentKindEdgeCloudflare:
-			capability = core.ComponentCapabilityEdgeTunnel
-			if record.Desired.Config.CloudflareTunnel != nil {
-				spec.Settings.ZoneIDs = append([]string(nil), record.Desired.Config.CloudflareTunnel.ZoneIDs...)
-				spec.Settings.SecretID = record.Desired.Config.CloudflareTunnel.SecretID
-			}
-		default:
-			return nil, errs.New(errs.KindInternal, "Environment Blueprint Component implementation is invalid")
-		}
-		if _, duplicate := result[string(capability)]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Environment Blueprint Component capability is duplicated")
-		}
-		result[string(capability)] = spec
-	}
-	return result, nil
-}
-
-func (service *Service) environmentBlueprintAuthoringAttachments(
-	ctx context.Context,
-	records []etcdstore.Versioned[attachrecord.Record],
-	serviceNames map[string]string,
-) (map[string]core.AttachmentSpec, error) {
-	names := make(map[string]string, len(records))
-	for _, versioned := range records {
-		names[versioned.Record.ID] = versioned.Record.Name
-	}
-	result := make(map[string]core.AttachmentSpec)
-	for _, versioned := range records {
-		record := versioned.Record
-		if record.Status == core.AttachDetached {
-			continue
-		}
-		serviceName, found := serviceNames[record.ServiceID]
-		if !found {
-			return nil, errs.New(errs.KindInternal, "Environment Blueprint Attach Service is missing")
-		}
-		backingProject, err := service.repository.GetProject(ctx, record.BackingProjectID)
-		if err != nil {
-			return nil, err
-		}
-		backingService, err := service.repository.GetService(ctx, record.BackingServiceID)
-		if err != nil {
-			return nil, err
-		}
-		credential := core.AttachmentCredentialSpec{Mode: "new"}
-		grants := make([]string, 0, len(record.GrantAttachIDs))
-		if !record.OwnsCredential() {
-			owner, found := names[record.CredentialAttachID]
-			if !found {
-				return nil, errs.New(errs.KindInternal, "Environment Blueprint Attach credential owner is missing")
-			}
-			credential = core.AttachmentCredentialSpec{Mode: "existing", Attach: owner}
-		} else {
-			for _, id := range record.GrantAttachIDs {
-				name, found := names[id]
-				if !found {
-					return nil, errs.New(errs.KindInternal, "Environment Blueprint Attach grant is missing")
-				}
-				grants = append(grants, name)
-			}
-			sort.Strings(grants)
-		}
-		if _, duplicate := result[record.Name]; duplicate {
-			return nil, errs.New(errs.KindInternal, "Environment Blueprint Attach name is duplicated")
-		}
-		result[record.Name] = core.AttachmentSpec{
-			BackingProject: backingProject.Record.Slug,
-			BackingService: backingService.Record.Desired.Name,
-			Service:        serviceName,
-			Credential:     credential,
-			Grants:         grants,
-		}
-	}
-	return result, nil
 }
 
 func environmentBlueprintChanges(
 	current blueprintparser.AuthoringDocument,
 	candidate blueprintparser.Result,
 	hasCurrent bool,
-	projection projectionrecord.EnvironmentComposeProjection,
 	currentProject *composetypes.Project,
 ) []apiTypes.EnvironmentBlueprintChange {
 	currentKeys := make(map[string]map[string]struct{})
 	candidateKeys := make(map[string]map[string]struct{})
 	if hasCurrent {
 		addBlueprintResourceKey(currentKeys, "compose", "root")
-		for _, service := range projection.DesiredServices {
-			addBlueprintResourceKey(currentKeys, "service", service.Desired.Name)
-		}
-		for _, zone := range projection.DesiredZones {
-			addBlueprintResourceKey(currentKeys, "zone", zone.Desired.Name)
-		}
-		for _, volume := range projection.Volumes {
-			addBlueprintResourceKey(currentKeys, "volume", volume.Key)
-		}
 		if currentProject != nil {
+			for key := range currentProject.Services {
+				addBlueprintResourceKey(currentKeys, "service", key)
+			}
+			for key := range currentProject.DisabledServices {
+				addBlueprintResourceKey(currentKeys, "service", key)
+			}
+			for key := range currentProject.Networks {
+				addBlueprintResourceKey(currentKeys, "zone", key)
+			}
+			for key := range currentProject.Volumes {
+				addBlueprintResourceKey(currentKeys, "volume", key)
+			}
 			for key := range currentProject.Configs {
 				addBlueprintResourceKey(currentKeys, "config", key)
 			}

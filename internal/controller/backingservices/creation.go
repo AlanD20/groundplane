@@ -433,7 +433,19 @@ func (service *CreationService) createBackingServiceFromStage(
 			{ServiceID: serviceID, VolumeID: volumeID, Target: spec.MountPath},
 		}
 	}
-	normalizedCompose, err := composerender.MarshalNormalizedEnvironmentProject(baseProject)
+	normalizedCompose, err := composerender.MarshalNormalizedEnvironmentProject(
+		backingDesiredComposeProject(spec, zone.Desired, volume, environment),
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	desiredInput, err := projectionrecord.NewEnvironmentDesiredInput(
+		environment.ID, claim.RevisionID, claim.RenderGeneration,
+		core.BlueprintDesiredInput{
+			NormalizedCompose: normalizedCompose,
+			NetworkPool:       environment.NetworkPool,
+		},
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -447,7 +459,7 @@ func (service *CreationService) createBackingServiceFromStage(
 	}
 	revision := desiredrevision.BlueprintRevision(environment.ID, task.ID, stage.Record.CreatedAt, bundle)
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
-		Claim: claim, Blueprint: &revision, Projection: projection,
+		Claim: claim, Blueprint: &revision, DesiredInput: desiredInput,
 		DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

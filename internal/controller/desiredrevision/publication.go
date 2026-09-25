@@ -37,6 +37,10 @@ type PublicationRepository interface {
 		blueprints.EnvironmentBlueprintStageRequest,
 	) (blueprints.EnvironmentBlueprintSeal, error)
 	AbandonEnvironmentBlueprintStage(context.Context, blueprints.EnvironmentBlueprintStageClaim) error
+	PublishEnvironmentBlueprintAuthoredRevision(
+		context.Context,
+		etcd.BlueprintAuthoredPublication,
+	) (etcd.IdempotencyTransactionResult, error)
 	PublishEnvironmentBlueprintDesiredRevision(
 		context.Context,
 		netip.Prefix,
@@ -133,7 +137,7 @@ func Claim(
 		BaselineHeadRevision: input.BaselineHeadRevision,
 		SourceKind:           input.SourceKind,
 		RenderGeneration:     input.RenderGeneration,
-		ProjectionSchema:     blueprints.EnvironmentDesiredProjectionSchema,
+		ProjectionSchema:     blueprints.EnvironmentDesiredInputSchema,
 		CreatedAt:            input.CreatedAt,
 	})
 	if err != nil {
@@ -167,7 +171,7 @@ func Claim(
 		claim.BaselineHeadRevision != input.BaselineHeadRevision ||
 		claim.RenderGeneration != input.RenderGeneration ||
 		claim.SourceKind != input.SourceKind ||
-		claim.ProjectionSchema != blueprints.EnvironmentDesiredProjectionSchema {
+		claim.ProjectionSchema != blueprints.EnvironmentDesiredInputSchema {
 		return blueprints.EnvironmentBlueprintStageClaim{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint staged baseline changed",
@@ -219,12 +223,14 @@ type stagedPublicationState struct {
 	claim      blueprints.EnvironmentBlueprintStageClaim
 	seal       blueprints.EnvironmentBlueprintSeal
 	projection projectionrecord.EnvironmentComposeProjection
+	desiredInput projectionrecord.EnvironmentDesiredInput
 }
 
 type StageInput struct {
-	Claim      blueprints.EnvironmentBlueprintStageClaim
-	Blueprint  blueprints.EnvironmentBlueprintRevision
-	Projection projectionrecord.EnvironmentComposeProjection
+	Claim        blueprints.EnvironmentBlueprintStageClaim
+	Blueprint    blueprints.EnvironmentBlueprintRevision
+	DesiredInput projectionrecord.EnvironmentDesiredInput
+	Projection   projectionrecord.EnvironmentComposeProjection
 }
 
 // TaskID returns the sole Task identity bound into this publication.
@@ -249,19 +255,27 @@ func Stage(
 			"Environment desired revision staging is not configured",
 		)
 	}
-	projectionBytes, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(input.Projection)
+	projectionBytes, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(input.DesiredInput)
 	if err != nil {
 		return StagedPublication{}, err
 	}
 	defer clear(projectionBytes)
 	projectionDigest := sha256.Sum256(projectionBytes)
-	evidence, err := PreflightProjection(input.Projection)
+	dependencyDigest := projectionDigest
+	if input.Projection.EnvironmentID != "" {
+		evidence, err := PreflightProjection(input.Projection)
+		if err != nil {
+			return StagedPublication{}, err
+		}
+		dependencyDigest = evidence.DependencyDigest
+	}
+	detachedInput, err := projectionrecord.DecodeEnvironmentDesiredInputStorage(projectionBytes)
 	if err != nil {
 		return StagedPublication{}, err
 	}
 	seal, err := repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: input.Claim, Blueprint: &input.Blueprint,
-		Projection: input.Projection, DependencyDigest: evidence.DependencyDigest,
+		DesiredInput: detachedInput, DependencyDigest: dependencyDigest,
 	})
 	if err != nil {
 		return StagedPublication{}, err
@@ -270,19 +284,17 @@ func Stage(
 		seal.SourceKind != input.Claim.SourceKind || seal.RenderGeneration != input.Claim.RenderGeneration ||
 		seal.ProjectionSchema != input.Claim.ProjectionSchema ||
 		seal.BaselineHeadRevision != input.Claim.BaselineHeadRevision ||
-		seal.DependencyDigest != evidence.DependencyDigest || seal.ProjectionBytes != uint64(len(projectionBytes)) ||
+		seal.DependencyDigest != dependencyDigest || seal.ProjectionBytes != uint64(len(projectionBytes)) ||
 		seal.ProjectionSHA256 != projectionDigest {
 		return StagedPublication{}, errs.New(
 			errs.KindInternal,
 			"Environment desired revision seal does not match its candidate",
 		)
 	}
-	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(projectionBytes)
-	if err != nil {
-		return StagedPublication{}, err
-	}
 	return StagedPublication{state: &stagedPublicationState{
-		locator: input.Claim.Locator, claim: input.Claim, seal: seal, projection: projection,
+		locator: input.Claim.Locator, claim: input.Claim, seal: seal,
+		projection: projectionrecord.CloneEnvironmentComposeProjection(input.Projection),
+		desiredInput: detachedInput,
 	}}, nil
 }
 
@@ -326,11 +338,10 @@ func (publication StagedPublication) consume(
 		return claim, projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	defer clear(encoded)
-	if uint64(len(encoded)) != publication.state.seal.ProjectionBytes ||
-		sha256.Sum256(encoded) != publication.state.seal.ProjectionSHA256 {
+	if sha256.Sum256(encoded) != publication.state.seal.DependencyDigest {
 		return claim, projectionrecord.EnvironmentComposeProjection{}, errs.New(
 			errs.KindInternal,
-			"Environment desired staged projection changed after sealing",
+			"Environment desired runtime projection changed after staging",
 		)
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(encoded)

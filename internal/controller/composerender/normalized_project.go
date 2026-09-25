@@ -26,6 +26,32 @@ func LoadNormalizedEnvironmentProject(
 	return loadNormalizedEnvironmentProject(ctx, projection)
 }
 
+// LoadNormalizedEnvironmentDesiredProject reads the authored Compose document
+// while its runtime artifact may still be pending. The immutable identity
+// record supplies only the owned names needed to remove generated metadata.
+func LoadNormalizedEnvironmentDesiredProject(
+	ctx context.Context,
+	desired projectionrecord.EnvironmentDesiredInput,
+	identities projectionrecord.EnvironmentOwnedIdentities,
+) (*composetypes.Project, error) {
+	if desired.EnvironmentID != identities.EnvironmentID ||
+		desired.RevisionID != identities.RevisionID ||
+		desired.RenderGeneration != identities.RenderGeneration {
+		return nil, errs.New(errs.KindStateConflict, "Environment desired identities changed")
+	}
+	ownedNetworks := make(map[string]struct{}, len(identities.Networks))
+	for _, identity := range identities.Networks {
+		ownedNetworks[identity.Name] = struct{}{}
+	}
+	volumeSlugs := make(map[string]string, len(identities.Volumes))
+	for _, identity := range identities.Volumes {
+		volumeSlugs[identity.Name] = identity.Slug
+	}
+	return loadNormalizedEnvironmentProjectInput(
+		ctx, desired.EnvironmentID, desired.Input.NormalizedCompose, ownedNetworks, volumeSlugs,
+	)
+}
+
 // MarshalNormalizedEnvironmentProject freezes the complete authored Compose
 // topology before Components, Entries, Attaches, releases, or ownership
 // metadata add execution-only state. Profile-disabled Services are folded back
@@ -120,20 +146,40 @@ func loadNormalizedEnvironmentProject(
 	ctx context.Context,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) (*composetypes.Project, error) {
-	if len(projection.NormalizedCompose) == 0 {
+	ownedNetworks := make(map[string]struct{}, len(projection.DesiredZones))
+	for _, network := range projection.DesiredZones {
+		ownedNetworks[network.Desired.Name] = struct{}{}
+	}
+	volumeSlugs := make(map[string]string, len(projection.Volumes))
+	for _, volume := range projection.Volumes {
+		volumeSlugs[volume.Key] = volume.Slug
+	}
+	return loadNormalizedEnvironmentProjectInput(
+		ctx, projection.EnvironmentID, projection.NormalizedCompose, ownedNetworks, volumeSlugs,
+	)
+}
+
+func loadNormalizedEnvironmentProjectInput(
+	ctx context.Context,
+	environmentID string,
+	normalizedCompose []byte,
+	ownedNetworks map[string]struct{},
+	volumeSlugs map[string]string,
+) (*composetypes.Project, error) {
+	if len(normalizedCompose) == 0 {
 		return nil, errs.New(errs.KindInternal, "Environment normalized authored Compose is missing")
 	}
 	project, err := loader.LoadWithContext(ctx, composetypes.ConfigDetails{
 		WorkingDir: "/",
 		ConfigFiles: []composetypes.ConfigFile{{
-			Filename: "compose.yaml", Content: append([]byte(nil), projection.NormalizedCompose...),
+			Filename: "compose.yaml", Content: append([]byte(nil), normalizedCompose...),
 		}},
 	}, func(options *loader.Options) {
 		options.ResolvePaths = false
 		options.SkipInterpolation = true
 		options.SkipNormalization = true
 		options.SkipResolveEnvironment = true
-		options.SetProjectName("gp-"+strings.ToLower(projection.EnvironmentID), true)
+		options.SetProjectName("gp-"+strings.ToLower(environmentID), true)
 	})
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
@@ -148,10 +194,6 @@ func loadNormalizedEnvironmentProject(
 		service.Extensions = stripControllerServiceExtensions(service.Extensions)
 		project.DisabledServices[name] = service
 	}
-	ownedNetworks := make(map[string]struct{}, len(projection.DesiredZones))
-	for _, network := range projection.DesiredZones {
-		ownedNetworks[network.Desired.Name] = struct{}{}
-	}
 	for name, network := range project.Networks {
 		if _, owned := ownedNetworks[name]; owned {
 			network.Name = ""
@@ -160,12 +202,8 @@ func loadNormalizedEnvironmentProject(
 		}
 		project.Networks[name] = network
 	}
-	ownedVolumes := make(map[string]projectionrecord.EnvironmentVolumeIdentity, len(projection.Volumes))
-	for _, volume := range projection.Volumes {
-		ownedVolumes[volume.Key] = volume
-	}
 	for name, volume := range project.Volumes {
-		if identity, owned := ownedVolumes[name]; owned {
+		if volumeSlug, owned := volumeSlugs[name]; owned {
 			volume.Name = ""
 			volume.Driver = ""
 			volume.DriverOpts = nil
@@ -174,7 +212,7 @@ func loadNormalizedEnvironmentProject(
 			if volume.Extensions == nil {
 				volume.Extensions = make(composetypes.Extensions)
 			}
-			volume.Extensions[ComposeVolumeSlugExtension] = identity.Slug
+			volume.Extensions[ComposeVolumeSlugExtension] = volumeSlug
 		}
 		project.Volumes[name] = volume
 	}

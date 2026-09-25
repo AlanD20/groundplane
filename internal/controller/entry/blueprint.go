@@ -66,14 +66,5 @@ func BlueprintAuthoring(
 
 // BlueprintKey returns the stable authored key used to adopt a direct Entry.
 func BlueprintKey(record entryrecord.Record) string {
-	if record.BlueprintKey != "" {
-		return record.BlueprintKey
-	}
-	if record.Entry.Kind == core.EntryKindEnv {
-		return record.Entry.Key
-	}
-	if record.Entry.Kind == core.EntryKindFile && record.Entry.Path != "" {
-		return "file:" + record.Entry.Path
-	}
-	return ""
+	return entryrecord.BlueprintIdentityKey(record)
 }

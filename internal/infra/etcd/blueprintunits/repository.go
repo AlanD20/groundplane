@@ -32,15 +32,16 @@ func NewRepository(backend Reader) (*Repository, error) {
 // Snapshot is one MVCC view of the latest head and acknowledged/unfinished
 // units. A missing epoch is valid only before the first unit mutation.
 type Snapshot struct {
-	EnvironmentID string
-	HeadTaskID    string
-	HeadRevision  int64
-	Epoch         EpochRecord
-	EpochRevision int64
-	Desired       *etcdstore.Versioned[DesiredPlan]
-	Applied       []etcdstore.Versioned[AppliedRecord]
-	Executions    []etcdstore.Versioned[ExecutionRecord]
-	ReadRevision  int64
+	EnvironmentID  string
+	HeadTaskID     string
+	HeadRevision   int64
+	Epoch          EpochRecord
+	EpochRevision  int64
+	Desired        *etcdstore.Versioned[DesiredPlan]
+	Applied        []etcdstore.Versioned[AppliedRecord]
+	Executions     []etcdstore.Versioned[ExecutionRecord]
+	ReadRevision   int64
+	initialAbsence []etcdstore.Versioned[initialAbsenceRecord]
 }
 
 func (repository *Repository) Load(ctx context.Context, environmentID string) (Snapshot, error) {
@@ -86,6 +87,9 @@ func (repository *Repository) Load(ctx context.Context, environmentID string) (S
 			Record: desired, Revision: read.Values[2].ModRevision, ReadRevision: snapshot.ReadRevision,
 		}
 	}
+	if err := repository.loadInitialAbsence(ctx, &snapshot); err != nil {
+		return Snapshot{}, err
+	}
 	for _, prefix := range []string{AppliedPrefix(environmentID), ExecutionPrefix(environmentID)} {
 		start := ""
 		for {
@@ -129,6 +133,9 @@ func (repository *Repository) Load(ctx context.Context, environmentID string) (S
 			start = page.Values[len(page.Values)-1].Key
 		}
 	}
+	if err := materializeInitialAbsence(&snapshot); err != nil {
+		return Snapshot{}, err
+	}
 	return snapshot, nil
 }
 
@@ -167,10 +174,20 @@ func PrepareMutation(
 		len(applied)+len(executions) == 0 {
 		return MutationPlan{}, invalidRecord()
 	}
+	seeded, err := seededTargets(snapshot)
+	if err != nil {
+		return MutationPlan{}, err
+	}
 	knownApplied := make(map[ResourceKey]etcdstore.Versioned[AppliedRecord], len(snapshot.Applied))
 	for _, versioned := range snapshot.Applied {
 		if versioned.Record.EnvironmentID != snapshot.EnvironmentID ||
-			validateApplied(versioned.Record) != nil || versioned.Revision <= 0 {
+			validateApplied(versioned.Record) != nil || versioned.Revision < 0 ||
+			(versioned.Revision == 0 && (!seeded[versioned.Record.Target] ||
+				versioned.Record.State != Absent || versioned.Record.SourceTaskID != "")) ||
+			(versioned.Revision > 0 && versioned.Record.SourceTaskID == "") {
+			return MutationPlan{}, invalidRecord()
+		}
+		if _, duplicate := knownApplied[versioned.Record.Target]; duplicate {
 			return MutationPlan{}, invalidRecord()
 		}
 		knownApplied[versioned.Record.Target] = versioned
@@ -208,7 +225,7 @@ func PrepareMutation(
 		current, exists := knownApplied[change.Target]
 		plan.conditions = append(plan.conditions, etcdstore.Condition{Key: key, ModRevision: current.Revision})
 		if change.Next == nil {
-			if !exists {
+			if !exists || seeded[change.Target] {
 				plan.Clear()
 				return MutationPlan{}, invalidRecord()
 			}
@@ -264,7 +281,7 @@ func validAppliedAdvance(
 	exists bool, next AppliedRecord, executions map[string]etcdstore.Versioned[ExecutionRecord],
 ) bool {
 	if next.SourceTaskID == "" {
-		return !exists && next.State == Absent
+		return false
 	}
 	execution, found := executions[next.SourcePlanID]
 	if !found || execution.Record.ParentTaskID != next.ParentTaskID ||

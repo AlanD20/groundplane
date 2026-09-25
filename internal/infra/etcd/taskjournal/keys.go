@@ -23,6 +23,7 @@ const (
 	taskAssignmentRootPrefix        = "/v1/runtime/assignments/"
 	ControllerTaskClaimPrefix       = "/v1/runtime/controller-task-claims/"
 	BlueprintParentClaimPrefix      = "/v1/runtime/blueprint-parent-claims/"
+	blueprintParentAbortPrefix      = "/v1/runtime/blueprint-parent-aborts/"
 	taskAssignmentIndexPrefix       = "/v1/indexes/tasks/assignment/"
 	TaskTimeoutIndexPrefix          = "/v1/indexes/tasks/timeout/"
 	taskRecoveryProofRequiredPrefix = "/v1/indexes/tasks/recovery-proof-required/"
@@ -110,6 +111,10 @@ func ControllerTaskClaimKey(taskID string) string {
 
 func BlueprintParentClaimKey(taskID string) string {
 	return BlueprintParentClaimPrefix + taskID
+}
+
+func BlueprintParentAbortKey(taskID string) string {
+	return blueprintParentAbortPrefix + taskID
 }
 
 func TaskExecutionClaimKey(executor TaskExecutor, agentID string, taskID string) string {

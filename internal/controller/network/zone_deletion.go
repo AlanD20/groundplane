@@ -2,13 +2,11 @@ package network
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -37,6 +35,10 @@ const (
 )
 
 type zoneDeletionRepository interface {
+	GetEnvironmentDesiredInput(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
 	GetZone(context.Context, string) (etcdstore.Versioned[zonerecord.Record], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
@@ -411,7 +413,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 			EnvironmentID: environment.Record.ID, CandidateRevisionID: candidateRevisionID,
 			CandidateTaskID: candidateRevisionID, Locator: locator, Intent: evidence.durable,
 			BaselineHeadRevision: projection.Revision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
-			RenderGeneration: candidate.RenderGeneration, ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema,
+			RenderGeneration: candidate.RenderGeneration, ProjectionSchema: blueprints.EnvironmentDesiredInputSchema,
 			CreatedAt: now,
 		},
 	)
@@ -446,7 +448,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 		claim.Locator != locator || claim.BaselineHeadRevision != projection.Revision ||
 		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
 		claim.RenderGeneration != candidate.RenderGeneration ||
-		claim.ProjectionSchema != blueprints.EnvironmentDesiredProjectionSchema {
+		claim.ProjectionSchema != blueprints.EnvironmentDesiredInputSchema {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone staged baseline changed")
 	}
 	task := etcd.TaskRecord{
@@ -498,13 +500,21 @@ func (service *zoneDeletionService) removeZoneOnce(
 			"Zone render generation exceeds Task limits",
 		)
 	}
+	desiredInput, err := controllerrevision.DeriveCurrentMutationDesiredInput(
+		ctx, service.repository, environment.Record.ID, projection.Record.RevisionID,
+		candidate, environment.Record.NetworkPool,
+		func(*core.BlueprintDesiredInput) error { return nil },
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
 		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Zone: &blueprints.EnvironmentZoneMutationAudit{
 			Action: blueprints.EnvironmentZoneMutationRemove, BaseRevisionID: projection.Record.RevisionID,
 			ZoneID: zone.Record.Desired.ID,
 		}},
-		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
+		DesiredInput: desiredInput, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -550,51 +560,4 @@ func (service *zoneDeletionService) removeZoneOnce(
 			"Zone deletion resolution is invalid",
 		)
 	}
-}
-
-func backingZoneCascadePlanHash(intent environmentchanges.ZoneRemovalIntent, impactToken string) (string, error) {
-	value, err := json.Marshal(struct {
-		Version                               int `json:"version"`
-		Type, ZoneID, ImpactToken, RevisionID string
-		RenderGeneration                      uint64 `json:"render_generation"`
-	}{Version: 2, Type: "backing_zone_cascade", ZoneID: intent.ZoneID, ImpactToken: impactToken,
-		RevisionID: intent.Claim.RevisionID, RenderGeneration: intent.CandidateProjection.RenderGeneration})
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
-	}
-	digest := sha256.Sum256(value)
-	clear(value)
-	return hex.EncodeToString(digest[:]), nil
-}
-
-func (service *zoneDeletionService) replayZoneDeletion(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	target idempotencyrecord.IdempotencyReplayTarget,
-	impactToken string,
-) (idempotencyrecord.IdempotencyResponse, error) {
-	evidence, err := service.idempotency.Prepare(ctx, locator, target.ID, impactToken)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	defer clear(evidence.durable.Ciphertext)
-	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"Zone deletion replay target is inconsistent",
-		)
-	}
-	return cloneIdempotencyResponse(resolution.Response), nil
-}
-
-func isUnknownZoneDeletionOutcome(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	kind, ok := errs.KindOf(err)
-	return ok && kind == errs.KindStorageUnavailable
 }

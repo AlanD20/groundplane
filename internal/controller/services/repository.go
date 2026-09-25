@@ -28,6 +28,10 @@ type serviceMutationRepository interface {
 		context.Context,
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentDesiredInput(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
@@ -108,6 +112,12 @@ func (repository *MutationRepository) GetEnvironmentBlueprintHead(
 	environmentID string,
 ) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error) {
 	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
+}
+
+func (repository *MutationRepository) GetEnvironmentDesiredInput(
+	ctx context.Context, environmentID string,
+) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error) {
+	return repository.desired.GetEnvironmentDesiredInput(ctx, environmentID)
 }
 
 func (repository *MutationRepository) GetService(

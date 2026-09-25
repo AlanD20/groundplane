@@ -7,6 +7,7 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -30,6 +31,10 @@ import (
 
 type entryDesiredMutationRepository interface {
 	controllerrevision.Repository
+	GetEnvironmentDesiredInput(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error)
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
@@ -310,6 +315,21 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	desiredInput, err := controllerrevision.DeriveCurrentMutationDesiredInput(
+		ctx, service.repository, request.environmentID, current.Record.RevisionID,
+		candidate, environment.Record.NetworkPool,
+		func(input *core.BlueprintDesiredInput) error {
+			entries, err := entrycontroller.BlueprintAuthoring(candidate.Entries)
+			if err != nil {
+				return err
+			}
+			input.Entries = entries
+			return nil
+		},
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	var auditRecord *entryrecord.Record
 	action := blueprints.EnvironmentEntryMutationCreate
 	if request.action == entryDesiredMutationEdit {
@@ -330,7 +350,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 			Action: action, BaseRevisionID: current.Record.RevisionID,
 			EntryID: targetEntryID, Record: auditRecord,
 		}},
-		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
+		DesiredInput: desiredInput, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

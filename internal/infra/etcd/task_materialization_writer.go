@@ -303,43 +303,29 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 		}
 		return taskMaterializationProjectionChange{}, nil
 	}
-	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(state.Values[0].Value)
-	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
-		return taskMaterializationProjectionChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
-	}
-	chunkKeys := make([]string, seal.ProjectionChunks)
-	for index := range chunkKeys {
-		chunkKeys[index] = blueprints.EnvironmentBlueprintChunkKeyFor(
-			environmentID,
-			revisionID,
-			blueprints.EnvironmentBlueprintChunkProjection,
-			uint32(index),
-		)
-	}
-	projectionValue, projectionRevision, err := blueprints.ReadStreamAtRevision(ctx, repository.store,
-		seal,
-		"projection",
-		chunkKeys,
-		readRevision,
+	selected, found, err := blueprints.ReadEffectiveProjectionRevisionAt(
+		ctx, repository.store, environmentID, revisionID, readRevision,
 	)
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
-	if projectionRevision != readRevision {
-		clear(projectionValue)
+	if !found || selected.ReadRevision != readRevision {
 		return taskMaterializationProjectionChange{}, errs.New(
-			errs.KindInternal,
-			"task desired projection read changed revision",
+			errs.KindStateConflict,
+			"task effective projection is unavailable",
 		)
 	}
-	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(projectionValue)
-	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID ||
+	projection := selected.Record
+	if projection.EnvironmentID != environmentID || projection.RevisionID != revisionID ||
 		projection.RenderGeneration != uint64(record.RenderGeneration) {
-		clear(projectionValue)
 		return taskMaterializationProjectionChange{}, errs.New(
 			errs.KindStateConflict,
 			"task desired projection identity changed",
 		)
+	}
+	projectionValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(projection)
+	if err != nil {
+		return taskMaterializationProjectionChange{}, err
 	}
 	projectionRevisionCondition := int64(0)
 	if state.Values[1] != nil {

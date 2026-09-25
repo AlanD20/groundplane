@@ -104,6 +104,17 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(publication.publishedDescriptor)
+	identityPublication, err := prepareEnvironmentDesiredIdentityPublication(
+		ctx,
+		repository.store,
+		input.Projection,
+		input.ExpectedHeadRevision,
+		fence.ReadRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer identityPublication.clear()
 	headReference, err := idempotencyrecord.EncodeTaskReference(input.Revision.RevisionID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -140,6 +151,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		conditions,
 		etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)},
 	)
+	conditions = append(conditions, identityPublication.conditions...)
 	conditions = append(conditions, referenceConditions...)
 	referenceOffset := len(conditions) - len(referenceConditions)
 	fenceOffset := len(conditions)
@@ -170,6 +182,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 			},
 		)
 	}
+	mutations = append(mutations, identityPublication.mutations...)
 	mutations = append(mutations, epochMutation)
 	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {

@@ -22,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -431,6 +432,17 @@ func (service *MutationService) mutateOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	previousRevisionID := ""
+	if hasHead {
+		previousRevisionID = head.Record.RevisionID
+	}
+	desiredInput, err := desiredrevision.DeriveCurrentMutationDesiredInput(
+		ctx, service.repository, request.environmentID, previousRevisionID, candidate,
+		environment.Record.NetworkPool, func(*core.BlueprintDesiredInput) error { return nil },
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	dependencyDigest := projectionEvidence.DependencyDigest
 	var precondition [sha256.Size]byte
 	if request.action == volumeMutationActionRemove && hasCurrent {
@@ -451,7 +463,7 @@ func (service *MutationService) mutateOnce(
 			Action: action, VolumeID: request.volumeID, Slug: request.slug, Key: request.key,
 			KeySupplied: request.keySupplied, PreconditionDigest: precondition,
 		}},
-		Projection: candidate, DependencyDigest: dependencyDigest,
+		DesiredInput: desiredInput, DependencyDigest: dependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

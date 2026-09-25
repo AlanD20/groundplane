@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	blueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -284,6 +285,21 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	desiredInput, err := controllerrevision.DeriveCurrentMutationDesiredInput(
+		ctx, service.desired.repository, input.environmentID, current.Record.RevisionID,
+		candidate, environment.Record.NetworkPool,
+		func(operatorInput *core.BlueprintDesiredInput) error {
+			entries, err := entrycontroller.BlueprintAuthoring(candidate.Entries)
+			if err != nil {
+				return err
+			}
+			operatorInput.Entries = entries
+			return nil
+		},
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	audits := make([]blueprints.EnvironmentEntryMutationAudit, len(candidateRecords.changes))
 	for index, change := range candidateRecords.changes {
 		action := blueprints.EnvironmentEntryMutationCreate
@@ -304,7 +320,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if _, err := service.desired.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim:            claim,
 		Mutation:         &blueprints.EnvironmentDesiredMutationAudit{Entries: audits},
-		Projection:       candidate,
+		DesiredInput:     desiredInput,
 		DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

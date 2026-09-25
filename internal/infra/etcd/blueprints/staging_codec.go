@@ -576,7 +576,8 @@ func DecodeEnvironmentBlueprintSeal(value []byte) (EnvironmentBlueprintSeal, err
 }
 
 func validateEnvironmentBlueprintSeal(value EnvironmentBlueprintSeal) error {
-	if value.BaselineHeadRevision < 0 || value.RenderGeneration == 0 || value.ProjectionSchema == 0 ||
+	if value.BaselineHeadRevision < 0 || value.RenderGeneration == 0 ||
+		value.ProjectionSchema != EnvironmentDesiredInputSchema ||
 		value.AuditBytes == 0 || value.AuditBytes > environmentBlueprintMaximumAuditBytes ||
 		value.ProjectionBytes == 0 || value.ProjectionBytes > projectionrecord.EnvironmentBlueprintProjectionMaxBytes ||
 		value.AuditChunks != ChunkCount32(int(value.AuditBytes)) ||

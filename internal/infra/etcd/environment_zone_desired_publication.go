@@ -97,6 +97,17 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(publication.publishedDescriptor)
+	identityPublication, err := prepareEnvironmentDesiredIdentityPublication(
+		ctx,
+		repository.store,
+		input.Projection,
+		input.ExpectedHeadRevision,
+		fence.ReadRevision(),
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer identityPublication.clear()
 	headReference, err := idempotencyrecord.EncodeTaskReference(input.Revision.RevisionID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -129,6 +140,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		conditions,
 		etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)},
 	)
+	conditions = append(conditions, identityPublication.conditions...)
 	fenceOffset := len(conditions)
 	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{
@@ -144,8 +156,9 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 			Key:   networkreservations.ZonePoolRegistryKey(input.Environment.Record.ID),
 			Value: registryValue,
 		},
-		epochMutation,
 	}
+	mutations = append(mutations, identityPublication.mutations...)
+	mutations = append(mutations, epochMutation)
 	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "direct Zone publication compare evidence is incomplete")

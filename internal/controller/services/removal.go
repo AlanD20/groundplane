@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
@@ -148,13 +149,20 @@ func (service *serviceMutationService) removeServiceOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	desiredInput, err := controllerrevision.DeriveCurrentMutationDesiredInput(
+		ctx, service.repository, environment.Record.ID, projection.Record.RevisionID, candidate,
+		environment.Record.NetworkPool, func(*core.BlueprintDesiredInput) error { return nil },
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, blueprints.EnvironmentBlueprintStageRequest{
 		Claim: claim,
 		Mutation: &blueprints.EnvironmentDesiredMutationAudit{Service: &blueprints.EnvironmentServiceMutationAudit{
 			Action: blueprints.EnvironmentServiceMutationRemove, BaseRevisionID: projection.Record.RevisionID,
 			ServiceID: serviceID,
 		}},
-		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
+		DesiredInput: desiredInput, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

@@ -109,11 +109,7 @@ func LoadBackupVolumeProjectionEvidence(
 		return BackupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	projectionDigest, _, err := blueprints.EnvironmentBlueprintProjectionEvidence(projection.Record)
-	if err != nil || projectionDigest != seal.ProjectionSHA256 {
-		return BackupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
-	}
-	dependencyDigest, err := blueprints.EnvironmentBlueprintDependencyDigest(projection.Record)
-	if err != nil || dependencyDigest != seal.DependencyDigest {
+	if err != nil || projectionDigest != seal.DependencyDigest {
 		return BackupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	identity := projectionrecord.EnvironmentVolumeIdentity{}
@@ -133,6 +129,6 @@ func LoadBackupVolumeProjectionEvidence(
 			Record: environment, Revision: headRead.Values[0].ModRevision, ReadRevision: fixedRevision,
 		},
 		Projection: projection, ProjectionRoot: rootRead.Values[0].ModRevision,
-		DependencyDigest: hex.EncodeToString(dependencyDigest[:]), Volume: identity,
+		DependencyDigest: hex.EncodeToString(projectionDigest[:]), Volume: identity,
 	}, nil
 }
