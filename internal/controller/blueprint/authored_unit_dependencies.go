@@ -53,13 +53,14 @@ func (planner *authoredUnitPlanner) targetByID(id string) blueprintunits.Resourc
 }
 
 func (planner *authoredUnitPlanner) entryReads(spec core.EntrySpec) ([]blueprintunits.ResourceKey, error) {
-	reads := make([]blueprintunits.ResourceKey, 0, len(spec.Exposure)+1)
+	reads := make([]blueprintunits.ResourceKey, 0, 1)
+	// Exposure selects immutable authored Service identities. It does not read
+	// their applied runtime: Services depend on their Entries, so adding the
+	// inverse read would deadlock an Entry when a prior Service is diverged.
 	for _, name := range planner.entryExposureNames(spec) {
-		identity, found := planner.identities[ids.KindService][name]
-		if !found {
+		if _, found := planner.identities[ids.KindService][name]; !found {
 			return nil, planner.missingInput("Entry exposure Service", name)
 		}
-		reads = append(reads, authoredResourceKey(ids.KindService, identity.ID))
 	}
 	if spec.Source.SecretRef != "" {
 		reads = append(reads, authoredResourceKey(ids.KindSecret, spec.Source.SecretRef))
