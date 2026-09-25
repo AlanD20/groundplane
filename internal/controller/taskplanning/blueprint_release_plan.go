@@ -41,11 +41,14 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	task etcd.TaskRecord,
 	input BlueprintReleasePlanInput,
 ) (etcd.TaskRecord, *agentpb.ExecutionPlan, error) {
+	serviceUnit := taskjournal.IsBlueprintChild(task.Params)
 	if resolver == nil || ctx == nil || len(input.Members) == 0 || task.Type != taskjournal.TaskUpdate ||
 		task.Params[releaserender.TaskReleasePublicationParam] == "" || len(input.ApplyStepIDs) != len(input.Members) ||
 		len(input.HealthStepIDs) != len(input.Members) || len(input.RecoveryProbeStepIDs) != len(input.Members) ||
 		len(input.RecoveryCompensateStepIDs) != len(input.Members) || len(input.PostStepIDs) != len(input.Members) ||
-		len(input.PreStepIDs) != 0 && len(input.PreStepIDs) != len(input.Members) {
+		len(input.PreStepIDs) != 0 && len(input.PreStepIDs) != len(input.Members) ||
+		serviceUnit && (len(input.Members) != 1 || len(input.ComponentSteps) != 0 ||
+			len(task.ManagedComponentTeardownSources) != 0) {
 		return etcd.TaskRecord{}, nil, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Release Task preparation is invalid",
@@ -89,23 +92,37 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	if err != nil {
 		return etcd.TaskRecord{}, nil, err
 	}
+	if serviceUnit {
+		for _, step := range steps {
+			if step.GetMaterializeFile() == nil {
+				return etcd.TaskRecord{}, nil, errs.New(
+					errs.KindValidationFailed,
+					"Blueprint Service unit prefix contains a non-Service effect",
+				)
+			}
+		}
+	}
 	prerequisite := ""
 	if len(steps) != 0 {
 		prerequisite = steps[len(steps)-1].StepId
 	}
-	task, networkSteps, err := prepareBlueprintReleaseNetworks(task, artifact, prerequisite)
-	if err != nil {
-		return etcd.TaskRecord{}, nil, err
+	if !serviceUnit {
+		var networkSteps []*agentpb.ExecutionStep
+		task, networkSteps, err = prepareBlueprintReleaseNetworks(task, artifact, prerequisite)
+		if err != nil {
+			return etcd.TaskRecord{}, nil, err
+		}
+		steps = append(steps, networkSteps...)
+		if len(steps) != 0 {
+			prerequisite = steps[len(steps)-1].StepId
+		}
+		var volumeSteps []*agentpb.ExecutionStep
+		task, volumeSteps, err = prepareBlueprintReleaseVolumes(task, artifact, prerequisite)
+		if err != nil {
+			return etcd.TaskRecord{}, nil, err
+		}
+		steps = append(steps, volumeSteps...)
 	}
-	steps = append(steps, networkSteps...)
-	if len(steps) != 0 {
-		prerequisite = steps[len(steps)-1].StepId
-	}
-	task, volumeSteps, err := prepareBlueprintReleaseVolumes(task, artifact, prerequisite)
-	if err != nil {
-		return etcd.TaskRecord{}, nil, err
-	}
-	steps = append(steps, volumeSteps...)
 	candidateServices := make([]executionplan.CandidateServiceIdentity, len(input.Members))
 	procedureMembers := make([]executionplan.CandidateReleaseMemberInput, 0, len(input.Members))
 	for index, member := range input.Members {
@@ -205,32 +222,38 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	if len(steps) != 0 {
 		managedPrerequisite = steps[len(steps)-1].StepId
 	}
-	teardown, err := resolver.BlueprintManagedComponentTeardown(
-		ctx,
-		task,
-		first.Projection,
-		artifact,
-		managedPrerequisite,
-		true,
-	)
-	if err != nil {
-		return etcd.TaskRecord{}, nil, err
-	}
-	if len(teardown.Steps) != 0 {
-		managedPrerequisite = teardown.Steps[len(teardown.Steps)-1].GetStepId()
-	}
-	managedSteps, err := BlueprintManagedServiceSteps(task, artifact, managedPrerequisite, true)
-	if err != nil {
-		return etcd.TaskRecord{}, nil, err
-	}
 	steps = append(steps, recoverySteps...)
-	steps = append(steps, teardown.Steps...)
-	steps = append(steps, managedSteps...)
-	componentSteps, err := cloneBlueprintReleaseForwardSteps(input.ComponentSteps, blueprintReleaseForwardComponent)
-	if err != nil {
-		return etcd.TaskRecord{}, nil, err
+	teardown := BlueprintManagedComponentTeardown{Artifacts: []*agentpb.ComposeArtifact{artifact}}
+	if !serviceUnit {
+		teardown, err = resolver.BlueprintManagedComponentTeardown(
+			ctx,
+			task,
+			first.Projection,
+			artifact,
+			managedPrerequisite,
+			true,
+		)
+		if err != nil {
+			return etcd.TaskRecord{}, nil, err
+		}
+		if len(teardown.Steps) != 0 {
+			managedPrerequisite = teardown.Steps[len(teardown.Steps)-1].GetStepId()
+		}
+		managedSteps, buildErr := BlueprintManagedServiceSteps(task, artifact, managedPrerequisite, true)
+		if buildErr != nil {
+			return etcd.TaskRecord{}, nil, buildErr
+		}
+		steps = append(steps, teardown.Steps...)
+		steps = append(steps, managedSteps...)
+		componentSteps, buildErr := cloneBlueprintReleaseForwardSteps(
+			input.ComponentSteps,
+			blueprintReleaseForwardComponent,
+		)
+		if buildErr != nil {
+			return etcd.TaskRecord{}, nil, buildErr
+		}
+		steps = append(steps, componentSteps...)
 	}
-	steps = append(steps, componentSteps...)
 	procedure, err := executionplan.BuildCandidateReleaseProcedure(executionplan.CandidateReleaseProcedureInput{
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, Members: procedureMembers,
 	})

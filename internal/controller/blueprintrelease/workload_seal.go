@@ -39,10 +39,20 @@ func (service *Service) Preflight(
 	if err != nil {
 		return WorkloadPreparation{}, err
 	}
+	return service.prepareSelectedWorkloads(ctx, environmentID, changes, candidates)
+}
+
+func (service *Service) prepareSelectedWorkloads(
+	ctx context.Context,
+	environmentID string,
+	changes []blueprints.EnvironmentBlueprintServiceChange,
+	candidates []blueprints.EnvironmentBlueprintServiceChange,
+) (WorkloadPreparation, error) {
 	result := WorkloadPreparation{
 		candidates:   make(map[string]domain.WorkloadSeal, len(candidates)),
 		predecessors: make(map[string]predecessorSnapshot),
 	}
+	var err error
 	result.retained, err = service.captureRetainedRuntime(ctx, environmentID, changes, candidates)
 	if err != nil {
 		return WorkloadPreparation{}, err

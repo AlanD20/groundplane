@@ -98,18 +98,33 @@ type Prepared struct {
 func (prepared Prepared) Abandon(ctx context.Context) error { return prepared.Publication.Abandon(ctx) }
 
 func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepared, error) {
+	if err := service.validatePrepareInput(ctx, input); err != nil {
+		return Prepared{}, err
+	}
+	candidates, err := selectCandidates(input.Projection, input.ServiceChanges, input.ReleaseGroups, input.Memberships)
+	if err != nil {
+		return Prepared{}, err
+	}
+	return service.prepareSelected(ctx, input, candidates)
+}
+
+func (service *Service) validatePrepareInput(ctx context.Context, input PrepareInput) error {
 	if ctx == nil || service == nil || service.ledger == nil || service.plans == nil || input.AllocateNamed == nil ||
 		input.Task.ID == "" || input.Task.OperationID == "" ||
 		ids.Validate(ids.KindTask, input.DesiredRevisionID) != nil ||
 		input.Projection.RevisionID != input.DesiredRevisionID ||
 		input.Task.Params[blueprints.EnvironmentDesiredRevisionParam] != input.DesiredRevisionID ||
 		!input.CreatedAt.Equal(input.CreatedAt.UTC()) {
-		return Prepared{}, errs.New(errs.KindValidationFailed, "Blueprint Release preparation is invalid")
+		return errs.New(errs.KindValidationFailed, "Blueprint Release preparation is invalid")
 	}
-	candidates, err := selectCandidates(input.Projection, input.ServiceChanges, input.ReleaseGroups, input.Memberships)
-	if err != nil {
-		return Prepared{}, err
-	}
+	return nil
+}
+
+func (service *Service) prepareSelected(
+	ctx context.Context,
+	input PrepareInput,
+	candidates []blueprints.EnvironmentBlueprintServiceChange,
+) (Prepared, error) {
 	task, err := service.prepareTaskConfiguration(ctx, input, len(candidates) != 0)
 	if err != nil {
 		return Prepared{}, err

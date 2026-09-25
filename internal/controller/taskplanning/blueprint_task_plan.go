@@ -61,6 +61,15 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		return nil, err
 	}
 	expectedParams := 4
+	parentID, blueprintChild := task.Params[taskjournal.TaskBlueprintParentParam]
+	if blueprintChild {
+		expectedParams++
+		if ids.Validate(ids.KindTask, parentID) != nil || parentID == task.ID ||
+			parentID != task.Params[blueprints.EnvironmentDesiredRevisionParam] ||
+			task.Actor != taskjournal.TaskActorSystem {
+			return nil, errs.New(errs.KindInternal, "durable Blueprint child parent identity is invalid")
+		}
+	}
 	resourceStepIDs, resourceParams, err := blueprintReleaseResourceStepIDs(task)
 	if err != nil {
 		return nil, err
@@ -86,6 +95,10 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
 	}
+	if blueprintChild && (!hasBlueprintReleases || len(blueprintReleases.Members) != 1 ||
+		len(resourceStepIDs) != 0 || len(managedVolumeIDs) != 0 || backingCreation.enabled || hasRequirementGate) {
+		return nil, errs.New(errs.KindInternal, "durable Blueprint Service child shape is invalid")
+	}
 	revisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Target ||
@@ -96,33 +109,42 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
-	if hasBlueprintReleases && len(resourceStepIDs) != len(pinned.artifact.Networks)+len(pinned.artifact.Volumes) ||
+	if hasBlueprintReleases && !blueprintChild && len(resourceStepIDs) != len(pinned.artifact.Networks)+len(pinned.artifact.Volumes) ||
+		hasBlueprintReleases && blueprintChild && len(resourceStepIDs) != 0 ||
 		!hasBlueprintReleases && len(resourceStepIDs) != 0 {
 		return nil, errs.New(
 			errs.KindInternal,
 			"durable Blueprint resource preparation count differs from its owned resources",
 		)
 	}
-	if hasRequirementGate != (len(pinned.requirements.Resolved) != 0) {
+	if !blueprintChild && hasRequirementGate != (len(pinned.requirements.Resolved) != 0) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint requirement marker is inconsistent")
 	}
-	managedConfigApply, hasManagedConfigApply, err := ResolveEnvironmentManagedConfigApply(
-		EnvironmentManagedConfigApplyInput{
-			RevisionID: revisionID, RenderGeneration: uint64(task.RenderGeneration), Components: pinned.components,
-			ComponentCatalog: resolver.componentCatalog,
-			Materializations: task.Materializations, Artifact: pinned.artifact,
-		},
-	)
-	if err != nil {
-		return nil, err
+	var managedConfigApply EnvironmentManagedConfigApply
+	hasManagedConfigApply := false
+	if !blueprintChild {
+		managedConfigApply, hasManagedConfigApply, err = ResolveEnvironmentManagedConfigApply(
+			EnvironmentManagedConfigApplyInput{
+				RevisionID: revisionID, RenderGeneration: uint64(task.RenderGeneration), Components: pinned.components,
+				ComponentCatalog: resolver.componentCatalog,
+				Materializations: task.Materializations, Artifact: pinned.artifact,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
-	attachCandidates, attachStepCount, err := resolver.blueprintAttachPlanCandidates(ctx, task)
-	if err != nil {
-		return nil, err
+	var attachCandidates []blueprintAttachPlanCandidate
+	attachStepCount := 0
+	if !blueprintChild {
+		attachCandidates, attachStepCount, err = resolver.blueprintAttachPlanCandidates(ctx, task)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var managedServiceSteps []*agentpb.ExecutionStep
 	managedTeardown := BlueprintManagedComponentTeardown{Artifacts: []*agentpb.ComposeArtifact{pinned.artifact}}
-	if procedure != taskcontract.BlueprintComposeProcedureFullReconcile {
+	if procedure != taskcontract.BlueprintComposeProcedureFullReconcile && !blueprintChild {
 		managedTeardown, err = resolver.BlueprintManagedComponentTeardown(
 			ctx,
 			task,
