@@ -70,6 +70,10 @@ Retry/recovery use the captured input, not the latest desired document.
 Partial failure must remain visible. Pinned configuration recovery is limited to
 files that the failed operation was authorized to replace; it is not database
 restoration or migration reversal.
+After a child fails and GP proves its effects were restored, the visible Apply
+fails. GP does not retry that child automatically; the operator submits a new
+Apply after correcting the cause. Unknown effects keep their claims and prevent
+premature completion.
 
 ## Latest-wins design: not yet available end to end
 

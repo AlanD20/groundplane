@@ -96,6 +96,15 @@ while waiting for those facts and must be sealed before successful completion.
 Reconciliation fences each expansion against the current head and planning
 epoch. A failed or superseded hook cannot be replaced with facts from another
 revision, and an empty unsealed plan is never evidence of success.
+All Service children wait for one complete Environment runtime projection while
+any Custom Attach fact needed by that projection is pending. Independent Zone
+and Volume units may proceed. This keeps Service renders on one sealed input
+instead of introducing per-Service snapshots with separate fact lifetimes.
+
+An exactly restored failed child closes the parent's publication gate and
+eventually fails the visible Apply after other children settle. The coordinator
+does not retry it automatically: a new Apply is a new operator decision. An
+operator Abort already committed before that receipt retains its Aborted result.
 
 When newer valid input makes an older unit obsolete:
 
