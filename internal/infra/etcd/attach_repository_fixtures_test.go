@@ -110,9 +110,22 @@ func seedDesiredServiceFixture(
 		if encodeErr != nil {
 			t.Fatalf("encodeTaskReference() error = %v", encodeErr)
 		}
-		mutations = append(mutations, testkeyvalue.Mutation{
-			Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headValue,
-		})
+		effectiveValue, encodeErr := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
+		if encodeErr != nil {
+			clear(headValue)
+			t.Fatalf("encodeEnvironmentComposeProjectionStorage() error = %v", encodeErr)
+		}
+		mutations = append(
+			mutations,
+			testkeyvalue.Mutation{
+				Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headValue,
+			},
+			testkeyvalue.Mutation{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testblueprints.EnvironmentBlueprintEffectiveProjectionKey(environmentID, revisionID),
+				Value: effectiveValue,
+			},
+		)
 	} else {
 		descriptor := streams.Descriptor
 		descriptor.State = testblueprints.EnvironmentBlueprintStageSealed
