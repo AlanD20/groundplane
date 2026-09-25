@@ -24,7 +24,7 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	task TaskRecord,
 	assignment taskassignments.TaskAssignmentRecord,
 	status taskjournal.TaskStatus,
-	verifiedRelease bool,
+	verifiedResult bool,
 	terminalAt time.Time,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if !taskjournal.IsBlueprintChild(task.Params) {
@@ -52,12 +52,14 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		execution.State != blueprintunits.Running && execution.State != blueprintunits.Draining {
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint child execution receipt authority changed")
 	}
-	verifiedServiceRelease := verifiedRelease && !execution.Unit.Removal &&
+	verifiedServiceRelease := verifiedResult && !execution.Unit.Removal &&
 		execution.Unit.Target.Kind == ids.KindService &&
 		task.Params[releaserender.TaskReleasePublicationParam] != ""
+	verifiedNetworkEffect := verifiedResult && blueprintNetworkChildTaskMatches(task, execution.Unit)
+	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect
 	if status != taskjournal.TaskStatusCompleted &&
 		(status != taskjournal.TaskStatusFailed && status != taskjournal.TaskStatusAborted ||
-			!verifiedServiceRelease) {
+			!verifiedEffect) {
 		if execution.State == blueprintunits.Draining {
 			return nil, nil, nil
 		}
@@ -71,26 +73,32 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		}
 		return plan.Conditions(), plan.Mutations(), nil
 	}
-	if !verifiedServiceRelease {
+	if !verifiedEffect {
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint child completion lacks unit effect proof")
 	}
-	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
-	manifestKey := releases.ReleaseManifestStagingKey(publicationID)
-	manifestRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{manifestKey}, Revision: snapshot.ReadRevision,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	if manifestRead == nil || len(manifestRead.Values) != 1 || manifestRead.Values[0] == nil {
-		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint child Release manifest is missing")
-	}
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
-		manifestRead.Values[0].Value, "release-staged-manifest",
-	)
-	if err != nil || len(manifest.Members) != 1 || manifest.OperationID != task.OperationID ||
-		manifest.Members[0].ServiceID != execution.Unit.Target.ID {
-		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint child Release does not match its unit")
+	manifestKey := ""
+	manifestRevision := int64(0)
+	if verifiedServiceRelease {
+		publicationID := task.Params[releaserender.TaskReleasePublicationParam]
+		manifestKey = releases.ReleaseManifestStagingKey(publicationID)
+		manifestRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+			Keys: []string{manifestKey}, Revision: snapshot.ReadRevision,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		if manifestRead == nil || len(manifestRead.Values) != 1 || manifestRead.Values[0] == nil {
+			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint child Release manifest is missing")
+		}
+		defer etcdstore.ClearValues(manifestRead.Values)
+		manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+			manifestRead.Values[0].Value, "release-staged-manifest",
+		)
+		if err != nil || len(manifest.Members) != 1 || manifest.OperationID != task.OperationID ||
+			manifest.Members[0].ServiceID != execution.Unit.Target.ID {
+			return nil, nil, errs.New(errs.KindStateConflict, "Blueprint child Release does not match its unit")
+		}
+		manifestRevision = manifestRead.Values[0].ModRevision
 	}
 	if assignment.ExecutionEpoch == 0 || recordcodec.ValidateID(ids.KindAssignment, assignment.AssignmentID) != nil {
 		return nil, nil, errs.New(errs.KindInternal, "Blueprint child assignment identity is invalid")
@@ -136,8 +144,9 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	if err != nil {
 		return nil, nil, err
 	}
-	conditions := append(plan.Conditions(), etcdstore.Condition{
-		Key: manifestKey, ModRevision: manifestRead.Values[0].ModRevision,
-	})
+	conditions := plan.Conditions()
+	if manifestKey != "" {
+		conditions = append(conditions, etcdstore.Condition{Key: manifestKey, ModRevision: manifestRevision})
+	}
 	return conditions, plan.Mutations(), nil
 }

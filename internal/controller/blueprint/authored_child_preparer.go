@@ -26,9 +26,17 @@ func (service *Service) Prepare(
 	unit blueprintunits.Unit,
 ) (blueprintcoordinator.PreparedChild, error) {
 	if service == nil || ctx == nil || parent.Executor != taskjournal.TaskExecutorBlueprint ||
-		parent.Status != taskjournal.TaskStatusRunning || unit.Target.Kind != ids.KindService || unit.Removal {
+		parent.Status != taskjournal.TaskStatusRunning || unit.Removal {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
-			errs.KindValidationFailed, "Blueprint Service child request is invalid",
+			errs.KindValidationFailed, "Blueprint child request is invalid",
+		)
+	}
+	if unit.Target.Kind == ids.KindNetwork {
+		return service.prepareAuthoredNetworkChild(ctx, parent, unit)
+	}
+	if unit.Target.Kind != ids.KindService {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict, "Blueprint unit has no child preparer",
 		)
 	}
 	input, err := service.loadAuthoredParentInput(ctx, parent)
@@ -98,6 +106,39 @@ func (service *Service) Prepare(
 	return blueprintcoordinator.PreparedChild{
 		Task: prepared.Task, ReleasePublication: prepared.Publication,
 	}, nil
+}
+
+func (service *Service) prepareAuthoredNetworkChild(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	unit blueprintunits.Unit,
+) (blueprintcoordinator.PreparedChild, error) {
+	if service.plans == nil || ids.Validate(ids.KindNetwork, unit.Target.ID) != nil {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindValidationFailed, "Blueprint Network child request is invalid",
+		)
+	}
+	createdAt := service.now().UTC()
+	child := etcd.TaskRecord{
+		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
+		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
+		RenderGeneration: parent.RenderGeneration, Type: taskjournal.TaskUpdate,
+		Target: unit.Target.ID,
+		Params: map[string]string{
+			blueprints.EnvironmentDesiredRevisionParam: parent.ID,
+			taskjournal.TaskBlueprintParentParam:       parent.ID,
+			taskjournal.TaskBlueprintNetworkUnitParam:  unit.Target.ID,
+		},
+		TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
+		CreatedAt: createdAt, UpdatedAt: createdAt,
+	}
+	prepared, _, err := service.plans.PrepareBlueprintNetworkUnit(ctx, child)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	return blueprintcoordinator.PreparedChild{Task: prepared}, nil
 }
 
 var _ blueprintcoordinator.ChildPreparer = (*Service)(nil)

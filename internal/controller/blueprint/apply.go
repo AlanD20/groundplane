@@ -32,6 +32,7 @@ type Service struct {
 	materials         materializationResolver
 	releaseGroups     *releasegroup.ReleaseGroupBlueprintPlanner
 	blueprintReleases *blueprintrelease.Service
+	plans             *taskplanning.TaskPlanResolver
 	entryGeneration   *entrygeneration.EntryGenerationService
 	attachFacts       *attachments.FactService
 	componentCatalog  []componentrender.EnvironmentComponentRegistration
@@ -67,12 +68,14 @@ func NewService(
 		blueprintReleases == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
-	if _, err := taskplanning.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
+	plans, err := taskplanning.NewTaskPlanResolverWithBlueprints(volumeRoot, repository, componentCatalog)
+	if err != nil {
 		return nil, err
 	}
 	return &Service{
 		volumeRoot: volumeRoot, environmentPool: parsedEnvironmentPool, repository: repository, idempotency: idempotency,
 		materials: materials, releaseGroups: releaseGroups, blueprintReleases: blueprintReleases,
+		plans:            plans,
 		entryGeneration:  entryGeneration,
 		attachFacts:      attachFacts,
 		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),

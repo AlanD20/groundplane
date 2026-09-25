@@ -13,7 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -39,14 +38,19 @@ func (repository *TaskRepository) PublishBlueprintChild(
 			"Blueprint child identity is invalid",
 		)
 	}
-	if unit.Target.Kind != ids.KindService || unit.Removal || releasePublication.IsZero() ||
-		child.Params[releaserender.TaskReleasePublicationParam] == "" {
+	releaseChild := unit.Target.Kind == ids.KindService && !unit.Removal && !releasePublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] != ""
+	networkChild := blueprintNetworkChildTaskMatches(child, unit) && releasePublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] == ""
+	if !releaseChild && !networkChild {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict, "Blueprint child has no supported effect publication",
 		)
 	}
-	if err := releasePublication.validate(child.Owner.EnvironmentID, child); err != nil {
-		return keyvalue.Versioned[TaskRecord]{}, err
+	if releaseChild {
+		if err := releasePublication.validate(child.Owner.EnvironmentID, child); err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
 	}
 	child = cloneTaskRecord(child)
 	if child.IdempotencyKey != "" && child.IdempotencyKey != child.ID {
@@ -84,72 +88,12 @@ func (repository *TaskRepository) PublishBlueprintChild(
 			"Blueprint unit is not ready for execution",
 		)
 	}
-	manifestKey := releases.ReleaseManifestStagingKey(child.Params[releaserender.TaskReleasePublicationParam])
-	manifestRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{manifestKey}, Revision: snapshot.ReadRevision,
-	})
-	if err != nil {
-		return keyvalue.Versioned[TaskRecord]{}, err
-	}
-	if manifestRead == nil || len(manifestRead.Values) != 1 || manifestRead.Values[0] == nil {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(
-			errs.KindStateConflict, "Blueprint child Release manifest is missing",
-		)
-	}
-	defer keyvalue.ClearValues(manifestRead.Values)
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
-		manifestRead.Values[0].Value, "release-staged-manifest",
-	)
-	if err != nil || manifest.PublicationID != child.Params[releaserender.TaskReleasePublicationParam] ||
-		len(manifest.Members) != 1 || manifest.OperationID != child.OperationID ||
-		manifest.Members[0].ServiceID != unit.Target.ID {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(
-			errs.KindStateConflict, "Blueprint child Release does not match its unit",
-		)
-	}
-	if !slices.Contains(releasePublication.conditions, keyvalue.Condition{
-		Key: manifestKey, ModRevision: manifestRead.Values[0].ModRevision,
-	}) {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(
-			errs.KindStateConflict, "Blueprint child Release manifest is not fenced",
-		)
-	}
-	publicationKey := releases.ReleasePublicationKey(manifest.PublicationID)
-	if !slices.Contains(releasePublication.conditions, keyvalue.Condition{Key: publicationKey}) {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(
-			errs.KindStateConflict, "Blueprint child Release publication is not fenced",
-		)
-	}
-	publicationMutations := 0
-	for _, mutation := range releasePublication.mutations {
-		if mutation.Key == manifestKey {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(
-				errs.KindStateConflict, "Blueprint child Release fragment changes its manifest",
-			)
+	if releaseChild {
+		if err := repository.validateBlueprintReleaseChildPublication(
+			ctx, child, unit, releasePublication, snapshot.ReadRevision,
+		); err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
 		}
-		if mutation.Key != publicationKey {
-			continue
-		}
-		if mutation.Type != keyvalue.MutationPut {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(
-				errs.KindStateConflict, "Blueprint child Release publication does not match its manifest",
-			)
-		}
-		marker, decodeErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
-			mutation.Value, "release-publication",
-		)
-		if decodeErr != nil || marker.PublicationID != manifest.PublicationID ||
-			marker.OperationID != child.OperationID || marker.ManifestDigest != manifest.Digest {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(
-				errs.KindStateConflict, "Blueprint child Release publication does not match its manifest",
-			)
-		}
-		publicationMutations++
-	}
-	if publicationMutations != 1 {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(
-			errs.KindStateConflict, "Blueprint child Release publication does not match its manifest",
-		)
 	}
 	parentKey := taskjournal.TaskStorageKey(parentID)
 	claimKey := taskjournal.BlueprintParentClaimKey(parentID)
@@ -300,12 +244,14 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		conditions = append(conditions, keyvalue.Condition{Key: key})
 		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(child.ID)})
 	}
-	releasePublication, err = releasePublication.withExistingComparisons(conditions)
-	if err != nil {
-		return keyvalue.Versioned[TaskRecord]{}, err
+	if releaseChild {
+		releasePublication, err = releasePublication.withExistingComparisons(conditions)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+		conditions = append(conditions, releasePublication.conditions...)
+		mutations = append(mutations, releasePublication.mutations...)
 	}
-	conditions = append(conditions, releasePublication.conditions...)
-	mutations = append(mutations, releasePublication.mutations...)
 	defer keyvalue.ClearMutationValues(mutations)
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(transaction.FailureReads)
