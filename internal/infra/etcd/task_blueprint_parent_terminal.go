@@ -113,24 +113,59 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 		{Key: blueprintunits.EpochKey(environmentID), ModRevision: snapshot.EpochRevision},
 		{Key: blueprintunits.DesiredPlanKey(environmentID), ModRevision: desiredRevision},
 	}
-	abortKey := taskjournal.BlueprintParentAbortKey(taskID)
-	abort, abortErr := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
-		Keys: []string{abortKey}, Revision: snapshot.ReadRevision,
+	stopKey := taskjournal.BlueprintParentAbortKey(taskID)
+	failureKey := blueprintParentFailureKey(taskID)
+	stop, stopErr := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+		Keys: []string{stopKey, failureKey}, Revision: snapshot.ReadRevision,
 	})
-	if abortErr != nil {
-		return keyvalue.Versioned[TaskRecord]{}, abortErr
+	if stopErr != nil {
+		return keyvalue.Versioned[TaskRecord]{}, stopErr
 	}
-	if abort == nil || len(abort.Values) != 1 {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Blueprint parent abort read is incomplete")
+	if stop == nil || len(stop.Values) != 2 {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "Blueprint parent stop read is incomplete")
 	}
-	if abort.Values[0] == nil {
-		conditions = append(conditions, keyvalue.Condition{Key: abortKey})
-	} else {
-		request, decodeErr := decodeBlueprintParentAbortRequest(abort.Values[0].Value)
-		if decodeErr != nil || request.TaskID != taskID || status != taskjournal.TaskStatusAborted {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent abort request changed")
+	defer keyvalue.ClearValues(stop.Values)
+	stopValue, failureValue := stop.Values[0], stop.Values[1]
+	if failureValue != nil {
+		failure, decodeErr := decodeBlueprintParentFailureRecord(failureValue.Value)
+		if decodeErr != nil || failure.ParentTaskID != taskID || status != taskjournal.TaskStatusFailed ||
+			stopValue == nil {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint parent failure changed",
+			)
 		}
-		conditions = append(conditions, keyvalue.Condition{Key: abortKey, ModRevision: abort.Values[0].ModRevision})
+		request, decodeErr := decodeBlueprintParentAbortRequest(stopValue.Value)
+		if decodeErr != nil || request.TaskID != taskID {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindInternal,
+				"Blueprint parent failure stop gate is corrupt",
+			)
+		}
+		conditions = append(conditions,
+			keyvalue.Condition{Key: stopKey, ModRevision: stopValue.ModRevision},
+			keyvalue.Condition{Key: failureKey, ModRevision: failureValue.ModRevision},
+		)
+	} else {
+		if status == taskjournal.TaskStatusFailed {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"Blueprint parent failure is unavailable",
+			)
+		}
+		conditions = append(conditions, keyvalue.Condition{Key: failureKey})
+		if stopValue == nil {
+			conditions = append(conditions, keyvalue.Condition{Key: stopKey})
+		} else {
+			request, decodeErr := decodeBlueprintParentAbortRequest(stopValue.Value)
+			if decodeErr != nil || request.TaskID != taskID || status != taskjournal.TaskStatusAborted {
+				return keyvalue.Versioned[TaskRecord]{}, errs.New(
+					errs.KindStateConflict,
+					"Blueprint parent abort request changed",
+				)
+			}
+			conditions = append(conditions, keyvalue.Condition{Key: stopKey, ModRevision: stopValue.ModRevision})
+		}
 	}
 	mutations := []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: taskKey, Value: terminalValue},
@@ -140,8 +175,11 @@ func (repository *TaskRepository) terminalizeBlueprintParent(
 		{Type: keyvalue.MutationPut, Key: retentionKey, Value: retentionValue},
 		{Type: keyvalue.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
 	}
-	if abort.Values[0] != nil {
-		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: abortKey})
+	if stopValue != nil {
+		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: stopKey})
+	}
+	if failureValue != nil {
+		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationDelete, Key: failureKey})
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(transaction.FailureReads)

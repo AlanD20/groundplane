@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -24,6 +25,7 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	assignment taskassignments.TaskAssignmentRecord,
 	status taskjournal.TaskStatus,
 	verifiedRelease bool,
+	terminalAt time.Time,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if !taskjournal.IsBlueprintChild(task.Params) {
 		return nil, nil, nil
@@ -50,7 +52,12 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		execution.State != blueprintunits.Running && execution.State != blueprintunits.Draining {
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint child execution receipt authority changed")
 	}
-	if status != taskjournal.TaskStatusCompleted {
+	verifiedServiceRelease := verifiedRelease && !execution.Unit.Removal &&
+		execution.Unit.Target.Kind == ids.KindService &&
+		task.Params[releaserender.TaskReleasePublicationParam] != ""
+	if status != taskjournal.TaskStatusCompleted &&
+		(status != taskjournal.TaskStatusFailed && status != taskjournal.TaskStatusAborted ||
+			!verifiedServiceRelease) {
 		if execution.State == blueprintunits.Draining {
 			return nil, nil, nil
 		}
@@ -64,8 +71,7 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		}
 		return plan.Conditions(), plan.Mutations(), nil
 	}
-	if !verifiedRelease || execution.Unit.Removal || execution.Unit.Target.Kind != ids.KindService ||
-		task.Params[releaserender.TaskReleasePublicationParam] == "" {
+	if !verifiedServiceRelease {
 		return nil, nil, errs.New(errs.KindStateConflict, "Blueprint child completion lacks unit effect proof")
 	}
 	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
@@ -88,6 +94,33 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	}
 	if assignment.ExecutionEpoch == 0 || recordcodec.ValidateID(ids.KindAssignment, assignment.AssignmentID) != nil {
 		return nil, nil, errs.New(errs.KindInternal, "Blueprint child assignment identity is invalid")
+	}
+	if status != taskjournal.TaskStatusCompleted {
+		plan, err := blueprintunits.PrepareMutation(snapshot, nil, []blueprintunits.ExecutionChange{{
+			PlanID: task.PlanID,
+		}})
+		if err != nil {
+			return nil, nil, err
+		}
+		conditions, mutations := plan.Conditions(), plan.Mutations()
+		failedParent := status == taskjournal.TaskStatusFailed ||
+			status == taskjournal.TaskStatusAborted && snapshot.HeadTaskID == execution.ParentTaskID
+		if failedParent {
+			failureConditions, failureMutations, err := repository.prepareBlueprintParentFailure(
+				ctx,
+				execution.ParentTaskID,
+				task,
+				terminalAt,
+				snapshot.ReadRevision,
+			)
+			if err != nil {
+				etcdstore.ZeroMutationBytes(mutations)
+				return nil, nil, err
+			}
+			conditions = append(conditions, failureConditions...)
+			mutations = append(mutations, failureMutations...)
+		}
+		return conditions, mutations, nil
 	}
 	applied := blueprintunits.AppliedRecord{
 		EnvironmentID: task.Owner.EnvironmentID,

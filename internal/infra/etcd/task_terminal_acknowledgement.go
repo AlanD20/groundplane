@@ -522,7 +522,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		childConditions, childMutations, err := repository.prepareBlueprintChildReceipt(
-			ctx, task, assignment, terminalStatus, blueprintCandidateChange.applies,
+			ctx, task, assignment, terminalStatus, blueprintCandidateChange.applies, terminalAt,
 		)
 		if err != nil {
 			clearPrepared()

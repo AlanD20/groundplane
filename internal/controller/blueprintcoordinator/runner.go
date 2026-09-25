@@ -14,7 +14,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const supersededAbortReason = "blueprint_superseded"
+const (
+	supersededAbortReason   = "blueprint_superseded"
+	failedParentAbortReason = "blueprint_parent_failed"
+)
 
 // Run resumes durable parent claims before claiming new work. Every effectful
 // decision is recalculated from a fresh ledger snapshot and committed through
@@ -77,6 +80,19 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 	snapshot, err := runner.ledger.Load(ctx, parent.Owner.EnvironmentID)
 	if err != nil {
 		return false, err
+	}
+	failureRequested, err := runner.tasks.BlueprintParentFailureRequested(ctx, parent.ID)
+	if err != nil {
+		return false, err
+	}
+	if failureRequested {
+		return runner.reconcileStoppingParent(
+			ctx,
+			parent,
+			snapshot,
+			taskjournal.TaskStatusFailed,
+			failedParentAbortReason,
+		)
 	}
 	abortRequested, err := runner.tasks.BlueprintParentAbortRequested(ctx, parent.ID)
 	if err != nil {
@@ -152,7 +168,7 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 		if !found || execution.State != blueprintunits.Running {
 			return planChanged, errs.New(errs.KindInternal, "running Blueprint cancellation lost its execution")
 		}
-		if err := runner.abortRunningChild(ctx, execution.TaskID); err != nil {
+		if err := runner.abortRunningChild(ctx, execution.TaskID, supersededAbortReason); err != nil {
 			if isStateRace(err) {
 				return true, nil
 			}
@@ -249,6 +265,22 @@ func (runner *Runner) reconcileAbortingParent(
 	parent etcd.TaskRecord,
 	snapshot blueprintunits.Snapshot,
 ) (bool, error) {
+	return runner.reconcileStoppingParent(
+		ctx,
+		parent,
+		snapshot,
+		taskjournal.TaskStatusAborted,
+		supersededAbortReason,
+	)
+}
+
+func (runner *Runner) reconcileStoppingParent(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	snapshot blueprintunits.Snapshot,
+	status taskjournal.TaskStatus,
+	abortReason string,
+) (bool, error) {
 	for _, execution := range snapshot.Executions {
 		if execution.Record.ParentTaskID != parent.ID || execution.Record.State != blueprintunits.Pending {
 			continue
@@ -263,7 +295,7 @@ func (runner *Runner) reconcileAbortingParent(
 		if execution.Record.ParentTaskID != parent.ID || execution.Record.State != blueprintunits.Running {
 			continue
 		}
-		if err := runner.abortRunningChild(ctx, execution.Record.TaskID); err != nil {
+		if err := runner.abortRunningChild(ctx, execution.Record.TaskID, abortReason); err != nil {
 			if isStateRace(err) {
 				return true, nil
 			}
@@ -279,19 +311,32 @@ func (runner *Runner) reconcileAbortingParent(
 			return false, nil
 		}
 	}
-	_, err := runner.tasks.AbortBlueprintParent(
-		ctx,
-		parent.Owner.EnvironmentID,
-		parent.ID,
-		runner.now().UTC(),
-	)
+	var err error
+	switch status {
+	case taskjournal.TaskStatusAborted:
+		_, err = runner.tasks.AbortBlueprintParent(
+			ctx,
+			parent.Owner.EnvironmentID,
+			parent.ID,
+			runner.now().UTC(),
+		)
+	case taskjournal.TaskStatusFailed:
+		_, err = runner.tasks.FailBlueprintParent(
+			ctx,
+			parent.Owner.EnvironmentID,
+			parent.ID,
+			runner.now().UTC(),
+		)
+	default:
+		return false, errs.New(errs.KindInternal, "Blueprint parent stop status is invalid")
+	}
 	if isWaiting(err) {
 		return false, nil
 	}
 	return err == nil, err
 }
 
-func (runner *Runner) abortRunningChild(ctx context.Context, taskID string) error {
+func (runner *Runner) abortRunningChild(ctx context.Context, taskID string, reason string) error {
 	assignment, err := runner.tasks.GetTaskAssignment(ctx, taskID)
 	if err != nil {
 		return err
@@ -328,7 +373,7 @@ func (runner *Runner) abortRunningChild(ctx context.Context, taskID string) erro
 		record.AgentGeneration,
 		record.TaskID,
 		record.AssignmentID,
-		supersededAbortReason,
+		reason,
 	); err != nil {
 		return err
 	}
