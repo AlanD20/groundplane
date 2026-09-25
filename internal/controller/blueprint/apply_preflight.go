@@ -32,8 +32,15 @@ type applyPreflight struct {
 	workloads             blueprintrelease.WorkloadPreparation
 }
 
+type applyPreflightMode uint8
+
+const (
+	legacyTaskPreflight applyPreflightMode = iota + 1
+	deferredUnitPreflight
+)
+
 type applyPreflightSource struct {
-	authored           bool
+	mode               applyPreflightMode
 	environment        etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	project            etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	tenant             etcdstore.Versioned[hierarchyrecord.TenantRecord]
@@ -54,7 +61,7 @@ func (service *Service) prepareApplyPreflight(
 ) (applyPreflight, error) {
 	projection := baseline.previousProjection.Record
 	return service.prepareApplyPreflightFromSource(ctx, environmentID, bundle, applyPreflightSource{
-		authored:    false,
+		mode:        legacyTaskPreflight,
 		environment: baseline.environment, project: baseline.project, tenant: baseline.tenant,
 		previousFiles: projection.RuntimeFiles, previousVolumes: projection.Volumes,
 		previousExtensions: projection.ServiceExtensions, previous: baseline.previous,
@@ -81,7 +88,7 @@ func (service *Service) prepareAuthoredApplyPreflight(
 		}
 	}
 	return service.prepareApplyPreflightFromSource(ctx, environmentID, bundle, applyPreflightSource{
-		authored:    true,
+		mode:        deferredUnitPreflight,
 		environment: baseline.environment, project: baseline.project, tenant: baseline.tenant,
 		previousFiles: previous.Input.RuntimeFiles, previousVolumes: volumes,
 		previousExtensions: previous.Input.ServiceExtensions, previous: baseline.previous,
@@ -99,6 +106,9 @@ func (service *Service) prepareApplyPreflightFromSource(
 	source applyPreflightSource,
 	preserveRoutes bool,
 ) (applyPreflight, error) {
+	if source.mode != legacyTaskPreflight && source.mode != deferredUnitPreflight {
+		return applyPreflight{}, errs.New(errs.KindInternal, "Blueprint Apply preflight mode is invalid")
+	}
 	environment, project, tenant := source.environment, source.project, source.tenant
 	if preserveRoutes && source.hasPrevious {
 		// Component-only edits preserve the selected native workload, including
@@ -127,7 +137,7 @@ func (service *Service) prepareApplyPreflightFromSource(
 			return applyPreflight{}, err
 		}
 	}
-	if source.authored && source.project.Record.Kind == hierarchyrecord.ProjectKindBacking {
+	if source.mode == deferredUnitPreflight && source.project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		checker, ok := service.repository.(interface {
 			BlueprintBackingZoneHasExternalAttaches(context.Context, string, string, string) (bool, error)
 		})
@@ -157,13 +167,13 @@ func (service *Service) prepareApplyPreflightFromSource(
 		return applyPreflight{}, err
 	}
 	var preflightServices []etcdstore.Versioned[servicerecord.ServiceRecord]
-	if !source.authored {
+	if source.mode == legacyTaskPreflight {
 		preflightServices, err = service.listBlueprintServices(ctx, environmentID)
 		if err != nil {
 			return applyPreflight{}, err
 		}
 	}
-	if !preserveRoutes && !source.authored {
+	if !preserveRoutes && source.mode == legacyTaskPreflight {
 		if err := service.rejectUnsupportedBlueprintOmissions(
 			ctx, environmentID, parsed, preflightServices, currentAttaches,
 		); err != nil {
@@ -209,7 +219,7 @@ func (service *Service) prepareApplyPreflightFromSource(
 		}
 	}
 	var workloads blueprintrelease.WorkloadPreparation
-	if !source.authored {
+	if source.mode == legacyTaskPreflight {
 		workloads, err = service.blueprintReleases.PreflightBlueprint(ctx, blueprintrelease.BlueprintPreflightInput{
 			EnvironmentID: environmentID, Project: parsed.Project, PriorProject: priorProject,
 			PreviousIdentities: source.previous, ServiceExtensions: preflightExtensions,
