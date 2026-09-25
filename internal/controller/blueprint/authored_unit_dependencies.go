@@ -65,6 +65,13 @@ func (planner *authoredUnitPlanner) entryReads(spec core.EntrySpec) ([]blueprint
 	if spec.Source.SecretRef != "" {
 		reads = append(reads, authoredResourceKey(ids.KindSecret, spec.Source.SecretRef))
 	}
+	if spec.Source.Fact != nil {
+		attach, found := planner.identities[ids.KindAttach][spec.Source.Fact.Attach]
+		if !found {
+			return nil, planner.missingInput("Entry fact Attach", spec.Source.Fact.Attach)
+		}
+		reads = append(reads, authoredResourceKey(ids.KindAttach, attach.ID))
+	}
 	return canonicalAuthoredUnitKeys(reads), nil
 }
 

@@ -41,7 +41,12 @@ func (service *Service) Plan(
 		}
 		runtimeReady = false
 	}
-	if !runtimeReady && requireAuthoredRuntimeProjectionInputs(input.desired, input.identities) == nil {
+	attachGenerations, err := service.loadAuthoredAttachGenerationAuthority(ctx, input, snapshot)
+	if err != nil {
+		return blueprintunits.DesiredPlan{}, err
+	}
+	defer clearAuthoredAttachGenerationAuthority(attachGenerations)
+	if !runtimeReady && requireAuthoredRuntimeProjectionInputs(input.desired, input.identities, snapshot) == nil {
 		if err := service.sealAuthoredRuntimeProjection(ctx, parent, snapshot); err != nil {
 			return blueprintunits.DesiredPlan{}, err
 		}
@@ -68,12 +73,7 @@ func (service *Service) Plan(
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
-	attachGenerations, err := service.loadAuthoredAttachGenerationAuthority(ctx, input, snapshot)
-	if err != nil {
-		return blueprintunits.DesiredPlan{}, err
-	}
-	defer clearAuthoredAttachGenerationAuthority(attachGenerations)
-	planner, err := newAuthoredUnitPlanner(ctx, input, targets, runtimeReady, attachGenerations)
+	planner, err := newAuthoredUnitPlanner(ctx, input, targets, runtimeReady, attachGenerations, snapshot)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}

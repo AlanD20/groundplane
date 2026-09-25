@@ -62,7 +62,7 @@ func (service *Service) sealAuthoredRuntimeProjection(
 	if err != nil {
 		return err
 	}
-	projection, err := compileAuthoredRuntimeProjection(ctx, parent, source)
+	projection, err := compileAuthoredRuntimeProjection(ctx, parent, source, snapshot)
 	if err != nil {
 		return err
 	}
@@ -186,9 +186,10 @@ func compileAuthoredRuntimeProjection(
 	ctx context.Context,
 	parent etcd.TaskRecord,
 	source authoredRuntimeProjectionSource,
+	unitSnapshot blueprintunits.Snapshot,
 ) (projectionrecord.EnvironmentComposeProjection, error) {
 	desired, identities := source.desired.Record, source.identities.Record
-	if err := requireAuthoredRuntimeProjectionInputs(desired, identities); err != nil {
+	if err := requireAuthoredRuntimeProjectionInputs(desired, identities, unitSnapshot); err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
 	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(ctx, desired, identities)
@@ -294,8 +295,9 @@ func compileAuthoredRuntimeProjection(
 func requireAuthoredRuntimeProjectionInputs(
 	desired projectionrecord.EnvironmentDesiredInput,
 	identities projectionrecord.EnvironmentOwnedIdentities,
+	snapshot blueprintunits.Snapshot,
 ) error {
-	if len(desired.Input.Attachments) != 0 || len(desired.Input.Components) != 0 ||
+	if len(desired.Input.Components) != 0 ||
 		desired.Input.Backup != nil || len(desired.Input.Requires) != 0 {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime projection prerequisites are pending")
 	}
@@ -304,12 +306,43 @@ func requireAuthoredRuntimeProjectionInputs(
 		!sameOwnedNames(sortedAuthoredMapKeys(desired.Input.Scripts), identities.Scripts) {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime projection desired identities changed")
 	}
-	for _, entry := range desired.Input.Entries {
-		if entry.Source.Fact != nil {
-			return errs.New(errs.KindStateConflict, "Blueprint runtime projection facts are pending")
+	for _, group := range []struct {
+		kind       ids.Kind
+		identities []projectionrecord.OwnedIdentity
+	}{
+		{ids.KindAttach, identities.Attaches},
+		{ids.KindEnvEntry, identities.Entries},
+	} {
+		for _, identity := range group.identities {
+			target := blueprintunits.ResourceKey{Kind: group.kind, ID: identity.ID}
+			if !authoredRuntimeInputApplied(snapshot, target) {
+				return errs.New(errs.KindStateConflict, "Blueprint runtime projection inputs are pending")
+			}
 		}
 	}
 	return nil
+}
+
+func authoredRuntimeInputApplied(
+	snapshot blueprintunits.Snapshot,
+	target blueprintunits.ResourceKey,
+) bool {
+	if snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID {
+		return false
+	}
+	for _, unit := range snapshot.Desired.Record.Units {
+		if unit.Target != target || unit.Removal {
+			continue
+		}
+		for _, applied := range snapshot.Applied {
+			if applied.Record.Target == target && applied.Record.State == blueprintunits.Applied &&
+				applied.Record.Fingerprint == unit.Fingerprint {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }
 
 func projectAuthoredRuntimeRoutes(

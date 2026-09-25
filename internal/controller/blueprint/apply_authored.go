@@ -154,6 +154,15 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	// A fact is resolved only after its Attach child settles. Give this Apply a
+	// fresh immutable value identity even when the Entry syntax is unchanged;
+	// reusing the preceding generation would bind the new receipt to old facts.
+	for index := range entries.Current {
+		key := entries.Current[index].BlueprintKey
+		if parsed.Extensions.Entries[key].Source.Fact != nil {
+			entries.Current[index].CurrentValueGenerationID = allocator.Named(ids.KindConfig, "entry-generation/"+key)
+		}
+	}
 	previousRoutes := make([]taskplanning.RouteIdentity, len(baseline.previousIdentities.Record.Routes))
 	for index, identity := range baseline.previousIdentities.Record.Routes {
 		host, path, ok := strings.Cut(identity.Name, "\x00")

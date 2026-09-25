@@ -15,14 +15,15 @@ import (
 )
 
 type authoredUnitPlanner struct {
-	input        authoredParentInput
-	project      *composetypes.Project
-	identities   map[ids.Kind]map[string]projectionrecord.OwnedIdentity
-	targets      map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
-	units        map[blueprintunits.ResourceKey]blueprintunits.Unit
-	blocked      map[blueprintunits.ResourceKey]bool
-	runtimeReady bool
-	attachInputs map[string]attachinputs.Generation
+	input         authoredParentInput
+	project       *composetypes.Project
+	identities    map[ids.Kind]map[string]projectionrecord.OwnedIdentity
+	targets       map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
+	units         map[blueprintunits.ResourceKey]blueprintunits.Unit
+	blocked       map[blueprintunits.ResourceKey]bool
+	runtimeReady  bool
+	attachInputs  map[string]attachinputs.Generation
+	appliedAttach map[string]blueprintunits.AppliedRecord
 }
 
 func newAuthoredUnitPlanner(
@@ -31,6 +32,7 @@ func newAuthoredUnitPlanner(
 	targets []authoredOwnedUnitTarget,
 	runtimeReady bool,
 	attachInputs map[string]attachinputs.Generation,
+	snapshot blueprintunits.Snapshot,
 ) (*authoredUnitPlanner, error) {
 	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
 		ctx,
@@ -42,12 +44,18 @@ func newAuthoredUnitPlanner(
 	}
 	planner := &authoredUnitPlanner{
 		input: input, project: project,
-		identities:   make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
-		targets:      make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
-		units:        make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
-		blocked:      make(map[blueprintunits.ResourceKey]bool),
-		runtimeReady: runtimeReady,
-		attachInputs: attachInputs,
+		identities:    make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
+		targets:       make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
+		units:         make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
+		blocked:       make(map[blueprintunits.ResourceKey]bool),
+		runtimeReady:  runtimeReady,
+		attachInputs:  attachInputs,
+		appliedAttach: make(map[string]blueprintunits.AppliedRecord),
+	}
+	for _, applied := range snapshot.Applied {
+		if applied.Record.Target.Kind == ids.KindAttach {
+			planner.appliedAttach[applied.Record.Target.ID] = applied.Record
+		}
 	}
 	for _, group := range []struct {
 		kind   ids.Kind
@@ -147,9 +155,19 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			return nil, false, planner.missingInput("Entry", name)
 		}
 		if spec.Source.Fact != nil {
-			planner.block(identity)
-			complete = false
-			continue
+			attach, found := planner.identities[ids.KindAttach][spec.Source.Fact.Attach]
+			if !found {
+				return nil, false, planner.missingInput("Entry fact Attach", spec.Source.Fact.Attach)
+			}
+			generation, hasInput := planner.attachInputs[attach.ID]
+			applied, hasApplied := planner.appliedAttach[attach.ID]
+			if !hasInput || !hasApplied || applied.State != blueprintunits.Applied ||
+				generation.OwnerKind != attachinputs.OwnerChild ||
+				generation.OwnerTaskID != applied.SourceTaskID {
+				planner.block(identity)
+				complete = false
+				continue
+			}
 		}
 		reads, err := planner.entryReads(spec)
 		if err != nil {

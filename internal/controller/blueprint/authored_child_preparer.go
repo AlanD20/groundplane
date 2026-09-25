@@ -54,11 +54,9 @@ func (service *Service) Prepare(
 	if err != nil {
 		return blueprintcoordinator.PreparedChild{}, err
 	}
-	// Entries, Attaches, Components, Scripts and Requirements have separate unit
-	// effects. This preparer must not issue a Release until those effects and
-	// their exact runtime inputs can be passed to the child plan.
-	if len(input.desired.Input.Entries) != 0 || len(input.desired.Input.Attachments) != 0 ||
-		len(input.desired.Input.Components) != 0 || len(input.desired.Input.Scripts) != 0 ||
+	// The runtime projection is sealed only after Entry and Attach unit receipts
+	// match this parent. Other unit effects are still unsupported here.
+	if len(input.desired.Input.Components) != 0 || len(input.desired.Input.Scripts) != 0 ||
 		len(input.desired.Input.Requires) != 0 {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindStateConflict, "Blueprint Service child prerequisites are not prepared",

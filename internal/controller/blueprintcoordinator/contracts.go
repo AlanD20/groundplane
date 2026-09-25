@@ -19,6 +19,12 @@ type Planner interface {
 	Plan(context.Context, etcd.TaskRecord, blueprintunits.Snapshot) (blueprintunits.DesiredPlan, error)
 }
 
+// EntrySettler publishes one Controller-owned Entry value and its applied
+// receipt atomically. It is separate from Agent child preparation.
+type EntrySettler interface {
+	SettleEntry(context.Context, etcd.TaskRecord, blueprintunits.Unit, blueprintunits.Snapshot) error
+}
+
 // ChildPreparer prepares one exact ready unit as a private Agent Task. It must
 // use the parent's immutable desired revision rather than the current head as
 // a substitute for that revision.
