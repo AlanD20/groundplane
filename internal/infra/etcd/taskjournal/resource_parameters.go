@@ -28,6 +28,9 @@ const (
 	TaskHierarchyDeletionInputParam      = "hierarchy_deletion_input_digest"
 	TaskBlueprintParentParam             = "blueprint_parent_task_id"
 	TaskBlueprintNetworkUnitParam        = "blueprint_network_unit_id"
+	TaskBlueprintVolumeUnitParam         = "blueprint_volume_unit_id"
+	TaskBlueprintVolumeModeParam         = "blueprint_volume_mode"
+	TaskBlueprintVolumeIntentParam       = "blueprint_volume_intent_sha256"
 	TaskComposeArtifactParam             = "compose_artifact_id"
 	TaskEntryEnvironmentParam            = "entry_environment_id"
 	TaskEntryTenantSlugParam             = "entry_tenant_slug"
@@ -39,4 +42,9 @@ const (
 	TaskZoneEnvironmentParam             = "zone_environment_id"
 	TaskZoneImpactTokenParam             = "zone_impact_token"
 	TaskZoneRemovalOperationParam        = "zone_removal_operation_id"
+)
+
+const (
+	TaskBlueprintVolumeModeCreate = "create"
+	TaskBlueprintVolumeModeVerify = "verify_existing"
 )

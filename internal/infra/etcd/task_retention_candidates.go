@@ -11,9 +11,10 @@ import (
 	"time"
 )
 
-// nextTaskRetentionPruneCandidate leaves retained Script indexes intact while
-// advancing discovery past attempts owned by a live or newer retry. Reads stay
-// bounded and use one MVCC view; no durable deadline or discovery key is moved.
+// nextTaskRetentionPruneCandidate leaves retained Script and Blueprint child
+// indexes intact while advancing discovery past attempts still owned by a
+// live claim or newer retry. Reads stay bounded and use one MVCC view; no
+// durable deadline or discovery key is moved.
 func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 	ctx context.Context, now time.Time,
 ) (*etcdstore.RangeResult, error) {
@@ -38,7 +39,7 @@ func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 		if deadline.After(now) {
 			return page, nil
 		}
-		blocked, err := repository.manualScriptRetentionCandidateBlocked(ctx, taskID, deadline, page.ReadRevision)
+		blocked, err := repository.taskRetentionCandidateBlocked(ctx, taskID, deadline, page.ReadRevision)
 		if err != nil {
 			clear(entry.Value)
 			return nil, err
@@ -51,7 +52,7 @@ func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 	}
 }
 
-func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
+func (repository *TaskRepository) taskRetentionCandidateBlocked(
 	ctx context.Context, taskID string, deadline time.Time, revision int64,
 ) (bool, error) {
 	read, err := repository.store.GetMany(
@@ -69,6 +70,9 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	if err != nil || task.ID != taskID || !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(deadline) {
 		return false, taskjournal.CorruptPruneIntent()
+	}
+	if held, err := repository.blueprintChildPruneHeld(ctx, task, revision); held || err != nil {
+		return held, err
 	}
 	if task.Type != taskjournal.TaskScript {
 		return false, nil

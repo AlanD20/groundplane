@@ -521,9 +521,12 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearPrepared()
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		verifiedBlueprintChildResult := blueprintCandidateChange.applies ||
-			result != nil && result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired &&
-				task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != ""
+		blueprintNetworkChild := task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != ""
+		blueprintVolumeChild := task.Params[taskjournal.TaskBlueprintVolumeUnitParam] != ""
+		verifiedBlueprintChildResult := blueprintCandidateChange.applies || result != nil && (result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired &&
+			(blueprintNetworkChild || blueprintVolumeChild) ||
+			terminalStatus == taskjournal.TaskStatusCompleted &&
+				result.Kind == taskjournal.TaskResultEnvironmentDirectory && blueprintVolumeChild)
 		childConditions, childMutations, err := repository.prepareBlueprintChildReceipt(
 			ctx, task, assignment, terminalStatus, verifiedBlueprintChildResult, terminalAt,
 		)

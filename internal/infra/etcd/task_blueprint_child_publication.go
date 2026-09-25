@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"slices"
@@ -42,7 +43,9 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		child.Params[releaserender.TaskReleasePublicationParam] != ""
 	networkChild := blueprintNetworkChildTaskMatches(child, unit) && releasePublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
-	if !releaseChild && !networkChild {
+	volumeChild := blueprintVolumeChildTaskMatches(child, unit) && releasePublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] == ""
+	if !releaseChild && !networkChild && !volumeChild {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict, "Blueprint child has no supported effect publication",
 		)
@@ -87,6 +90,21 @@ func (repository *TaskRepository) PublishBlueprintChild(
 			errs.KindStateConflict,
 			"Blueprint unit is not ready for execution",
 		)
+	}
+	if volumeChild {
+		create, err := blueprintVolumeNeedsCreate(snapshot, unit)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+		expectedMode := taskjournal.TaskBlueprintVolumeModeVerify
+		if create {
+			expectedMode = taskjournal.TaskBlueprintVolumeModeCreate
+		}
+		if child.Params[taskjournal.TaskBlueprintVolumeModeParam] != expectedMode {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict, "Blueprint Volume child execution mode changed",
+			)
+		}
 	}
 	if releaseChild {
 		if err := repository.validateBlueprintReleaseChildPublication(
@@ -146,6 +164,17 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	}
 	defer clear(parentMarker.Intent.Ciphertext)
 	defer clear(parentMarker.Response.Body)
+	if volumeChild {
+		intentDigest, err := blueprints.ProtectedBlueprintIntentDigest(parentMarker.Intent)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+		if hex.EncodeToString(intentDigest[:]) != child.Params[taskjournal.TaskBlueprintVolumeIntentParam] {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict, "Blueprint Volume child intent authority changed",
+			)
+		}
+	}
 	// The child has no operator replay surface. Its private marker reuses the
 	// parent's protected intent so terminal lifecycle can retain exact authority
 	// without inventing a second user request or exposing the hidden Task.

@@ -86,6 +86,9 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if taskjournal.IsBlueprintChild(task.Params) && task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != "" {
 		return resolver.resolveBlueprintNetworkUnitPlan(ctx, task)
 	}
+	if taskjournal.IsBlueprintChild(task.Params) && task.Params[taskjournal.TaskBlueprintVolumeUnitParam] != "" {
+		return resolver.resolveBlueprintVolumeUnitPlan(ctx, task)
+	}
 	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent {
 		if resolver.componentPlans == nil {
 			return nil, errs.New(errs.KindInternal, "Component Task plan resolver is not configured")

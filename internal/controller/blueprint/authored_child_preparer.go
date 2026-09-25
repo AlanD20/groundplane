@@ -34,6 +34,9 @@ func (service *Service) Prepare(
 	if unit.Target.Kind == ids.KindNetwork {
 		return service.prepareAuthoredNetworkChild(ctx, parent, unit)
 	}
+	if unit.Target.Kind == ids.KindVolume {
+		return service.prepareAuthoredVolumeChild(ctx, parent, unit)
+	}
 	if unit.Target.Kind != ids.KindService {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
 			errs.KindStateConflict, "Blueprint unit has no child preparer",
@@ -106,6 +109,66 @@ func (service *Service) Prepare(
 	return blueprintcoordinator.PreparedChild{
 		Task: prepared.Task, ReleasePublication: prepared.Publication,
 	}, nil
+}
+
+type authoredParentVolumeIntentReader interface {
+	BlueprintParentProtectedIntentSHA256(context.Context, string) (string, error)
+	BlueprintVolumeNeedsCreate(context.Context, string, string, blueprintunits.Unit) (bool, error)
+}
+
+func (service *Service) prepareAuthoredVolumeChild(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	unit blueprintunits.Unit,
+) (blueprintcoordinator.PreparedChild, error) {
+	if service.plans == nil || ids.Validate(ids.KindVolume, unit.Target.ID) != nil {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindValidationFailed, "Blueprint Volume child request is invalid",
+		)
+	}
+	authority, ok := service.repository.(authoredParentVolumeIntentReader)
+	if !ok {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindInternal, "Blueprint Volume child intent authority is not configured",
+		)
+	}
+	intentSHA256, err := authority.BlueprintParentProtectedIntentSHA256(ctx, parent.ID)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	create, err := authority.BlueprintVolumeNeedsCreate(
+		ctx, parent.Owner.EnvironmentID, parent.ID, unit,
+	)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	mode := taskjournal.TaskBlueprintVolumeModeVerify
+	if create {
+		mode = taskjournal.TaskBlueprintVolumeModeCreate
+	}
+	createdAt := service.now().UTC()
+	child := etcd.TaskRecord{
+		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
+		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
+		RenderGeneration: parent.RenderGeneration, Type: taskjournal.TaskUpdate,
+		Target: unit.Target.ID,
+		Params: map[string]string{
+			blueprints.EnvironmentDesiredRevisionParam: parent.ID,
+			taskjournal.TaskBlueprintParentParam:       parent.ID,
+			taskjournal.TaskBlueprintVolumeUnitParam:   unit.Target.ID,
+			taskjournal.TaskBlueprintVolumeModeParam:   mode,
+			taskjournal.TaskBlueprintVolumeIntentParam: intentSHA256,
+		},
+		TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
+		CreatedAt: createdAt, UpdatedAt: createdAt,
+	}
+	prepared, _, err := service.plans.PrepareBlueprintVolumeUnit(ctx, child)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	return blueprintcoordinator.PreparedChild{Task: prepared}, nil
 }
 
 func (service *Service) prepareAuthoredNetworkChild(

@@ -20,6 +20,9 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	readRevision int64,
 	now time.Time,
 ) (bool, error) {
+	if held, err := repository.blueprintChildPruneHeld(ctx, task, readRevision); held || err != nil {
+		return held, err
+	}
 	if stop, err := repository.prepareRecoverySecretPinExpiry(ctx, task, taskRevision, retentionEntry, now); stop ||
 		err != nil {
 		return stop, err

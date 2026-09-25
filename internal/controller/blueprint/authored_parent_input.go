@@ -2,6 +2,8 @@ package blueprint
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -54,6 +56,15 @@ func (service *Service) loadAuthoredParentInput(
 		desired.Record.RenderGeneration > math.MaxInt32 ||
 		int32(desired.Record.RenderGeneration) != parent.RenderGeneration {
 		return authoredParentInput{}, errs.New(errs.KindStateConflict, "Blueprint parent desired input changed")
+	}
+	encoded, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(desired.Record)
+	if err != nil {
+		return authoredParentInput{}, err
+	}
+	digest := sha256.Sum256(encoded)
+	clear(encoded)
+	if hex.EncodeToString(digest[:]) != parent.PlanHash {
+		return authoredParentInput{}, errs.New(errs.KindStateConflict, "Blueprint parent sealed input changed")
 	}
 	if _, err := authoredOwnedIdentitySnapshot(ctx, desired.Record, identities.Record); err != nil {
 		return authoredParentInput{}, err

@@ -16,9 +16,8 @@ import (
 )
 
 // prepareBlueprintChildReceipt joins the verified child outcome to its unit
-// claim in the same terminal transaction. Only a single-Service candidate
-// Release has completed-effect proof here; other unit kinds need their own
-// proof boundary before they can be published as private children.
+// claim in the same terminal transaction. Each private child supplies its own
+// exact result-proof boundary before its unit can become applied or restored.
 func (repository *TaskRepository) prepareBlueprintChildReceipt(
 	ctx context.Context,
 	task TaskRecord,
@@ -56,7 +55,8 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		execution.Unit.Target.Kind == ids.KindService &&
 		task.Params[releaserender.TaskReleasePublicationParam] != ""
 	verifiedNetworkEffect := verifiedResult && blueprintNetworkChildTaskMatches(task, execution.Unit)
-	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect
+	verifiedVolumeEffect := verifiedResult && blueprintVolumeChildTaskMatches(task, execution.Unit)
+	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect
 	if status != taskjournal.TaskStatusCompleted &&
 		(status != taskjournal.TaskStatusFailed && status != taskjournal.TaskStatusAborted ||
 			!verifiedEffect) {
