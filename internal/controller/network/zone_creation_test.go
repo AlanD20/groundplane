@@ -142,6 +142,40 @@ type fakeZoneCreationRepository struct {
 	calls       int
 }
 
+func (repository *fakeZoneCreationRepository) GetEnvironmentDesiredInput(
+	context.Context, string,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput], bool, error) {
+	repository.reads++
+	projection := repository.projection.Record
+	return zoneTestDesiredInput(
+		projection,
+		repository.environment.Record.NetworkPool,
+	), projection.EnvironmentID != "", nil
+}
+
+func zoneTestDesiredInput(
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+	networkPool string,
+) testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput] {
+	compose := projection.NormalizedCompose
+	if len(compose) == 0 {
+		compose = []byte("services: {}\n")
+	}
+	if networkPool == "" {
+		networkPool = "10.40.0.0/16"
+	}
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput]{
+		Record: testenvironmentprojection.EnvironmentDesiredInput{
+			EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
+			RenderGeneration: projection.RenderGeneration,
+			Input: core.BlueprintDesiredInput{
+				NormalizedCompose: append([]byte(nil), compose...),
+				NetworkPool:       networkPool,
+			},
+		},
+	}
+}
+
 func zoneCreationProjectionForTest(
 	t *testing.T,
 	environmentID string,

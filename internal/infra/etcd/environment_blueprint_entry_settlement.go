@@ -136,7 +136,12 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintEntry(
 		if projected.Secret && projected.Source.Kind == core.SourceLiteral {
 			projected.Source.Literal = ""
 		}
-		expected, err := entries.NewBlueprintRecord(record.EnvironmentID, identity.Name, projected, identity.ValueGenerationID)
+		expected, err := entries.NewBlueprintRecord(
+			record.EnvironmentID,
+			identity.Name,
+			projected,
+			identity.ValueGenerationID,
+		)
 		if err != nil || !entries.EqualRecord(expected, record) {
 			return errs.New(errs.KindStateConflict, "Blueprint Entry metadata differs from authored input")
 		}
@@ -233,13 +238,22 @@ func (repository *EnvironmentBlueprintRepository) SettleBlueprintEntry(
 		epochMutation,
 	)
 	if generationValue != nil {
-		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: generationKey, Value: generationValue})
+		mutations = append(
+			mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: generationKey, Value: generationValue},
+		)
 	}
 	if entryRevision == 0 {
-		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ownerKey, Value: []byte(record.Entry.ID)})
+		mutations = append(
+			mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: ownerKey, Value: []byte(record.Entry.ID)},
+		)
 	}
 	if read.Values[7] == nil {
-		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: bindingKey, Value: []byte(record.EnvironmentID)})
+		mutations = append(
+			mutations,
+			keyvalue.Mutation{Type: keyvalue.MutationPut, Key: bindingKey, Value: []byte(record.EnvironmentID)},
+		)
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(result.FailureReads)

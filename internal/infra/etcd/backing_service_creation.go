@@ -89,6 +89,18 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(publication.publishedDescriptor)
+	identityPublication, err := prepareEnvironmentDesiredIdentityPublication(
+		ctx,
+		repository.store,
+		creation.Projection,
+		creation.Claim.SourceKind,
+		0,
+		creation.Stage.ReadRevision,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer identityPublication.clear()
 
 	projectValue, err := hierarchyrecord.EncodeProject(creation.Project)
 	if err != nil {
@@ -205,6 +217,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	conditions := backingServiceCreationConditions(creation, publication, creationStageKey)
+	conditions = append(conditions, identityPublication.conditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: creationStageKey},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(creation.Task.ID), Value: taskValue},
@@ -362,6 +375,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			},
 		)
 	}
+	mutations = append(mutations, identityPublication.mutations...)
 	classifier := classifyBackingServiceCreation(creation, publication, len(conditions))
 	conditions, mutations, classifier, err = hookPublication.bind(conditions, mutations, classifier)
 	if err != nil {

@@ -55,6 +55,7 @@ func TestEntryMutationAcknowledgementRecordsEntriesWithoutPromotingWorkloads(t *
 	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0,
 		environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
 		candidate, environmentBlueprintTestMarker(task, environment.Record.ID))
+	seedEffectiveBlueprintFixture(t, store, candidate)
 	tasks, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatal(err)
@@ -148,6 +149,7 @@ func TestEntryMutationAcknowledgementPreservesAppliedArtifactWithoutComposeApply
 	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0,
 		environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
 		candidate, environmentBlueprintTestMarker(task, environment.Record.ID))
+	seedEffectiveBlueprintFixture(t, store, candidate)
 	tasks, err := newTaskRepository(store)
 	if err != nil {
 		t.Fatal(err)

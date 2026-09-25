@@ -113,15 +113,22 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	}
 	manifest := releases.ReleaseStagedManifest{
 		PublicationID: publicationID, OperationID: child.OperationID, Digest: strings.Repeat("a", 64),
-		Members:   []releases.ReleaseStagedMemberRef{{ServiceID: service.ID, ReleaseID: ids.NewAt(ids.KindDeployment, now, 87)}},
+		Members: []releases.ReleaseStagedMemberRef{
+			{ServiceID: service.ID, ReleaseID: ids.NewAt(ids.KindDeployment, now, 87)},
+		},
 		CreatedAt: now,
 	}
 	manifestValue, err := releases.EncodeReleaseRecord("release-staged-manifest", manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	staged, err := store.Transact(ctx, []keyvalue.Condition{{Key: releases.ReleaseManifestStagingKey(publicationID)}},
-		[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: releases.ReleaseManifestStagingKey(publicationID), Value: manifestValue}})
+	staged, err := store.Transact(
+		ctx,
+		[]keyvalue.Condition{{Key: releases.ReleaseManifestStagingKey(publicationID)}},
+		[]keyvalue.Mutation{
+			{Type: keyvalue.MutationPut, Key: releases.ReleaseManifestStagingKey(publicationID), Value: manifestValue},
+		},
+	)
 	if err != nil || !staged.Succeeded {
 		t.Fatalf("stage Release manifest = %#v, %v", staged, err)
 	}
@@ -137,7 +144,9 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 			{Key: releases.ReleaseManifestStagingKey(publicationID), ModRevision: staged.Revision},
 			{Key: releases.ReleasePublicationKey(publicationID)},
 		},
-		Mutations: []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: releases.ReleasePublicationKey(publicationID), Value: publicationValue}},
+		Mutations: []keyvalue.Mutation{
+			{Type: keyvalue.MutationPut, Key: releases.ReleasePublicationKey(publicationID), Value: publicationValue},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -164,7 +173,8 @@ func TestPublishBlueprintChildClaimsOneReadyUnitWithLifecycle(t *testing.T) {
 	read, err := store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{
 		taskjournal.TaskQueueKey(child.Executor, child.ID), markerKey, releases.ReleasePublicationKey(publicationID),
 	}})
-	if err != nil || read == nil || len(read.Values) != 3 || read.Values[0] == nil || read.Values[1] == nil || read.Values[2] == nil {
+	if err != nil || read == nil || len(read.Values) != 3 || read.Values[0] == nil || read.Values[1] == nil ||
+		read.Values[2] == nil {
 		t.Fatalf("child queue, terminal marker, and Release = %#v, %v", read, err)
 	}
 	newHead := ids.NewAt(ids.KindTask, now, 86)

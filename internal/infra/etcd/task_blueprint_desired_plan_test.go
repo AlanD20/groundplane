@@ -62,6 +62,7 @@ func TestPublishBlueprintDesiredPlanReplaysAndFencesSupersededParent(t *testing.
 	}
 	attach := blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: ids.NewAt(ids.KindAttach, now, 72)}
 	service := blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.NewAt(ids.KindService, now, 73)}
+	seedBlueprintUnitInitialAbsence(t, store, parent.Owner.EnvironmentID, parent.ID, attach, service)
 	incomplete := blueprintunits.DesiredPlan{
 		EnvironmentID: parent.Owner.EnvironmentID, ParentTaskID: parent.ID,
 		Units: []blueprintunits.Unit{{

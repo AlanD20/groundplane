@@ -109,7 +109,8 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if err != nil {
 		return nil, err
 	}
-	if hasBlueprintReleases && !blueprintChild && len(resourceStepIDs) != len(pinned.artifact.Networks)+len(pinned.artifact.Volumes) ||
+	if hasBlueprintReleases && !blueprintChild &&
+		len(resourceStepIDs) != len(pinned.artifact.Networks)+len(pinned.artifact.Volumes) ||
 		hasBlueprintReleases && blueprintChild && len(resourceStepIDs) != 0 ||
 		!hasBlueprintReleases && len(resourceStepIDs) != 0 {
 		return nil, errs.New(

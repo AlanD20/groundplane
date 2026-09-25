@@ -141,7 +141,10 @@ func (repository *TaskRepository) AbortBlueprintParent(
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
 	if !requested {
-		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent abort was not requested")
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint parent abort was not requested",
+		)
 	}
 	ledger, err := blueprintunits.NewRepository(repository.store)
 	if err != nil {
@@ -153,12 +156,18 @@ func (repository *TaskRepository) AbortBlueprintParent(
 	}
 	for _, execution := range snapshot.Executions {
 		if execution.Record.ParentTaskID == taskID {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindResourceInUse, "Blueprint parent has unsettled child effects")
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindResourceInUse,
+				"Blueprint parent has unsettled child effects",
+			)
 		}
 	}
 	for _, applied := range snapshot.Applied {
 		if applied.Record.ParentTaskID == taskID && applied.Record.State == blueprintunits.Uncertain {
-			return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindResourceInUse, "Blueprint parent has unknown child effects")
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindResourceInUse,
+				"Blueprint parent has unknown child effects",
+			)
 		}
 	}
 	return repository.terminalizeBlueprintParent(ctx, snapshot, taskID, taskjournal.TaskStatusAborted, at)

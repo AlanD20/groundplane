@@ -165,6 +165,7 @@ func routeRepositoryTestHierarchy(
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {api: {}}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
+	seedEffectiveBlueprintFixture(t, store, projection)
 	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
@@ -247,6 +248,7 @@ func routeRepositoryTestSelectDesiredHead(
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {api: {}}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 	stageEnvironmentBlueprintForPublicationTest(t, hierarchy, 0, revision, projection, marker)
+	seedEffectiveBlueprintFixture(t, store, projection)
 	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)

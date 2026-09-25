@@ -44,7 +44,10 @@ func authoredOwnedIdentities(
 	entryGenerations := make(map[string]string, len(entries))
 	for index, record := range entries {
 		if record.EnvironmentID != environmentID {
-			return projectionrecord.EnvironmentOwnedIdentities{}, errs.New(errs.KindInternal, "Entry identity has wrong Environment")
+			return projectionrecord.EnvironmentOwnedIdentities{}, errs.New(
+				errs.KindInternal,
+				"Entry identity has wrong Environment",
+			)
 		}
 		entryResources[index] = composeidentity.Resource{
 			ID: record.Entry.ID, Name: entryrecord.BlueprintIdentityKey(record),
@@ -58,7 +61,10 @@ func authoredOwnedIdentities(
 	routeResources := make([]composeidentity.Resource, len(routes))
 	for index, route := range routes {
 		if route.EnvironmentID != environmentID {
-			return projectionrecord.EnvironmentOwnedIdentities{}, errs.New(errs.KindInternal, "Route identity has wrong Environment")
+			return projectionrecord.EnvironmentOwnedIdentities{}, errs.New(
+				errs.KindInternal,
+				"Route identity has wrong Environment",
+			)
 		}
 		routeResources[index] = composeidentity.Resource{
 			ID:   route.Desired.ID,

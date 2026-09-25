@@ -135,6 +135,18 @@ func desiredInputForProjectionFixture(
 	if len(normalized) == 0 {
 		normalized = []byte("services: {}\n")
 	}
+	serviceNames := make(map[string]string, len(projection.DesiredServices))
+	for _, service := range projection.DesiredServices {
+		serviceNames[service.Desired.ID] = service.Desired.Name
+	}
+	routes := make([]core.RouteSpec, len(projection.DesiredRoutes))
+	for index, route := range projection.DesiredRoutes {
+		routes[index] = core.RouteSpec{
+			Hostname: route.Desired.Host, Path: route.Desired.Path,
+			Target:     serviceNames[route.Desired.TargetServiceID],
+			TargetPort: route.Desired.TargetPort, Exposure: route.Desired.Exposure,
+		}
+	}
 	return testenvironmentprojection.EnvironmentDesiredInput{
 		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
 		RenderGeneration: projection.RenderGeneration,
@@ -143,6 +155,50 @@ func desiredInputForProjectionFixture(
 			RuntimeFiles:      projection.RuntimeFiles,
 			ServiceExtensions: projection.ServiceExtensions,
 			NetworkPool:       "10.40.0.0/16",
+			Routes:            routes,
 		},
+	}
+}
+
+// Manual fixture heads represent an already materialized desired revision.
+// Staging alone intentionally does not publish these two runtime authorities.
+func seedEffectiveBlueprintFixture(
+	t *testing.T,
+	store interface {
+		Transact(context.Context, []testkeyvalue.Condition, []testkeyvalue.Mutation) (testkeyvalue.TransactionResult, error)
+	},
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+) {
+	t.Helper()
+	effective, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(effective)
+	identities, err := testenvironmentprojection.OwnedIdentitiesFromProjection(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owned, err := testenvironmentprojection.EncodeEnvironmentOwnedIdentities(identities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(owned)
+	result, err := store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut,
+			Key: testblueprints.EnvironmentBlueprintEffectiveProjectionKey(
+				projection.EnvironmentID,
+				projection.RevisionID,
+			),
+			Value: effective},
+		{Type: testkeyvalue.MutationPut,
+			Key: testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(
+				projection.EnvironmentID,
+				projection.RevisionID,
+			),
+			Value: owned},
+	})
+	if err != nil || !result.Succeeded {
+		t.Fatalf("seed effective Blueprint fixture = %#v, %v", result, err)
 	}
 }

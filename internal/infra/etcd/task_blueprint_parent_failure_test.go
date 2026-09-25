@@ -261,12 +261,28 @@ func newBlueprintParentFailureFixture(t *testing.T) blueprintParentFailureFixtur
 	seedMutations := append([]keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: taskjournal.TaskStorageKey(parent.ID), Value: parentValue},
 		{Type: keyvalue.MutationPut, Key: taskjournal.BlueprintParentClaimKey(parent.ID), Value: parentReference},
-		{Type: keyvalue.MutationPut, Key: taskjournal.TaskActiveOperationKey(parent.OperationID), Value: parentReference},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   taskjournal.TaskActiveOperationKey(parent.OperationID),
+			Value: parentReference,
+		},
 		{Type: keyvalue.MutationPut, Key: markerKey, Value: markerValue},
-		{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(parent.Owner.EnvironmentID), Value: parentReference},
-		{Type: keyvalue.MutationPut, Key: blueprintunits.DesiredPlanKey(parent.Owner.EnvironmentID), Value: desiredValue},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(parent.Owner.EnvironmentID),
+			Value: parentReference,
+		},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprintunits.DesiredPlanKey(parent.Owner.EnvironmentID),
+			Value: desiredValue,
+		},
 		{Type: keyvalue.MutationPut, Key: blueprintunits.EpochKey(parent.Owner.EnvironmentID), Value: epochValue},
-		{Type: keyvalue.MutationPut, Key: blueprintunits.ExecutionKey(parent.Owner.EnvironmentID, child.PlanID), Value: executionValue},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprintunits.ExecutionKey(parent.Owner.EnvironmentID, child.PlanID),
+			Value: executionValue,
+		},
 		{Type: keyvalue.MutationPut, Key: releases.ReleaseManifestStagingKey(publicationID), Value: manifestValue},
 	}, absence.Mutations()...)
 	seed, err := store.Transact(ctx, absence.Conditions(), seedMutations)

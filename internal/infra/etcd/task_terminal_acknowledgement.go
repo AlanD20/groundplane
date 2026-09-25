@@ -2,13 +2,10 @@ package etcd
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
 
@@ -51,20 +48,9 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		assignmentValue := primaryAndAssignment.Values[1]
 		assignmentIndexValue := primaryAndAssignment.Values[2]
-		environmentCreation := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskCreate &&
-			recordcodec.ValidateID(ids.KindEnvironment, task.Target) == nil
-		environmentRemoval := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&
-			recordcodec.ValidateID(ids.KindEnvironment, task.Target) == nil
-		zoneRemoval := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&
-			recordcodec.ValidateID(
-				ids.KindNetwork,
-				task.Target,
-			) == nil && task.Params[taskjournal.TaskZoneRemovalOperationParam] != ""
-		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
-			return etcdstore.Versioned[TaskRecord]{}, errs.New(
-				errs.KindStateConflict,
-				"environment creation Task requires its atomic provisioning acknowledgement",
-			)
+		environmentRemoval, zoneRemoval, scopeErr := taskAcknowledgementRemovalScope(task, executor, environmentID)
+		if scopeErr != nil {
+			return etcdstore.Versioned[TaskRecord]{}, scopeErr
 		}
 		if result != nil {
 			if err := taskjournal.ValidateTaskResult(*result, task.Steps, terminalStatus); err != nil {
@@ -527,7 +513,13 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearPrepared()
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		verifiedBlueprintChildResult := blueprintChildTerminalResultVerified(task, terminalStatus, result, blueprintCandidateChange.applies, blueprintAttachChange.verifiedChildResult)
+		verifiedBlueprintChildResult := blueprintChildTerminalResultVerified(
+			task,
+			terminalStatus,
+			result,
+			blueprintCandidateChange.applies,
+			blueprintAttachChange.verifiedChildResult,
+		)
 		childConditions, childMutations, err := repository.prepareBlueprintChildReceipt(
 			ctx, task, assignment, terminalStatus, verifiedBlueprintChildResult, terminalAt,
 		)

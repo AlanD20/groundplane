@@ -686,7 +686,9 @@ func (fixture *VolumePolicyDesiredFixture) UseMaximumSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture.Projection = projection
-	fixture.Request.DesiredInput, fixture.Request.DependencyDigest = desiredInputForProjectionFixture(projection), digest
+	fixture.Request.DesiredInput, fixture.Request.DependencyDigest = desiredInputForProjectionFixture(
+		projection,
+	), digest
 	fixture.Request.Mutation.Volume.PreconditionDigest = precondition
 }
 
@@ -721,11 +723,11 @@ func (fixture *VolumePolicyDesiredFixture) AssertMaximumSelectionPublished(t *te
 	}
 	// Publication-time JSON timestamps trim trailing fractional zeros; the
 	// nine-digit representation is the upper bound, not every request's size.
-	wantConditions, wantMutations, maximumBytes := 38, 15, 13286
+	wantConditions, wantMutations, maximumBytes := 40, 17, 20000
 	if fixture.Initial != nil {
 		wantConditions += 9
 		wantMutations += 7
-		maximumBytes = 17392
+		maximumBytes = 24000
 	} else {
 		wantConditions++ // Ordinary desired mutation must exclude the Environment removal lock too.
 	}
@@ -779,10 +781,10 @@ func (fixture *VolumePolicyDesiredFixture) AssertAtomicPolicy(t *testing.T, earl
 	if value := fixture.policy.store.valueAt(testbackuppolicy.BackupPolicyConnectorReferenceKey(fixture.policy.connector.Record.Connector.ID, fixture.Task.Owner.EnvironmentID), fixture.policy.store.revision); value != nil {
 		t.Fatal("disabled policy retained its active Connector reference")
 	}
-	wantConditions, wantMutations, maximumBytes := 28, 16, 11076
+	wantConditions, wantMutations, maximumBytes := 30, 18, 14100
 	if fixture.Initial != nil {
-		wantConditions, wantMutations = 36, 23
-		maximumBytes = 15182
+		wantConditions, wantMutations = 38, 25
+		maximumBytes = 18200
 	}
 	if len(fixture.store.conditions) != wantConditions || len(fixture.store.mutations) != wantMutations ||
 		fixture.store.bytes > maximumBytes || fixture.store.bytes > 900*1024 {

@@ -391,6 +391,12 @@ func seedBackupRuntimePublicationEvidence(
 			testblueprints.EnvironmentBlueprintRootKey(backingEnvironment.ID, backingServiceRevisionID),
 			func() ([]byte, error) { return testblueprints.EncodeEnvironmentBlueprintSeal(backingServiceSeal) },
 		},
+		{
+			testblueprints.EnvironmentBlueprintEffectiveProjectionKey(backingEnvironment.ID, backingServiceRevisionID),
+			func() ([]byte, error) {
+				return testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(backingServiceProjection)
+			},
+		},
 		{testblueprints.EnvironmentBlueprintChunkKeyFor(
 			backingEnvironment.ID, backingServiceRevisionID, testblueprints.EnvironmentBlueprintChunkProjection, 0,
 		), func() ([]byte, error) {

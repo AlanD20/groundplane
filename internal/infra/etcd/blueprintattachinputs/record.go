@@ -194,7 +194,10 @@ func validate(record Generation, bound bool) error {
 		ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, record.RevisionID) != nil || record.RevisionID != record.ParentTaskID ||
 		ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
-		ids.Validate(ids.KindAttach, record.AttachID) != nil || attachrecord.ValidateAttachName(record.AttachName) != nil ||
+		ids.Validate(
+			ids.KindAttach,
+			record.AttachID,
+		) != nil || attachrecord.ValidateAttachName(record.AttachName) != nil ||
 		!recordcodec.ValidSHA256(record.AuthoredSpecSHA256) ||
 		ids.Validate(ids.KindService, record.ConsumerServiceID) != nil || record.CredentialOwnerID != record.AttachID ||
 		ids.Validate(ids.KindProject, record.BackingProjectID) != nil ||
@@ -230,7 +233,9 @@ func validate(record Generation, bound bool) error {
 		}
 		return 0
 	}) ||
-		backinghook.ValidateConfiguration(probe) != nil || attachrecord.ValidateAttachEncryptedFacts(record.GeneratedInputs) != nil ||
+		backinghook.ValidateConfiguration(
+			probe,
+		) != nil || attachrecord.ValidateAttachEncryptedFacts(record.GeneratedInputs) != nil ||
 		record.GeneratedInputs.AttachID != record.AttachID || !matchingFactSets(record.Hook.Facts, record.FactSets) {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach hook generation is invalid")
 	}

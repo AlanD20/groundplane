@@ -38,7 +38,9 @@ func (reader *blueprintVolumeUnitPlanReader) GetEnvironmentOwnedIdentitiesRevisi
 	string,
 	string,
 ) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities], bool, error) {
-	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities]{Record: reader.identities}, true, nil
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities]{
+		Record: reader.identities,
+	}, true, nil
 }
 
 // BP-10 / VOL-01: a private newborn Volume child must reconstruct the same

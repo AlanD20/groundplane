@@ -42,6 +42,33 @@ type fakeServiceMutationRepository struct {
 	withoutDesiredState bool
 }
 
+func (fake *fakeServiceMutationRepository) GetEnvironmentDesiredInput(
+	context.Context, string,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput], bool, error) {
+	if fake.withoutDesiredState {
+		return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput]{}, false, nil
+	}
+	projection := fake.projection.Record
+	compose := projection.NormalizedCompose
+	if len(compose) == 0 {
+		compose = []byte("services: {}\n")
+	}
+	pool := fake.environment.Record.NetworkPool
+	if pool == "" {
+		pool = "10.40.0.0/16"
+	}
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput]{
+		Record: testenvironmentprojection.EnvironmentDesiredInput{
+			EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
+			RenderGeneration: projection.RenderGeneration,
+			Input: core.BlueprintDesiredInput{
+				NormalizedCompose: append([]byte(nil), compose...), NetworkPool: pool,
+			},
+		},
+		Revision: fake.projection.Revision, ReadRevision: fake.projection.ReadRevision,
+	}, true, nil
+}
+
 func (fake *fakeServiceMutationRepository) GetTenant(
 	context.Context,
 	string,
@@ -124,7 +151,6 @@ func (fake *fakeServiceMutationRepository) StageEnvironmentBlueprintRevision(
 	_ context.Context,
 	request testblueprints.EnvironmentBlueprintStageRequest,
 ) (testblueprints.EnvironmentBlueprintSeal, error) {
-	fake.projection.Record = request.Projection
 	return testblueprints.EnvironmentBlueprintSeal{}, nil
 }
 
@@ -132,6 +158,7 @@ func (fake *fakeServiceMutationRepository) PublishEnvironmentServiceDesiredRevis
 	_ context.Context,
 	input etcd.EnvironmentServiceDesiredPublication,
 ) (etcd.IdempotencyTransactionResult, error) {
+	fake.projection.Record = input.Projection
 	fake.record = input.Change.Record
 	fake.references = input.References
 	fake.marker = input.Marker
@@ -222,9 +249,9 @@ func TestServiceCreationCommitsExactResponseAndZoneFence(t *testing.T) {
 	repository := &fakeServiceMutationRepository{
 		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
 			Record: testhierarchy.EnvironmentRecord{
-				ID:                environmentID,
-				ProjectID:         projectID,
-				ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
+				ID:          environmentID,
+				ProjectID:   projectID,
+				NetworkPool: "10.40.0.0/16", ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 			},
 			Revision:     7,
 			ReadRevision: 7,
@@ -331,7 +358,7 @@ func TestServiceCreationBootstrapsMissingEnvironmentDesiredState(t *testing.T) {
 	repository := &fakeServiceMutationRepository{
 		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
 			Record: testhierarchy.EnvironmentRecord{
-				ID: environmentID, ProjectID: projectID, VolumeDir: volumeDir,
+				ID: environmentID, ProjectID: projectID, VolumeDir: volumeDir, NetworkPool: "10.40.0.0/16",
 				ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 			},
 			Revision: 7, ReadRevision: 7,

@@ -36,7 +36,7 @@ func proveEntryServingPublication(
 		EnvironmentID: task.Target, CandidateRevisionID: task.ID, CandidateTaskID: task.ID,
 		Locator: marker.Locator, Intent: marker.Intent, BaselineHeadRevision: current.Revision,
 		SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: candidate.RenderGeneration,
-		ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: task.CreatedAt,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: task.CreatedAt,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +47,7 @@ func proveEntryServingPublication(
 	}
 	entry := candidate.Entries[0]
 	if _, err := desired.StageEnvironmentBlueprintRevision(ctx, testblueprints.EnvironmentBlueprintStageRequest{
-		Claim: claim, Projection: candidate, DependencyDigest: digest,
+		Claim: claim, DesiredInput: publicationTestDesiredInput(candidate), DependencyDigest: digest,
 		Mutation: &testblueprints.EnvironmentDesiredMutationAudit{Entry: &testblueprints.EnvironmentEntryMutationAudit{
 			Action: testblueprints.EnvironmentEntryMutationCreate, BaseRevisionID: current.Record.RevisionID,
 			EntryID: entry.Entry.ID, Record: &entry,

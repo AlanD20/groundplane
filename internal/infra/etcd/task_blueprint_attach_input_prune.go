@@ -149,7 +149,10 @@ func (repository *TaskRepository) pruneChildOwnedBlueprintAttachInput(
 		taskjournal.TaskActiveOperationKey(task.OperationID),
 		taskjournal.TaskAssignmentIndexKey(task.ID),
 		taskjournal.TaskRecoveryProofRequiredKey(task.ID),
-		blueprintunits.AppliedKey(task.Owner.EnvironmentID, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: attachID}),
+		blueprintunits.AppliedKey(
+			task.Owner.EnvironmentID,
+			blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: attachID},
+		),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {

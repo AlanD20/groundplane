@@ -87,7 +87,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 					EnvironmentID: entry.EnvironmentID, CandidateRevisionID: task.ID, CandidateTaskID: task.ID,
 					Locator: marker.Locator, Intent: marker.Intent, BaselineHeadRevision: current.Revision,
 					SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: current.Record.RenderGeneration + 1,
-					ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: task.CreatedAt,
+					ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: task.CreatedAt,
 				},
 			)
 			if err != nil {
@@ -115,7 +115,7 @@ func testEntryRemovalPublication(t *testing.T, applied, failFirst bool, expireRe
 				t.Fatal(err)
 			}
 			if _, err := desired.StageEnvironmentBlueprintRevision(ctx, testblueprints.EnvironmentBlueprintStageRequest{
-				Claim: claim, Projection: candidate, DependencyDigest: digest,
+				Claim: claim, DesiredInput: publicationTestDesiredInput(candidate), DependencyDigest: digest,
 				Mutation: &testblueprints.EnvironmentDesiredMutationAudit{Entry: &testblueprints.EnvironmentEntryMutationAudit{
 					Action: testblueprints.EnvironmentEntryMutationRemove, EntryID: entry.Entry.ID, BaseRevisionID: current.Record.RevisionID,
 				}},

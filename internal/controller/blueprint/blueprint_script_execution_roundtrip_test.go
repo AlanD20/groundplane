@@ -88,6 +88,7 @@ func TestGetBlueprintScriptExecutionReconcilesWithoutChangingGeneration(t *testi
 				ProjectID:   projectID,
 				Name:        "production",
 				NetworkPool: "10.40.0.0/16",
+				VolumeDir:   "/var/lib/groundplane/vol/tenant/project/" + environmentID,
 			},
 		},
 		projection: testenvironmentprojection.EnvironmentComposeProjection{
@@ -110,6 +111,43 @@ func TestGetBlueprintScriptExecutionReconcilesWithoutChangingGeneration(t *testi
 			},
 		},
 		scripts: []testscripts.Record{script},
+	}
+	readOnly := false
+	repository.desired = testenvironmentprojection.EnvironmentDesiredInput{
+		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+		Input: core.BlueprintDesiredInput{
+			NormalizedCompose: repository.projection.NormalizedCompose, NetworkPool: "10.40.0.0/16",
+			Entries: map[string]core.EntrySpec{"SETUP_INPUT": {
+				Kind: core.EntryKindEnv, Exposure: []string{"web"},
+				Source: core.EntrySourceSpec{Literal: "input"},
+			}},
+			Scripts: map[string]core.ScriptSpec{"setup-hook": {
+				Slug: "renamed-setup", Service: "web", When: core.ScriptPreDeploy,
+				Script: "echo setup", Order: 20,
+				Execution: &core.ScriptExecutionSpec{
+					Mode: core.ScriptExecutionExplicit, User: "0:0",
+					Image:   "example.invalid/setup@sha256:" + strings.Repeat("a", 64),
+					Volumes: []core.ScriptVolumeGrantSpec{{Volume: "data", Target: "/data", ReadOnly: &readOnly}},
+					Entries: []string{"SETUP_INPUT"},
+				},
+			}},
+		},
+	}
+	repository.identities = testenvironmentprojection.EnvironmentOwnedIdentities{
+		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+		Services: []testenvironmentprojection.OwnedIdentity{{
+			ID: serviceID, Name: "web", BirthRevisionID: revisionID,
+		}},
+		Volumes: []testenvironmentprojection.OwnedIdentity{{
+			ID: volumeID, Name: "data", Slug: "renamed-data", BirthRevisionID: revisionID,
+		}},
+		Entries: []testenvironmentprojection.OwnedIdentity{{
+			ID: entryID, Name: "SETUP_INPUT", BirthRevisionID: revisionID,
+			ValueGenerationID: ids.NewAt(ids.KindConfig, at, 10),
+		}},
+		Scripts: []testenvironmentprojection.OwnedIdentity{{
+			ID: script.Desired.ID, Name: "setup-hook", BirthRevisionID: revisionID,
+		}},
 	}
 	blueprints := &Service{repository: repository, releaseGroups: planner}
 	document, err := blueprints.GetBlueprint(t.Context(), environmentID)

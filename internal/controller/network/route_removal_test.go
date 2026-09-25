@@ -201,6 +201,7 @@ func (fake *routeRemovalRepositoryFake) BeginRouteDeletionWithTask(
 	store := &routeRemovalTransactionStore{
 		routeID: route.Record.Desired.ID, environmentID: environment.Record.ID,
 		indexRevision: 40, revision: int64(100 + fake.begins), conflict: fake.begins <= fake.conflicts,
+		source: fake.serviceEvidence,
 	}
 	if len(task.Materializations) != 0 {
 		if err := store.seedConfiguration(ctx, projection); err != nil {
@@ -232,6 +233,7 @@ type routeRemovalTransactionStore struct {
 	conflict              bool
 	configuration         map[string]testkeyvalue.KeyValue
 	configurationRevision int64
+	source                *routeRemovalServiceEvidenceStore
 }
 
 // Model acknowledged configuration and immutable staging, not a second Route
@@ -279,15 +281,19 @@ func (store *routeRemovalTransactionStore) seedConfiguration(
 type routeRemovalServiceEvidenceStore struct {
 	testkeyvalue.Store
 
-	environmentID string
-	projection    testenvironmentprojection.EnvironmentComposeProjection
-	headValue     []byte
-	rootValue     []byte
-	chunkValue    []byte
-	headKey       string
-	rootKey       string
-	chunkKey      string
-	readRevision  int64
+	environmentID   string
+	projection      testenvironmentprojection.EnvironmentComposeProjection
+	headValue       []byte
+	rootValue       []byte
+	chunkValue      []byte
+	effectiveValue  []byte
+	identitiesValue []byte
+	headKey         string
+	rootKey         string
+	chunkKey        string
+	effectiveKey    string
+	identitiesKey   string
+	readRevision    int64
 }
 
 func (store *routeRemovalServiceEvidenceStore) Range(
@@ -328,6 +334,16 @@ func (store *routeRemovalServiceEvidenceStore) GetMany(
 				Value:       append([]byte(nil), store.chunkValue...),
 				ModRevision: store.readRevision,
 			}
+		case store.effectiveKey:
+			values[index] = &testkeyvalue.KeyValue{
+				Key: key, Value: append([]byte(nil), store.effectiveValue...),
+				ModRevision: store.readRevision,
+			}
+		case store.identitiesKey:
+			values[index] = &testkeyvalue.KeyValue{
+				Key: key, Value: append([]byte(nil), store.identitiesValue...),
+				ModRevision: store.readRevision,
+			}
 		}
 	}
 	return &testkeyvalue.GetManyResult{
@@ -361,23 +377,44 @@ func routeRemovalServiceEvidence(
 	if err != nil {
 		t.Fatalf("EncodeEnvironmentComposeProjectionStorage() error = %v", err)
 	}
-	projectionDigest := sha256.Sum256(projectionValue)
+	desiredValue, err := testenvironmentprojection.EncodeEnvironmentDesiredInputStorage(
+		testenvironmentprojection.EnvironmentDesiredInput{
+			EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+			Input: core.BlueprintDesiredInput{
+				NormalizedCompose: append([]byte(nil), projection.NormalizedCompose...),
+				NetworkPool:       "10.70.0.0/16",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("EncodeEnvironmentDesiredInputStorage() error = %v", err)
+	}
+	identities, err := testenvironmentprojection.OwnedIdentitiesFromProjection(projection)
+	if err != nil {
+		t.Fatalf("OwnedIdentitiesFromProjection() error = %v", err)
+	}
+	identitiesValue, err := testenvironmentprojection.EncodeEnvironmentOwnedIdentities(identities)
+	if err != nil {
+		t.Fatalf("EncodeEnvironmentOwnedIdentities() error = %v", err)
+	}
+	projectionDigest := sha256.Sum256(desiredValue)
 	audit := []byte("route removal fixture")
 	auditDigest := sha256.Sum256(audit)
 	dependencyDigest := sha256.Sum256([]byte("route removal dependency"))
 	sealValue, err := testblueprints.EncodeEnvironmentBlueprintSeal(testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: environmentID, RevisionID: revisionID,
-		SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: 1, ProjectionSchema: 1,
-		AuditChunks: 1, AuditBytes: uint64(len(audit)), AuditSHA256: auditDigest,
-		ProjectionChunks: 1, ProjectionBytes: uint64(len(projectionValue)), ProjectionSHA256: projectionDigest,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: 1,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
+		AuditChunks:      1, AuditBytes: uint64(len(audit)), AuditSHA256: auditDigest,
+		ProjectionChunks: 1, ProjectionBytes: uint64(len(desiredValue)), ProjectionSHA256: projectionDigest,
 		ProjectionResources: 1, DependencyDigest: dependencyDigest,
 	})
 	if err != nil {
 		t.Fatalf("EncodeDesiredRevisionSeal() error = %v", err)
 	}
 	chunkValue, err := testblueprints.EncodeEnvironmentBlueprintChunk(testblueprints.EnvironmentBlueprintChunk{
-		Family: testblueprints.EnvironmentBlueprintChunkProjection, LogicalLength: uint32(len(projectionValue)),
-		Digest: projectionDigest, Data: projectionValue,
+		Family: testblueprints.EnvironmentBlueprintChunkProjection, LogicalLength: uint32(len(desiredValue)),
+		Digest: projectionDigest, Data: desiredValue,
 	})
 	if err != nil {
 		t.Fatalf("EncodeDesiredRevisionChunk() error = %v", err)
@@ -390,12 +427,15 @@ func routeRemovalServiceEvidence(
 	return &routeRemovalServiceEvidenceStore{
 		environmentID: environmentID, projection: projection,
 		headValue: headValue, rootValue: sealValue, chunkValue: chunkValue,
+		effectiveValue: projectionValue, identitiesValue: identitiesValue,
 		headKey: headKey, rootKey: testblueprints.EnvironmentBlueprintRootKey(environmentID, revisionID),
 		chunkKey: testblueprints.EnvironmentBlueprintChunkKeyFor(
 			environmentID,
 			revisionID, testblueprints.EnvironmentBlueprintChunkProjection, 0,
 		),
-		readRevision: 13,
+		effectiveKey:  testblueprints.EnvironmentBlueprintEffectiveProjectionKey(environmentID, revisionID),
+		identitiesKey: testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(environmentID, revisionID),
+		readRevision:  13,
 	}
 }
 
@@ -403,6 +443,11 @@ func (store *routeRemovalTransactionStore) GetMany(
 	_ context.Context,
 	request testkeyvalue.GetManyRequest,
 ) (*testkeyvalue.GetManyResult, error) {
+	if store.source != nil && len(request.Keys) != 0 &&
+		(strings.HasPrefix(request.Keys[0], "/v1/records/environment-blueprints/") ||
+			strings.HasPrefix(request.Keys[0], "/v1/records/environment-blueprint-revisions/")) {
+		return store.source.GetMany(context.Background(), request)
+	}
 	if len(request.Keys) != 0 && (strings.Contains(request.Keys[0], "/runtime-configuration-sources/") ||
 		strings.HasPrefix(request.Keys[0], "/v1/runtime/environment-configurations/")) {
 		revision := request.Revision
@@ -736,7 +781,7 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 	}
 	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: repository.environment.Record.ID,
-		RevisionID:    ids.NewAt(ids.KindTask, at, 22), RenderGeneration: 7,
+		RevisionID:    repository.serviceEvidence.projection.RevisionID, RenderGeneration: 1,
 		DesiredServices: []testservices.EnvironmentServiceProjection{
 			{EnvironmentID: repository.environment.Record.ID, Desired: repository.target.Record.Desired},
 			{EnvironmentID: repository.environment.Record.ID, Desired: core.Service{
@@ -758,7 +803,23 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 	projection.NormalizedCompose = routeRemovalTestNormalizedCompose(t)
 	projection.ComposeArtifact = routeRemovalTestComposeArtifact(projection)
 	repository.projection = &testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
-		Record: projection, Revision: 15, ReadRevision: 15,
+		Record: projection, Revision: 13, ReadRevision: 13,
+	}
+	identities, err := testenvironmentprojection.OwnedIdentitiesFromProjection(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository.serviceEvidence.identitiesValue, err = testenvironmentprojection.EncodeEnvironmentOwnedIdentities(
+		identities,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository.serviceEvidence.effectiveValue, err = testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(
+		projection,
+	)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if _, err := service.RemoveRoute(
 		context.Background(), repository.route.Record.Desired.ID, "route-remove-key-0004",
@@ -766,8 +827,8 @@ func TestRouteRemovalSelectsAgentProviderPlanForAppliedRoute(t *testing.T) {
 		t.Fatalf("RemoveRoute() error = %v", err)
 	}
 	if plans.calls != 1 || plans.intent.Provider == nil || plans.intent.CandidateProjection == nil ||
-		plans.intent.CandidateProjection.RenderGeneration != 8 ||
-		repository.task.Executor != testtaskjournal.TaskExecutorAgent || repository.task.RenderGeneration != 8 ||
+		plans.intent.CandidateProjection.RenderGeneration != 2 ||
+		repository.task.Executor != testtaskjournal.TaskExecutorAgent || repository.task.RenderGeneration != 2 ||
 		repository.tombstone.Phase != testdeletions.DeletionPhaseHostEffects {
 		t.Fatalf(
 			"applied Route removal = calls %d intent %#v task %#v tombstone %#v",

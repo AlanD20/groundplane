@@ -60,9 +60,13 @@ func (fixture *ExecutedArtifactFixture) SeedNativeCandidateDesired(
 	replicas int,
 ) {
 	t.Helper()
+	priorIdentities, found, err := fixture.Hierarchy.GetEnvironmentOwnedIdentities(t.Context(), render.EnvironmentID)
+	if err != nil || !found {
+		t.Fatalf("native desired fixture predecessor identities: found=%t err=%v", found, err)
+	}
 	projection := testenvironmentprojection.CloneEnvironmentComposeProjection(render.Projection)
 	projection.RevisionID = ids.New(ids.KindTask)
-	projection.RenderGeneration = 2
+	projection.RenderGeneration = priorIdentities.Record.RenderGeneration + 1
 	for index := range projection.DesiredServices {
 		if projection.DesiredServices[index].Desired.ID == render.ServiceID {
 			projection.DesiredServices[index].Desired.Replicas = replicas
@@ -84,6 +88,27 @@ func (fixture *ExecutedArtifactFixture) SeedNativeCandidateDesired(
 		projection,
 		marker,
 	)
+	identities, err := testenvironmentprojection.OwnedIdentitiesFromProjection(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identities, err = testenvironmentprojection.RetainOwnedIdentityBirths(identities, priorIdentities.Record)
+	if err != nil {
+		t.Fatalf("retain native identities: prior generation=%d candidate generation=%d: %v",
+			priorIdentities.Record.RenderGeneration, projection.RenderGeneration, err)
+	}
+	identitiesValue, err := testenvironmentprojection.EncodeEnvironmentOwnedIdentities(identities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(identitiesValue)
+	if _, err := fixture.store.Put(
+		t.Context(),
+		testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(render.EnvironmentID, projection.RevisionID),
+		identitiesValue,
+	); err != nil {
+		t.Fatal(err)
+	}
 	headValue, err := testidempotency.EncodeTaskReference(projection.RevisionID)
 	if err != nil {
 		t.Fatal(err)
@@ -96,6 +121,18 @@ func (fixture *ExecutedArtifactFixture) SeedNativeCandidateDesired(
 	); err != nil {
 		t.Fatal(err)
 	}
+	effectiveValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(effectiveValue)
+	if _, err := fixture.store.Put(
+		t.Context(),
+		testblueprints.EnvironmentBlueprintEffectiveProjectionKey(render.EnvironmentID, projection.RevisionID),
+		effectiveValue,
+	); err != nil {
+		t.Fatal(err)
+	}
 	loaded, err := fixture.store.Get(
 		context.Background(),
 		testblueprints.EnvironmentBlueprintHeadKey(render.EnvironmentID),
@@ -104,6 +141,10 @@ func (fixture *ExecutedArtifactFixture) SeedNativeCandidateDesired(
 		t.Fatalf("desired fixture head: %v", err)
 	}
 	fixture.head = loaded.Entry.ModRevision
+	if _, found, err := fixture.Hierarchy.GetEnvironmentComposeProjection(t.Context(), render.EnvironmentID); err != nil ||
+		!found {
+		t.Fatalf("native desired fixture effective projection: found=%t err=%v", found, err)
+	}
 }
 
 func (fixture *ExecutedArtifactFixture) AssertNativeCandidateSourceRace(

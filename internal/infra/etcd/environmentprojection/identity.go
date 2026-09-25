@@ -52,7 +52,10 @@ func OwnedIdentitiesFromProjection(projection EnvironmentComposeProjection) (Env
 	}
 	for index, service := range projection.DesiredServices {
 		if service.EnvironmentID != projection.EnvironmentID {
-			return EnvironmentOwnedIdentities{}, errs.New(errs.KindValidationFailed, "Service identity has wrong Environment")
+			return EnvironmentOwnedIdentities{}, errs.New(
+				errs.KindValidationFailed,
+				"Service identity has wrong Environment",
+			)
 		}
 		value.Services[index] = OwnedIdentity{
 			ID: service.Desired.ID, Name: service.Desired.Name, BirthRevisionID: projection.RevisionID,
@@ -60,7 +63,10 @@ func OwnedIdentitiesFromProjection(projection EnvironmentComposeProjection) (Env
 	}
 	for index, network := range projection.DesiredZones {
 		if network.EnvironmentID != projection.EnvironmentID {
-			return EnvironmentOwnedIdentities{}, errs.New(errs.KindValidationFailed, "Zone identity has wrong Environment")
+			return EnvironmentOwnedIdentities{}, errs.New(
+				errs.KindValidationFailed,
+				"Zone identity has wrong Environment",
+			)
 		}
 		value.Networks[index] = OwnedIdentity{
 			ID: network.Desired.ID, Name: network.Desired.Name, BirthRevisionID: projection.RevisionID,
@@ -73,7 +79,10 @@ func OwnedIdentitiesFromProjection(projection EnvironmentComposeProjection) (Env
 	}
 	for index, entry := range projection.Entries {
 		if entry.EnvironmentID != projection.EnvironmentID {
-			return EnvironmentOwnedIdentities{}, errs.New(errs.KindValidationFailed, "Entry identity has wrong Environment")
+			return EnvironmentOwnedIdentities{}, errs.New(
+				errs.KindValidationFailed,
+				"Entry identity has wrong Environment",
+			)
 		}
 		value.Entries[index] = OwnedIdentity{
 			ID: entry.Entry.ID, Name: entryrecord.BlueprintIdentityKey(entry),
@@ -83,7 +92,10 @@ func OwnedIdentitiesFromProjection(projection EnvironmentComposeProjection) (Env
 	}
 	for index, route := range projection.DesiredRoutes {
 		if route.EnvironmentID != projection.EnvironmentID {
-			return EnvironmentOwnedIdentities{}, errs.New(errs.KindValidationFailed, "Route identity has wrong Environment")
+			return EnvironmentOwnedIdentities{}, errs.New(
+				errs.KindValidationFailed,
+				"Route identity has wrong Environment",
+			)
 		}
 		value.Routes[index] = OwnedIdentity{
 			ID:              route.Desired.ID,
@@ -94,7 +106,10 @@ func OwnedIdentitiesFromProjection(projection EnvironmentComposeProjection) (Env
 	for index, component := range projection.Components {
 		if component.Desired.Owner != core.ComponentOwnerEnvironment ||
 			component.Desired.OwnerID != projection.EnvironmentID {
-			return EnvironmentOwnedIdentities{}, errs.New(errs.KindValidationFailed, "Component identity has wrong Environment")
+			return EnvironmentOwnedIdentities{}, errs.New(
+				errs.KindValidationFailed,
+				"Component identity has wrong Environment",
+			)
 		}
 		value.Components[index] = OwnedIdentity{
 			ID: component.Desired.ID, Name: string(component.Desired.Kind), BirthRevisionID: projection.RevisionID,
@@ -141,7 +156,10 @@ func RetainOwnedIdentityBirths(
 	}
 	if current.EnvironmentID != previous.EnvironmentID ||
 		current.RenderGeneration <= previous.RenderGeneration {
-		return EnvironmentOwnedIdentities{}, errs.New(errs.KindValidationFailed, "Environment owned identity predecessor is invalid")
+		return EnvironmentOwnedIdentities{}, errs.New(
+			errs.KindValidationFailed,
+			"Environment owned identity predecessor is invalid",
+		)
 	}
 	result := CloneEnvironmentOwnedIdentities(current)
 	retainOwnedBirths(result.Services, previous.Services)

@@ -57,6 +57,7 @@ func TestPrepareEnvironmentComponentTaskReorderedMultiComponentUsesDesiredSecond
 		desiredProjection,
 		environmentBlueprintTestMarker(desiredTask, environment.Record.ID),
 	)
+	seedEffectiveBlueprintFixture(t, store, desiredProjection)
 	headValue, err := testidempotency.EncodeTaskReference(desiredTask.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)

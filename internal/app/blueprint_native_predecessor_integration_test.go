@@ -122,17 +122,23 @@ func proveNativeCandidatePreparation(
 	if err != nil || fixture.ReadRevision() != before {
 		t.Fatalf("read-only native preflight: %v", err)
 	}
+	priorIdentities, found, err := fixture.Hierarchy.GetEnvironmentOwnedIdentities(ctx, current.EnvironmentID)
+	if err != nil || !found {
+		t.Fatalf("native predecessor desired identities: found=%t err=%v", found, err)
+	}
+	candidateGeneration := priorIdentities.Record.RenderGeneration + 1
 	task := fixture.Task(t, 1700)
 	task.CreatedAt = time.Now().UTC()
 	task.UpdatedAt = task.CreatedAt
-	task.RenderGeneration = 3
+	task.RenderGeneration = int32(candidateGeneration)
 	artifactID := ids.New(ids.KindConfig)
 	task.Params[taskcontract.EnvironmentBlueprintArtifactParam] = artifactID
 	task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(taskcontract.BlueprintComposeProcedureNone)
 	artifact, err := testcomposerender.RenderCompose(
 		testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
 			ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: current.TenantID, ProjectID: current.ProjectID,
-			EnvironmentID: current.EnvironmentID, PlanID: task.PlanID, RenderGeneration: 3, AuthorizedVolumeDir: current.AuthorizedVolumeDir,
+			EnvironmentID: current.EnvironmentID, PlanID: task.PlanID, RenderGeneration: candidateGeneration,
+			AuthorizedVolumeDir: current.AuthorizedVolumeDir,
 			Identities: testcomposeidentity.Snapshot{
 				Services: []testcomposeidentity.Resource{{ID: current.ServiceID, Name: current.ServiceName}},
 			}},
@@ -141,7 +147,7 @@ func proveNativeCandidatePreparation(
 		t.Fatal(err)
 	}
 	projection := current.Projection
-	projection.RevisionID, projection.RenderGeneration = task.ID, 3
+	projection.RevisionID, projection.RenderGeneration = task.ID, candidateGeneration
 	projection.DesiredServices = []testservices.EnvironmentServiceProjection{
 		{EnvironmentID: current.EnvironmentID, Desired: desired.Desired},
 	}

@@ -74,8 +74,8 @@ func TestRouteRemovalCompletionPromotesStagedCandidate(t *testing.T) {
 		t.Fatalf("Get(Route desired descriptor) = %#v/%v", descriptorRead, err)
 	}
 	descriptor, err := testblueprints.DecodeEnvironmentBlueprintStageDescriptor(descriptorRead.Entry.Value)
-	if err != nil || descriptor.ProjectionResources != 1 {
-		t.Fatalf("Route desired descriptor resources = %d/%v, want 1", descriptor.ProjectionResources, err)
+	if err != nil || descriptor.ProjectionResources != 0 {
+		t.Fatalf("Route removal desired descriptor resources = %d/%v, want 0", descriptor.ProjectionResources, err)
 	}
 	desired, found, err := hierarchy.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil || !found || !testenvironmentchanges.SameRouteRemovalProjection(desired.Record, projection.Record) {
@@ -372,6 +372,7 @@ func routeDeletionTestProjection(
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 	claim := stageEnvironmentBlueprintForPublicationTest(t, hierarchy, selected.Revision, revision, projection, marker)
+	seedEffectiveBlueprintFixture(t, store, projection)
 	descriptorRead, err := store.Get(
 		context.Background(),
 		testblueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID),

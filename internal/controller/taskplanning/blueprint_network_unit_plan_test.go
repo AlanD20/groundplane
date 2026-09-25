@@ -36,7 +36,9 @@ func (reader *blueprintNetworkUnitPlanReader) GetEnvironmentOwnedIdentitiesRevis
 	string,
 	string,
 ) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities], bool, error) {
-	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities]{Record: reader.identities}, true, nil
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities]{
+		Record: reader.identities,
+	}, true, nil
 }
 
 // BP-10 / NET-01: a private Zone child must reconstruct the same single-Network

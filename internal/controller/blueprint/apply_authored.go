@@ -113,7 +113,10 @@ func (service *Service) applyAuthoredOnce(
 			errs.KindResourceInUse, "Blueprint omits a persistent Volume; remove it separately before Apply",
 		)
 	}
-	previousVolumes := make([]projectionrecord.EnvironmentVolumeIdentity, len(baseline.previousIdentities.Record.Volumes))
+	previousVolumes := make(
+		[]projectionrecord.EnvironmentVolumeIdentity,
+		len(baseline.previousIdentities.Record.Volumes),
+	)
 	for index, identity := range baseline.previousIdentities.Record.Volumes {
 		previousVolumes[index] = projectionrecord.EnvironmentVolumeIdentity{
 			ID: identity.ID, Key: identity.Name, Slug: identity.Slug,
@@ -192,9 +195,24 @@ func (service *Service) applyAuthoredOnce(
 		}
 	}
 	previous := baseline.previousIdentities.Record
-	attaches := selectAuthoredNamedResources(parsed.Extensions.Attachments, previous.Attaches, ids.KindAttach, allocator.Named)
-	components := selectAuthoredNamedResources(parsed.Extensions.Components, previous.Components, ids.KindComponent, allocator.Named)
-	scripts := selectAuthoredNamedResources(parsed.Extensions.Scripts, previous.Scripts, ids.KindScript, allocator.Named)
+	attaches := selectAuthoredNamedResources(
+		parsed.Extensions.Attachments,
+		previous.Attaches,
+		ids.KindAttach,
+		allocator.Named,
+	)
+	components := selectAuthoredNamedResources(
+		parsed.Extensions.Components,
+		previous.Components,
+		ids.KindComponent,
+		allocator.Named,
+	)
+	scripts := selectAuthoredNamedResources(
+		parsed.Extensions.Scripts,
+		previous.Scripts,
+		ids.KindScript,
+		allocator.Named,
+	)
 	owned, err := authoredOwnedIdentities(
 		environmentID, claim.RevisionID, baseline.generation, changes.Current, previous,
 		volumeSlugs, entries.Current, routeProjections, attaches, components, scripts,
@@ -230,12 +248,17 @@ func (service *Service) applyAuthoredOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	claimHeld = false
-	return desiredrevision.PublishAuthored(ctx, service.repository, service.idempotency, desiredrevision.PublishAuthoredInput{
-		Project: baseline.project, Environment: baseline.environment,
-		ExpectedHeadRevision: baseline.expectedHeadRevision,
-		Staged:               staged, OwnedIdentities: owned, AttachInputGenerations: attachInputGenerations,
-		Evidence: evidence, Locator: locator, Parent: parent,
-	})
+	return desiredrevision.PublishAuthored(
+		ctx,
+		service.repository,
+		service.idempotency,
+		desiredrevision.PublishAuthoredInput{
+			Project: baseline.project, Environment: baseline.environment,
+			ExpectedHeadRevision: baseline.expectedHeadRevision,
+			Staged:               staged, OwnedIdentities: owned, AttachInputGenerations: attachInputGenerations,
+			Evidence: evidence, Locator: locator, Parent: parent,
+		},
+	)
 }
 
 func selectAuthoredNamedResources[T any](

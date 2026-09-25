@@ -81,7 +81,39 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 				Kind:     testhierarchy.ProjectKindTenant,
 			},
 			environment: testhierarchy.EnvironmentRecord{ID: environmentID, ProjectID: projectID,
-				Name: scope.Environment, NetworkPool: "10.40.0.0/16"},
+				Name: scope.Environment, NetworkPool: "10.40.0.0/16",
+				VolumeDir: "/var/lib/groundplane/vol/tenant/project/" + environmentID},
+		},
+		desired: testenvironmentprojection.EnvironmentDesiredInput{
+			EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 2,
+			Input: core.BlueprintDesiredInput{
+				NormalizedCompose: normalized, NetworkPool: "10.40.0.0/16",
+				Entries: map[string]core.EntrySpec{
+					"settings": {Kind: core.EntryKindFile, Path: "config/settings", UID: &uid, GID: &gid,
+						Exposure: []string{"web"}, Secret: true,
+						Source: core.EntrySourceSpec{SecretRef: secretID}},
+					"TOKEN": {Kind: core.EntryKindEnv, Exposure: []string{"web"}, Secret: true},
+				},
+			},
+		},
+		identities: testenvironmentprojection.EnvironmentOwnedIdentities{
+			EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 2,
+			Services: []testenvironmentprojection.OwnedIdentity{{
+				ID: ids.NewAt(ids.KindService, at, 10), Name: "web", BirthRevisionID: revisionID,
+			}},
+			Networks: []testenvironmentprojection.OwnedIdentity{
+				{ID: ids.NewAt(ids.KindNetwork, at, 16), Name: "default", BirthRevisionID: revisionID},
+				{ID: ids.NewAt(ids.KindNetwork, at, 6), Name: "secondary", BirthRevisionID: revisionID},
+			},
+			Volumes: []testenvironmentprojection.OwnedIdentity{{
+				ID: ids.NewAt(ids.KindVolume, at, 11), Name: "data", Slug: "data", BirthRevisionID: revisionID,
+			}},
+			Entries: []testenvironmentprojection.OwnedIdentity{
+				{ID: ids.NewAt(ids.KindEnvEntry, at, 12), Name: "TOKEN", BirthRevisionID: revisionID,
+					ValueGenerationID: ids.NewAt(ids.KindConfig, at, 13)},
+				{ID: ids.NewAt(ids.KindEnvEntry, at, 14), Name: "settings", BirthRevisionID: revisionID,
+					ValueGenerationID: ids.NewAt(ids.KindConfig, at, 15)},
+			},
 		},
 		projection: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID:     environmentID,
@@ -128,7 +160,25 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 type authoringRoundtripRepository struct {
 	*blueprintPreflightRepository
 	projection testenvironmentprojection.EnvironmentComposeProjection
+	desired    testenvironmentprojection.EnvironmentDesiredInput
+	identities testenvironmentprojection.EnvironmentOwnedIdentities
 	scripts    []testscripts.Record
+}
+
+func (r *authoringRoundtripRepository) GetEnvironmentDesiredInput(
+	context.Context, string,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput], bool, error) {
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput]{
+		Record: r.desired, Revision: 1, ReadRevision: 1,
+	}, true, nil
+}
+
+func (r *authoringRoundtripRepository) GetEnvironmentOwnedIdentities(
+	context.Context, string,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities], bool, error) {
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentOwnedIdentities]{
+		Record: r.identities, Revision: 1, ReadRevision: 1,
+	}, true, nil
 }
 
 func (r *authoringRoundtripRepository) GetEnvironmentBlueprintHead(

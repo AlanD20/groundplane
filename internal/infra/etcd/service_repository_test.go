@@ -277,6 +277,15 @@ func seedServiceRepositoryTestDesiredProjection(
 		t.Fatalf("encodeEnvironmentComposeProjectionStorage() error = %v", err)
 	}
 	defer clear(effectiveValue)
+	identities, err := testenvironmentprojection.OwnedIdentitiesFromProjection(projection)
+	if err != nil {
+		t.Fatalf("OwnedIdentitiesFromProjection() error = %v", err)
+	}
+	identityValue, err := testenvironmentprojection.EncodeEnvironmentOwnedIdentities(identities)
+	if err != nil {
+		t.Fatalf("EncodeEnvironmentOwnedIdentities() error = %v", err)
+	}
+	defer clear(identityValue)
 	headValue, err := testidempotency.EncodeTaskReference(projection.RevisionID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
@@ -299,6 +308,13 @@ func seedServiceRepositoryTestDesiredProjection(
 				projection.EnvironmentID, projection.RevisionID,
 			),
 			Value: effectiveValue,
+		},
+		{
+			Type: testkeyvalue.MutationPut,
+			Key: testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(
+				projection.EnvironmentID, projection.RevisionID,
+			),
+			Value: identityValue,
 		},
 	}
 	for index := uint32(0); index < streams.Descriptor.ProjectionChunks; index++ {

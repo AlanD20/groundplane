@@ -487,9 +487,9 @@ func isWaiting(err error) bool {
 }
 
 func errorCode(err error) string {
-	kind, ok := errs.KindOf(err)
-	if ok {
-		return string(kind)
+	var domainErr *errs.Error
+	if errors.As(err, &domainErr) {
+		return string(domainErr.ToProblem().Code)
 	}
 	if errors.Is(err, context.Canceled) {
 		return "context.canceled"
@@ -497,5 +497,5 @@ func errorCode(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "context.deadline_exceeded"
 	}
-	return string(errs.KindInternal)
+	return string(errs.CodeInternal)
 }

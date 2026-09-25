@@ -186,17 +186,17 @@ func TestEnvironmentBlueprintTopologyPublicationHasConstantCompactShape(t *testi
 				t.Fatalf("PublishEnvironmentDesiredRevisionWithTask() error = %v", err)
 			}
 			// The configuration-head fence adds one comparison, not one per resource.
-			if audited.comparisons != 23 || audited.successMutations != 12 {
+			if audited.comparisons != 26 || audited.successMutations != 15 {
 				t.Fatalf(
-					"publication partitions = %d/%d, want 23/12",
+					"publication partitions = %d/%d, want 26/15",
 					audited.comparisons,
 					audited.successMutations,
 				)
 			}
 			outcome, _, conflict, classifyErr := result.Classify()
 			if reject {
-				if audited.failureReads != 23 {
-					t.Fatalf("failure reads = %d, want 23", audited.failureReads)
+				if audited.failureReads != 26 {
+					t.Fatalf("failure reads = %d, want 26", audited.failureReads)
 				}
 				if classifyErr != nil || outcome != IdempotencyKnownConflict || conflict == nil {
 					t.Fatalf("rejected publication = %v/%v/%v", outcome, conflict, classifyErr)

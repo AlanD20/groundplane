@@ -91,7 +91,7 @@ func (repository *boundaryRepository) StageEnvironmentBlueprintRevision(
 ) (testblueprints.EnvironmentBlueprintSeal, error) {
 	repository.stages++
 	repository.stagedTaskID = request.Claim.TaskID
-	projection, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(request.Projection)
+	projection, err := testenvironmentprojection.EncodeEnvironmentDesiredInputStorage(request.DesiredInput)
 	if err != nil {
 		return testblueprints.EnvironmentBlueprintSeal{}, err
 	}
@@ -106,6 +106,13 @@ func (repository *boundaryRepository) StageEnvironmentBlueprintRevision(
 		ProjectionBytes:      uint64(len(projection)),
 		ProjectionSHA256:     sha256.Sum256(projection),
 	}, nil
+}
+
+func (repository *boundaryRepository) PublishEnvironmentBlueprintAuthoredRevision(
+	_ context.Context,
+	_ etcd.BlueprintAuthoredPublication,
+) (etcd.IdempotencyTransactionResult, error) {
+	return etcd.IdempotencyTransactionResult{}, errors.New("unexpected authored publication")
 }
 
 func (repository *boundaryRepository) PublishEnvironmentBlueprintDesiredRevision(
@@ -315,7 +322,7 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 	}
 
 	staged, err := Stage(ctx, repository, StageInput{
-		Claim: recovered, Projection: recoveredProjection,
+		Claim: recovered, Projection: recoveredProjection, DesiredInput: boundaryDesiredInput(recoveredProjection),
 	})
 	if err != nil {
 		t.Fatalf("Stage(recovered) error = %v", err)
@@ -493,7 +500,9 @@ func boundaryStagedPublication(
 		t.Fatalf("Claim() error = %v", err)
 	}
 	projection := boundaryProjection(t, now, environmentID, taskID, 64, 0)
-	staged, err := Stage(ctx, repository, StageInput{Claim: claim, Projection: projection})
+	staged, err := Stage(ctx, repository, StageInput{
+		Claim: claim, Projection: projection, DesiredInput: boundaryDesiredInput(projection),
+	})
 	if err != nil {
 		t.Fatalf("Stage() error = %v", err)
 	}
@@ -554,6 +563,19 @@ func boundaryProjection(
 				TargetPort: 8080, Exposure: "public",
 			},
 		}},
+	}
+}
+
+func boundaryDesiredInput(
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+) testenvironmentprojection.EnvironmentDesiredInput {
+	return testenvironmentprojection.EnvironmentDesiredInput{
+		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
+		RenderGeneration: projection.RenderGeneration,
+		Input: core.BlueprintDesiredInput{
+			NormalizedCompose: append([]byte(nil), projection.NormalizedCompose...),
+			NetworkPool:       "10.70.0.0/16",
+		},
 	}
 }
 

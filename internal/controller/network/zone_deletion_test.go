@@ -38,6 +38,13 @@ type fakeZoneDeletionRepository struct {
 	authorities testenvironmentchanges.EnvironmentZoneRemovalAuthorities
 }
 
+func (fake *fakeZoneDeletionRepository) GetEnvironmentDesiredInput(
+	context.Context, string,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentDesiredInput], bool, error) {
+	projection := fake.authorities.Desired.Record
+	return zoneTestDesiredInput(projection, fake.environment.Record.NetworkPool), projection.EnvironmentID != "", nil
+}
+
 func (fake *fakeZoneDeletionRepository) GetZone(
 	context.Context,
 	string,

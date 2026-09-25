@@ -192,7 +192,10 @@ func (service *Service) listBlueprintEntries(
 				current.Record.RevisionID != desired.Record.RevisionID) {
 				return nil, errs.New(errs.KindStateConflict, "Environment desired input changed while listing Entries")
 			}
-			currentIdentities, currentIdentitiesFound, err := service.repository.GetEnvironmentOwnedIdentities(ctx, environmentID)
+			currentIdentities, currentIdentitiesFound, err := service.repository.GetEnvironmentOwnedIdentities(
+				ctx,
+				environmentID,
+			)
 			if err != nil {
 				return nil, err
 			}

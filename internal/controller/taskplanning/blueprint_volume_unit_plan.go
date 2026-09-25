@@ -107,7 +107,8 @@ func (resolver *TaskPlanResolver) buildBlueprintVolumeUnitPlan(
 	if err != nil {
 		return nil, err
 	}
-	if task.Owner != expectedOwner || environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
+	if task.Owner != expectedOwner ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Volume child Environment hierarchy changed")
 	}
 	ownerKind := composerender.ComposeProjectOwnerBacking

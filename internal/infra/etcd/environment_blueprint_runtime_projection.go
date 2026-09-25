@@ -145,7 +145,10 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 		{Key: parentKey, ModRevision: read.Values[0].ModRevision},
 		{Key: claimKey, ModRevision: read.Values[1].ModRevision},
 		{Key: stopKey},
-		{Key: blueprints.EnvironmentBlueprintRootKey(projection.EnvironmentID, parent.ID), ModRevision: input.DesiredRootRevision},
+		{
+			Key:         blueprints.EnvironmentBlueprintRootKey(projection.EnvironmentID, parent.ID),
+			ModRevision: input.DesiredRootRevision,
+		},
 		{Key: identitiesKey, ModRevision: input.OwnedIdentitiesRevision},
 		{Key: hierarchyrecord.ProjectKey(input.Project.Record.ID), ModRevision: input.Project.Revision},
 		{Key: hierarchyrecord.EnvironmentKey(input.Environment.Record.ID), ModRevision: input.Environment.Revision},

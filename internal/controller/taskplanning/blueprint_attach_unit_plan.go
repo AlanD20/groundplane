@@ -201,5 +201,10 @@ func blueprintAttachUnitStepID(task etcd.TaskRecord) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return ids.DeriveAt(ids.KindStep, planTime, task.PlanID, "blueprint-attach-unit:"+task.Params[attachinputs.TaskAttachIDParam]), nil
+	return ids.DeriveAt(
+		ids.KindStep,
+		planTime,
+		task.PlanID,
+		"blueprint-attach-unit:"+task.Params[attachinputs.TaskAttachIDParam],
+	), nil
 }

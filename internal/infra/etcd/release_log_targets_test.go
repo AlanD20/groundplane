@@ -172,6 +172,7 @@ func stageReleaseLogDesiredProjection(
 	}}); err != nil {
 		t.Fatalf("Put(Environment blueprint head) error = %v", err)
 	}
+	seedEffectiveBlueprintFixture(t, store, projection)
 	return fixtures
 }
 

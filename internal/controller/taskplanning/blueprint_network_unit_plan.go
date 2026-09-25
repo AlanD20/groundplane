@@ -145,7 +145,8 @@ func (resolver *TaskPlanResolver) buildBlueprintNetworkUnitPlan(
 	if err != nil {
 		return nil, err
 	}
-	if task.Owner != expectedOwner || environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
+	if task.Owner != expectedOwner ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		desired.Record.Input.NetworkPool != environment.Record.NetworkPool {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Network child Environment hierarchy changed")
 	}

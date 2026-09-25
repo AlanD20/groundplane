@@ -42,11 +42,30 @@ type candidatePublicationRepository struct {
 	abandoned        []testidempotency.IdempotencyLocator
 }
 
+func (repository *candidatePublicationRepository) PublishEnvironmentBlueprintAuthoredRevision(
+	_ context.Context, _ etcd.BlueprintAuthoredPublication,
+) (etcd.IdempotencyTransactionResult, error) {
+	return etcd.IdempotencyTransactionResult{}, errors.New("unexpected authored publication")
+}
+
+func candidatePublicationDesiredInput(
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+) testenvironmentprojection.EnvironmentDesiredInput {
+	return testenvironmentprojection.EnvironmentDesiredInput{
+		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
+		RenderGeneration: projection.RenderGeneration,
+		Input: core.BlueprintDesiredInput{
+			NormalizedCompose: append([]byte(nil), projection.NormalizedCompose...),
+			NetworkPool:       "10.40.0.0/16",
+		},
+	}
+}
+
 func (repository *candidatePublicationRepository) StageEnvironmentBlueprintRevision(
 	_ context.Context,
 	request testblueprints.EnvironmentBlueprintStageRequest,
 ) (testblueprints.EnvironmentBlueprintSeal, error) {
-	projection, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(request.Projection)
+	projection, err := testenvironmentprojection.EncodeEnvironmentDesiredInputStorage(request.DesiredInput)
 	if err != nil {
 		return testblueprints.EnvironmentBlueprintSeal{}, err
 	}
@@ -145,12 +164,12 @@ func TestEnvironmentBlueprintApplyStagesCandidateProjectionBeforeReleaseHooksAnd
 		TaskID:           taskID,
 		SourceKind:       testblueprints.EnvironmentBlueprintSourceApply,
 		RenderGeneration: 1,
-		ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		CreatedAt:        now,
 	}
 	repository := &candidatePublicationRepository{}
 	staged, err := desiredrevision.Stage(ctx, repository, desiredrevision.StageInput{
-		Claim: claim, Projection: projection,
+		Claim: claim, Projection: projection, DesiredInput: candidatePublicationDesiredInput(projection),
 	})
 	if err != nil {
 		t.Fatalf("desiredrevision.Stage() error = %v", err)
@@ -211,7 +230,7 @@ func TestEnvironmentBlueprintPostStagePreparationFailuresAbandonExactLocator(t *
 				Locator:          locator,
 				SourceKind:       testblueprints.EnvironmentBlueprintSourceApply,
 				RenderGeneration: 1,
-				ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema,
+				ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 				CreatedAt:        now,
 			}
 			projection := testenvironmentprojection.EnvironmentComposeProjection{
@@ -230,7 +249,7 @@ func TestEnvironmentBlueprintPostStagePreparationFailuresAbandonExactLocator(t *
 			}
 			repository := &candidatePublicationRepository{}
 			staged, stageErr := desiredrevision.Stage(ctx, repository, desiredrevision.StageInput{
-				Claim: claim, Projection: projection,
+				Claim: claim, Projection: projection, DesiredInput: candidatePublicationDesiredInput(projection),
 			})
 			if stageErr != nil {
 				t.Fatalf("desiredrevision.Stage() error = %v", stageErr)

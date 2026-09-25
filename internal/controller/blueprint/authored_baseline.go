@@ -138,7 +138,10 @@ func authoredOwnedIdentitySnapshot(
 		!sameOwnedNames(volumeNames, identities.Volumes) ||
 		!sameOwnedNames(entryNames, identities.Entries) ||
 		!sameOwnedNames(routeNames, identities.Routes) {
-		return composeidentity.Snapshot{}, errs.New(errs.KindInternal, "Environment desired identity names are inconsistent")
+		return composeidentity.Snapshot{}, errs.New(
+			errs.KindInternal,
+			"Environment desired identity names are inconsistent",
+		)
 	}
 	previous := composeidentity.Snapshot{
 		Services: make([]composeidentity.Resource, len(identities.Services)),

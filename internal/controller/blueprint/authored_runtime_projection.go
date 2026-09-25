@@ -155,7 +155,8 @@ func (service *Service) loadAuthoredRuntimeProjectionSource(
 	if err != nil {
 		return authoredRuntimeProjectionSource{}, err
 	}
-	if expectedOwner != parent.Owner || environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
+	if expectedOwner != parent.Owner ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return authoredRuntimeProjectionSource{}, errs.New(
 			errs.KindStateConflict, "Blueprint runtime projection hierarchy changed",
 		)

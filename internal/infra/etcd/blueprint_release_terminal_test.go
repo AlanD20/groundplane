@@ -280,7 +280,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 			Type:  testkeyvalue.MutationPut,
 			Key:   testreleases.ReleaseServiceIndexKey(environmentID, serviceID, releaseID),
 			Value: indexValue,
-		}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentMutationEpochKey(environmentID), Value: epochValue}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headValue}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintRootKey(environmentID, taskID), Value: sealValue}, testkeyvalue.Mutation{
+		}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testhierarchy.EnvironmentMutationEpochKey(environmentID), Value: epochValue}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintHeadKey(environmentID), Value: headValue}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintRootKey(environmentID, taskID), Value: sealValue}, testkeyvalue.Mutation{Type: testkeyvalue.MutationPut, Key: testblueprints.EnvironmentBlueprintEffectiveProjectionKey(environmentID, taskID), Value: projectionValue}, testkeyvalue.Mutation{
 			Type: testkeyvalue.MutationPut,
 			Key: testblueprints.EnvironmentBlueprintChunkKeyFor(
 				environmentID,

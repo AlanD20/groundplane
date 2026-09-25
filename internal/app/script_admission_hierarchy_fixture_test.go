@@ -42,6 +42,20 @@ func routeRepositoryTestHierarchy(
 	revision := environmentBlueprintTestRevision(environment.Record.ID, task, "services: {api: {}}\n")
 	marker := environmentBlueprintTestMarker(task, environment.Record.ID)
 	stageEnvironmentBlueprintForPublicationTest(t, store, 0, revision, projection, marker)
+	effectiveValue, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(effectiveValue)
+	identities, err := testenvironmentprojection.OwnedIdentitiesFromProjection(projection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identitiesValue, err := testenvironmentprojection.EncodeEnvironmentOwnedIdentities(identities)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(identitiesValue)
 	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
@@ -56,6 +70,8 @@ func routeRepositoryTestHierarchy(
 	defer clear(runtimeValue)
 	seed, err := store.Transact(context.Background(), []testkeyvalue.Condition{
 		{Key: testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID)},
+		{Key: testblueprints.EnvironmentBlueprintEffectiveProjectionKey(environment.Record.ID, task.ID)},
+		{Key: testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(environment.Record.ID, task.ID)},
 		{Key: testservices.ServiceRuntimeKey(targetID)},
 		{Key: "/v1/runtime/environment-configurations/" + environment.Record.ID},
 	}, []testkeyvalue.Mutation{
@@ -64,6 +80,12 @@ func routeRepositoryTestHierarchy(
 			Key:   testblueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
 			Value: headValue,
 		},
+		{Type: testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintEffectiveProjectionKey(environment.Record.ID, task.ID),
+			Value: effectiveValue},
+		{Type: testkeyvalue.MutationPut,
+			Key:   testblueprints.EnvironmentBlueprintOwnedIdentitiesKey(environment.Record.ID, task.ID),
+			Value: identitiesValue},
 		{Type: testkeyvalue.MutationPut, Key: testservices.ServiceRuntimeKey(targetID), Value: runtimeValue},
 		{
 			Type:  testkeyvalue.MutationPut,

@@ -36,6 +36,7 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 	}}); err != nil || !tx.Succeeded {
 		t.Fatalf("seed Blueprint head = %#v, %v", tx, err)
 	}
+	seedBlueprintUnitInitialAbsence(t, store, environmentID, parentID, service)
 	initial, err := ledger.Load(ctx, environmentID)
 	if err != nil || initial.HeadTaskID != parentID || initial.EpochRevision != 0 {
 		t.Fatalf("initial unit snapshot = %#v, %v", initial, err)
@@ -51,7 +52,7 @@ func TestBlueprintUnitMutationFencesHeadAndEpoch(t *testing.T) {
 		State: blueprintunits.Pending,
 	}
 	plan, err := blueprintunits.PrepareMutation(initial,
-		[]blueprintunits.AppliedChange{{Target: service, Next: &absent}},
+		nil,
 		[]blueprintunits.ExecutionChange{{PlanID: planID, Next: &execution}},
 	)
 	if err != nil {
@@ -205,12 +206,13 @@ func TestBlueprintDesiredUnitPlanSealsAfterFactDependentExpansion(t *testing.T) 
 	}}); err != nil || !tx.Succeeded {
 		t.Fatalf("seed desired head = %#v, %v", tx, err)
 	}
+	attach := blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: ids.NewAt(ids.KindAttach, now, 72)}
+	service := blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.NewAt(ids.KindService, now, 73)}
+	seedBlueprintUnitInitialAbsence(t, store, environmentID, parentID, attach, service)
 	initial, err := ledger.Load(ctx, environmentID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	attach := blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: ids.NewAt(ids.KindAttach, now, 72)}
-	service := blueprintunits.ResourceKey{Kind: ids.KindService, ID: ids.NewAt(ids.KindService, now, 73)}
 	first := blueprintunits.DesiredPlan{
 		EnvironmentID: environmentID, ParentTaskID: parentID,
 		Units: []blueprintunits.Unit{
@@ -253,5 +255,20 @@ func TestBlueprintDesiredUnitPlanSealsAfterFactDependentExpansion(t *testing.T) 
 	}
 	if _, err := blueprintunits.PrepareDesiredPlan(current, first); err == nil {
 		t.Fatal("sealed plan was reopened")
+	}
+}
+
+func seedBlueprintUnitInitialAbsence(
+	t *testing.T, store *memoryTaskStore, environmentID, parentID string, targets ...blueprintunits.ResourceKey,
+) {
+	t.Helper()
+	publication, err := blueprintunits.PrepareInitialAbsencePublication(environmentID, parentID, targets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer publication.Clear()
+	if result, err := store.Transact(context.Background(), publication.Conditions(), publication.Mutations()); err != nil ||
+		!result.Succeeded {
+		t.Fatalf("seed unit initial absence = %#v, %v", result, err)
 	}
 }

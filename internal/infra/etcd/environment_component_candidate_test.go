@@ -72,6 +72,7 @@ func testEnvironmentComponentTaskPublication(t *testing.T, combined bool) {
 		previousProjection,
 		environmentBlueprintTestMarker(previousTask, environment.Record.ID),
 	)
+	seedEffectiveBlueprintFixture(t, store, previousProjection)
 	headValue, err := testidempotency.EncodeTaskReference(previousTask.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
@@ -406,6 +407,7 @@ func TestPrepareEnvironmentComponentTaskUsesAppliedProjectionAuthority(t *testin
 		t, repository, 0, environmentBlueprintTestRevision(environment.Record.ID, task, "services: {}\n"),
 		desired, environmentBlueprintTestMarker(task, environment.Record.ID),
 	)
+	seedEffectiveBlueprintFixture(t, store, desired)
 	headValue, err := testidempotency.EncodeTaskReference(task.ID)
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)
@@ -524,6 +526,7 @@ func TestPrepareEnvironmentComponentTaskRetainsPrimaryReservationWhenAddingSecon
 	stageEnvironmentBlueprintForPublicationTest(t, repository, 0,
 		environmentBlueprintTestRevision(environment.Record.ID, previousTask, "services: {}\n"), applied,
 		environmentBlueprintTestMarker(previousTask, environment.Record.ID))
+	seedEffectiveBlueprintFixture(t, store, applied)
 	headValue, err := testidempotency.EncodeTaskReference(previousTask.ID)
 	if err != nil {
 		t.Fatal(err)

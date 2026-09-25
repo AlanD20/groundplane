@@ -137,15 +137,40 @@ func (repository *TaskRepository) prepareBlueprintAttachChildPublication(
 		etcdstore.Condition{Key: attachrecord.AttachFactsKey(record.ID)},
 		etcdstore.Condition{Key: attachrecord.BlueprintAttachTaskIntentKey(child.ID)},
 	)
-	publication.mutations = append(publication.mutations,
+	publication.mutations = append(
+		publication.mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(record.ID), Value: recordValue},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachNameKey(record.EnvironmentID, record.Name), Value: []byte(record.ID)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachServiceKey(record.ServiceID, record.ID), Value: []byte(record.ID)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachNameKey(record.EnvironmentID, record.Name),
+			Value: []byte(record.ID),
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID),
+			Value: []byte(record.ID),
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachServiceKey(record.ServiceID, record.ID),
+			Value: []byte(record.ID),
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachBackingServiceKey(record.BackingServiceID, record.ID),
+			Value: []byte(record.ID),
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID),
+			Value: []byte(record.ID),
+		},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachFactsKey(record.ID), Value: factsValue},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.BlueprintAttachTaskIntentKey(child.ID), Value: intentValue},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.BlueprintAttachTaskIntentKey(child.ID),
+			Value: intentValue,
+		},
 	)
 	if generation.ResolvedInputs != nil {
 		hookValue, err := taskconfiguration.EncodeBackingHookEncryptedInputs(*generation.ResolvedInputs)

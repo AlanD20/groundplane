@@ -88,7 +88,8 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	if err := idempotency.ValidateIdempotencyMarker(input.Marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil || found {
+	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, input.Marker); err != nil ||
+		found {
 		return existing, err
 	}
 	desiredValue, err := projectionrecord.EncodeEnvironmentDesiredInputStorage(input.DesiredInput)
@@ -127,7 +128,10 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 		{Key: taskjournal.TaskOperationIndexKey(parent.OperationID, parent.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(parent.OperationID)},
 		{Key: taskjournal.TaskQueueKey(parent.Executor, parent.ID)},
-		{Key: blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID), ModRevision: publication.rootRevision},
+		{
+			Key:         blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID),
+			ModRevision: publication.rootRevision,
+		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
@@ -136,13 +140,25 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintAut
 	}
 	mutations := []keyvalue.Mutation{
 		{Type: keyvalue.MutationPut, Key: taskjournal.TaskStorageKey(parent.ID), Value: parentValue},
-		{Type: keyvalue.MutationPut, Key: taskjournal.TaskOperationIndexKey(parent.OperationID, parent.ID), Value: reference},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(parent.OperationID, parent.ID),
+			Value: reference,
+		},
 		{Type: keyvalue.MutationPut, Key: taskjournal.TaskActiveOperationKey(parent.OperationID), Value: reference},
 		{Type: keyvalue.MutationPut, Key: taskjournal.TaskQueueKey(parent.Executor, parent.ID), Value: reference},
 		{Type: keyvalue.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: keyvalue.MutationDelete, Key: publication.locatorKey},
-		{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
-		{Type: keyvalue.MutationPut, Key: blueprints.EnvironmentBlueprintOwnedIdentitiesKey(revision.EnvironmentID, revision.RevisionID), Value: ownedIdentityValue},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID),
+			Value: reference,
+		},
+		{
+			Type:  keyvalue.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintOwnedIdentitiesKey(revision.EnvironmentID, revision.RevisionID),
+			Value: ownedIdentityValue,
+		},
 	}
 	conditions = append(conditions, initialAbsence.Conditions()...)
 	mutations = append(mutations, initialAbsence.Mutations()...)

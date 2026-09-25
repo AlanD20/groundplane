@@ -150,12 +150,12 @@ func TestRouteRepositoryRejectsPublicationOmittingDesiredService(t *testing.T) {
 	_, mutationErr := repository.BeginRouteMutationWithTask(
 		ctx, environment, project, target, nil, record, intent, task, marker,
 	)
-	if kind, ok := errs.KindOf(mutationErr); !ok || kind != errs.KindResourceInUse {
+	if kind, ok := errs.KindOf(mutationErr); !ok || kind != errs.KindStateConflict {
 		t.Errorf(
 			"BeginRouteMutationWithTask() error kind = %v/%v, want %v (error %v)",
 			kind,
 			ok,
-			errs.KindResourceInUse,
+			errs.KindStateConflict,
 			mutationErr,
 		)
 	}

@@ -71,7 +71,7 @@ func TestServiceRemovalCandidatePreservesAbsentRuntimeFiles(t *testing.T) {
 		},
 		Intent:               serviceTestProtectedIntent(),
 		BaselineHeadRevision: 11, SourceKind: testblueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: 2, ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
+		RenderGeneration: 2, ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: createdAt,
 	}
 	intent, err := testenvironmentchanges.NewServiceRemovalIntent(
 		candidateRevisionID,

@@ -6,7 +6,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/core"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
-	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -14,12 +13,10 @@ import (
 // Rationale: a reapply must not advertise existing native resources as new;
 // unsupported omission paths cannot promise removal in Validate.
 func TestBlueprintDiffRecognizesExistingNativeResources(t *testing.T) {
-	projection := testenvironmentprojection.EnvironmentComposeProjection{
-		DesiredServices: []testservices.EnvironmentServiceProjection{{Desired: core.Service{Name: "api"}}},
-		DesiredZones:    []testenvironmentprojection.EnvironmentZoneProjection{{Desired: core.Zone{Name: "private"}}},
-		Volumes: []testenvironmentprojection.EnvironmentVolumeIdentity{
-			{Key: "storage", Slug: "renamed-storage"},
-		},
+	current := &composetypes.Project{
+		Services: composetypes.Services{"api": {Name: "api"}},
+		Networks: composetypes.Networks{"private": {}},
+		Volumes:  composetypes.Volumes{"storage": {}},
 	}
 	for _, included := range []bool{false, true} {
 		project := &composetypes.Project{}
@@ -31,7 +28,7 @@ func TestBlueprintDiffRecognizesExistingNativeResources(t *testing.T) {
 			want = apiTypes.BlueprintChangeUpdate
 		}
 		changes := environmentBlueprintChanges(blueprintparser.AuthoringDocument{},
-			blueprintparser.Result{Project: project}, true, projection, nil)
+			blueprintparser.Result{Project: project}, true, current)
 		found := 0
 		for _, change := range changes {
 			if change.Resource == "compose" {
@@ -71,7 +68,7 @@ func TestBlueprintDiffReportsOmittedEntryRemoval(t *testing.T) {
 			"TOKEN": {Kind: core.EntryKindEnv, Secret: true},
 		}},
 		blueprintparser.Result{Project: &composetypes.Project{}}, true,
-		testenvironmentprojection.EnvironmentComposeProjection{}, nil,
+		nil,
 	)
 	for _, change := range changes {
 		if change.Resource == "entry" && change.Key == "TOKEN" {
@@ -90,7 +87,7 @@ func TestBlueprintDiffReportsOmittedScriptRemoval(t *testing.T) {
 	changes := environmentBlueprintChanges(
 		blueprintparser.AuthoringDocument{Scripts: map[string]core.ScriptSpec{"migrate": {}}},
 		blueprintparser.Result{Project: &composetypes.Project{}}, true,
-		testenvironmentprojection.EnvironmentComposeProjection{}, nil,
+		nil,
 	)
 	for _, change := range changes {
 		if change.Resource == "script" && change.Key == "migrate" {
@@ -116,7 +113,7 @@ func TestBlueprintDiffReportsNativeConfigAndSecretChanges(t *testing.T) {
 	}
 	changes := environmentBlueprintChanges(
 		blueprintparser.AuthoringDocument{}, blueprintparser.Result{Project: candidate}, true,
-		testenvironmentprojection.EnvironmentComposeProjection{}, current,
+		current,
 	)
 	want := map[string]apiTypes.BlueprintChangeAction{
 		"config/old-config":    apiTypes.BlueprintChangeRemove,
@@ -147,7 +144,7 @@ func TestBlueprintDiffMarksNewEmptySecretLiteral(t *testing.T) {
 			Extensions: blueprintparser.Extensions{Entries: map[string]core.EntrySpec{
 				"TOKEN": {Kind: core.EntryKindEnv, Secret: true, Source: core.EntrySourceSpec{}},
 			}},
-		}, false, testenvironmentprojection.EnvironmentComposeProjection{}, nil,
+		}, false, nil,
 	)
 	for _, change := range changes {
 		if change.Resource == "entry" && change.Key == "TOKEN" {

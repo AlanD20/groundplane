@@ -2,7 +2,9 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -11,6 +13,29 @@ type taskAcknowledgementSource struct {
 	read  *etcdstore.GetManyResult
 	value *etcdstore.KeyValue
 	task  TaskRecord
+}
+
+// taskAcknowledgementRemovalScope classifies the terminal effect only after
+// checking that environment creation uses its atomic provisioning path.
+func taskAcknowledgementRemovalScope(
+	task TaskRecord,
+	executor taskjournal.TaskExecutor,
+	environmentID string,
+) (bool, bool, error) {
+	environmentTask := executor == taskjournal.TaskExecutorAgent &&
+		recordcodec.ValidateID(ids.KindEnvironment, task.Target) == nil
+	environmentCreation := environmentTask && task.Type == taskjournal.TaskCreate
+	if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
+		return false, false, errs.New(
+			errs.KindStateConflict,
+			"environment creation Task requires its atomic provisioning acknowledgement",
+		)
+	}
+	environmentRemoval := environmentTask && task.Type == taskjournal.TaskRemove
+	zoneRemoval := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&
+		recordcodec.ValidateID(ids.KindNetwork, task.Target) == nil &&
+		task.Params[taskjournal.TaskZoneRemovalOperationParam] != ""
+	return environmentRemoval, zoneRemoval, nil
 }
 
 // readTaskAcknowledgementSource captures the journal and assignment together and

@@ -305,7 +305,12 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			return nil, false, err
 		}
 		dependency := authoredResourceKey(ids.KindService, service.ID)
-		planner.addUnit(identity, fingerprint, []blueprintunits.ResourceKey{dependency}, []blueprintunits.ResourceKey{dependency})
+		planner.addUnit(
+			identity,
+			fingerprint,
+			[]blueprintunits.ResourceKey{dependency},
+			[]blueprintunits.ResourceKey{dependency},
+		)
 	}
 	for name, identity := range planner.identities[ids.KindComponent] {
 		spec, found := planner.input.desired.Input.Components[name]

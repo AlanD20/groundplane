@@ -179,6 +179,7 @@ func seedInitialBlueprintComponentTaskLifecycle(
 		environmentBlueprintTestRevision(task.Target, task, "services: {}\n"),
 		projection, environmentBlueprintTestMarker(task, task.Target),
 	)
+	seedEffectiveBlueprintFixture(t, store, projection)
 	headValue, err := testidempotency.EncodeTaskReference(task.Params[testblueprints.EnvironmentDesiredRevisionParam])
 	if err != nil {
 		t.Fatalf("encodeTaskReference() error = %v", err)

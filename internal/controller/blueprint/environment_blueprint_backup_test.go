@@ -2,7 +2,6 @@ package blueprint
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
-	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -23,7 +21,6 @@ import (
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
-	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
@@ -394,7 +391,7 @@ func TestEnvironmentBlueprintBackupValidationResolvesFixedRevisionDependencies(t
 				{Kind: core.BackupSourceVolume, Ref: "archive"},
 				{Kind: core.BackupSourceAttach, Ref: "database"},
 			},
-		}, testenvironmentprojection.EnvironmentComposeProjection{Volumes: []testenvironmentprojection.EnvironmentVolumeIdentity{{ID: volumeID, Slug: "archive"}}}, []testkeyvalue.Versioned[testattachments.Record]{{Record: testattachments.Record{
+		}, []testenvironmentprojection.EnvironmentVolumeIdentity{{ID: volumeID, Slug: "archive"}}, []testkeyvalue.Versioned[testattachments.Record]{{Record: testattachments.Record{
 			ID: attachID, EnvironmentID: environmentID, Name: "database", CredentialAttachID: attachID,
 		}}},
 	)
@@ -406,7 +403,7 @@ func TestEnvironmentBlueprintBackupValidationResolvesFixedRevisionDependencies(t
 	changes := environmentBlueprintChanges(
 		blueprintparser.AuthoringDocument{Backup: &core.BackupSpec{}},
 		blueprintparser.Result{Project: &composetypes.Project{}, Extensions: blueprintparser.Extensions{}},
-		true, testenvironmentprojection.EnvironmentComposeProjection{}, nil,
+		true, nil,
 	)
 	found := false
 	for _, change := range changes {
@@ -415,90 +412,5 @@ func TestEnvironmentBlueprintBackupValidationResolvesFixedRevisionDependencies(t
 	}
 	if !found {
 		t.Fatalf("omitted Backup validation changes = %#v", changes)
-	}
-}
-
-// Rationale: canonical authoring maps stable target ids to current labels and
-// omits only a deleted Connector from a valid disabled policy.
-func TestEnvironmentBlueprintBackupAuthoringUsesLabelsAndHidesDeletedDisabledConnector(t *testing.T) {
-	now := time.Date(2026, 9, 2, 16, 0, 0, 0, time.UTC)
-	environmentID := ids.NewAt(ids.KindEnvironment, now, 11)
-	volumeID := ids.NewAt(ids.KindVolume, now, 12)
-	attachID := ids.NewAt(ids.KindAttach, now, 13)
-	connectorID := ids.NewAt(ids.KindConnector, now, 14)
-	stub := &environmentBlueprintBackupRepositoryStub{snapshot: environmentBlueprintBackupPolicySnapshot{
-		found: true, connectorFound: true, connectorName: "current-store",
-		policy: testbackuppolicy.BackupPolicyRecord{
-			EnvironmentID: environmentID, Enabled: true, Frequency: "*-*-* 02:00:00",
-			Keep: 4, Encryption: "age", ConnectorID: connectorID,
-		},
-		sources: []testbackuppolicy.BackupSourceRecord{
-			{EnvironmentID: environmentID, Kind: core.BackupSourceVolume, TargetID: volumeID},
-			{EnvironmentID: environmentID, Kind: core.BackupSourceAttach, TargetID: attachID},
-		},
-	}}
-	service := &Service{backups: stub}
-	snapshot := environmentBlueprintSnapshot{
-		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
-			Record: testhierarchy.EnvironmentRecord{ID: environmentID},
-		},
-		hasHead: true,
-		projection: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
-			Record: testenvironmentprojection.EnvironmentComposeProjection{
-				Volumes: []testenvironmentprojection.EnvironmentVolumeIdentity{{ID: volumeID, Slug: "archive"}},
-			},
-		},
-	}
-	authored, err := service.environmentBlueprintAuthoringBackup(
-		context.Background(),
-		snapshot,
-		[]testkeyvalue.Versioned[testattachments.Record]{
-			{Record: testattachments.Record{ID: attachID, Name: "database"}},
-		},
-	)
-	if err != nil || authored.Connector != "current-store" || authored.Sources[0].Ref != "archive" ||
-		authored.Sources[1].Ref != "database" {
-		t.Fatalf("authoring Backup = %#v, %v", authored, err)
-	}
-	stub.snapshot.policy.Enabled = false
-	stub.snapshot.connectorFound = false
-	authored, err = service.environmentBlueprintAuthoringBackup(
-		context.Background(),
-		snapshot,
-		[]testkeyvalue.Versioned[testattachments.Record]{
-			{Record: testattachments.Record{ID: attachID, Name: "database"}},
-		},
-	)
-	if err != nil || authored == nil || authored.Enabled || authored.Connector != "" || authored.Keep != 4 ||
-		authored.Encryption != "age" || authored.Frequency != "*-*-* 02:00:00" || len(authored.Sources) != 2 {
-		t.Fatalf("deleted disabled Connector authoring = %#v, %v", authored, err)
-	}
-	document, err := blueprintparser.MarshalAuthoringDocument(blueprintparser.AuthoringDocument{
-		Envelope: core.Envelope{Kind: core.KindDocEnvironment, Schema: core.EnvelopeSchema,
-			Metadata: core.EnvelopeMetadata{Tenant: "acme", Project: "console", Environment: "production"}},
-		NetworkPool: "10.40.0.0/16", Compose: []byte("services: {}\n"), Backup: authored,
-	})
-	if err != nil || strings.Contains(string(document), connectorID) || strings.Contains(string(document), volumeID) ||
-		strings.Contains(string(document), attachID) {
-		t.Fatalf("canonical disabled Backup leaked stable ids: %q, %v", document, err)
-	}
-	parsed, err := blueprintparser.Parse(context.Background(), blueprintparser.EnvironmentScope{
-		EnvironmentID: environmentID, Tenant: "acme", Project: "console", Environment: "production",
-	}, core.BlueprintBundle{
-		RootPath: "compose.yaml", ComposeSources: []string{"compose.yaml"},
-		Files: []core.BlueprintFile{{Path: "compose.yaml", Content: document}},
-	})
-	if err != nil || parsed.Extensions.Backup == nil || parsed.Extensions.Backup.Keep != 4 ||
-		len(parsed.Extensions.Backup.Sources) != 2 {
-		t.Fatalf("canonical disabled Backup reparse = %#v, %v", parsed.Extensions.Backup, err)
-	}
-	stub.snapshot.policy.Enabled = true
-	if _, err := service.environmentBlueprintAuthoringBackup(context.Background(), snapshot, nil); err == nil {
-		t.Fatal("enabled missing Connector authoring succeeded")
-	}
-	stub.snapshotErr = errs.Wrap(errs.KindInternal, errors.New("storage unavailable"))
-	if _, err := service.environmentBlueprintAuthoringBackup(context.Background(), snapshot, nil); err == nil ||
-		!strings.Contains(err.Error(), "storage unavailable") {
-		t.Fatalf("authoring snapshot error = %v", err)
 	}
 }
