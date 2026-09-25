@@ -106,6 +106,10 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		etcd.BlueprintAuthoredPublication,
 	) (etcd.IdempotencyTransactionResult, error)
+	SealEnvironmentBlueprintRuntimeProjection(
+		context.Context,
+		etcd.BlueprintRuntimeProjectionSeal,
+	) error
 	PublishEnvironmentBlueprintDesiredRevision(
 		context.Context,
 		netip.Prefix,
