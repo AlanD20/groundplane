@@ -54,7 +54,7 @@ func (service *Service) prepareApplyPreflight(
 ) (applyPreflight, error) {
 	projection := baseline.previousProjection.Record
 	return service.prepareApplyPreflightFromSource(ctx, environmentID, bundle, applyPreflightSource{
-		authored:    true,
+		authored:    false,
 		environment: baseline.environment, project: baseline.project, tenant: baseline.tenant,
 		previousFiles: projection.RuntimeFiles, previousVolumes: projection.Volumes,
 		previousExtensions: projection.ServiceExtensions, previous: baseline.previous,
