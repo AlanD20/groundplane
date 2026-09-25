@@ -3,6 +3,8 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/core"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -26,6 +28,7 @@ type BlueprintRuntimeProjectionSeal struct {
 	Project                 etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	Environment             etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	Projection              projectionrecord.EnvironmentComposeProjection
+	Attaches                []etcdstore.Versioned[attachrecord.Record]
 }
 
 // SealEnvironmentBlueprintRuntimeProjection publishes one complete immutable
@@ -64,6 +67,34 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 	}
 	if expectedOwner != parent.Owner {
 		return errs.New(errs.KindStateConflict, "Blueprint runtime projection hierarchy changed")
+	}
+	identitiesKey := blueprints.EnvironmentBlueprintOwnedIdentitiesKey(projection.EnvironmentID, parent.ID)
+	identitiesRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{identitiesKey},
+	})
+	if err != nil {
+		return err
+	}
+	if identitiesRead == nil || len(identitiesRead.Values) != 1 || identitiesRead.Values[0] == nil ||
+		identitiesRead.Values[0].ModRevision != input.OwnedIdentitiesRevision {
+		return errs.New(errs.KindStateConflict, "Blueprint runtime owned identities changed")
+	}
+	defer etcdstore.ClearValues(identitiesRead.Values)
+	identities, err := projectionrecord.DecodeEnvironmentOwnedIdentities(identitiesRead.Values[0].Value)
+	if err != nil || identities.EnvironmentID != projection.EnvironmentID ||
+		identities.RevisionID != parent.ID || len(identities.Attaches) != len(input.Attaches) {
+		return errs.New(errs.KindStateConflict, "Blueprint runtime Attach identities changed")
+	}
+	selected := make(map[string]string, len(identities.Attaches))
+	for _, identity := range identities.Attaches {
+		selected[identity.ID] = identity.Name
+	}
+	for _, attach := range input.Attaches {
+		name, found := selected[attach.Record.ID]
+		if !found || name != attach.Record.Name || attachrecord.ValidateAttachRecord(attach.Record) != nil {
+			return errs.New(errs.KindStateConflict, "Blueprint runtime Attach selection changed")
+		}
+		delete(selected, attach.Record.ID)
 	}
 	switch input.Project.Record.Kind {
 	case hierarchyrecord.ProjectKindTenant:
@@ -115,13 +146,23 @@ func (repository *EnvironmentBlueprintRepository) SealEnvironmentBlueprintRuntim
 		{Key: claimKey, ModRevision: read.Values[1].ModRevision},
 		{Key: stopKey},
 		{Key: blueprints.EnvironmentBlueprintRootKey(projection.EnvironmentID, parent.ID), ModRevision: input.DesiredRootRevision},
-		{Key: blueprints.EnvironmentBlueprintOwnedIdentitiesKey(projection.EnvironmentID, parent.ID), ModRevision: input.OwnedIdentitiesRevision},
+		{Key: identitiesKey, ModRevision: input.OwnedIdentitiesRevision},
 		{Key: hierarchyrecord.ProjectKey(input.Project.Record.ID), ModRevision: input.Project.Revision},
 		{Key: hierarchyrecord.EnvironmentKey(input.Environment.Record.ID), ModRevision: input.Environment.Revision},
 	}
 	if input.Project.Record.Kind == hierarchyrecord.ProjectKindTenant {
 		conditions = append(conditions, etcdstore.Condition{
 			Key: hierarchyrecord.TenantKey(input.Tenant.Record.ID), ModRevision: input.Tenant.Revision,
+		})
+	}
+	for _, attach := range input.Attaches {
+		if attach.Revision <= 0 || attach.Record.EnvironmentID != projection.EnvironmentID ||
+			attach.Record.Status != core.AttachReady ||
+			attach.Record.Operation != attachrecord.AttachOperationProvision {
+			return errs.New(errs.KindValidationFailed, "Blueprint runtime Attach authority is invalid")
+		}
+		conditions = append(conditions, etcdstore.Condition{
+			Key: attachrecord.AttachKey(attach.Record.ID), ModRevision: attach.Revision,
 		})
 	}
 	mutations := []etcdstore.Mutation{{

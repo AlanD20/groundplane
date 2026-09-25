@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -62,7 +63,13 @@ func (service *Service) sealAuthoredRuntimeProjection(
 	if err != nil {
 		return err
 	}
-	projection, err := compileAuthoredRuntimeProjection(ctx, parent, source, snapshot)
+	attaches, err := service.loadAuthoredRuntimeAttaches(
+		ctx, parent.Owner.EnvironmentID, source.identities.Record, snapshot,
+	)
+	if err != nil {
+		return err
+	}
+	projection, err := compileAuthoredRuntimeProjection(ctx, parent, source, snapshot, attaches)
 	if err != nil {
 		return err
 	}
@@ -74,7 +81,7 @@ func (service *Service) sealAuthoredRuntimeProjection(
 			DesiredRootRevision:     source.desired.Revision,
 			OwnedIdentitiesRevision: source.identities.Revision,
 			Tenant:                  source.tenant, Project: source.project, Environment: source.environment,
-			Projection: projection,
+			Projection: projection, Attaches: attaches,
 		},
 	)
 }
@@ -187,6 +194,7 @@ func compileAuthoredRuntimeProjection(
 	parent etcd.TaskRecord,
 	source authoredRuntimeProjectionSource,
 	unitSnapshot blueprintunits.Snapshot,
+	attaches []etcdstore.Versioned[attachrecord.Record],
 ) (projectionrecord.EnvironmentComposeProjection, error) {
 	desired, identities := source.desired.Record, source.identities.Record
 	if err := requireAuthoredRuntimeProjectionInputs(desired, identities, unitSnapshot); err != nil {
@@ -230,6 +238,24 @@ func compileAuthoredRuntimeProjection(
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
 	}
+	zoneProjection := make([]projectionrecord.EnvironmentZoneProjection, len(zones))
+	for index, zone := range zones {
+		zoneProjection[index] = projectionrecord.EnvironmentZoneProjection{
+			EnvironmentID: desired.EnvironmentID, Desired: zone,
+		}
+	}
+	serviceProjection := make([]servicerecord.EnvironmentServiceProjection, len(services))
+	for index, service := range services {
+		serviceProjection[index] = servicerecord.EnvironmentServiceProjection{
+			EnvironmentID: desired.EnvironmentID, Desired: service,
+		}
+	}
+	externalNetworks, err := taskplanning.ProjectEnvironmentAttachNetworks(
+		entryProjection.Project, desired.EnvironmentID, zoneProjection, serviceProjection, attaches,
+	)
+	if err != nil {
+		return projectionrecord.EnvironmentComposeProjection{}, err
+	}
 	volumeMounts, err := environmentBlueprintVolumeMounts(entryProjection.Project, snapshot)
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
@@ -251,7 +277,7 @@ func compileAuthoredRuntimeProjection(
 		),
 		RenderGeneration:    desired.RenderGeneration,
 		AuthorizedVolumeDir: source.environment.Record.VolumeDir,
-		Identities:          snapshot,
+		Identities:          snapshot, ExternalNetworks: externalNetworks,
 	})
 	if err != nil {
 		return projectionrecord.EnvironmentComposeProjection{}, err
@@ -270,18 +296,6 @@ func compileAuthoredRuntimeProjection(
 		desired.Input.NormalizedCompose, desired.Input.RuntimeFiles,
 		desired.Input.ServiceExtensions, nil, nil, entries,
 	)
-	zoneProjection := make([]projectionrecord.EnvironmentZoneProjection, len(zones))
-	for index, zone := range zones {
-		zoneProjection[index] = projectionrecord.EnvironmentZoneProjection{
-			EnvironmentID: desired.EnvironmentID, Desired: zone,
-		}
-	}
-	serviceProjection := make([]servicerecord.EnvironmentServiceProjection, len(services))
-	for index, service := range services {
-		serviceProjection[index] = servicerecord.EnvironmentServiceProjection{
-			EnvironmentID: desired.EnvironmentID, Desired: service,
-		}
-	}
 	projection = desiredrevision.WithDesiredTopology(
 		projection, zoneProjection, serviceProjection, routes,
 	)

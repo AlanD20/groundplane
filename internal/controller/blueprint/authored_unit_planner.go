@@ -270,11 +270,12 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 			Extension     core.ServiceExtensionSpec
 			Files         []core.BlueprintFile
 			Entries       []string
+			Attaches      map[string]core.AttachmentSpec
 			ReleaseGroups map[string]core.ReleaseGroupSpec
 		}{
 			name, service, planner.input.desired.Input.ServiceExtensions[name],
 			planner.serviceRuntimeFiles(service), planner.serviceEntryNames(name),
-			planner.serviceReleaseGroups(name),
+			planner.serviceAttachments(name), planner.serviceReleaseGroups(name),
 		})
 		if err != nil {
 			return nil, false, err

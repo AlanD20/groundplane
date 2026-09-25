@@ -108,6 +108,9 @@ All Service children wait for one complete Environment runtime projection while
 any Custom Attach fact needed by that projection is pending. Independent Zone
 and Volume units may proceed. This keeps Service renders on one sealed input
 instead of introducing per-Service snapshots with separate fact lifetimes.
+That projection includes the complete shared-network membership of its ready,
+acknowledged Attaches. Its seal fences the exact Attach record revisions; a
+completed hook without the consumer's network binding is not a complete Apply.
 
 An Attach that can produce facts has one immutable, encrypted input generation
 prepared before admission. The visible parent owns it until the hidden Attach

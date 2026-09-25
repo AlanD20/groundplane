@@ -131,6 +131,13 @@ func (planner *authoredUnitPlanner) serviceDependencies(
 		}
 		dependencies = append(dependencies, authoredResourceKey(ids.KindEnvEntry, identity.ID))
 	}
+	for attachName := range planner.serviceAttachments(name) {
+		identity, found := planner.identities[ids.KindAttach][attachName]
+		if !found {
+			return nil, nil, planner.missingInput("Service Attach", attachName)
+		}
+		dependencies = append(dependencies, authoredResourceKey(ids.KindAttach, identity.ID))
+	}
 	dependencies = canonicalAuthoredUnitKeys(dependencies)
 	return dependencies, slices.Clone(dependencies), nil
 }
@@ -143,6 +150,19 @@ func (planner *authoredUnitPlanner) serviceEntryNames(service string) []string {
 		}
 	}
 	slices.Sort(result)
+	return result
+}
+
+func (planner *authoredUnitPlanner) serviceAttachments(service string) map[string]core.AttachmentSpec {
+	result := make(map[string]core.AttachmentSpec)
+	for name, spec := range planner.input.desired.Input.Attachments {
+		if spec.Service == service {
+			result[name] = spec
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
 	return result
 }
 
