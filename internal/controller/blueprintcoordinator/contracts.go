@@ -7,7 +7,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,17 +27,16 @@ type ChildPreparer interface {
 }
 
 type PreparedChild struct {
-	Task   etcd.TaskRecord
-	Marker idempotency.IdempotencyMarker
+	Task               etcd.TaskRecord
+	ReleasePublication etcd.BlueprintReleasePublication
 }
 
-// Clear releases the protected request copy once publication has cloned it.
+// Clear releases prepared Release bytes after publication.
 func (prepared *PreparedChild) Clear() {
 	if prepared == nil {
 		return
 	}
-	clear(prepared.Marker.Intent.Ciphertext)
-	clear(prepared.Marker.Response.Body)
+	prepared.ReleasePublication.Clear()
 }
 
 type taskStore interface {
@@ -54,7 +52,7 @@ type taskStore interface {
 		string,
 		etcd.TaskRecord,
 		blueprintunits.Unit,
-		idempotency.IdempotencyMarker,
+		etcd.BlueprintReleasePublication,
 	) (keyvalue.Versioned[etcd.TaskRecord], error)
 	AbortPendingTask(context.Context, string, time.Time) (keyvalue.Versioned[etcd.TaskRecord], error)
 	GetTask(context.Context, string) (keyvalue.Versioned[etcd.TaskRecord], error)

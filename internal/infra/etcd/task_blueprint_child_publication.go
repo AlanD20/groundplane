@@ -2,6 +2,8 @@ package etcd
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -10,6 +12,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -20,7 +24,7 @@ import (
 // enter the Agent queue.
 func (repository *TaskRepository) PublishBlueprintChild(
 	ctx context.Context, parentID string, child TaskRecord, unit blueprintunits.Unit,
-	marker idempotency.IdempotencyMarker,
+	releasePublication BlueprintReleasePublication,
 ) (keyvalue.Versioned[TaskRecord], error) {
 	if err := keyvalue.ValidateContext(ctx); err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
@@ -35,23 +39,22 @@ func (repository *TaskRepository) PublishBlueprintChild(
 			"Blueprint child identity is invalid",
 		)
 	}
-	if marker.Kind != idempotency.IdempotencyMarkerTask ||
-		marker.State != idempotency.IdempotencyMarkerPending || marker.TaskID != child.ID ||
-		marker.Locator.ScopeKind != idempotency.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != child.Owner.EnvironmentID ||
-		(child.IdempotencyKey != "" && child.IdempotencyKey != marker.Locator.Key) ||
-		!marker.CreatedAt.Equal(child.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) ||
-		idempotency.ValidateIdempotencyMarker(marker) != nil {
+	if unit.Target.Kind != ids.KindService || unit.Removal || releasePublication.IsZero() ||
+		child.Params[releaserender.TaskReleasePublicationParam] == "" {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(
-			errs.KindValidationFailed,
-			"Blueprint child marker is invalid",
+			errs.KindStateConflict, "Blueprint child has no supported effect publication",
 		)
 	}
-	child = cloneTaskRecord(child)
-	if child.IdempotencyKey == "" {
-		child.IdempotencyKey = marker.Locator.Key
+	if err := releasePublication.validate(child.Owner.EnvironmentID, child); err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
 	}
-	child.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	child = cloneTaskRecord(child)
+	if child.IdempotencyKey != "" && child.IdempotencyKey != child.ID {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindValidationFailed, "Blueprint child idempotency key is invalid",
+		)
+	}
+	child.IdempotencyKey = child.ID
 	if err := ValidateTaskRecord(child); err != nil {
 		return keyvalue.Versioned[TaskRecord]{}, err
 	}
@@ -81,6 +84,73 @@ func (repository *TaskRepository) PublishBlueprintChild(
 			"Blueprint unit is not ready for execution",
 		)
 	}
+	manifestKey := releases.ReleaseManifestStagingKey(child.Params[releaserender.TaskReleasePublicationParam])
+	manifestRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+		Keys: []string{manifestKey}, Revision: snapshot.ReadRevision,
+	})
+	if err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
+	}
+	if manifestRead == nil || len(manifestRead.Values) != 1 || manifestRead.Values[0] == nil {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict, "Blueprint child Release manifest is missing",
+		)
+	}
+	defer keyvalue.ClearValues(manifestRead.Values)
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		manifestRead.Values[0].Value, "release-staged-manifest",
+	)
+	if err != nil || manifest.PublicationID != child.Params[releaserender.TaskReleasePublicationParam] ||
+		len(manifest.Members) != 1 || manifest.OperationID != child.OperationID ||
+		manifest.Members[0].ServiceID != unit.Target.ID {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict, "Blueprint child Release does not match its unit",
+		)
+	}
+	if !slices.Contains(releasePublication.conditions, keyvalue.Condition{
+		Key: manifestKey, ModRevision: manifestRead.Values[0].ModRevision,
+	}) {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict, "Blueprint child Release manifest is not fenced",
+		)
+	}
+	publicationKey := releases.ReleasePublicationKey(manifest.PublicationID)
+	if !slices.Contains(releasePublication.conditions, keyvalue.Condition{Key: publicationKey}) {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict, "Blueprint child Release publication is not fenced",
+		)
+	}
+	publicationMutations := 0
+	for _, mutation := range releasePublication.mutations {
+		if mutation.Key == manifestKey {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict, "Blueprint child Release fragment changes its manifest",
+			)
+		}
+		if mutation.Key != publicationKey {
+			continue
+		}
+		if mutation.Type != keyvalue.MutationPut {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict, "Blueprint child Release publication does not match its manifest",
+			)
+		}
+		marker, decodeErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+			mutation.Value, "release-publication",
+		)
+		if decodeErr != nil || marker.PublicationID != manifest.PublicationID ||
+			marker.OperationID != child.OperationID || marker.ManifestDigest != manifest.Digest {
+			return keyvalue.Versioned[TaskRecord]{}, errs.New(
+				errs.KindStateConflict, "Blueprint child Release publication does not match its manifest",
+			)
+		}
+		publicationMutations++
+	}
+	if publicationMutations != 1 {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict, "Blueprint child Release publication does not match its manifest",
+		)
+	}
 	parentKey := taskjournal.TaskStorageKey(parentID)
 	claimKey := taskjournal.BlueprintParentClaimKey(parentID)
 	parentRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
@@ -100,9 +170,66 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	claimID, claimErr := idempotency.DecodeTaskReference(parentRead.Values[1].Value)
 	if err != nil || claimErr != nil || claimID != parentID ||
 		validateBlueprintParentClaimTask(parent) != nil || parent.Status != taskjournal.TaskStatusRunning ||
+		parent.idempotencyMarker == nil ||
 		parent.Owner != child.Owner ||
 		parent.Params[blueprints.EnvironmentDesiredRevisionParam] != child.Params[blueprints.EnvironmentDesiredRevisionParam] {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "Blueprint parent claim changed")
+	}
+	parentMarkerKey, err := idempotency.IdempotencyMarkerKey(*parent.idempotencyMarker)
+	if err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
+	}
+	parentMarkerRead, err := repository.store.GetMany(ctx, keyvalue.GetManyRequest{
+		Keys: []string{parentMarkerKey}, Revision: snapshot.ReadRevision,
+	})
+	if err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
+	}
+	if parentMarkerRead == nil || len(parentMarkerRead.Values) != 1 || parentMarkerRead.Values[0] == nil {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict, "Blueprint parent marker is missing",
+		)
+	}
+	defer keyvalue.ClearValues(parentMarkerRead.Values)
+	parentMarker, err := idempotency.DecodeIdempotencyMarker(
+		parentMarkerRead.Values[0].Value, *parent.idempotencyMarker,
+	)
+	if err != nil || parentMarker.Kind != idempotency.IdempotencyMarkerTask ||
+		parentMarker.State != idempotency.IdempotencyMarkerPending || parentMarker.TaskID != parentID {
+		return keyvalue.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict, "Blueprint parent marker changed",
+		)
+	}
+	defer clear(parentMarker.Intent.Ciphertext)
+	defer clear(parentMarker.Response.Body)
+	// The child has no operator replay surface. Its private marker reuses the
+	// parent's protected intent so terminal lifecycle can retain exact authority
+	// without inventing a second user request or exposing the hidden Task.
+	responseBody, err := json.Marshal(struct {
+		TaskID string `json:"task_id"`
+	}{TaskID: child.ID})
+	if err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
+	}
+	defer clear(responseBody)
+	marker := idempotency.IdempotencyMarker{
+		Kind: idempotency.IdempotencyMarkerTask, State: idempotency.IdempotencyMarkerPending,
+		Locator: idempotency.IdempotencyLocator{
+			ScopeKind: idempotency.IdempotencyScopeEnvironment, ScopeID: child.Owner.EnvironmentID,
+			Method: http.MethodPost, Route: "/internal/blueprint-child", Key: child.ID,
+		},
+		Intent: parentMarker.Intent,
+		Response: idempotency.IdempotencyResponse{
+			Status: http.StatusAccepted, ContentKind: "application/json", Body: responseBody,
+		},
+		TaskID: child.ID, CreatedAt: child.CreatedAt, UpdatedAt: child.CreatedAt,
+	}
+	if err := idempotency.ValidateIdempotencyMarker(marker); err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
+	}
+	child.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	if err := ValidateTaskRecord(child); err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
 	}
 	execution := blueprintunits.ExecutionRecord{
 		EnvironmentID: child.Owner.EnvironmentID, ParentTaskID: parentID,
@@ -137,6 +264,7 @@ func (repository *TaskRepository) PublishBlueprintChild(
 	conditions := append(claim.Conditions(),
 		keyvalue.Condition{Key: parentKey, ModRevision: parentRead.Values[0].ModRevision},
 		keyvalue.Condition{Key: claimKey, ModRevision: parentRead.Values[1].ModRevision},
+		keyvalue.Condition{Key: parentMarkerKey, ModRevision: parentMarkerRead.Values[0].ModRevision},
 		keyvalue.Condition{Key: taskjournal.BlueprintParentAbortKey(parentID)},
 		keyvalue.Condition{Key: taskjournal.TaskStorageKey(child.ID)},
 		keyvalue.Condition{Key: taskjournal.TaskOperationIndexKey(child.OperationID, child.ID)},
@@ -172,6 +300,12 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		conditions = append(conditions, keyvalue.Condition{Key: key})
 		mutations = append(mutations, keyvalue.Mutation{Type: keyvalue.MutationPut, Key: key, Value: []byte(child.ID)})
 	}
+	releasePublication, err = releasePublication.withExistingComparisons(conditions)
+	if err != nil {
+		return keyvalue.Versioned[TaskRecord]{}, err
+	}
+	conditions = append(conditions, releasePublication.conditions...)
+	mutations = append(mutations, releasePublication.mutations...)
 	defer keyvalue.ClearMutationValues(mutations)
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	keyvalue.ClearValues(transaction.FailureReads)

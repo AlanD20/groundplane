@@ -178,8 +178,13 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 			parent.ID,
 			prepared.Task,
 			unit,
-			prepared.Marker,
+			prepared.ReleasePublication,
 		); err != nil {
+			if !unknownBlueprintChildPublication(err) {
+				if cleanupErr := prepared.ReleasePublication.Abandon(ctx); cleanupErr != nil {
+					return planChanged, errors.Join(err, cleanupErr)
+				}
+			}
 			if isStateRace(err) {
 				return true, nil
 			}
@@ -376,6 +381,14 @@ func isStateRace(err error) bool {
 	}
 	kind, ok := errs.KindOf(err)
 	return ok && kind == errs.KindStateConflict
+}
+
+func unknownBlueprintChildPublication(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	kind, ok := errs.KindOf(err)
+	return ok && kind == errs.KindStorageUnavailable
 }
 
 func isWaiting(err error) bool {
