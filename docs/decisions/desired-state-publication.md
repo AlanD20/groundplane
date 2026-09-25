@@ -80,13 +80,17 @@ read, write and predecessor claims.
 An omitted owned resource becomes a removal unit; only acknowledged absence
 satisfies it. Merely dropping it from the desired document cannot prove cleanup.
 
-One operator-visible Blueprint Apply Task owns those units. Each unit executes
-as a hidden system Agent child Task so it can use the existing durable claim,
-abort and recovery machinery. Child identity is not an operator action: Task
+One operator-visible Blueprint Apply Task owns those units. Host-effect units
+execute as hidden system Agent child Tasks so they can use the existing durable
+claim, abort and recovery machinery. An Entry value derived and encrypted by
+the Controller has no Agent effect before Deploy; it settles through an atomic
+Controller write of its exact value generation and unit receipt, fenced by the
+parent, current head and unit epoch. It does not create a no-op Agent Task or
+restart a running Service. Child identity is not an operator action: Task
 lists, direct reads, Retry, Abort and event streams expose only the parent.
-The parent records each child's verified result and remains nonterminal while
-any required unit is running or has unknown effects. A child terminal status
-alone cannot mark the parent successful or release its resource claims.
+The parent remains nonterminal while any required unit is running or has
+unknown effects. A child terminal status alone cannot mark the parent
+successful or release its resource claims.
 
 Some effective inputs depend on facts from a Custom backing Attach created by
 the same Apply. Seal the operator's authored decisions at publication, then

@@ -184,7 +184,7 @@ func PrepareMutation(
 			validateApplied(versioned.Record) != nil || versioned.Revision < 0 ||
 			(versioned.Revision == 0 && (!seeded[versioned.Record.Target] ||
 				versioned.Record.State != Absent || versioned.Record.SourceTaskID != "")) ||
-			(versioned.Revision > 0 && versioned.Record.SourceTaskID == "") {
+			(versioned.Revision > 0 && !hasAppliedEffectSource(versioned.Record)) {
 			return MutationPlan{}, invalidRecord()
 		}
 		if _, duplicate := knownApplied[versioned.Record.Target]; duplicate {
@@ -233,7 +233,7 @@ func PrepareMutation(
 			continue
 		}
 		if change.Next.EnvironmentID != snapshot.EnvironmentID || change.Next.Target != change.Target ||
-			!validAppliedAdvance(exists, *change.Next, knownExecutions) {
+			!validAppliedAdvance(snapshot, exists, *change.Next, knownExecutions) {
 			plan.Clear()
 			return MutationPlan{}, invalidRecord()
 		}
@@ -278,8 +278,22 @@ func PrepareMutation(
 }
 
 func validAppliedAdvance(
-	exists bool, next AppliedRecord, executions map[string]etcdstore.Versioned[ExecutionRecord],
+	snapshot Snapshot, exists bool, next AppliedRecord, executions map[string]etcdstore.Versioned[ExecutionRecord],
 ) bool {
+	if next.ControllerOperationID != "" {
+		if !exists || next.State != Applied || next.Target.Kind != ids.KindEnvEntry ||
+			snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
+			next.ParentTaskID != snapshot.HeadTaskID {
+			return false
+		}
+		for _, unit := range snapshot.Desired.Record.Units {
+			if unit.Target == next.Target {
+				return !unit.Removal && next.Fingerprint == unit.Fingerprint &&
+					len(unit.Writes) == 1 && unit.Writes[0] == next.Target
+			}
+		}
+		return false
+	}
 	if next.SourceTaskID == "" {
 		return false
 	}
