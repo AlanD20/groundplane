@@ -65,6 +65,7 @@ type Generation struct {
 	OperationID          string                                        `json:"operation_id"`
 	AttachID             string                                        `json:"attach_id"`
 	AttachName           string                                        `json:"attach_name"`
+	AuthoredSpecSHA256   string                                        `json:"authored_spec_sha256"`
 	ConsumerServiceID    string                                        `json:"consumer_service_id"`
 	CredentialOwnerID    string                                        `json:"credential_owner_id"`
 	BackingProjectID     string                                        `json:"backing_project_id"`
@@ -194,6 +195,7 @@ func validate(record Generation, bound bool) error {
 		ids.Validate(ids.KindTask, record.RevisionID) != nil || record.RevisionID != record.ParentTaskID ||
 		ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
 		ids.Validate(ids.KindAttach, record.AttachID) != nil || attachrecord.ValidateAttachName(record.AttachName) != nil ||
+		!recordcodec.ValidSHA256(record.AuthoredSpecSHA256) ||
 		ids.Validate(ids.KindService, record.ConsumerServiceID) != nil || record.CredentialOwnerID != record.AttachID ||
 		ids.Validate(ids.KindProject, record.BackingProjectID) != nil ||
 		ids.Validate(ids.KindEnvironment, record.BackingEnvironmentID) != nil ||

@@ -135,6 +135,7 @@ func (repository *TaskRepository) prepareBlueprintAttachChildTerminal(
 	output := attachoutputs.Generation{
 		EnvironmentID: task.Owner.EnvironmentID, ParentTaskID: parentID,
 		ChildTaskID: task.ID, AttachID: attachID, OperationID: task.OperationID,
+		PlanID:       task.PlanID,
 		AssignmentID: assignment.AssignmentID, ExecutionEpoch: assignment.ExecutionEpoch,
 		StepID: task.Steps[0].ID, PlanHash: task.PlanHash,
 		ResultSHA256: checkpoint.ResultSHA256, Facts: *checkpoint.Facts,

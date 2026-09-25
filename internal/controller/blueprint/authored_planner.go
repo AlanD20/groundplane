@@ -68,7 +68,7 @@ func (service *Service) Plan(
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
-	attachGenerations, err := service.loadAuthoredAttachGenerationAuthority(ctx, input)
+	attachGenerations, err := service.loadAuthoredAttachGenerationAuthority(ctx, input, snapshot)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}

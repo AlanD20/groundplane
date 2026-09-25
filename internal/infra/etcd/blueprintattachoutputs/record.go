@@ -21,6 +21,7 @@ type Generation struct {
 	ChildTaskID    string                      `json:"child_task_id"`
 	AttachID       string                      `json:"attach_id"`
 	OperationID    string                      `json:"operation_id"`
+	PlanID         string                      `json:"plan_id"`
 	AssignmentID   string                      `json:"assignment_id"`
 	ExecutionEpoch uint32                      `json:"execution_epoch"`
 	StepID         string                      `json:"step_id"`
@@ -61,6 +62,7 @@ func Validate(record Generation) error {
 		record.ParentTaskID == record.ChildTaskID ||
 		ids.Validate(ids.KindAttach, record.AttachID) != nil ||
 		ids.Validate(ids.KindOperation, record.OperationID) != nil ||
+		ids.Validate(ids.KindPlan, record.PlanID) != nil ||
 		ids.Validate(ids.KindAssignment, record.AssignmentID) != nil ||
 		record.ExecutionEpoch == 0 || ids.Validate(ids.KindStep, record.StepID) != nil ||
 		!recordcodec.ValidSHA256(record.PlanHash) ||

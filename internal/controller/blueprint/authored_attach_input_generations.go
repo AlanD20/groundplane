@@ -114,6 +114,10 @@ func (service *Service) prepareAuthoredAttachInputGenerations(
 			)
 		}
 		attachID := attachIDByName[name]
+		authoredSpecSHA256, err := authoredUnitFingerprint("attach-spec", spec)
+		if err != nil {
+			return nil, err
+		}
 		operationID := allocator.Named(ids.KindOperation, "attach-input:"+name)
 		metadata, generated, resolved, err := service.attachFacts.SealCustomHookBundle(
 			ctx, attachID, backingProject.Record.ID, operationID, *hooks,
@@ -137,8 +141,9 @@ func (service *Service) prepareAuthoredAttachInputGenerations(
 			ID: operationID, EnvironmentID: environmentID, RevisionID: revisionID,
 			ParentTaskID: revisionID, OperationID: operationID,
 			AttachID: attachID, AttachName: name, ConsumerServiceID: consumer.ID,
-			CredentialOwnerID: attachID,
-			BackingProjectID:  backingProject.Record.ID, BackingEnvironmentID: backingEnvironment.Record.ID,
+			AuthoredSpecSHA256: authoredSpecSHA256,
+			CredentialOwnerID:  attachID,
+			BackingProjectID:   backingProject.Record.ID, BackingEnvironmentID: backingEnvironment.Record.ID,
 			BackingServiceID: backingService.Record.Desired.ID,
 			BackingNetworkID: backingService.Record.BackingNetworkID,
 			AdapterKey:       backingService.Record.Desired.Adapter,

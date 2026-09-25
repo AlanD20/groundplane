@@ -176,6 +176,13 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		if !found || generation.AttachName != name || generation.ConsumerServiceID == "" {
 			return nil, false, planner.missingInput("Attach", name)
 		}
+		authoredSpecSHA256, err := authoredUnitFingerprint("attach-spec", spec)
+		if err != nil {
+			return nil, false, err
+		}
+		if generation.AuthoredSpecSHA256 != authoredSpecSHA256 {
+			return nil, false, errs.New(errs.KindStateConflict, "Blueprint Attach authored specification changed")
+		}
 		consumer, found := planner.identities[ids.KindService][spec.Service]
 		if !found || consumer.ID != generation.ConsumerServiceID {
 			return nil, false, planner.missingInput("Attach consumer Service", spec.Service)
