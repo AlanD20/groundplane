@@ -96,6 +96,10 @@ func ValidateDraft(record Generation) error {
 	return validate(record, false)
 }
 
+func Validate(record Generation) error {
+	return validate(record, true)
+}
+
 func MatchesConfiguration(record Generation, configuration backinghook.Configuration) bool {
 	if configuration.Attach == nil {
 		return false

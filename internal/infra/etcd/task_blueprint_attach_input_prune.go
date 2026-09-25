@@ -3,7 +3,9 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
@@ -147,6 +149,7 @@ func (repository *TaskRepository) pruneChildOwnedBlueprintAttachInput(
 		taskjournal.TaskActiveOperationKey(task.OperationID),
 		taskjournal.TaskAssignmentIndexKey(task.ID),
 		taskjournal.TaskRecoveryProofRequiredKey(task.ID),
+		blueprintunits.AppliedKey(task.Owner.EnvironmentID, blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: attachID}),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
@@ -178,14 +181,27 @@ func (repository *TaskRepository) pruneChildOwnedBlueprintAttachInput(
 	if read.Values[1] != nil || read.Values[2] != nil || read.Values[3] != nil {
 		return true, nil
 	}
+	if read.Values[4] != nil {
+		applied, err := blueprintunits.DecodeApplied(read.Values[4].Value)
+		if err != nil || applied.EnvironmentID != task.Owner.EnvironmentID ||
+			applied.Target != (blueprintunits.ResourceKey{Kind: ids.KindAttach, ID: attachID}) {
+			return true, errs.New(errs.KindStateConflict, "Blueprint Attach applied owner changed")
+		}
+		if applied.SourceTaskID == task.ID {
+			return true, nil
+		}
+	}
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
 		{Key: retention.Key, ModRevision: retention.ModRevision},
 		{Key: key, ModRevision: read.Values[0].ModRevision},
 	}
-	for _, absentKey := range keys[1:] {
+	for _, absentKey := range keys[1:4] {
 		conditions = append(conditions, etcdstore.Condition{Key: absentKey})
 	}
+	conditions = append(conditions, etcdstore.Condition{
+		Key: keys[4], ModRevision: etcdstore.RevisionOf(read.Values[4]),
+	})
 	commit, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
 		Type: etcdstore.MutationDelete, Key: key,
 	}})
