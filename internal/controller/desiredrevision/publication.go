@@ -217,12 +217,12 @@ type StagedPublication struct {
 }
 
 type stagedPublicationState struct {
-	mu         sync.Mutex
-	consumed   bool
-	locator    idempotencyrecord.IdempotencyLocator
-	claim      blueprints.EnvironmentBlueprintStageClaim
-	seal       blueprints.EnvironmentBlueprintSeal
-	projection projectionrecord.EnvironmentComposeProjection
+	mu           sync.Mutex
+	consumed     bool
+	locator      idempotencyrecord.IdempotencyLocator
+	claim        blueprints.EnvironmentBlueprintStageClaim
+	seal         blueprints.EnvironmentBlueprintSeal
+	projection   projectionrecord.EnvironmentComposeProjection
 	desiredInput projectionrecord.EnvironmentDesiredInput
 }
 
@@ -293,7 +293,7 @@ func Stage(
 	}
 	return StagedPublication{state: &stagedPublicationState{
 		locator: input.Claim.Locator, claim: input.Claim, seal: seal,
-		projection: projectionrecord.CloneEnvironmentComposeProjection(input.Projection),
+		projection:   projectionrecord.CloneEnvironmentComposeProjection(input.Projection),
 		desiredInput: detachedInput,
 	}}, nil
 }
@@ -382,6 +382,21 @@ func abandonKnownFailure(
 		return err
 	}
 	return cause
+}
+
+// AbandonClaim releases a private desired-revision claim after a known
+// pre-publication failure. It must not be used after the final publication
+// transaction has been attempted, because that outcome may be unknown.
+func AbandonClaim(
+	ctx context.Context,
+	repository PublicationRepository,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	cause error,
+) error {
+	if ctx == nil || repository == nil || cause == nil {
+		return errs.New(errs.KindInternal, "Environment desired revision claim abandonment is not configured")
+	}
+	return abandonKnownFailure(ctx, repository, claim, cause)
 }
 
 // Abandon releases a sealed candidate after a known pre-publication failure.

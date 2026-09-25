@@ -30,7 +30,7 @@ func (service *Service) applyAuthoredOnce(
 	bundle core.BlueprintBundle,
 	expectedRevision, idempotencyKey string,
 	preserveRoutes bool,
-) (idempotencyrecord.IdempotencyResponse, error) {
+) (response idempotencyrecord.IdempotencyResponse, resultErr error) {
 	evidence, err := service.idempotency.Prepare(ctx, desiredrevision.IntentAddress{
 		Method: http.MethodPut, Route: environmentBlueprintRoute,
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
@@ -94,6 +94,12 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	claimHeld := true
+	defer func() {
+		if claimHeld && resultErr != nil {
+			resultErr = desiredrevision.AbandonClaim(ctx, service.repository, claim, resultErr)
+		}
+	}()
 	allocator, err := desiredrevision.NewBlueprintIdentityAllocator(claim)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -200,6 +206,7 @@ func (service *Service) applyAuthoredOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	claimHeld = false
 	return desiredrevision.PublishAuthored(ctx, service.repository, service.idempotency, desiredrevision.PublishAuthoredInput{
 		Project: baseline.project, Environment: baseline.environment,
 		ExpectedHeadRevision: baseline.expectedHeadRevision,
