@@ -274,7 +274,7 @@ func seedBackupRuntimePublicationEvidence(
 	backingServiceAuditDigest := sha256.Sum256(backingServiceAudit)
 	backingServiceSeal := testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: backingEnvironment.ID, RevisionID: backingServiceRevisionID,
-		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: 1,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		AuditChunks: 1, AuditBytes: uint64(len(backingServiceAudit)), AuditSHA256: backingServiceAuditDigest,
 		ProjectionChunks: 1, ProjectionBytes: uint64(len(backingServiceProjectionValue)),
 		ProjectionSHA256: backingServiceProjectionDigest,

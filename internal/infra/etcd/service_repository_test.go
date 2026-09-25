@@ -243,7 +243,7 @@ func seedServiceRepositoryTestDesiredProjection(
 		},
 		Intent:     validEnvironmentBlueprintProtectedIntentForTest("service-repository-seed"),
 		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: projection.RenderGeneration,
-		ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: createdAt,
 	}
 	blueprint := testblueprints.EnvironmentBlueprintRevision{
 		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
@@ -258,7 +258,7 @@ func seedServiceRepositoryTestDesiredProjection(
 		t.Fatalf("EnvironmentBlueprintDependencyDigest() error = %v", err)
 	}
 	streams, err := testblueprints.BuildEnvironmentBlueprintStreams(testblueprints.EnvironmentBlueprintStageRequest{
-		Claim: claim, Blueprint: &blueprint, Projection: projection, DependencyDigest: digest,
+		Claim: claim, Blueprint: &blueprint, DesiredInput: desiredInputForProjectionFixture(projection), DependencyDigest: digest,
 	})
 	if err != nil {
 		t.Fatalf("buildEnvironmentBlueprintStreams() error = %v", err)

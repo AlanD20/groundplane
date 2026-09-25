@@ -257,7 +257,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 	sealValue, err := testblueprints.EncodeEnvironmentBlueprintSeal(testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: environmentID, RevisionID: taskID,
 		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 3,
-		ProjectionSchema: 1,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		AuditChunks:      1, AuditBytes: 1, AuditSHA256: sha256.Sum256([]byte("audit")),
 		ProjectionChunks: 1, ProjectionBytes: uint64(len(projectionValue)),
 		ProjectionSHA256:    sha256.Sum256(projectionValue),
@@ -785,7 +785,7 @@ func TestBlueprintCandidateSuccessAtomicallyPromotesSealedWorkloadAndPreservesDe
 	successorSealValue, err := testblueprints.EncodeEnvironmentBlueprintSeal(testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: environmentID, RevisionID: successorTaskID,
 		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 4,
-		ProjectionSchema: 1,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		AuditChunks:      1, AuditBytes: 1, AuditSHA256: sha256.Sum256([]byte("successor-audit")),
 		ProjectionChunks: 1, ProjectionBytes: 1,
 		ProjectionSHA256:    sha256.Sum256([]byte("successor-projection")),

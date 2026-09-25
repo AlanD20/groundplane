@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -41,7 +42,7 @@ func TestRepositoryClaimsWinnerAndSealsTypedMutationRevision(t *testing.T) {
 			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: ciphertext,
 		},
 		SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: 1,
-		ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: now,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: now,
 	}
 	claim, err := repository.ClaimEnvironmentBlueprintStage(ctx, request)
 	if err != nil || claim.Existing {
@@ -69,7 +70,13 @@ func TestRepositoryClaimsWinnerAndSealsTypedMutationRevision(t *testing.T) {
 				Slug: "application-data", Key: "application_data", KeySupplied: true,
 			},
 		},
-		Projection: projection, DependencyDigest: dependencyDigest,
+		DesiredInput: testenvironmentprojection.EnvironmentDesiredInput{
+			EnvironmentID: environmentID, RevisionID: taskID, RenderGeneration: 1,
+			Input: core.BlueprintDesiredInput{
+				NormalizedCompose: projection.NormalizedCompose, NetworkPool: "10.40.0.0/16",
+			},
+		},
+		DependencyDigest: dependencyDigest,
 	})
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != taskID ||
 		seal.SourceKind != testblueprints.EnvironmentBlueprintSourceMutation || seal.ProjectionBytes == 0 {

@@ -442,7 +442,7 @@ func TestBackupRuntimeRepositoryClassifiesPinnedVolumeEvidence(t *testing.T) {
 	digest := sha256.Sum256([]byte("normalized Volume projection"))
 	sealValue, err := testblueprints.EncodeEnvironmentBlueprintSeal(testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID: environment.ID, RevisionID: revisionID,
-		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: 1,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1, ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		AuditChunks: 1, AuditBytes: 1, AuditSHA256: digest,
 		ProjectionChunks: 1, ProjectionBytes: 1, ProjectionSHA256: digest,
 		ProjectionResources: 1, DependencyDigest: digest,

@@ -51,7 +51,7 @@ func stageVolumePolicyDesired(t *testing.T, fixture *etcd.VolumePolicyDesiredFix
 			EnvironmentID: fixture.Task.Owner.EnvironmentID, CandidateRevisionID: fixture.Task.ID, CandidateTaskID: fixture.Task.ID,
 			Locator: fixture.Marker.Locator, Intent: fixture.Marker.Intent, BaselineHeadRevision: fixture.HeadRevision,
 			SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: 2,
-			ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: fixture.Task.CreatedAt,
+			ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: fixture.Task.CreatedAt,
 		},
 	)
 	if err != nil {
@@ -91,8 +91,8 @@ func TestVolumePolicyDesiredPublicationRejectsRaces(t *testing.T) {
 // policy replacement for the exact fixed-revision Volume preparation.
 func TestVolumePolicyDesiredPublicationRejectsDifferentStagedPolicy(t *testing.T) {
 	fixture := etcd.NewVolumePolicyDesiredFixture(t)
-	fixture.Request.Projection.Backup.Keep = 8
-	digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(fixture.Request.Projection)
+	fixture.Projection.Backup.Keep = 8
+	digest, err := testblueprints.EnvironmentBlueprintDependencyDigest(fixture.Projection)
 	if err != nil {
 		t.Fatal(err)
 	}

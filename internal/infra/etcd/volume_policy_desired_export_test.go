@@ -32,6 +32,7 @@ type VolumePolicyDesiredFixture struct {
 	Task                             TaskRecord
 	Marker                           testidempotency.IdempotencyMarker
 	Request                          testblueprints.EnvironmentBlueprintStageRequest
+	Projection                       testenvironmentprojection.EnvironmentComposeProjection
 	HeadRevision                     int64
 	Initial                          *removalrecord.InitialPublication
 	OwnerBeforePublication           *removalrecord.Owner
@@ -516,8 +517,9 @@ func NewVolumePolicyDesiredFixture(t *testing.T) *VolumePolicyDesiredFixture {
 	}
 	return &VolumePolicyDesiredFixture{
 		Store: store, Task: task, Marker: marker, HeadRevision: head.Revision, prepared: prepared, policy: policy, store: store,
+		Projection: projection,
 		Request: testblueprints.EnvironmentBlueprintStageRequest{
-			Projection: projection, DependencyDigest: digest,
+			DesiredInput: desiredInputForProjectionFixture(projection), DependencyDigest: digest,
 			Mutation: &testblueprints.EnvironmentDesiredMutationAudit{
 				Volume: &testblueprints.EnvironmentVolumeMutationAudit{
 					Action: testblueprints.EnvironmentVolumeMutationRemove, VolumeID: volume.TargetID,
@@ -545,7 +547,7 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 			fixture.policy.environment,
 			fixture.HeadRevision,
 			fixture.Request.Claim,
-			fixture.Request.Projection,
+			fixture.Projection,
 			fixture.prepared,
 			*fixture.Initial,
 			fixture.Task,
@@ -568,7 +570,7 @@ func (fixture *VolumePolicyDesiredFixture) Publish(ctx context.Context) (Idempot
 			EnvironmentID: fixture.Task.Owner.EnvironmentID,
 			RevisionID:    fixture.Task.ID,
 		},
-		fixture.Request.Projection,
+		fixture.Projection,
 		nil,
 		nil,
 		nil,
@@ -683,7 +685,8 @@ func (fixture *VolumePolicyDesiredFixture) UseMaximumSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture.Request.Projection, fixture.Request.DependencyDigest = projection, digest
+	fixture.Projection = projection
+	fixture.Request.DesiredInput, fixture.Request.DependencyDigest = desiredInputForProjectionFixture(projection), digest
 	fixture.Request.Mutation.Volume.PreconditionDigest = precondition
 }
 
@@ -968,7 +971,7 @@ func TestVolumePolicyDesiredPreparationBinding(t *testing.T) {
 			case "unprepared":
 				prepared = VolumeRemovalBackupPolicyPreparation{}
 			}
-			err := prepared.validateDesiredPublication(claim, fixture.Request.Projection, task, marker, removed)
+			err := prepared.validateDesiredPublication(claim, fixture.Projection, task, marker, removed)
 			if changed == "control" {
 				if err != nil {
 					t.Fatal(err)

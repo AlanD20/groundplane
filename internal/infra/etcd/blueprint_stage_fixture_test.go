@@ -30,7 +30,7 @@ func validEnvironmentBlueprintStageDescriptorForTest(t *testing.T) fixtureowner.
 			},
 			Intent:     validEnvironmentBlueprintProtectedIntentForTest("protected intent"),
 			SourceKind: fixtureowner.EnvironmentBlueprintSourceApply, RenderGeneration: 1,
-			ProjectionSchema: 1, CreatedAt: now,
+			ProjectionSchema: fixtureowner.EnvironmentDesiredInputSchema, CreatedAt: now,
 		},
 		State: fixtureowner.EnvironmentBlueprintStageOpen, Bound: true,
 		AuditChunks: 1, AuditBytes: 5, AuditSHA256: audit,

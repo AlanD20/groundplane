@@ -104,7 +104,7 @@ func TestEnvironmentZoneDesiredPublicationCommitsHeadPoolAndReplay(t *testing.T)
 		DescriptorID: strings.TrimPrefix(revisionID, "task_"), EnvironmentID: environment.Record.ID,
 		RevisionID: revisionID, TaskID: revisionID, Locator: locator, Intent: intent,
 		BaselineHeadRevision: current.Revision, SourceKind: testblueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema,
+		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		CreatedAt: at,
 	}, current.Record.RevisionID, candidate, zone)
 	response := testidempotency.IdempotencyResponse{
@@ -230,7 +230,7 @@ func stageZoneDesiredPublicationTest(
 				Subnet: zone.Desired.Subnet, Internal: zone.Desired.Internal,
 			},
 		}},
-		Projection: projection, DependencyDigest: digest,
+		DesiredInput: desiredInputForProjectionFixture(projection), DependencyDigest: digest,
 	})
 	if err != nil {
 		t.Fatal(err)

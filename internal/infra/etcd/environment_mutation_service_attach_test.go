@@ -418,7 +418,7 @@ func stageDirectServicePublicationForTest(
 				},
 			},
 		},
-		Projection:       fixture.Projection.Record,
+		DesiredInput:     desiredInputForProjectionFixture(fixture.Projection.Record),
 		DependencyDigest: mustEnvironmentBlueprintDependencyDigest(t, fixture.Projection.Record),
 	})
 	if err != nil {
@@ -530,7 +530,7 @@ func joinedServiceMutationClaim(
 		EnvironmentID: service.EnvironmentID, RevisionID: projection.RevisionID, TaskID: projection.RevisionID,
 		Locator: marker.Locator, Intent: marker.Intent, BaselineHeadRevision: 0,
 		SourceKind: testblueprints.EnvironmentBlueprintSourceMutation, RenderGeneration: projection.RenderGeneration,
-		ProjectionSchema: 1, CreatedAt: marker.CreatedAt,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: marker.CreatedAt,
 	}
 }
 

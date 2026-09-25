@@ -333,7 +333,7 @@ func TestEnvironmentZoneAndRouteMutationAuditStageSealsEveryAuthoredField(t *tes
 	}
 	for index, audit := range audits {
 		streams, buildErr := BuildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
-			Claim: claim, Mutation: &audit, Projection: projection, DependencyDigest: dependencyDigest,
+			Claim: claim, Mutation: &audit, DesiredInput: desiredInputFixtureFromProjection(projection), DependencyDigest: dependencyDigest,
 		})
 		if buildErr != nil {
 			t.Fatalf("stage audit %d error = %v", index, buildErr)
@@ -440,7 +440,7 @@ func mutationAuditDigestForTest(
 ) [sha256.Size]byte {
 	t.Helper()
 	streams, err := BuildEnvironmentBlueprintStreams(EnvironmentBlueprintStageRequest{
-		Claim: claim, Mutation: &audit, Projection: projection, DependencyDigest: dependencyDigest,
+		Claim: claim, Mutation: &audit, DesiredInput: desiredInputFixtureFromProjection(projection), DependencyDigest: dependencyDigest,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -448,6 +448,24 @@ func mutationAuditDigestForTest(
 	defer clear(streams.Audit)
 	defer clear(streams.Projection)
 	return streams.Descriptor.AuditSHA256
+}
+
+func desiredInputFixtureFromProjection(
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+) testenvironmentprojection.EnvironmentDesiredInput {
+	normalized := projection.NormalizedCompose
+	if len(normalized) == 0 {
+		normalized = []byte("services: {}\n")
+	}
+	return testenvironmentprojection.EnvironmentDesiredInput{
+		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
+		RenderGeneration: projection.RenderGeneration,
+		Input: core.BlueprintDesiredInput{
+			NormalizedCompose: append([]byte(nil), normalized...),
+			RuntimeFiles:      projection.RuntimeFiles, ServiceExtensions: projection.ServiceExtensions,
+			NetworkPool: "10.40.0.0/16",
+		},
+	}
 }
 
 func TestEnvironmentEntryMutationAuditIsTypedRedactedAndDeterministic(t *testing.T) {
@@ -523,7 +541,7 @@ func validEnvironmentBlueprintStageDescriptorForTest(t *testing.T) EnvironmentBl
 			},
 			Intent:     validEnvironmentBlueprintProtectedIntentForTest("protected intent"),
 			SourceKind: EnvironmentBlueprintSourceApply, RenderGeneration: 1,
-			ProjectionSchema: 1, CreatedAt: now,
+			ProjectionSchema: EnvironmentDesiredInputSchema, CreatedAt: now,
 		},
 		State: EnvironmentBlueprintStageOpen, Bound: true,
 		AuditChunks: 1, AuditBytes: 5, AuditSHA256: audit,

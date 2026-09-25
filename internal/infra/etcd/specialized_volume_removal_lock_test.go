@@ -145,7 +145,7 @@ func specializedZoneRemovalLockFixture(t *testing.T) specializedRemovalLockFixtu
 		DescriptorID: strings.TrimPrefix(candidate.RevisionID, "task_"), EnvironmentID: environment.Record.ID,
 		RevisionID: candidate.RevisionID, TaskID: candidate.RevisionID, Locator: locator, Intent: intent,
 		BaselineHeadRevision: current.Revision, SourceKind: testblueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: 2, ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema, CreatedAt: at,
+		RenderGeneration: 2, ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: at,
 	}, current.Record.RevisionID, candidate, zone)
 	marker, err := testidempotency.NewCompletedDirectIdempotencyMarker(
 		locator,

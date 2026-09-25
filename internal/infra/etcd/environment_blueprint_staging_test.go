@@ -3,6 +3,7 @@ package etcd
 import (
 	context "context"
 	sha256 "crypto/sha256"
+	"github.com/AlanD20/groundplane/internal/core"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -29,11 +30,11 @@ func stageEnvironmentBlueprintForPublicationTest(
 		EnvironmentID: revision.EnvironmentID, RevisionID: revision.RevisionID,
 		TaskID: marker.TaskID, Locator: marker.Locator, Intent: marker.Intent,
 		BaselineHeadRevision: expectedHeadRevision, SourceKind: testblueprints.EnvironmentBlueprintSourceApply,
-		RenderGeneration: projection.RenderGeneration, ProjectionSchema: 1,
+		RenderGeneration: projection.RenderGeneration, ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		CreatedAt: revision.CreatedAt,
 	}
 	streams, err := testblueprints.BuildEnvironmentBlueprintStreams(testblueprints.EnvironmentBlueprintStageRequest{
-		Claim: claim, Blueprint: &revision, Projection: projection, DependencyDigest: dependencyDigest,
+		Claim: claim, Blueprint: &revision, DesiredInput: desiredInputForProjectionFixture(projection), DependencyDigest: dependencyDigest,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,4 +126,23 @@ func stageEnvironmentBlueprintForPublicationTest(
 		t.Fatalf("persist sealed desired revision = %#v, %v", result, err)
 	}
 	return claim
+}
+
+func desiredInputForProjectionFixture(
+	projection testenvironmentprojection.EnvironmentComposeProjection,
+) testenvironmentprojection.EnvironmentDesiredInput {
+	normalized := projection.NormalizedCompose
+	if len(normalized) == 0 {
+		normalized = []byte("services: {}\n")
+	}
+	return testenvironmentprojection.EnvironmentDesiredInput{
+		EnvironmentID: projection.EnvironmentID, RevisionID: projection.RevisionID,
+		RenderGeneration: projection.RenderGeneration,
+		Input: core.BlueprintDesiredInput{
+			NormalizedCompose: append([]byte(nil), normalized...),
+			RuntimeFiles:      projection.RuntimeFiles,
+			ServiceExtensions: projection.ServiceExtensions,
+			NetworkPool:       "10.40.0.0/16",
+		},
+	}
 }

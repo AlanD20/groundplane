@@ -262,7 +262,7 @@ func newZoneDeletionProjectionFixture(t *testing.T, backing bool) *zoneDeletionP
 		RevisionID: candidateID, TaskID: candidateID, Locator: locator,
 		Intent:               validEnvironmentBlueprintProtectedIntentForTest("zone-deletion"),
 		BaselineHeadRevision: selected.Revision, SourceKind: testblueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: testblueprints.EnvironmentDesiredProjectionSchema,
+		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema,
 		CreatedAt: at,
 	}, selected.Record.RevisionID, candidate, record)
 	task := zoneDeletionAgentTask(t, project.Record, environment.Record, testenvironmentchanges.ZoneRemovalIntent{

@@ -78,7 +78,7 @@ func seedDesiredServiceFixture(
 			CiphertextDigest: hex.EncodeToString(intentDigest[:]), Ciphertext: intentCiphertext,
 		},
 		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1,
-		ProjectionSchema: 1, CreatedAt: testAttachTime,
+		ProjectionSchema: testblueprints.EnvironmentDesiredInputSchema, CreatedAt: testAttachTime,
 	}
 	blueprint := testblueprints.EnvironmentBlueprintRevision{
 		EnvironmentID: environmentID, RevisionID: revisionID,
@@ -88,7 +88,7 @@ func seedDesiredServiceFixture(
 		}, CreatedAt: testAttachTime,
 	}
 	streams, err := testblueprints.BuildEnvironmentBlueprintStreams(testblueprints.EnvironmentBlueprintStageRequest{
-		Claim: claim, Blueprint: &blueprint, Projection: projection, DependencyDigest: dependencyDigest,
+		Claim: claim, Blueprint: &blueprint, DesiredInput: desiredInputForProjectionFixture(projection), DependencyDigest: dependencyDigest,
 	})
 	if err != nil {
 		t.Fatalf("buildEnvironmentBlueprintStreams() error = %v", err)
