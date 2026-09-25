@@ -41,6 +41,22 @@ func (service *Service) Plan(
 		}
 		runtimeReady = false
 	}
+	if !runtimeReady && requireAuthoredRuntimeProjectionInputs(input.desired, input.identities) == nil {
+		if err := service.sealAuthoredRuntimeProjection(ctx, parent, snapshot); err != nil {
+			return blueprintunits.DesiredPlan{}, err
+		}
+		runtime, runtimeReady, err = service.repository.GetEnvironmentComposeProjectionRevision(
+			ctx, parent.Owner.EnvironmentID, parent.ID,
+		)
+		if err != nil || !runtimeReady {
+			if err != nil {
+				return blueprintunits.DesiredPlan{}, err
+			}
+			return blueprintunits.DesiredPlan{}, errs.New(
+				errs.KindStateConflict, "Blueprint runtime projection seal is not readable",
+			)
+		}
+	}
 	if runtimeReady && (runtime.Record.EnvironmentID != parent.Owner.EnvironmentID ||
 		runtime.Record.RevisionID != parent.ID ||
 		runtime.Record.RenderGeneration != input.desired.RenderGeneration) {
