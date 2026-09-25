@@ -125,7 +125,7 @@ func (repository *TaskRepository) pruneParentOwnedBlueprintAttachInput(
 
 // Once a hidden child has no execution claim, assignment or recovery owner,
 // its encrypted input generation is no longer needed to reconstruct a plan.
-// Output facts have a separate retention owner and are not removed here.
+// Output facts are pruned through their separate applied-authority check.
 func (repository *TaskRepository) pruneChildOwnedBlueprintAttachInput(
 	ctx context.Context,
 	task TaskRecord,

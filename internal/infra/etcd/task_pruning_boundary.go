@@ -37,6 +37,11 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	); stop || err != nil {
 		return stop, err
 	}
+	if stop, err := repository.pruneChildOwnedBlueprintAttachOutput(
+		ctx, task, taskRevision, retentionEntry, readRevision,
+	); stop || err != nil {
+		return stop, err
+	}
 	if task.Type == taskjournal.TaskScript {
 		return repository.prepareManualScriptExpiry(ctx, task, taskRevision, retentionEntry, readRevision, now)
 	}
