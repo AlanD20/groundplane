@@ -587,6 +587,12 @@ the slug retains the stable Volume id, storage path, and mounts.
 
 ### `x-gp-adapter` in a Backing Blueprint
 
+Backing Blueprint upload is not available yet. The example below describes the
+accepted Service field, not a file the current Environment Blueprint parser can
+apply. A Backing Service Blueprint does not use tenant or project metadata; its
+own envelope is not implemented yet. Do not add `x-gp-adapter` to a tenant
+Environment Blueprint to work around that limit.
+
 `x-gp-adapter` is valid only on the sole Service of a Backing Blueprint. Native
 Compose still owns its networks, health check, resources, Volumes, and restart
 policy:
