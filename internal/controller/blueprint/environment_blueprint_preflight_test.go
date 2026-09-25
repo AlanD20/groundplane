@@ -22,6 +22,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -29,6 +30,7 @@ import (
 	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
 	releasegroupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -320,5 +322,48 @@ func TestApplyBlueprintImageFailurePrecedesEveryDurableWrite(t *testing.T) {
 	}
 	if store.writes != 0 || response.Status != 0 {
 		t.Fatalf("failed preflight wrote state or returned publication: writes=%d response=%+v", store.writes, response)
+	}
+
+	// A published Apply advances the desired head before its Task settles.
+	// A later Apply must refuse that pending Task before image resolution or writes.
+	taskID := ids.NewAt(ids.KindTask, now, 6)
+	task := etcd.TaskRecord{
+		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 7),
+		Owner: testtaskjournal.TaskOwner{
+			WorkspaceType: testtaskjournal.TaskWorkspaceTenant,
+			TenantID:      tenantID, ProjectID: projectID, EnvironmentID: environmentID,
+		},
+		Actor: testtaskjournal.TaskActorOperator, Executor: testtaskjournal.TaskExecutorAgent,
+		PlanID: ids.NewAt(ids.KindPlan, now, 8), PlanHash: strings.Repeat("a", 64),
+		RenderGeneration: 1, Type: testtaskjournal.TaskUpdate, Target: environmentID,
+		Params: map[string]string{
+			testblueprints.EnvironmentDesiredRevisionParam:      taskID,
+			testtaskjournal.TaskMaterializationEnvironmentParam: environmentID,
+		},
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusPending,
+		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	encoded, err := etcd.EncodeTaskRecord(task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.readOnly = false
+	if _, err := store.Put(t.Context(), testtaskjournal.TaskStorageKey(taskID), encoded); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Put(t.Context(), testtaskjournal.TaskEnvironmentIndexKey(environmentID, taskID), []byte(taskID)); err != nil {
+		t.Fatal(err)
+	}
+	store.readOnly, store.writes = true, 0
+	response, err = service.ApplyBlueprint(t.Context(), environmentID, bundle, "", "preflight-overlap")
+	if !errors.Is(err, errs.New(errs.KindResourceInUse, "")) ||
+		response.Status != 0 || store.writes != 0 || resolver.calls != 1 {
+		t.Fatalf(
+			"overlapping Apply = response=%+v error=%v writes=%d imageCalls=%d",
+			response,
+			err,
+			store.writes,
+			resolver.calls,
+		)
 	}
 }

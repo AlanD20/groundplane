@@ -26,6 +26,7 @@ import (
 )
 
 type environmentBlueprintRepository interface {
+	HasActiveEnvironmentBlueprintApply(context.Context, string) (bool, error)
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
@@ -213,6 +214,11 @@ func (repository *durableRepository) GetEnvironmentDesiredInput(
 	ctx context.Context, environmentID string,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentDesiredInput], bool, error) {
 	return repository.desired.GetEnvironmentDesiredInput(ctx, environmentID)
+}
+func (repository *durableRepository) HasActiveEnvironmentBlueprintApply(
+	ctx context.Context, environmentID string,
+) (bool, error) {
+	return repository.desired.HasActiveEnvironmentBlueprintApply(ctx, environmentID)
 }
 func (repository *durableRepository) CreateBlueprintEntryValueGeneration(
 	ctx context.Context,

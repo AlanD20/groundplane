@@ -70,6 +70,13 @@ func (service *Service) loadApplyBaseline(
 			"Environment Blueprint changed after the authoring revision was loaded",
 		)
 	}
+	active, err := service.repository.HasActiveEnvironmentBlueprintApply(ctx, environmentID)
+	if err != nil {
+		return applyBaseline{}, err
+	}
+	if active {
+		return applyBaseline{}, errs.New(errs.KindResourceInUse, "Environment Blueprint Apply is already in progress")
+	}
 	if generation > math.MaxInt32 {
 		return applyBaseline{}, errs.New(errs.KindInternal, "Environment render generation is exhausted")
 	}

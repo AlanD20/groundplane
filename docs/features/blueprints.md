@@ -22,6 +22,8 @@ revision or host effect; its diff is create, update, remove or retain.
 Apply publishes one reconcile Task with immutable inputs. Follow its outcome;
 acceptance does not imply successful application. Required workload images must
 already exist in the host Docker daemon.
+While that Apply Task is pending or running, a second Apply to the same
+Environment is refused. Wait for the first Task to settle before applying again.
 
 ## Removal and identity
 
