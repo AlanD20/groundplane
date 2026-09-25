@@ -80,6 +80,7 @@ func (service *Service) prepareAuthoredApplyPreflight(
 		}
 	}
 	return service.prepareApplyPreflightFromSource(ctx, environmentID, bundle, applyPreflightSource{
+		authored:    true,
 		environment: baseline.environment, project: baseline.project, tenant: baseline.tenant,
 		previousFiles: previous.Input.RuntimeFiles, previousVolumes: volumes,
 		previousExtensions: previous.Input.ServiceExtensions, previous: baseline.previous,
