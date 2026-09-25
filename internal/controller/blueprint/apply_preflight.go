@@ -14,6 +14,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"sort"
 )
@@ -124,6 +125,31 @@ func (service *Service) prepareApplyPreflightFromSource(
 	if source.hasPrevious && !preserveRoutes {
 		if err := requireExplicitBlueprintVolumes(parsed.Project, source.previousVolumes); err != nil {
 			return applyPreflight{}, err
+		}
+	}
+	if source.authored && source.project.Record.Kind == hierarchyrecord.ProjectKindBacking {
+		checker, ok := service.repository.(interface {
+			BlueprintBackingZoneHasExternalAttaches(context.Context, string, string, string) (bool, error)
+		})
+		if !ok {
+			return applyPreflight{}, errs.New(errs.KindInternal, "Blueprint Backing Zone impact reader is unavailable")
+		}
+		for _, prior := range source.previous.Networks {
+			if _, present := parsed.Project.Networks[prior.Name]; present {
+				continue
+			}
+			external, err := checker.BlueprintBackingZoneHasExternalAttaches(
+				ctx, source.project.Record.ID, environmentID, prior.ID,
+			)
+			if err != nil {
+				return applyPreflight{}, err
+			}
+			if external {
+				return applyPreflight{}, errs.New(
+					errs.KindResourceInUse,
+					"Blueprint omits a Backing Zone with external Attaches; remove it with impact approval first",
+				)
+			}
 		}
 	}
 	currentAttaches, attachReadRevision, err := service.listBlueprintAttaches(ctx, environmentID)
