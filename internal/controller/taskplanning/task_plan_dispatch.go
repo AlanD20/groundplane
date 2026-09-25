@@ -9,6 +9,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -88,6 +89,9 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	}
 	if taskjournal.IsBlueprintChild(task.Params) && task.Params[taskjournal.TaskBlueprintVolumeUnitParam] != "" {
 		return resolver.resolveBlueprintVolumeUnitPlan(ctx, task)
+	}
+	if taskjournal.IsBlueprintChild(task.Params) && task.Params[attachinputs.TaskAttachIDParam] != "" {
+		return resolver.resolveBlueprintAttachUnitPlan(ctx, task)
 	}
 	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent {
 		if resolver.componentPlans == nil {

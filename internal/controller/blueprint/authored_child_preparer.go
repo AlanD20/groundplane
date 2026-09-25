@@ -8,10 +8,15 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	"github.com/AlanD20/groundplane/internal/controller/taskplan"
+	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
+	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -36,6 +41,9 @@ func (service *Service) Prepare(
 	}
 	if unit.Target.Kind == ids.KindVolume {
 		return service.prepareAuthoredVolumeChild(ctx, parent, unit)
+	}
+	if unit.Target.Kind == ids.KindAttach {
+		return service.prepareAuthoredAttachChild(ctx, parent, unit)
 	}
 	if unit.Target.Kind != ids.KindService {
 		return blueprintcoordinator.PreparedChild{}, errs.New(
@@ -109,6 +117,80 @@ func (service *Service) Prepare(
 	return blueprintcoordinator.PreparedChild{
 		Task: prepared.Task, ReleasePublication: prepared.Publication,
 	}, nil
+}
+
+func (service *Service) prepareAuthoredAttachChild(
+	ctx context.Context,
+	parent etcd.TaskRecord,
+	unit blueprintunits.Unit,
+) (blueprintcoordinator.PreparedChild, error) {
+	reader, ok := service.repository.(authoredAttachGenerationReader)
+	if !ok || service.attachFacts == nil || ids.Validate(ids.KindAttach, unit.Target.ID) != nil {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindInternal, "Blueprint Attach child authority is not configured",
+		)
+	}
+	versioned, found, err := reader.GetBlueprintAttachInputGeneration(ctx, parent.ID, unit.Target.ID)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	if !found {
+		return blueprintcoordinator.PreparedChild{}, errs.New(
+			errs.KindStateConflict, "Blueprint Attach input generation is unavailable",
+		)
+	}
+	defer attachinputs.Clear(&versioned.Record)
+	createdAt := service.now().UTC()
+	child := etcd.TaskRecord{
+		ID: ids.New(ids.KindTask), OperationID: versioned.Record.OperationID,
+		Owner: parent.Owner, Actor: taskjournal.TaskActorSystem,
+		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
+		RenderGeneration: parent.RenderGeneration, Type: taskjournal.TaskUpdate,
+		Target: parent.Owner.EnvironmentID,
+		Params: map[string]string{
+			blueprints.EnvironmentDesiredRevisionParam: parent.ID,
+			taskjournal.TaskBlueprintParentParam:       parent.ID,
+			attachinputs.TaskAttachIDParam:             unit.Target.ID,
+		},
+		TimeoutSeconds: desiredrevision.TaskTimeoutSeconds,
+		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1,
+		CreatedAt: createdAt, UpdatedAt: createdAt,
+	}
+	child.TimeoutSeconds = max(
+		child.TimeoutSeconds,
+		int64(versioned.Record.Hook.Attach.TimeoutSeconds)+15,
+	)
+	transferred, err := attachinputs.TransferToChild(versioned.Record, child.ID)
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	if transferred.ResolvedInputs != nil {
+		child.Configuration = &taskconfiguration.TaskConfiguration{
+			BackingHookInputs: &taskconfiguration.TaskBackingHookInputSet{
+				ProjectID:        transferred.BackingProjectID,
+				CiphertextSHA256: transferred.ResolvedInputs.CiphertextSHA256,
+				SecretSources: append(
+					[]tasksecretpinrecord.Record(nil), transferred.SecretSources...,
+				),
+			},
+		}
+		if transferred.SecretPins != nil {
+			pins := *transferred.SecretPins
+			child.Configuration.SecretPins = &pins
+		}
+	}
+	prepared, plan, err := taskplanning.PrepareBlueprintAttachUnit(
+		ctx, service.volumeRoot, service.attachFacts, transferred, child,
+	)
+	if plan != nil {
+		for _, step := range plan.GetSteps() {
+			taskplan.ClearBackingHookProcedure(step.GetBackingHookProcedure())
+		}
+	}
+	if err != nil {
+		return blueprintcoordinator.PreparedChild{}, err
+	}
+	return blueprintcoordinator.PreparedChild{Task: prepared}, nil
 }
 
 type authoredParentVolumeIntentReader interface {

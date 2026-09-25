@@ -294,6 +294,12 @@ func (repository *TaskRepository) acknowledgeTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearBlueprintAttachTaskChange(blueprintAttachChange)
+		if err := repository.prepareBlueprintAttachChildTerminal(ctx, terminal, assignment, primaryAndAssignment.ReadRevision, &blueprintAttachChange); err != nil {
+			journal.clearPrimary()
+			clear(environmentValue)
+			clearAttachTaskChange(attachChange)
+			return etcdstore.Versioned[TaskRecord]{}, err
+		}
 		if blueprintAttachChange.applies {
 			conditions = append(conditions, blueprintAttachChange.conditions...)
 			mutations = append(mutations, blueprintAttachChange.mutations...)
@@ -521,12 +527,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearPrepared()
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		blueprintNetworkChild := task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != ""
-		blueprintVolumeChild := task.Params[taskjournal.TaskBlueprintVolumeUnitParam] != ""
-		verifiedBlueprintChildResult := blueprintCandidateChange.applies || result != nil && (result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired &&
-			(blueprintNetworkChild || blueprintVolumeChild) ||
-			terminalStatus == taskjournal.TaskStatusCompleted &&
-				result.Kind == taskjournal.TaskResultEnvironmentDirectory && blueprintVolumeChild)
+		verifiedBlueprintChildResult := blueprintChildTerminalResultVerified(task, terminalStatus, result, blueprintCandidateChange.applies, blueprintAttachChange.verifiedChildResult)
 		childConditions, childMutations, err := repository.prepareBlueprintChildReceipt(
 			ctx, task, assignment, terminalStatus, verifiedBlueprintChildResult, terminalAt,
 		)

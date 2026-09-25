@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -14,6 +15,29 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func blueprintChildTerminalResultVerified(
+	task TaskRecord,
+	status taskjournal.TaskStatus,
+	result *taskjournal.TaskResultRecord,
+	verifiedCandidate bool,
+	verifiedAttach bool,
+) bool {
+	if task.Params[attachinputs.TaskAttachIDParam] != "" {
+		return verifiedAttach
+	}
+	if verifiedCandidate {
+		return true
+	}
+	if result == nil {
+		return false
+	}
+	network := task.Params[taskjournal.TaskBlueprintNetworkUnitParam] != ""
+	volume := task.Params[taskjournal.TaskBlueprintVolumeUnitParam] != ""
+	return result.Kind == taskjournal.TaskResultCompose && !result.ReconciliationRequired &&
+		(network || volume) || status == taskjournal.TaskStatusCompleted &&
+		result.Kind == taskjournal.TaskResultEnvironmentDirectory && volume
+}
 
 // prepareBlueprintChildReceipt joins the verified child outcome to its unit
 // claim in the same terminal transaction. Each private child supplies its own
@@ -56,7 +80,8 @@ func (repository *TaskRepository) prepareBlueprintChildReceipt(
 		task.Params[releaserender.TaskReleasePublicationParam] != ""
 	verifiedNetworkEffect := verifiedResult && blueprintNetworkChildTaskMatches(task, execution.Unit)
 	verifiedVolumeEffect := verifiedResult && blueprintVolumeChildTaskMatches(task, execution.Unit)
-	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect
+	verifiedAttachEffect := verifiedResult && blueprintAttachChildTaskMatches(task, execution.Unit)
+	verifiedEffect := verifiedServiceRelease || verifiedNetworkEffect || verifiedVolumeEffect || verifiedAttachEffect
 	if status != taskjournal.TaskStatusCompleted &&
 		(status != taskjournal.TaskStatusFailed && status != taskjournal.TaskStatusAborted ||
 			!verifiedEffect) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core/blueprintreconcile"
+	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -45,7 +46,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
 	volumeChild := blueprintVolumeChildTaskMatches(child, unit) && releasePublication.IsZero() &&
 		child.Params[releaserender.TaskReleasePublicationParam] == ""
-	if !releaseChild && !networkChild && !volumeChild {
+	attachChild := unit.Target.Kind == ids.KindAttach && !unit.Removal &&
+		child.Params[attachinputs.TaskAttachIDParam] == unit.Target.ID && releasePublication.IsZero() &&
+		child.Params[releaserender.TaskReleasePublicationParam] == ""
+	if !releaseChild && !networkChild && !volumeChild && !attachChild {
 		return keyvalue.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict, "Blueprint child has no supported effect publication",
 		)
@@ -112,6 +116,16 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		); err != nil {
 			return keyvalue.Versioned[TaskRecord]{}, err
 		}
+	}
+	attachPublication := blueprintAttachChildPublication{}
+	if attachChild {
+		attachPublication, err = repository.prepareBlueprintAttachChildPublication(
+			ctx, child, unit, snapshot.ReadRevision,
+		)
+		if err != nil {
+			return keyvalue.Versioned[TaskRecord]{}, err
+		}
+		defer attachPublication.clear()
 	}
 	parentKey := taskjournal.TaskStorageKey(parentID)
 	claimKey := taskjournal.BlueprintParentClaimKey(parentID)
@@ -280,6 +294,10 @@ func (repository *TaskRepository) PublishBlueprintChild(
 		}
 		conditions = append(conditions, releasePublication.conditions...)
 		mutations = append(mutations, releasePublication.mutations...)
+	}
+	if attachChild {
+		conditions = append(conditions, attachPublication.conditions...)
+		mutations = append(mutations, attachPublication.mutations...)
 	}
 	defer keyvalue.ClearMutationValues(mutations)
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)

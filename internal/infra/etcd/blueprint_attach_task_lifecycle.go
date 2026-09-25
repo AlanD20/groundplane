@@ -14,10 +14,11 @@ import (
 )
 
 type blueprintAttachTaskChange struct {
-	applies    bool
-	conditions []etcdstore.Condition
-	mutations  []etcdstore.Mutation
-	values     [][]byte
+	applies             bool
+	verifiedChildResult bool
+	conditions          []etcdstore.Condition
+	mutations           []etcdstore.Mutation
+	values              [][]byte
 }
 
 func (repository *TaskRepository) prepareBlueprintAttachTaskClaim(

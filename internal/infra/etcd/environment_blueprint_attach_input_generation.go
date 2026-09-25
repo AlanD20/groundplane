@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
@@ -250,4 +251,50 @@ func (prepared *preparedBlueprintAttachInputGenerations) finish(
 		))
 	}
 	return result, publicationErr
+}
+
+// GetBlueprintAttachInputGeneration reads one immutable generation by the
+// desired revision and Attach identity which jointly own its storage key.
+func (repository *EnvironmentBlueprintRepository) GetBlueprintAttachInputGeneration(
+	ctx context.Context,
+	revisionID string,
+	attachID string,
+) (etcdstore.Versioned[attachinputs.Generation], bool, error) {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
+		return etcdstore.Versioned[attachinputs.Generation]{}, false, err
+	}
+	if ids.Validate(ids.KindTask, revisionID) != nil || ids.Validate(ids.KindAttach, attachID) != nil {
+		return etcdstore.Versioned[attachinputs.Generation]{}, false, errs.New(
+			errs.KindValidationFailed, "Blueprint Attach input generation identity is invalid",
+		)
+	}
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{attachinputs.Key(revisionID, attachID)},
+	})
+	if err != nil {
+		return etcdstore.Versioned[attachinputs.Generation]{}, false, err
+	}
+	if result == nil || len(result.Values) != 1 {
+		return etcdstore.Versioned[attachinputs.Generation]{}, false, errs.New(
+			errs.KindInternal, "Blueprint Attach input generation read is incomplete",
+		)
+	}
+	defer etcdstore.ClearValues(result.Values)
+	if result.Values[0] == nil {
+		return etcdstore.Versioned[attachinputs.Generation]{ReadRevision: result.ReadRevision}, false, nil
+	}
+	value := result.Values[0]
+	generation, err := attachinputs.Decode(value.Value)
+	if err != nil || generation.RevisionID != revisionID || generation.AttachID != attachID {
+		attachinputs.Clear(&generation)
+		if err != nil {
+			return etcdstore.Versioned[attachinputs.Generation]{}, false, err
+		}
+		return etcdstore.Versioned[attachinputs.Generation]{}, false, errs.New(
+			errs.KindInternal, "Blueprint Attach input generation key is corrupt",
+		)
+	}
+	return etcdstore.Versioned[attachinputs.Generation]{
+		Record: generation, Revision: value.ModRevision, ReadRevision: result.ReadRevision,
+	}, true, nil
 }

@@ -68,7 +68,12 @@ func (service *Service) Plan(
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
-	planner, err := newAuthoredUnitPlanner(ctx, input, targets, runtimeReady)
+	attachGenerations, err := service.loadAuthoredAttachGenerationAuthority(ctx, input)
+	if err != nil {
+		return blueprintunits.DesiredPlan{}, err
+	}
+	defer clearAuthoredAttachGenerationAuthority(attachGenerations)
+	planner, err := newAuthoredUnitPlanner(ctx, input, targets, runtimeReady, attachGenerations)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}

@@ -23,8 +23,18 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	if held, err := repository.blueprintChildPruneHeld(ctx, task, readRevision); held || err != nil {
 		return held, err
 	}
+	if stop, err := repository.pruneParentOwnedBlueprintAttachInput(
+		ctx, task, taskRevision, retentionEntry, readRevision,
+	); stop || err != nil {
+		return stop, err
+	}
 	if stop, err := repository.prepareRecoverySecretPinExpiry(ctx, task, taskRevision, retentionEntry, now); stop ||
 		err != nil {
+		return stop, err
+	}
+	if stop, err := repository.pruneChildOwnedBlueprintAttachInput(
+		ctx, task, taskRevision, retentionEntry, readRevision,
+	); stop || err != nil {
 		return stop, err
 	}
 	if task.Type == taskjournal.TaskScript {

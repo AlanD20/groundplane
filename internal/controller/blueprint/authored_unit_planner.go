@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
+	attachinputs "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintattachinputs"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,6 +22,7 @@ type authoredUnitPlanner struct {
 	units        map[blueprintunits.ResourceKey]blueprintunits.Unit
 	blocked      map[blueprintunits.ResourceKey]bool
 	runtimeReady bool
+	attachInputs map[string]attachinputs.Generation
 }
 
 func newAuthoredUnitPlanner(
@@ -28,6 +30,7 @@ func newAuthoredUnitPlanner(
 	input authoredParentInput,
 	targets []authoredOwnedUnitTarget,
 	runtimeReady bool,
+	attachInputs map[string]attachinputs.Generation,
 ) (*authoredUnitPlanner, error) {
 	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
 		ctx,
@@ -44,6 +47,7 @@ func newAuthoredUnitPlanner(
 		units:        make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
 		blocked:      make(map[blueprintunits.ResourceKey]bool),
 		runtimeReady: runtimeReady,
+		attachInputs: attachInputs,
 	}
 	for _, group := range []struct {
 		kind   ids.Kind
@@ -161,13 +165,30 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		}
 		planner.addUnit(identity, fingerprint, reads, nil)
 	}
-	for _, identity := range planner.identities[ids.KindAttach] {
-		// The desired revision currently pins only authored names and the local
-		// stable id. It does not pin the resolved Backing Project, Service,
-		// Network, credential owner, or hook-output generation. Publishing a
-		// fingerprint from mutable flat records would make replay nondeterministic.
-		planner.block(identity)
-		complete = false
+	for name, identity := range planner.identities[ids.KindAttach] {
+		generation, found := planner.attachInputs[identity.ID]
+		if !found {
+			planner.block(identity)
+			complete = false
+			continue
+		}
+		spec, found := planner.input.desired.Input.Attachments[name]
+		if !found || generation.AttachName != name || generation.ConsumerServiceID == "" {
+			return nil, false, planner.missingInput("Attach", name)
+		}
+		consumer, found := planner.identities[ids.KindService][spec.Service]
+		if !found || consumer.ID != generation.ConsumerServiceID {
+			return nil, false, planner.missingInput("Attach consumer Service", spec.Service)
+		}
+		fingerprintAuthority := generation
+		fingerprintAuthority.OwnerKind = ""
+		fingerprintAuthority.OwnerTaskID = ""
+		fingerprintAuthority.Transfer = nil
+		fingerprint, err := authoredUnitFingerprint("attach", fingerprintAuthority)
+		if err != nil {
+			return nil, false, err
+		}
+		planner.addUnit(identity, fingerprint, nil, nil)
 	}
 	serviceBlocked := make(map[string]bool, len(planner.identities[ids.KindService]))
 	// Service children share one complete Environment runtime projection.

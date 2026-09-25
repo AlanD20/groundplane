@@ -18,6 +18,22 @@ import (
 
 const recordPrefix = "/v1/private/blueprint-attach-input-generations/"
 
+const TaskAttachIDParam = "blueprint_attach_input_generation_attach_id"
+
+type OwnerKind string
+
+const (
+	OwnerParent OwnerKind = "parent"
+	OwnerChild  OwnerKind = "child"
+)
+
+// Transfer is immutable evidence that publication moved one generation from
+// its visible Blueprint parent to the exact hidden child which executes it.
+type Transfer struct {
+	ParentTaskID string `json:"parent_task_id"`
+	ChildTaskID  string `json:"child_task_id"`
+}
+
 // HookPlan is the non-secret executable authority needed to run the Attach
 // hook. Resolved values live only in the encrypted envelopes on Generation.
 type HookPlan struct {
@@ -39,8 +55,8 @@ type HookInput struct {
 	Source HookInputSource `json:"source"`
 }
 
-// Generation is immutable parent-owned authority. A later child publication
-// transfers this exact generation; it never resolves mutable backing records.
+// Generation is immutable authority first owned by its parent and then by the
+// exact published child. Transfer never resolves mutable backing records.
 type Generation struct {
 	ID                   string                                        `json:"id"`
 	EnvironmentID        string                                        `json:"environment_id"`
@@ -63,10 +79,17 @@ type Generation struct {
 	ResolvedInputs       *taskconfiguration.BackingHookEncryptedInputs `json:"resolved_inputs,omitempty"`
 	SecretSources        []tasksecretpinrecord.Record                  `json:"secret_sources,omitempty"`
 	SecretPins           *taskconfiguration.TaskSecretPinSet           `json:"secret_pins,omitempty"`
+	OwnerKind            OwnerKind                                     `json:"owner_kind"`
+	OwnerTaskID          string                                        `json:"owner_task_id"`
+	Transfer             *Transfer                                     `json:"transfer,omitempty"`
 }
 
 func Key(revisionID, attachID string) string {
 	return recordPrefix + revisionID + "/" + attachID
+}
+
+func ParentPrefix(parentTaskID string) string {
+	return recordPrefix + parentTaskID + "/"
 }
 
 func ValidateDraft(record Generation) error {
@@ -95,6 +118,9 @@ func MatchesConfiguration(record Generation, configuration backinghook.Configura
 }
 
 func BindSecretPins(record Generation, count uint64, digest string) (Generation, error) {
+	if record.OwnerKind != "" || record.OwnerTaskID != "" || record.Transfer != nil {
+		return Generation{}, errs.New(errs.KindValidationFailed, "Blueprint Attach draft ownership is invalid")
+	}
 	if len(record.SecretSources) == 0 {
 		if count != 0 || digest != "" {
 			return Generation{}, errs.New(errs.KindValidationFailed, "Blueprint Attach Secret pin binding is invalid")
@@ -105,6 +131,26 @@ func BindSecretPins(record Generation, count uint64, digest string) (Generation,
 			TaskID: record.ParentTaskID, Count: count, SHA256: digest,
 		}
 	}
+	record.OwnerKind = OwnerParent
+	record.OwnerTaskID = record.ParentTaskID
+	if err := validate(record, true); err != nil {
+		return Generation{}, err
+	}
+	return record, nil
+}
+
+// TransferToChild changes only lifecycle ownership. The immutable parent,
+// source identities, encrypted values and original Secret-pin TaskID remain
+// unchanged so replay can prove the exact admitted generation.
+func TransferToChild(record Generation, childTaskID string) (Generation, error) {
+	if err := validate(record, true); err != nil || record.OwnerKind != OwnerParent ||
+		record.OwnerTaskID != record.ParentTaskID || record.Transfer != nil ||
+		ids.Validate(ids.KindTask, childTaskID) != nil || childTaskID == record.ParentTaskID {
+		return Generation{}, errs.New(errs.KindStateConflict, "Blueprint Attach input ownership cannot transfer")
+	}
+	record.OwnerKind = OwnerChild
+	record.OwnerTaskID = childTaskID
+	record.Transfer = &Transfer{ParentTaskID: record.ParentTaskID, ChildTaskID: childTaskID}
 	if err := validate(record, true); err != nil {
 		return Generation{}, err
 	}
@@ -215,8 +261,22 @@ func validate(record Generation, bound bool) error {
 				record.SecretPins.Count != uint64(len(record.SecretSources))) {
 			return errs.New(errs.KindValidationFailed, "Blueprint Attach Secret pin ownership is invalid")
 		}
-	} else if record.SecretPins != nil {
-		return errs.New(errs.KindValidationFailed, "Blueprint Attach draft already owns Secret pins")
+		switch record.OwnerKind {
+		case OwnerParent:
+			if record.OwnerTaskID != record.ParentTaskID || record.Transfer != nil {
+				return errs.New(errs.KindValidationFailed, "Blueprint Attach parent ownership is invalid")
+			}
+		case OwnerChild:
+			if ids.Validate(ids.KindTask, record.OwnerTaskID) != nil || record.OwnerTaskID == record.ParentTaskID ||
+				record.Transfer == nil || record.Transfer.ParentTaskID != record.ParentTaskID ||
+				record.Transfer.ChildTaskID != record.OwnerTaskID {
+				return errs.New(errs.KindValidationFailed, "Blueprint Attach child ownership is invalid")
+			}
+		default:
+			return errs.New(errs.KindValidationFailed, "Blueprint Attach input owner kind is invalid")
+		}
+	} else if record.SecretPins != nil || record.OwnerKind != "" || record.OwnerTaskID != "" || record.Transfer != nil {
+		return errs.New(errs.KindValidationFailed, "Blueprint Attach draft already owns retained authority")
 	}
 	return nil
 }
