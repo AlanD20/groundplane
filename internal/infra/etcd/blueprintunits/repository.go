@@ -282,7 +282,8 @@ func validAppliedAdvance(
 ) bool {
 	if next.ControllerOperationID != "" {
 		if !exists || next.State != Applied ||
-			(next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService) ||
+			(next.Target.Kind != ids.KindEnvEntry && next.Target.Kind != ids.KindService &&
+				next.Target.Kind != ids.KindRoute) ||
 			snapshot.Desired == nil || snapshot.Desired.Record.ParentTaskID != snapshot.HeadTaskID ||
 			next.ParentTaskID != snapshot.HeadTaskID {
 			return false

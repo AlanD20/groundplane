@@ -89,7 +89,9 @@ parent, current head and unit epoch. It does not create a no-op Agent Task or
 restart a running Service. A stopped or absent Service also has no host effect
 from a definition edit: the Controller can acknowledge that unit only while
 the exact non-running runtime-intent record remains unchanged. A later Start
-uses the current desired Service definition. Child identity is not an operator
+uses the current desired Service definition. A Route unit can similarly be
+acknowledged against its exact sealed projection; the HTTP-router Component
+owns any host configuration that consumes it. Child identity is not an operator
 action: Task
 lists, direct reads, Retry, Abort and event streams expose only the parent.
 The parent remains nonterminal while any required unit is running or has

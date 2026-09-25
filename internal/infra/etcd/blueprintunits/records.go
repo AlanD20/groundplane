@@ -41,19 +41,20 @@ const (
 // Applied is acknowledged execution authority. Source fields identify the
 // exact child outcome when present. Initial proven absence has no source.
 type AppliedRecord struct {
-	EnvironmentID               string        `json:"environment_id"`
-	Target                      ResourceKey   `json:"target"`
-	State                       AppliedState  `json:"state"`
-	Fingerprint                 string        `json:"fingerprint,omitempty"`
-	AffectedWrites              []ResourceKey `json:"affected_writes,omitempty"`
-	ParentTaskID                string        `json:"parent_task_id,omitempty"`
-	SourceTaskID                string        `json:"source_task_id,omitempty"`
-	SourcePlanID                string        `json:"source_plan_id,omitempty"`
-	SourceAssignment            string        `json:"source_assignment,omitempty"`
-	ExecutionEpoch              uint32        `json:"execution_epoch,omitempty"`
-	ControllerOperationID       string        `json:"controller_operation_id,omitempty"`
-	ControllerValueGenerationID string        `json:"controller_value_generation_id,omitempty"`
-	ControllerRuntimeRevision   int64         `json:"controller_runtime_revision,omitempty"`
+	EnvironmentID                string        `json:"environment_id"`
+	Target                       ResourceKey   `json:"target"`
+	State                        AppliedState  `json:"state"`
+	Fingerprint                  string        `json:"fingerprint,omitempty"`
+	AffectedWrites               []ResourceKey `json:"affected_writes,omitempty"`
+	ParentTaskID                 string        `json:"parent_task_id,omitempty"`
+	SourceTaskID                 string        `json:"source_task_id,omitempty"`
+	SourcePlanID                 string        `json:"source_plan_id,omitempty"`
+	SourceAssignment             string        `json:"source_assignment,omitempty"`
+	ExecutionEpoch               uint32        `json:"execution_epoch,omitempty"`
+	ControllerOperationID        string        `json:"controller_operation_id,omitempty"`
+	ControllerValueGenerationID  string        `json:"controller_value_generation_id,omitempty"`
+	ControllerRuntimeRevision    int64         `json:"controller_runtime_revision,omitempty"`
+	ControllerProjectionRevision int64         `json:"controller_projection_revision,omitempty"`
 }
 
 type ExecutionState string
@@ -209,10 +210,14 @@ func validateApplied(record AppliedRecord) error {
 	if record.ControllerOperationID != "" {
 		validEntry := record.Target.Kind == ids.KindEnvEntry &&
 			ids.Validate(ids.KindConfig, record.ControllerValueGenerationID) == nil &&
-			record.ControllerRuntimeRevision == 0
+			record.ControllerRuntimeRevision == 0 && record.ControllerProjectionRevision == 0
 		validDormantService := record.Target.Kind == ids.KindService &&
-			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision > 0
-		if (!validEntry && !validDormantService) || record.State != Applied ||
+			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision > 0 &&
+			record.ControllerProjectionRevision == 0
+		validRoute := record.Target.Kind == ids.KindRoute &&
+			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision == 0 &&
+			record.ControllerProjectionRevision > 0
+		if (!validEntry && !validDormantService && !validRoute) || record.State != Applied ||
 			ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
 			ids.Validate(ids.KindOperation, record.ControllerOperationID) != nil ||
 			record.SourceTaskID != "" || record.SourcePlanID != "" ||
@@ -222,7 +227,7 @@ func validateApplied(record AppliedRecord) error {
 	} else if record.SourceTaskID == "" {
 		if record.ParentTaskID != "" || record.SourcePlanID != "" || record.SourceAssignment != "" ||
 			record.ExecutionEpoch != 0 || record.ControllerValueGenerationID != "" ||
-			record.ControllerRuntimeRevision != 0 ||
+			record.ControllerRuntimeRevision != 0 || record.ControllerProjectionRevision != 0 ||
 			record.State != Absent {
 			return invalidRecord()
 		}
@@ -230,7 +235,8 @@ func validateApplied(record AppliedRecord) error {
 		ids.Validate(ids.KindTask, record.SourceTaskID) != nil || record.ParentTaskID == record.SourceTaskID ||
 		ids.Validate(ids.KindPlan, record.SourcePlanID) != nil ||
 		ids.Validate(ids.KindAssignment, record.SourceAssignment) != nil || record.ExecutionEpoch == 0 ||
-		record.ControllerValueGenerationID != "" || record.ControllerRuntimeRevision != 0 {
+		record.ControllerValueGenerationID != "" || record.ControllerRuntimeRevision != 0 ||
+		record.ControllerProjectionRevision != 0 {
 		return invalidRecord()
 	}
 	switch record.State {

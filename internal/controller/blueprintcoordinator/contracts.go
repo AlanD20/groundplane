@@ -25,6 +25,12 @@ type EntrySettler interface {
 	SettleEntry(context.Context, etcd.TaskRecord, blueprintunits.Unit, blueprintunits.Snapshot) error
 }
 
+// RouteSettler acknowledges metadata already sealed into the exact runtime
+// projection; its Component dependency owns any subsequent host effect.
+type RouteSettler interface {
+	SettleRoute(context.Context, etcd.TaskRecord, blueprintunits.Unit) error
+}
+
 // DormantServiceSettler acknowledges desired configuration when a Service's
 // separate runtime intent forbids a host Release.
 type DormantServiceSettler interface {
