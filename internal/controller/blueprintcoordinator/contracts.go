@@ -25,6 +25,12 @@ type EntrySettler interface {
 	SettleEntry(context.Context, etcd.TaskRecord, blueprintunits.Unit, blueprintunits.Snapshot) error
 }
 
+// DormantServiceSettler acknowledges desired configuration when a Service's
+// separate runtime intent forbids a host Release.
+type DormantServiceSettler interface {
+	TrySettleDormantService(context.Context, etcd.TaskRecord, blueprintunits.Unit) (bool, error)
+}
+
 // ChildPreparer prepares one exact ready unit as a private Agent Task. It must
 // use the parent's immutable desired revision rather than the current head as
 // a substitute for that revision.

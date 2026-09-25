@@ -197,6 +197,22 @@ func (runner *Runner) reconcileParent(ctx context.Context, parent etcd.TaskRecor
 			}
 			return true, nil
 		}
+		if unit.Target.Kind == ids.KindService && !unit.Removal {
+			settler, ok := runner.planner.(DormantServiceSettler)
+			if !ok {
+				return planChanged, errs.New(errs.KindInternal, "Blueprint dormant Service settler is not configured")
+			}
+			settled, err := settler.TrySettleDormantService(ctx, parent, unit)
+			if err != nil {
+				if isStateRace(err) {
+					return true, nil
+				}
+				return planChanged, err
+			}
+			if settled {
+				return true, nil
+			}
+		}
 		prepared, err := runner.children.Prepare(ctx, parent, unit)
 		if err != nil {
 			return planChanged, err

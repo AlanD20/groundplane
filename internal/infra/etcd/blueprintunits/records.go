@@ -53,6 +53,7 @@ type AppliedRecord struct {
 	ExecutionEpoch              uint32        `json:"execution_epoch,omitempty"`
 	ControllerOperationID       string        `json:"controller_operation_id,omitempty"`
 	ControllerValueGenerationID string        `json:"controller_value_generation_id,omitempty"`
+	ControllerRuntimeRevision   int64         `json:"controller_runtime_revision,omitempty"`
 }
 
 type ExecutionState string
@@ -206,10 +207,14 @@ func validateApplied(record AppliedRecord) error {
 		return invalidRecord()
 	}
 	if record.ControllerOperationID != "" {
-		if record.Target.Kind != ids.KindEnvEntry || record.State != Applied ||
+		validEntry := record.Target.Kind == ids.KindEnvEntry &&
+			ids.Validate(ids.KindConfig, record.ControllerValueGenerationID) == nil &&
+			record.ControllerRuntimeRevision == 0
+		validDormantService := record.Target.Kind == ids.KindService &&
+			record.ControllerValueGenerationID == "" && record.ControllerRuntimeRevision > 0
+		if (!validEntry && !validDormantService) || record.State != Applied ||
 			ids.Validate(ids.KindTask, record.ParentTaskID) != nil ||
 			ids.Validate(ids.KindOperation, record.ControllerOperationID) != nil ||
-			ids.Validate(ids.KindConfig, record.ControllerValueGenerationID) != nil ||
 			record.SourceTaskID != "" || record.SourcePlanID != "" ||
 			record.SourceAssignment != "" || record.ExecutionEpoch != 0 {
 			return invalidRecord()
@@ -217,6 +222,7 @@ func validateApplied(record AppliedRecord) error {
 	} else if record.SourceTaskID == "" {
 		if record.ParentTaskID != "" || record.SourcePlanID != "" || record.SourceAssignment != "" ||
 			record.ExecutionEpoch != 0 || record.ControllerValueGenerationID != "" ||
+			record.ControllerRuntimeRevision != 0 ||
 			record.State != Absent {
 			return invalidRecord()
 		}
@@ -224,7 +230,7 @@ func validateApplied(record AppliedRecord) error {
 		ids.Validate(ids.KindTask, record.SourceTaskID) != nil || record.ParentTaskID == record.SourceTaskID ||
 		ids.Validate(ids.KindPlan, record.SourcePlanID) != nil ||
 		ids.Validate(ids.KindAssignment, record.SourceAssignment) != nil || record.ExecutionEpoch == 0 ||
-		record.ControllerValueGenerationID != "" {
+		record.ControllerValueGenerationID != "" || record.ControllerRuntimeRevision != 0 {
 		return invalidRecord()
 	}
 	switch record.State {
