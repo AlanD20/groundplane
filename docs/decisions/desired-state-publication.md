@@ -101,6 +101,18 @@ any Custom Attach fact needed by that projection is pending. Independent Zone
 and Volume units may proceed. This keeps Service renders on one sealed input
 instead of introducing per-Service snapshots with separate fact lifetimes.
 
+An Attach that can produce facts has one immutable, encrypted input generation
+prepared before admission. The visible parent owns it until the hidden Attach
+child is published; publication transfers ownership to that child atomically.
+Secret values and hook inputs remain protected by exact-generation pins through
+retry and recovery. A successful hook writes a create-only output generation;
+the mutable current Attach facts record is not replay authority. Dependent
+Entries and the Environment runtime projection select that exact output
+generation. Neither parent completion nor Task pruning may delete a generation
+while an Attach, Entry, runtime projection or recoverable Task still uses it.
+Superseded or failed work releases generations only after those references and
+the executor's effects have been accounted for.
+
 An exactly restored failed child closes the parent's publication gate and
 eventually fails the visible Apply after other children settle. The coordinator
 does not retry it automatically: a new Apply is a new operator decision. An
