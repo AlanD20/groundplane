@@ -31,11 +31,28 @@ func (service *Service) Plan(
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
+	runtime, runtimeReady, err := service.repository.GetEnvironmentComposeProjectionRevision(
+		ctx, parent.Owner.EnvironmentID, parent.ID,
+	)
+	if err != nil {
+		kind, known := errs.KindOf(err)
+		if !known || kind != errs.KindStateConflict {
+			return blueprintunits.DesiredPlan{}, err
+		}
+		runtimeReady = false
+	}
+	if runtimeReady && (runtime.Record.EnvironmentID != parent.Owner.EnvironmentID ||
+		runtime.Record.RevisionID != parent.ID ||
+		runtime.Record.RenderGeneration != input.desired.RenderGeneration) {
+		return blueprintunits.DesiredPlan{}, errs.New(
+			errs.KindStateConflict, "Blueprint runtime projection changed",
+		)
+	}
 	targets, err := selectAuthoredOwnedUnitTargets(input.identities)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}
-	planner, err := newAuthoredUnitPlanner(ctx, input, targets)
+	planner, err := newAuthoredUnitPlanner(ctx, input, targets, runtimeReady)
 	if err != nil {
 		return blueprintunits.DesiredPlan{}, err
 	}

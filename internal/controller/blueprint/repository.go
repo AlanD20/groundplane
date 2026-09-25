@@ -42,6 +42,11 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
+	GetEnvironmentComposeProjectionRevision(
+		context.Context,
+		string,
+		string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	GetEnvironmentDesiredInput(
 		context.Context,
 		string,

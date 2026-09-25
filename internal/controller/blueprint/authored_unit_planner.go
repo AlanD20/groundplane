@@ -14,18 +14,20 @@ import (
 )
 
 type authoredUnitPlanner struct {
-	input      authoredParentInput
-	project    *composetypes.Project
-	identities map[ids.Kind]map[string]projectionrecord.OwnedIdentity
-	targets    map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
-	units      map[blueprintunits.ResourceKey]blueprintunits.Unit
-	blocked    map[blueprintunits.ResourceKey]bool
+	input        authoredParentInput
+	project      *composetypes.Project
+	identities   map[ids.Kind]map[string]projectionrecord.OwnedIdentity
+	targets      map[blueprintunits.ResourceKey]authoredOwnedUnitTarget
+	units        map[blueprintunits.ResourceKey]blueprintunits.Unit
+	blocked      map[blueprintunits.ResourceKey]bool
+	runtimeReady bool
 }
 
 func newAuthoredUnitPlanner(
 	ctx context.Context,
 	input authoredParentInput,
 	targets []authoredOwnedUnitTarget,
+	runtimeReady bool,
 ) (*authoredUnitPlanner, error) {
 	project, err := composerender.LoadNormalizedEnvironmentDesiredProject(
 		ctx,
@@ -37,10 +39,11 @@ func newAuthoredUnitPlanner(
 	}
 	planner := &authoredUnitPlanner{
 		input: input, project: project,
-		identities: make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
-		targets:    make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
-		units:      make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
-		blocked:    make(map[blueprintunits.ResourceKey]bool),
+		identities:   make(map[ids.Kind]map[string]projectionrecord.OwnedIdentity),
+		targets:      make(map[blueprintunits.ResourceKey]authoredOwnedUnitTarget, len(targets)),
+		units:        make(map[blueprintunits.ResourceKey]blueprintunits.Unit, len(targets)),
+		blocked:      make(map[blueprintunits.ResourceKey]bool),
+		runtimeReady: runtimeReady,
 	}
 	for _, group := range []struct {
 		kind   ids.Kind
@@ -167,21 +170,12 @@ func (planner *authoredUnitPlanner) plan() ([]blueprintunits.Unit, bool, error) 
 		complete = false
 	}
 	serviceBlocked := make(map[string]bool, len(planner.identities[ids.KindService]))
-	if len(planner.input.desired.Input.Requires) != 0 {
+	// Service children share one complete Environment runtime projection.
+	// Independent Networks and Volumes remain selectable while it is pending.
+	if !planner.runtimeReady {
 		complete = false
 		for name := range planner.identities[ids.KindService] {
 			serviceBlocked[name] = true
-		}
-	}
-	for _, spec := range planner.input.desired.Input.Attachments {
-		serviceBlocked[spec.Service] = true
-	}
-	for _, spec := range planner.input.desired.Input.Entries {
-		if spec.Source.Fact == nil {
-			continue
-		}
-		for _, service := range planner.entryExposureNames(spec) {
-			serviceBlocked[service] = true
 		}
 	}
 	for changed := true; changed; {
