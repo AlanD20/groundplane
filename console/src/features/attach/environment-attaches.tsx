@@ -24,6 +24,7 @@ import type { Attach, Environment } from "@/lib/types";
 // ---- Attaches ----
 
 export function AttachesCard({ env }: { env: Environment }) {
+  const store = useStore();
   const [open, setOpen] = useState(false);
   return (
     <Card>
@@ -46,7 +47,9 @@ export function AttachesCard({ env }: { env: Environment }) {
               to={`/platform/backing-services/${a.projectId}`}
               className="flex min-w-0 flex-1 items-center justify-between gap-2 transition-colors hover:border-ring/50"
             >
-              <span className="font-mono text-sm">{a.projectId}</span>
+              <span className="truncate text-sm font-medium">
+                {store.getBackingProject(a.projectId)?.name ?? a.projectId}
+              </span>
               <span className="truncate font-mono text-xs text-muted-foreground">
                 {a.database !== "—"
                   ? `database ${a.database} · role ${a.role}`

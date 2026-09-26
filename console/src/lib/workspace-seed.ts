@@ -103,8 +103,6 @@ export const platform: PlatformInfra = {
       name: "Agent",
       kind: "agent",
       status: "healthy",
-      image: "groundplane/agent",
-      version: "v0.4.2",
       runtime: "container · docker socket",
       mounts: [
         "/var/run/docker.sock (rw)",
@@ -123,8 +121,6 @@ export const platform: PlatformInfra = {
       name: "CoreDNS",
       kind: "coredns",
       status: "healthy",
-      image: "coredns/coredns",
-      version: "1.11.3",
       runtime: "container · host network",
       hostNetwork: true,
       mounts: [
@@ -141,8 +137,6 @@ export const platform: PlatformInfra = {
       name: "Controller",
       kind: "controller",
       status: "healthy",
-      image: "systemd unit",
-      version: "v0.4.2",
       runtime: "groundplane-controller.service",
       mounts: ["/etc/groundplane", "/infra/vol"],
       notes: [

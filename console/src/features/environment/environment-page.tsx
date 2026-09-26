@@ -45,6 +45,7 @@ import { BackupsCard } from "@/features/backup/environment-backups";
 import { EnvVarsCard } from "@/features/entry/environment-entries";
 import { FactsCard } from "@/features/attach/environment-facts";
 import { SettingsCard } from "@/features/environment/environment-settings";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 type EnvTab =
   | "overview"
@@ -160,7 +161,9 @@ export default function EnvironmentPage() {
         meta={
           <>
             <MetaPill icon={<Tag />}>release {env.release}</MetaPill>
-            <MetaPill icon={<Clock />}>deployed {env.lastDeployAt}</MetaPill>
+            <MetaPill icon={<Clock />}>
+              deployed {formatTimestamp(env.lastDeployAt, "never")}
+            </MetaPill>
           </>
         }
         actions={
@@ -229,7 +232,7 @@ export default function EnvironmentPage() {
           icon={<History />}
           label="Last deploy"
           value={env.release}
-          hint={env.lastDeployAt}
+          hint={formatTimestamp(env.lastDeployAt, "never")}
         />
       </div>
       <fieldset

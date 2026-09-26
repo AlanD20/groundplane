@@ -124,9 +124,6 @@ export default function PlatformComponentPage() {
             <MetaPill icon={kindIcon[component.kind]}>
               {component.name}
             </MetaPill>
-            <MetaPill icon={<RefreshCw />}>
-              {component.image}:{component.version}
-            </MetaPill>
             <StatusBadge status={component.status} />
           </>
         }
@@ -144,28 +141,25 @@ export default function PlatformComponentPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-1.5 text-sm">
-            <Row
-              label="Image"
-              value={`${component.image}:${component.version}`}
-              mono
-            />
             <Row label="Runtime" value={component.runtime} />
             {component.hostNetwork ? (
               <Row label="Network" value="host network" mono />
             ) : null}
-            <div className="mt-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
-                Mounts
-              </span>
-              {component.mounts.map((m) => (
-                <div
-                  key={m}
-                  className="font-mono text-xs text-muted-foreground"
-                >
-                  {m}
-                </div>
-              ))}
-            </div>
+            {component.mounts.length > 0 && (
+              <div className="mt-1">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  Mounts
+                </span>
+                {component.mounts.map((m) => (
+                  <div
+                    key={m}
+                    className="font-mono text-xs text-muted-foreground"
+                  >
+                    {m}
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="mt-1 flex flex-col gap-0.5">
               {component.notes.map((n) => (
                 <span key={n} className="text-xs text-muted-foreground">

@@ -466,8 +466,6 @@ export type PlatformComponent = {
   name: string;
   kind: "agent" | "coredns" | "controller";
   status: HealthState;
-  image: string;
-  version: string;
   runtime: string;
   hostNetwork?: boolean;
   mounts: string[];

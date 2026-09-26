@@ -9,8 +9,6 @@ type PlatformComponentKind = PlatformComponent["kind"];
 const coreDNSPresentation: Omit<PlatformComponent, "id" | "status"> = {
   name: "CoreDNS",
   kind: "coredns",
-  image: "unavailable",
-  version: "unavailable",
   runtime: "container · host network",
   hostNetwork: true,
   mounts: [],

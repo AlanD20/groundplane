@@ -49,7 +49,7 @@ export function TaskJournalItem({ entry, scope }: { entry: ActivityEntry; scope:
           type="button"
           onClick={() => setOpen(true)}
           className="min-w-0 flex-1 items-start justify-start gap-3 rounded-l-xl rounded-r-none p-3.5 text-left hover:bg-surface/40"
-          aria-label={`Inspect Task ${entry.id}`}
+          aria-label={`Inspect ${entry.title}, ${entry.status}, Task ${entry.id}`}
           aria-haspopup="dialog"
         >
           {body}

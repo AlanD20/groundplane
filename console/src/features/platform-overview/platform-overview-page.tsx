@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import type { Environment, HealthState, TaskJournalScope } from '@/lib/types'
 import { environmentRuntimeState, serviceObservationState } from '@/features/service/service-observation'
 import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
+import { formatTimestamp } from '@/lib/format-timestamp'
 
 const platformTaskScope: TaskJournalScope = { kind: 'workspace', workspace: 'platform' }
 
@@ -93,7 +94,7 @@ export default function PlatformOverviewPage() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={<Boxes />} label="Tenants" value={tenants.length} hint={`${tenantProjects.length} projects`} />
-        <StatCard icon={<Layers />} label="Environments" value={allEnvs.length} hint="staging + production" />
+        <StatCard icon={<Layers />} label="Environments" value={allEnvs.length} hint="across tenant projects" />
         <StatCard
           icon={<Cpu />}
           label="Services"
@@ -262,7 +263,7 @@ export default function PlatformOverviewPage() {
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="hidden shrink-0 whitespace-nowrap text-xs text-muted-foreground sm:block">
-                      {env.lastDeployAt}
+                      {formatTimestamp(env.lastDeployAt, 'never')}
                     </span>
                   </div>
                 </Link>
