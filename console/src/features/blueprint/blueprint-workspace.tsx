@@ -23,6 +23,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/ui/code-editor";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { BlueprintApplyAction } from "@/features/blueprint/blueprint-apply-action";
 import { BlueprintReview } from "@/features/blueprint/blueprint-review";
 import {
@@ -33,12 +41,17 @@ import { useStore } from "@/lib/store";
 import {
   type BlueprintDocumentResponse,
   type BlueprintValidationResponse,
+  pendingBlueprintApply,
+  resolvePendingBlueprintApply,
+  settleBlueprintApply,
 } from "./api";
+import { newULID } from "@/lib/utils";
 import type { Environment } from "@/lib/types";
 
 type PreparedBlueprint = {
   request: BlueprintApplyRequest;
   validation: BlueprintValidationResponse;
+  key: string;
 };
 
 export function BlueprintWorkspace({
@@ -50,6 +63,7 @@ export function BlueprintWorkspace({
 }) {
   const store = useStore();
   const getBlueprint = store.getBlueprint;
+  const getTask = store.getTask;
   const fileInput = useRef<HTMLInputElement>(null);
   const [snapshot, setSnapshot] = useState<BlueprintDocumentResponse | null>(
     null,
@@ -61,6 +75,39 @@ export function BlueprintWorkspace({
   const [error, setError] = useState("");
   const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null);
   const [dispatched, setDispatched] = useState(false);
+  const [confirmRefresh, setConfirmRefresh] = useState(false);
+  const [pendingApply, setPendingApply] = useState(() => pendingBlueprintApply());
+  const [resolveError, setResolveError] = useState("");
+  const [resolving, setResolving] = useState(false);
+
+  useEffect(() => {
+    if (!pendingApply?.taskId) return;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void getTask(pendingApply.taskId!).then((task) => {
+        if (!active) return;
+        if (["completed", "failed", "timed_out", "aborted"].includes(task.status)) {
+          settleBlueprintApply(task.id);
+          setPendingApply(pendingBlueprintApply());
+        }
+      }).catch(() => undefined);
+    }, 2000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [getTask, pendingApply]);
+
+  async function resolveApply() {
+    setResolving(true);
+    setResolveError("");
+    try {
+      await resolvePendingBlueprintApply();
+      setPendingApply(pendingBlueprintApply());
+    } catch (cause) {
+      setResolveError(cause instanceof Error ? cause.message : "Unable to resolve Blueprint Apply.");
+      setPendingApply(pendingBlueprintApply());
+    } finally {
+      setResolving(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,13 +148,21 @@ export function BlueprintWorkspace({
   function exportDocument() {
     if (!snapshot) return;
     const url = URL.createObjectURL(
-      new Blob([draft], { type: "application/yaml;charset=utf-8" }),
+      new Blob([snapshot.document], { type: "application/yaml;charset=utf-8" }),
     );
     const link = document.createElement("a");
     link.href = url;
     link.download = `${environment.name}.blueprint.yaml`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  function refresh() {
+    if (editing && snapshot && draft !== snapshot.document) {
+      setConfirmRefresh(true);
+      return;
+    }
+    void load();
   }
 
   async function reviewDraft() {
@@ -121,7 +176,7 @@ export function BlueprintWorkspace({
         request,
         snapshot.revision,
       );
-      setPrepared({ request, validation });
+      setPrepared({ request, validation, key: newULID() });
       setDispatched(false);
     } catch (cause) {
       setError(
@@ -149,6 +204,8 @@ export function BlueprintWorkspace({
             <BlueprintApplyAction
               environment={environment}
               workspace={workspace}
+              disabled={pendingApply !== null}
+              onIntentChange={() => setPendingApply(pendingBlueprintApply())}
             />
             <Button
               variant="outline"
@@ -171,12 +228,23 @@ export function BlueprintWorkspace({
               disabled={!snapshot}
               onClick={exportDocument}
             >
-              <Download /> Export
+              <Download /> Export saved
             </Button>
-            {snapshot && <CopyButton value={draft} label="copy" />}
+            {snapshot && <CopyButton value={draft} label="copy displayed Blueprint" />}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {pendingApply && (
+            <div role="status" className="space-y-2 rounded-lg border border-warning/40 p-3 text-sm">
+              <p>A Blueprint Apply is unresolved for Environment <code>{pendingApply.environmentId}</code>. Do not submit another Apply until the original Task settles.</p>
+              {pendingApply.taskId ? <code className="block break-all text-xs">Task {pendingApply.taskId}</code> : (
+                <Button size="sm" variant="outline" disabled={resolving} onClick={() => void resolveApply()}>
+                  {resolving ? "Resolving…" : "Resolve original Apply"}
+                </Button>
+              )}
+              {resolveError && <p role="alert" className="text-xs text-destructive">{resolveError}</p>}
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Badge variant="outline">
@@ -189,7 +257,7 @@ export function BlueprintWorkspace({
                 variant="ghost"
                 size="sm"
                 disabled={loading || working}
-                onClick={() => void load()}
+                onClick={refresh}
               >
                 <RefreshCw /> Refresh
               </Button>
@@ -217,7 +285,7 @@ export function BlueprintWorkspace({
                   </Button>
                   <Button
                     size="sm"
-                    disabled={working || !draft.trim()}
+                    disabled={working || !draft.trim() || pendingApply !== null}
                     onClick={() => void reviewDraft()}
                   >
                     <Upload /> {working ? "Validating…" : "Review apply"}
@@ -269,17 +337,40 @@ export function BlueprintWorkspace({
           review={<BlueprintReview validation={prepared.validation} />}
           startLabel="Confirm and apply"
           onDispatch={async () => {
-            const accepted = await store.applyBlueprint(
-              environment.id,
-              prepared.request,
-              snapshot.revision,
-            );
-            setDispatched(true);
-            return accepted.task_id;
+            try {
+              const accepted = await store.applyBlueprint(
+                environment.id,
+                prepared.request,
+                snapshot.revision,
+                prepared.key,
+              );
+              setDispatched(true);
+              return accepted.task_id;
+            } finally {
+              setPendingApply(pendingBlueprintApply());
+            }
           }}
           variant="dialog"
         />
       )}
+      <Dialog open={confirmRefresh} onOpenChange={setConfirmRefresh}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard local Blueprint changes?</DialogTitle>
+            <DialogDescription>
+              Refresh loads the saved Blueprint and replaces your unsaved draft.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRefresh(false)}>
+              Keep editing
+            </Button>
+            <Button onClick={() => { setConfirmRefresh(false); void load(); }}>
+              Discard and refresh
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

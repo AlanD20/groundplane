@@ -253,18 +253,29 @@ func runBlueprintApply(
 	cmd *cobra.Command,
 	environmentID string,
 	expectedRevision string,
+	idempotencyKey string,
 	body []byte,
 	contentType string,
 ) error {
 	app := fromContext(cmd)
-	accepted, err := app.Client.ApplyEnvironmentBlueprint(
+	accepted, uncertain, err := app.Client.ApplyEnvironmentBlueprint(
 		cmd.Context(),
 		environmentID,
 		expectedRevision,
+		idempotencyKey,
 		body,
 		contentType,
 	)
 	if err != nil {
+		if uncertain {
+			return errs.Newf(
+				errs.KindRequestUnavailable,
+				"Blueprint Apply outcome is unknown for Environment %s; keep the bundle unchanged and replay against this Environment ID with --retry-revision %s --retry-key %s",
+				environmentID,
+				expectedRevision,
+				idempotencyKey,
+			)
+		}
 		return err
 	}
 	return renderTaskAccepted(cmd, accepted)

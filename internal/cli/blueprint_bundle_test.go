@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,8 +11,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/AlanD20/groundplane/internal/cli/apiclient"
+	clicommon "github.com/AlanD20/groundplane/internal/cli/common"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -153,5 +157,104 @@ func TestEnvironmentApplySendsMultipartSingletonReplacement(t *testing.T) {
 	)
 	if requests != 2 {
 		t.Fatalf("requests = %d, want revision read then apply", requests)
+	}
+}
+
+// QA: BP-03, UI-04; local CLI replay after a lost HTTP acceptance response.
+// Rationale: a second invocation must reuse the original key, revision and
+// exact bundle rather than reread the advanced head or create a second Task.
+func TestEnvironmentApplyCanReplayUnknownOutcome(t *testing.T) {
+	const environmentID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	const revision = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+	directory := t.TempDir()
+	if err := os.WriteFile(filepath.Join(directory, "blueprint.yaml"), []byte("services: {}\n"), 0o600); err != nil {
+		t.Fatalf("write bundle: %v", err)
+	}
+	var originalKey string
+	var originalBody []byte
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		if requests == 1 {
+			if request.Method != http.MethodGet {
+				t.Errorf("first request = %s", request.Method)
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(
+				writer,
+				`{"environment_id":"`+environmentID+`","revision":"`+revision+`","document":"services: {}\n"}`,
+			)
+			return
+		}
+		if request.Method != http.MethodPut || request.Header.Get("If-Match") != `"`+revision+`"` {
+			t.Errorf("Apply request = %s If-Match %q", request.Method, request.Header.Get("If-Match"))
+		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Errorf("read Apply body: %v", err)
+		}
+		_, parameters, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+		if err != nil {
+			t.Errorf("parse multipart type: %v", err)
+		}
+		body = bytes.ReplaceAll(body, []byte(parameters["boundary"]), []byte("TEST-BOUNDARY"))
+		if requests == 2 {
+			originalKey = request.Header.Get("Idempotency-Key")
+			originalBody = body
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(writer, `{"task_id":`)
+			writer.(http.Flusher).Flush()
+			connection, _, err := writer.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Errorf("hijack: %v", err)
+				return
+			}
+			_ = connection.Close()
+			return
+		}
+		if request.Header.Get("Idempotency-Key") != originalKey || !bytes.Equal(body, originalBody) {
+			t.Errorf("replay changed key or body")
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusAccepted)
+		_, _ = io.WriteString(writer, `{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`)
+	}))
+	defer server.Close()
+
+	command := func(args ...string) error {
+		var output bytes.Buffer
+		cmd := newEnvironmentCmd()
+		app := &App{
+			Client: apiclient.New(server.URL),
+			Out:    clicommon.NewWriter(clicommon.FormatJSON, true, &output),
+			Scope:  Scope{AsID: true},
+		}
+		cmd.SetContext(context.WithValue(context.Background(), appKey{}, app))
+		cmd.SetOut(&output)
+		cmd.SetErr(&output)
+		cmd.SetArgs(
+			append(
+				[]string{"blueprint", "apply", environmentID, "--bundle-dir", directory, "--root", "blueprint.yaml"},
+				args...),
+		)
+		return cmd.Execute()
+	}
+	first := command()
+	if !errors.Is(first, errs.New(errs.KindRequestUnavailable, "")) || originalKey == "" ||
+		!strings.Contains(first.Error(), "--retry-revision "+revision+" --retry-key "+originalKey) {
+		t.Fatalf("unknown outcome = %v, key %q", first, originalKey)
+	}
+	if err := command("--retry-revision", revision, "--retry-key", originalKey); err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if requests != 3 {
+		t.Fatalf("requests = %d, want GET and two PUTs", requests)
+	}
+	if err := command("--retry-key", originalKey); !errors.Is(err, errs.New(errs.KindValidationFailed, "")) {
+		t.Fatalf("incomplete replay flags = %v", err)
+	}
+	if requests != 3 {
+		t.Fatalf("incomplete replay sent request %d", requests)
 	}
 }

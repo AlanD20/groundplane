@@ -3,7 +3,10 @@ package cli
 import (
 	"fmt"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/oklog/ulid/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -89,11 +92,28 @@ func newEnvironmentBlueprintCmd() *cobra.Command {
 	blueprint.AddCommand(validate)
 
 	applyFlags := &environmentBlueprintBundleFlags{}
+	var retryKey, retryRevision string
 	apply := &cobra.Command{
 		Use:   "apply <name>",
 		Short: "Apply a closed Blueprint bundle against the current revision",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			retrying := cmd.Flags().Changed("retry-key")
+			if retrying != cmd.Flags().Changed("retry-revision") {
+				return errs.New(errs.KindValidationFailed, "--retry-key and --retry-revision must be supplied together")
+			}
+			if retrying {
+				if _, err := ulid.ParseStrict(retryKey); err != nil {
+					return errs.New(errs.KindValidationFailed, "--retry-key must be the original Apply ULID")
+				}
+				if retryRevision != apiTypes.EnvironmentBlueprintInitialRevision &&
+					ids.Validate(ids.KindTask, retryRevision) != nil {
+					return errs.New(
+						errs.KindValidationFailed,
+						"--retry-revision must be the original Blueprint revision",
+					)
+				}
+			}
 			id, err := resolveEnvironmentTarget(cmd, args[0])
 			if err != nil {
 				return err
@@ -102,14 +122,21 @@ func newEnvironmentBlueprintCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			current, err := fromContext(cmd).Client.ShowEnvironmentBlueprint(cmd.Context(), id)
-			if err != nil {
-				return err
+			key, revision := retryKey, retryRevision
+			if !retrying {
+				current, err := fromContext(cmd).Client.ShowEnvironmentBlueprint(cmd.Context(), id)
+				if err != nil {
+					return err
+				}
+				key, revision = ids.NewULID(), current.Revision
 			}
-			return runBlueprintApply(cmd, id, current.Revision, body, contentType)
+			return runBlueprintApply(cmd, id, revision, key, body, contentType)
 		},
 	}
 	applyFlags.bind(apply)
+	apply.Flags().StringVar(&retryKey, "retry-key", "", "original Apply idempotency key after an uncertain response")
+	apply.Flags().
+		StringVar(&retryRevision, "retry-revision", "", "original Blueprint revision after an uncertain response")
 	blueprint.AddCommand(apply)
 	return blueprint
 }

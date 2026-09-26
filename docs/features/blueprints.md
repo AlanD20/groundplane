@@ -19,6 +19,13 @@ Read the desired revision before Validate or Apply and send that exact quoted
 desired head. Validate parses the same input as Apply but creates no Task,
 revision or host effect; its diff is create, update, remove or retain.
 
+If the CLI reports an unknown Apply outcome, keep the bundle unchanged. Repeat
+the Apply against the same Environment ID with the reported `--retry-key` and
+`--retry-revision`; this replays the original request without reading a newer
+revision or creating a second intent. If the bundle changed, the Controller
+rejects the replay. The Console retains its original request in the current
+browser tab and offers **Resolve original Apply** after an uncertain response.
+
 Apply publishes one reconcile Task with immutable inputs. Follow its outcome;
 acceptance does not imply successful application. Required workload images must
 already exist in the host Docker daemon.

@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (c *Client) ListEnvironments(
@@ -249,41 +250,52 @@ func (c *Client) ValidateEnvironmentBlueprint(
 	return validation, nil
 }
 
+// ApplyEnvironmentBlueprint reports uncertainty when the PUT may have been
+// accepted but the CLI has no reliable Task identity. The caller retains the
+// supplied revision and key for exact replay in that case.
 func (c *Client) ApplyEnvironmentBlueprint(
 	ctx context.Context,
 	id string,
 	expectedRevision string,
+	idempotencyKey string,
 	body []byte,
 	contentType string,
-) (apiTypes.TaskAccepted, error) {
+) (accepted apiTypes.TaskAccepted, responseUncertain bool, err error) {
 	client, err := c.generatedHumanClient()
 	if err != nil {
-		return apiTypes.TaskAccepted{}, err
+		return apiTypes.TaskAccepted{}, false, err
 	}
 	path := "/api/v1/environments/" + id + "/blueprint"
 	params := &generated.BlueprintApplyParams{
-		IdempotencyKey: ids.NewULID(),
+		IdempotencyKey: idempotencyKey,
 		IfMatch:        quoteBlueprintRevision(expectedRevision),
 	}
 	response, err := client.BlueprintApplyWithBodyWithResponse(
 		ctx, id, params, contentType, bytes.NewReader(body),
 	)
 	if err != nil {
-		return apiTypes.TaskAccepted{}, generatedCallError(ctx, http.MethodPut, path, err)
+		return apiTypes.TaskAccepted{}, true, generatedCallError(ctx, http.MethodPut, path, err)
 	}
 	if err := generatedResponseError(
 		http.MethodPut, path, response.HTTPResponse, response.Body, http.StatusAccepted,
 	); err != nil {
-		return apiTypes.TaskAccepted{}, err
+		return apiTypes.TaskAccepted{}, response.HTTPResponse == nil ||
+			response.StatusCode() < http.StatusMultipleChoices, err
 	}
 	parsed := response.JSON202
 	if parsed == nil {
 		parsed = &generated.TaskAccepted{}
 		if err := decodeSingleJSON(http.MethodPut, path, bytes.NewReader(response.Body), parsed); err != nil {
-			return apiTypes.TaskAccepted{}, err
+			return apiTypes.TaskAccepted{}, true, err
 		}
 	}
-	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, nil
+	if parsed.TaskId == "" {
+		return apiTypes.TaskAccepted{}, true, errs.New(
+			errs.KindInternal,
+			"Blueprint Apply response is missing Task identity",
+		)
+	}
+	return apiTypes.TaskAccepted{TaskID: parsed.TaskId}, false, nil
 }
 
 func quoteBlueprintRevision(revision string) string {

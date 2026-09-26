@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { useStore } from '@/lib/store'
 import type { Environment } from '@/lib/types'
 import type { BlueprintValidationResponse } from './api'
+import { newULID } from '@/lib/utils'
 import {
   BLUEPRINT_BUNDLE_LIMITS,
   createBlueprintApplyRequest,
@@ -33,9 +34,10 @@ type InterpolationEntry = BlueprintInterpolation & {
 type PreparedBlueprint = {
   request: BlueprintApplyRequest
   validation: BlueprintValidationResponse
+  key: string
 }
 
-export function BlueprintApplyAction({ environment, workspace }: { environment: Environment; workspace: string }) {
+export function BlueprintApplyAction({ environment, workspace, disabled = false, onIntentChange }: { environment: Environment; workspace: string; disabled?: boolean; onIntentChange?: () => void }) {
   const store = useStore()
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState<InspectedBlueprintFile[]>([])
@@ -113,7 +115,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
       const request = createBlueprintApplyRequest(files, rootPath, composeSources, entries)
       const current = await store.getBlueprint(environment.id)
       const validation = await store.validateBlueprint(environment.id, request, current.revision)
-      setPrepared({ request, validation })
+      setPrepared({ request, validation, key: newULID() })
     } catch (cause) {
       setReviewError(cause instanceof Error ? cause.message : 'Blueprint validation failed.')
     } finally {
@@ -144,7 +146,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" size="sm" disabled={disabled} onClick={() => setOpen(true)}>
         <Upload /> Import bundle
       </Button>
       <Drawer open={open && !prepared} onOpenChange={(next) => { if (next) setOpen(true); else closeEditor() }}>
@@ -250,7 +252,7 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
               ))}
               {files.length === 0 && <p className="px-2 py-3 text-xs text-muted-foreground">Select files to build the manifest.</p>}
             </div>
-            <p className="text-xs text-muted-foreground">Browsers cannot prove symlink safety. The Controller rejects symlinks and validates every include, extends, env_file, label_file, config, secret reference, and bind against the declared closed namespace.</p>
+            <p className="text-xs text-muted-foreground">Browsers cannot prove symlink safety. The Controller rejects symlinks and validates every include, extends, env_file, label_file, config, secret reference, and bind against the declared closed namespace. This tab temporarily retains the selected bundle to resolve a lost Apply response; it removes the bytes after acceptance.</p>
           </section>
 
           {errors.length > 0 && files.length > 0 && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"><p className="mb-1 text-xs font-medium text-destructive">Resolve before applying</p><ul className="space-y-1 text-xs text-destructive">{errors.map((error) => <li key={error}>· {error}</li>)}</ul></div>}
@@ -286,9 +288,13 @@ export function BlueprintApplyAction({ environment, workspace }: { environment: 
           review={<><div className="rounded-lg border border-border bg-surface p-3 text-xs"><p><span className="text-muted-foreground">Root </span><code>{prepared.request.manifest.root}</code></p><p><span className="text-muted-foreground">Sources </span>{prepared.request.manifest.compose_sources.length}</p><p><span className="text-muted-foreground">Files </span>{prepared.request.manifest.files.length} · {formatBlueprintBytes(prepared.request.manifest.files.reduce((sum, file) => sum + file.size, 0))}</p><p><span className="text-muted-foreground">Interpolation keys </span>{Object.keys(prepared.request.manifest.interpolation).join(', ') || 'none'}</p></div><BlueprintReview validation={prepared.validation} /></>}
           startLabel="Confirm and apply"
           onDispatch={async () => {
-            const accepted = await store.applyBlueprint(environment.id, prepared.request, prepared.validation.revision)
-            setCompleted(true)
-            return accepted.task_id
+            try {
+              const accepted = await store.applyBlueprint(environment.id, prepared.request, prepared.validation.revision, prepared.key)
+              setCompleted(true)
+              return accepted.task_id
+            } finally {
+              onIntentChange?.()
+            }
           }}
           variant="dialog"
         />
