@@ -45,7 +45,7 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 		EnvironmentID: ids.NewAt(ids.KindEnvironment, at, 5), EnvironmentName: "production",
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/test",
 		ArtifactID:          current.ArtifactID,
-		Projection:          projection, AppliedProjectionRevision: 20,
+		Projection:          &projection, AppliedProjectionRevision: 20,
 		Release: testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID: current.ReleaseID, ProjectionRevision: 21, IntentRevision: 22,
 			RenderRevision: 23, Current: current,
@@ -62,6 +62,23 @@ func TestServiceLifecycleRenderInputPinsAppliedProjection(t *testing.T) {
 	input.Projection.DesiredServices[0].Desired.Name = "changed"
 	if decoded.Projection.DesiredServices[0].Desired.Name != "api" {
 		t.Fatalf("decoded render input aliases caller = %#v", decoded)
+	}
+	input.Projection.DesiredServices[0].Desired.Name = "api"
+	// A new lifecycle record pins the applied generation without persisting a
+	// second full Environment projection. Older queued records remain readable.
+	input.Projection = nil
+	input.AppliedRenderGeneration = projection.RenderGeneration
+	compact, err := testreleaserender.EncodeServiceLifecycleRenderInput(input)
+	if err != nil {
+		t.Fatalf("encode compact lifecycle input: %v", err)
+	}
+	if len(compact) >= len(value) {
+		t.Fatalf("compact lifecycle input did not remove duplicate projection: %d >= %d", len(compact), len(value))
+	}
+	decodedCompact, err := testreleaserender.DecodeServiceLifecycleRenderInput(compact)
+	if err != nil || decodedCompact.Projection != nil ||
+		decodedCompact.RenderGeneration() != projection.RenderGeneration {
+		t.Fatalf("decode compact lifecycle input = %#v, %v", decodedCompact, err)
 	}
 }
 

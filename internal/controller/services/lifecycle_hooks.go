@@ -42,13 +42,24 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	if err != nil {
 		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil, err
 	}
+	found := false
+	for _, candidate := range projection.Record.DesiredServices {
+		if candidate.Desired.ID == current.Record.Desired.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return etcd.TaskRecord{}, releaserender.ServiceLifecycleRenderInput{}, nil,
+			errs.New(errs.KindStateConflict, "Applied projection does not contain Service")
+	}
 	input := releaserender.ServiceLifecycleRenderInput{
 		PlanID: task.PlanID, ServiceID: current.Record.Desired.ID,
 		ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
 		EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
 		AuthorizedVolumeDir:       environment.Record.VolumeDir,
 		ArtifactID:                releaseAuthority.Current.ArtifactID,
-		Projection:                projection.Record,
+		AppliedRenderGeneration:   projection.Record.RenderGeneration,
 		AppliedProjectionRevision: projection.Revision,
 		Release:                   releaseAuthority,
 	}

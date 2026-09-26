@@ -91,7 +91,7 @@ func TestServiceLifecyclePlanSelectsAppliedSealedAddressableRuntime(t *testing.T
 		ProjectID: reader.project.ID, ProjectSlug: reader.project.Slug,
 		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
 		AuthorizedVolumeDir: reader.environment.VolumeDir,
-		ArtifactID:          source.ArtifactId, Projection: reader.projection, AppliedProjectionRevision: 20,
+		ArtifactID:          source.ArtifactId, Projection: &reader.projection, AppliedProjectionRevision: 20,
 		Release: testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID: releaseID, ProjectionRevision: 21, IntentRevision: 22,
 			RenderRevision: 23, Current: releaseRender,
@@ -196,7 +196,7 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 		EnvironmentID: reader.environment.ID, EnvironmentName: reader.environment.Name,
 		AuthorizedVolumeDir: reader.environment.VolumeDir,
 		ArtifactID:          "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		Projection:          reader.projection,
+		Projection:          &reader.projection,
 	}
 	project := &composetypes.Project{
 		Services: composetypes.Services{
@@ -234,7 +234,7 @@ func TestServiceLifecyclePlanCompilesPinnedStartDependenciesAcrossRestart(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	input.Projection = reader.projection
+	input.Projection = &reader.projection
 	workload := domain.WorkloadSeal{
 		RequestedReference: "example/api:deployed",
 		LocalImageID:       "sha256:" + strings.Repeat("a", 64), ReplicaCount: 1,

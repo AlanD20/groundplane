@@ -379,7 +379,7 @@ func validateServiceLifecycleProjection(
 		task.Executor != taskjournal.TaskExecutorAgent || uint64(task.RenderGeneration) != projection.Record.RenderGeneration ||
 		input.PlanID != task.PlanID || input.ServiceID != task.Target ||
 		input.EnvironmentID != projection.Record.EnvironmentID ||
-		!environmentchanges.SameRouteRemovalProjection(input.Projection, projection.Record) ||
+		input.AppliedProjectionRevision != projection.Revision || input.RenderGeneration() != projection.Record.RenderGeneration ||
 		len(task.Params) != 2 || task.Params[taskjournal.TaskServiceEnvironmentParam] != input.EnvironmentID ||
 		task.Params[taskjournal.TaskComposeArtifactParam] != input.ArtifactID {
 		return errs.New(errs.KindValidationFailed, "applied Service lifecycle Task is invalid")

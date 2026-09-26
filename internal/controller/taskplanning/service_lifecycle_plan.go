@@ -95,11 +95,11 @@ func (resolver *TaskPlanResolver) prepareServiceLifecycleTask(
 			return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Service lifecycle step identity is invalid")
 		}
 	}
-	if input.Projection.RenderGeneration == 0 || input.Projection.RenderGeneration > uint64(^uint32(0)>>1) {
+	if input.RenderGeneration() == 0 || input.RenderGeneration() > uint64(^uint32(0)>>1) {
 		return etcd.TaskRecord{}, errs.New(errs.KindStateConflict, "Service render generation exceeds Task limits")
 	}
 	prepared := task
-	prepared.RenderGeneration = int32(input.Projection.RenderGeneration)
+	prepared.RenderGeneration = int32(input.RenderGeneration())
 	prepared.Params = map[string]string{
 		taskjournal.TaskServiceEnvironmentParam: input.EnvironmentID,
 		taskjournal.TaskComposeArtifactParam:    input.ArtifactID,
@@ -129,7 +129,7 @@ func (resolver *TaskPlanResolver) resolveServiceLifecyclePlan(
 		return nil, err
 	}
 	if !found || input.Record.PlanID != task.PlanID || input.Record.ServiceID != task.Target ||
-		input.Record.Projection.RenderGeneration != uint64(task.RenderGeneration) {
+		input.Record.RenderGeneration() != uint64(task.RenderGeneration) {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle render input does not match Task")
 	}
 	return resolver.buildServiceLifecyclePlan(ctx, task, input.Record)
