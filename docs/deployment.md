@@ -123,6 +123,11 @@ restart etcd and application workloads.
 `--config` is rejected on this path. Partial or legacy layouts require explicit
 diagnosis; the installer does not silently repair them.
 
+Earlier pre-release installations with storage epoch 1 cannot update in place to
+the current epoch-2 candidate. The guarded update must refuse before replacing
+the Controller, leaving the old installation and application data intact. A fresh
+install is for an empty host; moving old data requires a separate migration.
+
 `--stage-only` requires an existing guarded installation. It prepares a candidate
 without activating the Controller or replacing the CLI. Activate the printed
 digest through Host's Controller view or the CLI:

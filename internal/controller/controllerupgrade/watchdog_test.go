@@ -191,7 +191,7 @@ func watchdogJournal() upgrade.Journal {
 				"a",
 				64,
 			),
-			StorageEpoch:  1,
+			StorageEpoch:  upgrade.StorageEpoch,
 			ChannelSchema: 1,
 		},
 		StartedAt:   now,

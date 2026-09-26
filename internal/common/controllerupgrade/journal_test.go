@@ -76,7 +76,7 @@ func validJournal(t *testing.T) Journal {
 				"a",
 				64,
 			),
-			StorageEpoch:  1,
+			StorageEpoch:  StorageEpoch,
 			ChannelSchema: 1,
 		},
 		StartedAt: now, Deadline: now.Add(600 * time.Second)}

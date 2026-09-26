@@ -134,7 +134,7 @@ func testReleaseStore(t *testing.T) (*Store, upgrade.Digest, []byte) {
 	binary := []byte("verified executable bytes")
 	manifest := []byte(`{"agent_image":"registry.example/agent@sha256:` + strings.Repeat("a", 64) +
 		`","channel_schema":1,"controller_sha256":"` + string(upgrade.Hash(binary)) +
-		`","controller_version":"0.1.0","schema":1,"storage_epoch":1}`)
+		`","controller_version":"0.1.0","schema":1,"storage_epoch":2}`)
 	id := upgrade.Hash(manifest)
 	leaf := filepath.Join(directory, "releases", string(id)[7:])
 	if err := os.MkdirAll(leaf, 0o700); err != nil {
