@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useRequiredParams } from "@/lib/router";
 import {
   ArrowLeft,
@@ -66,30 +65,21 @@ export default function EnvironmentPage() {
   const store = useStore();
   const env = store.getEnvironment(params.tenant, params.project, params.env);
   const project = store.getProject(params.tenant, params.project);
-  // Deep-linkable tabs: ?tab=tasks opens the Tasks tab (journal click-through).
-  const [tab, setTab] = useState<EnvTab>("overview");
-  useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("tab");
-    if (
-      t &&
-      [
-        "overview",
-        "services",
-        "state",
-        "router",
-        "releases",
-        "release-groups",
-        "tasks",
-        "backups",
-        "volumes",
-        "environments",
-        "settings",
-        "scripts",
-      ].includes(t)
-    ) {
-      setTab(t as EnvTab);
-    }
-  }, []);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const tab: EnvTab = requestedTab && [
+    "overview", "services", "state", "router", "releases",
+    "release-groups", "tasks", "backups", "volumes",
+    "environments", "settings", "scripts",
+  ].includes(requestedTab) ? requestedTab as EnvTab : "overview";
+  function selectTab(value: string) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (value === "overview") next.delete("tab");
+      else next.set("tab", value);
+      return next;
+    });
+  }
   const visibleBackingEnvironments = store.backingProjects.flatMap(
     (backing) => backing.environments?.slice(0, 1) ?? [],
   );
@@ -243,7 +233,7 @@ export default function EnvironmentPage() {
           deletionInProgress ? "Environment deletion in progress" : undefined
         }
       >
-        <Tabs value={tab} onValueChange={(v) => setTab(v as EnvTab)}>
+        <Tabs value={tab} onValueChange={selectTab}>
           <TabsList>
             <TabsTab value="overview">Overview</TabsTab>
             <TabsTab value="services">Services</TabsTab>
