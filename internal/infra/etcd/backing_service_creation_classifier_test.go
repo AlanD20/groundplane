@@ -55,6 +55,7 @@ func TestBackingServicePublicationBudgetPreservesAtomicFacadeEnvelope(t *testing
 		wantError        bool
 	}{
 		{name: "current facade", comparisons: 43, successMutations: 37, failureReads: 43},
+		{name: "current Valkey facade with deferred failure evidence", comparisons: 46, successMutations: 40},
 		{name: "exact selected and request bounds", comparisons: 32, successMutations: 64, failureReads: 32},
 		{name: "selected branch overflow", comparisons: 1, successMutations: 96, failureReads: 1, wantError: true},
 		{name: "full request overflow", comparisons: 43, successMutations: 43, failureReads: 43, wantError: true},

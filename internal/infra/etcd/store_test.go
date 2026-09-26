@@ -592,26 +592,27 @@ func TestStoreSnapshotStreamsAndCloses(t *testing.T) {
 }
 
 type fakeClient struct {
-	getKey              string
-	getOptions          []clientv3.OpOption
-	getResponse         *clientv3.GetResponse
-	getError            error
-	putKey              string
-	putValue            string
-	putResponse         *clientv3.PutResponse
-	putError            error
-	deleteKey           string
-	deleteResponse      *clientv3.DeleteResponse
-	deleteError         error
-	transaction         *fakeTransaction
-	transactionResponse *clientv3.TxnResponse
-	transactionError    error
-	watchKey            string
-	watchOptions        []clientv3.OpOption
-	watchResponses      chan clientv3.WatchResponse
-	snapshotReader      io.ReadCloser
-	snapshotError       error
-	closeError          error
+	getKey               string
+	getOptions           []clientv3.OpOption
+	getResponse          *clientv3.GetResponse
+	getError             error
+	putKey               string
+	putValue             string
+	putResponse          *clientv3.PutResponse
+	putError             error
+	deleteKey            string
+	deleteResponse       *clientv3.DeleteResponse
+	deleteError          error
+	transaction          *fakeTransaction
+	transactionResponse  *clientv3.TxnResponse
+	transactionResponses []*clientv3.TxnResponse
+	transactionError     error
+	watchKey             string
+	watchOptions         []clientv3.OpOption
+	watchResponses       chan clientv3.WatchResponse
+	snapshotReader       io.ReadCloser
+	snapshotError        error
+	closeError           error
 }
 
 func (f *fakeClient) Get(
@@ -648,7 +649,12 @@ func (f *fakeClient) Delete(
 }
 
 func (f *fakeClient) Txn(context.Context) clientv3.Txn {
-	f.transaction = &fakeTransaction{response: f.transactionResponse, err: f.transactionError}
+	response := f.transactionResponse
+	if len(f.transactionResponses) > 0 {
+		response = f.transactionResponses[0]
+		f.transactionResponses = f.transactionResponses[1:]
+	}
+	f.transaction = &fakeTransaction{response: response, err: f.transactionError}
 	return f.transaction
 }
 

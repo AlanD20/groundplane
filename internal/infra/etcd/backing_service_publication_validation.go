@@ -23,7 +23,7 @@ func validateBackingServicePublicationBudget(
 	return validateBackingServicePublicationOperationCounts(
 		len(conditions),
 		len(mutations),
-		len(conditions),
+		0,
 	)
 }
 

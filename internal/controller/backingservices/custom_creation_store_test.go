@@ -162,6 +162,14 @@ func (store *backingCreationStore) TransactEnvironmentBlueprint(
 	return store.Transact(ctx, conditions, mutations)
 }
 
+func (store *backingCreationStore) TransactBackingService(
+	ctx context.Context,
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
+	return store.Transact(ctx, conditions, mutations)
+}
+
 func (*backingCreationStore) ValidateBlueprintTaskTerminal(
 	_ context.Context,
 	envelope etcd.BlueprintTaskTerminalTransaction,

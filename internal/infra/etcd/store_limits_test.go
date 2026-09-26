@@ -167,3 +167,56 @@ func TestStoreTransactReturnsSameRevisionFailureReads(t *testing.T) {
 		t.Fatalf("Transact() failure result = %#v", result)
 	}
 }
+
+// Rationale: Backing creation must fit its accepted Valkey facade while a
+// failed compare still classifies from the exact failed MVCC view.
+func TestBackingServiceTransactionDefersFailureEvidence(t *testing.T) {
+	t.Parallel()
+	conditions := make([]testkeyvalue.Condition, 46)
+	mutations := make([]testkeyvalue.Mutation, 40)
+	for index := range conditions {
+		conditions[index] = testkeyvalue.Condition{Key: fmt.Sprintf("/backing/condition/%02d", index)}
+	}
+	for index := range mutations {
+		mutations[index] = testkeyvalue.Mutation{
+			Type: testkeyvalue.MutationDelete,
+			Key:  fmt.Sprintf("/backing/mutation/%02d", index),
+		}
+	}
+	backend := &fakeClient{transactionResponse: &clientv3.TxnResponse{
+		Header: &etcdserverpb.ResponseHeader{Revision: 17}, Succeeded: true,
+	}}
+	store, err := newStore(backend, "/groundplane/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.TransactBackingService(context.Background(), conditions, mutations)
+	if err != nil || !result.Succeeded || result.Revision != 17 {
+		t.Fatalf("Backing transaction = %#v, %v", result, err)
+	}
+	if len(backend.transaction.conditions) != 46 || len(backend.transaction.operations) != 40 ||
+		len(backend.transaction.otherwise) != 0 {
+		t.Fatalf("Backing transaction arms = %d/%d/%d", len(backend.transaction.conditions),
+			len(backend.transaction.operations), len(backend.transaction.otherwise))
+	}
+
+	backend.transactionResponses = []*clientv3.TxnResponse{
+		{Header: &etcdserverpb.ResponseHeader{Revision: 22}},
+		{Header: &etcdserverpb.ResponseHeader{Revision: 24}, Responses: []*etcdserverpb.ResponseOp{
+			{Response: &etcdserverpb.ResponseOp_ResponseRange{ResponseRange: &etcdserverpb.RangeResponse{
+				Kvs: []*mvccpb.KeyValue{{Key: []byte("/groundplane/backing/condition/00"),
+					Value: []byte("changed"), ModRevision: 22}},
+			}}},
+			{Response: &etcdserverpb.ResponseOp_ResponseRange{ResponseRange: &etcdserverpb.RangeResponse{}}},
+		}},
+	}
+	result, err = store.TransactBackingService(context.Background(), conditions[:2], mutations[:1])
+	if err != nil || result.Succeeded || result.Revision != 22 || len(result.FailureReads) != 2 ||
+		result.FailureReads[0] == nil || string(result.FailureReads[0].Value) != "changed" ||
+		result.FailureReads[1] != nil {
+		t.Fatalf("Backing conflict evidence = %#v, %v", result, err)
+	}
+	if got := backend.transaction.operations[0].Rev(); got != 22 {
+		t.Fatalf("Backing conflict read revision = %d, want 22", got)
+	}
+}

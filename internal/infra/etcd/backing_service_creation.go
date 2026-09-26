@@ -19,6 +19,7 @@ import (
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const maximumBackingServiceTransactionRequestOperations = 128
@@ -397,5 +398,12 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	return idempotency.Apply(ctx, creation.Marker, plan)
+	transactions, ok := repository.store.(backingServiceTransactionStore)
+	if !ok {
+		return IdempotencyTransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Backing-service transaction executor is required",
+		)
+	}
+	return idempotency.apply(ctx, creation.Marker, plan, transactions.TransactBackingService)
 }

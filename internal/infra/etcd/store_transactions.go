@@ -35,6 +35,15 @@ func (s *store) transact(
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) (etcdstore.TransactionResult, error) {
+	return s.transactWithFailureReads(ctx, conditions, mutations, false)
+}
+
+func (s *store) transactWithFailureReads(
+	ctx context.Context,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+	deferred bool,
+) (etcdstore.TransactionResult, error) {
 
 	prepared, err := s.prepareTransaction(conditions, mutations)
 	if err != nil {
@@ -46,7 +55,7 @@ func (s *store) transact(
 		transaction = transaction.If(prepared.comparisons...)
 	}
 	transaction = transaction.Then(prepared.operations...)
-	if len(prepared.failureReads) > 0 {
+	if !deferred && len(prepared.failureReads) > 0 {
 		transaction = transaction.Else(prepared.failureReads...)
 	}
 	response, err := transaction.Commit()
@@ -61,6 +70,18 @@ func (s *store) transact(
 	}
 	result := etcdstore.TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}
 	if !response.Succeeded {
+		if deferred {
+			keys := make([]string, len(conditions))
+			for index, condition := range conditions {
+				keys[index] = condition.Key
+			}
+			read, err := s.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: result.Revision})
+			if err != nil {
+				return etcdstore.TransactionResult{}, err
+			}
+			result.FailureReads = read.Values
+			return result, nil
+		}
 		reads, err := transactionFailureReads(response, conditions, prepared.physicalConditions, s.root)
 		if err != nil {
 			return etcdstore.TransactionResult{}, err
