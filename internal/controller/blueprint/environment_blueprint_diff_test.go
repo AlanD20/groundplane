@@ -28,7 +28,7 @@ func TestBlueprintDiffRecognizesExistingNativeResources(t *testing.T) {
 			want = apiTypes.BlueprintChangeUpdate
 		}
 		changes := environmentBlueprintChanges(blueprintparser.AuthoringDocument{},
-			blueprintparser.Result{Project: project}, true, current)
+			blueprintparser.Result{Project: project}, true, current, nil)
 		found := 0
 		for _, change := range changes {
 			if change.Resource == "compose" {
@@ -68,7 +68,7 @@ func TestBlueprintDiffReportsOmittedEntryRemoval(t *testing.T) {
 			"TOKEN": {Kind: core.EntryKindEnv, Secret: true},
 		}},
 		blueprintparser.Result{Project: &composetypes.Project{}}, true,
-		nil,
+		nil, nil,
 	)
 	for _, change := range changes {
 		if change.Resource == "entry" && change.Key == "TOKEN" {
@@ -87,7 +87,7 @@ func TestBlueprintDiffReportsOmittedScriptRemoval(t *testing.T) {
 	changes := environmentBlueprintChanges(
 		blueprintparser.AuthoringDocument{Scripts: map[string]core.ScriptSpec{"migrate": {}}},
 		blueprintparser.Result{Project: &composetypes.Project{}}, true,
-		nil,
+		nil, nil,
 	)
 	for _, change := range changes {
 		if change.Resource == "script" && change.Key == "migrate" {
@@ -113,7 +113,7 @@ func TestBlueprintDiffReportsNativeConfigAndSecretChanges(t *testing.T) {
 	}
 	changes := environmentBlueprintChanges(
 		blueprintparser.AuthoringDocument{}, blueprintparser.Result{Project: candidate}, true,
-		current,
+		current, nil,
 	)
 	want := map[string]apiTypes.BlueprintChangeAction{
 		"config/old-config":    apiTypes.BlueprintChangeRemove,
@@ -144,7 +144,7 @@ func TestBlueprintDiffMarksNewEmptySecretLiteral(t *testing.T) {
 			Extensions: blueprintparser.Extensions{Entries: map[string]core.EntrySpec{
 				"TOKEN": {Kind: core.EntryKindEnv, Secret: true, Source: core.EntrySourceSpec{}},
 			}},
-		}, false, nil,
+		}, false, nil, nil,
 	)
 	for _, change := range changes {
 		if change.Resource == "entry" && change.Key == "TOKEN" {

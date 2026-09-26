@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -46,7 +47,11 @@ func (service *Service) GetBlueprint(
 	if err != nil {
 		return apiTypes.EnvironmentBlueprintDocument{}, err
 	}
-	authoring, err := service.environmentBlueprintAuthoringDocument(ctx, snapshot)
+	attaches, _, err := service.listBlueprintAttaches(ctx, environmentID)
+	if err != nil {
+		return apiTypes.EnvironmentBlueprintDocument{}, err
+	}
+	authoring, err := service.environmentBlueprintAuthoringDocument(ctx, snapshot, attaches)
 	if err != nil {
 		return apiTypes.EnvironmentBlueprintDocument{}, err
 	}
@@ -132,8 +137,11 @@ func (service *Service) ValidateBlueprint(
 			return apiTypes.EnvironmentBlueprintValidation{}, err
 		}
 	}
-	current, err := service.environmentBlueprintAuthoringDocument(ctx, snapshot)
+	current, err := service.environmentBlueprintAuthoringDocument(ctx, snapshot, attaches)
 	if err != nil {
+		return apiTypes.EnvironmentBlueprintValidation{}, err
+	}
+	if err := validateCurrentAttachmentDeclarations(parsed.Extensions.Attachments, current.Attachments, attaches); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
 	var currentProject *composetypes.Project
@@ -152,6 +160,7 @@ func (service *Service) ValidateBlueprint(
 			parsed,
 			snapshot.hasHead,
 			currentProject,
+			attaches,
 		),
 	}, nil
 }
@@ -235,8 +244,9 @@ func environmentBlueprintRevision(
 }
 
 func (service *Service) environmentBlueprintAuthoringDocument(
-	_ context.Context,
+	ctx context.Context,
 	snapshot environmentBlueprintSnapshot,
+	attaches []etcdstore.Versioned[attachrecord.Record],
 ) (blueprintparser.AuthoringDocument, error) {
 	input := blueprintparser.AuthoringDocument{
 		Envelope: core.Envelope{
@@ -251,26 +261,37 @@ func (service *Service) environmentBlueprintAuthoringDocument(
 		NetworkPool: snapshot.environment.Record.NetworkPool,
 		Compose:     []byte("services: {}\n"),
 	}
-	if !snapshot.hasHead {
-		return input, nil
+	if snapshot.hasHead {
+		desired := core.CloneBlueprintDesiredInput(snapshot.desired.Record.Input)
+		compose, err := composerender.AuthoringComposeVolumes(
+			desired.NormalizedCompose, snapshot.volumes, snapshot.environment.Record.VolumeDir,
+		)
+		if err != nil {
+			return blueprintparser.AuthoringDocument{}, err
+		}
+		input.NetworkPool = desired.NetworkPool
+		input.Compose = compose
+		input.Requires = desired.Requires
+		input.Attachments = desired.Attachments
+		input.Entries = desired.Entries
+		input.Routes = desired.Routes
+		input.Scripts = desired.Scripts
+		input.Components = desired.Components
+		input.Backup = desired.Backup
+		input.ReleaseGroups = desired.ReleaseGroups
 	}
-	desired := core.CloneBlueprintDesiredInput(snapshot.desired.Record.Input)
-	compose, err := composerender.AuthoringComposeVolumes(
-		desired.NormalizedCompose, snapshot.volumes, snapshot.environment.Record.VolumeDir,
-	)
-	if err != nil {
-		return blueprintparser.AuthoringDocument{}, err
+	if len(attaches) != 0 {
+		current, err := service.authoringAttachmentSpecs(ctx, snapshot.environment.Record.ID, attaches)
+		if err != nil {
+			return blueprintparser.AuthoringDocument{}, err
+		}
+		if input.Attachments == nil {
+			input.Attachments = make(map[string]core.AttachmentSpec, len(current))
+		}
+		for name, spec := range current {
+			input.Attachments[name] = spec
+		}
 	}
-	input.NetworkPool = desired.NetworkPool
-	input.Compose = compose
-	input.Requires = desired.Requires
-	input.Attachments = desired.Attachments
-	input.Entries = desired.Entries
-	input.Routes = desired.Routes
-	input.Scripts = desired.Scripts
-	input.Components = desired.Components
-	input.Backup = desired.Backup
-	input.ReleaseGroups = desired.ReleaseGroups
 	return input, nil
 }
 
@@ -279,6 +300,7 @@ func environmentBlueprintChanges(
 	candidate blueprintparser.Result,
 	hasCurrent bool,
 	currentProject *composetypes.Project,
+	currentAttaches []etcdstore.Versioned[attachrecord.Record],
 ) []apiTypes.EnvironmentBlueprintChange {
 	currentKeys := make(map[string]map[string]struct{})
 	candidateKeys := make(map[string]map[string]struct{})
@@ -368,11 +390,23 @@ func environmentBlueprintChanges(
 	}
 
 	changes := make([]apiTypes.EnvironmentBlueprintChange, 0)
+	readyAttaches := make(map[string]struct{}, len(currentAttaches))
+	for _, attach := range currentAttaches {
+		if attach.Record.Status == core.AttachReady {
+			readyAttaches[attach.Record.Name] = struct{}{}
+		}
+	}
 	for resource, keys := range candidateKeys {
 		for key := range keys {
 			action := apiTypes.BlueprintChangeCreate
 			if _, exists := currentKeys[resource][key]; exists {
 				action = apiTypes.BlueprintChangeUpdate
+				if resource == "attach" {
+					if _, ready := readyAttaches[key]; ready &&
+						sameAttachmentSpec(current.Attachments[key], candidate.Extensions.Attachments[key]) {
+						action = apiTypes.BlueprintChangeRetain
+					}
+				}
 			}
 			change := apiTypes.EnvironmentBlueprintChange{
 				Resource: resource, Key: key, Action: action,

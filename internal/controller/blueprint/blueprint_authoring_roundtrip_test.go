@@ -19,6 +19,7 @@ import (
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -131,6 +132,34 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 			},
 		},
 	}
+	backingProjectID := ids.NewAt(ids.KindProject, at, 20)
+	backingEnvironmentID := ids.NewAt(ids.KindEnvironment, at, 21)
+	backingServiceID := ids.NewAt(ids.KindService, at, 22)
+	backingNetworkID := ids.NewAt(ids.KindNetwork, at, 23)
+	attachID := ids.NewAt(ids.KindAttach, at, 24)
+	repository.extraProjects = map[string]testhierarchy.ProjectRecord{
+		backingProjectID: {ID: backingProjectID, Slug: "shared-cache", Kind: testhierarchy.ProjectKindBacking},
+	}
+	repository.extraEnvironments = map[string]testhierarchy.EnvironmentRecord{
+		backingEnvironmentID: {ID: backingEnvironmentID, ProjectID: backingProjectID, Name: "main"},
+	}
+	repository.services = map[string]testservices.ServiceRecord{
+		repository.identities.Services[0].ID: {
+			EnvironmentID: environmentID,
+			Desired:       core.Service{ID: repository.identities.Services[0].ID, Name: "web"},
+		},
+		backingServiceID: {
+			EnvironmentID: backingEnvironmentID, BackingNetworkID: backingNetworkID,
+			Desired: core.Service{ID: backingServiceID, Name: "valkey"},
+		},
+	}
+	repository.attaches = []testattachments.Record{{
+		ID: attachID, EnvironmentID: environmentID, Name: "web-cache",
+		BackingProjectID: backingProjectID, BackingEnvironmentID: backingEnvironmentID,
+		BackingServiceID: backingServiceID, BackingNetworkID: backingNetworkID,
+		ServiceID: repository.identities.Services[0].ID, CredentialAttachID: attachID,
+		Status: core.AttachReady, Operation: testattachments.AttachOperationProvision,
+	}}
 	service := &Service{repository: repository, releaseGroups: planner}
 	document, err := service.GetBlueprint(t.Context(), environmentID)
 	if err != nil {
@@ -155,14 +184,51 @@ func TestGetBlueprintNormalizedProjectParsesAgain(t *testing.T) {
 		reparsed.Extensions.Entries["settings"].GID == nil || *reparsed.Extensions.Entries["settings"].GID != gid {
 		t.Fatal("authoring changed desired decisions or managed-file source")
 	}
+	attach := reparsed.Extensions.Attachments["web-cache"]
+	if attach.BackingProject != "shared-cache" || attach.BackingService != "valkey" ||
+		attach.Service != "web" || attach.Credential.Mode != "new" {
+		t.Fatalf("direct Attach was not exported as a reproducible decision: %#v", attach)
+	}
 }
 
 type authoringRoundtripRepository struct {
 	*blueprintPreflightRepository
-	projection testenvironmentprojection.EnvironmentComposeProjection
-	desired    testenvironmentprojection.EnvironmentDesiredInput
-	identities testenvironmentprojection.EnvironmentOwnedIdentities
-	scripts    []testscripts.Record
+	projection        testenvironmentprojection.EnvironmentComposeProjection
+	desired           testenvironmentprojection.EnvironmentDesiredInput
+	identities        testenvironmentprojection.EnvironmentOwnedIdentities
+	scripts           []testscripts.Record
+	attaches          []testattachments.Record
+	services          map[string]testservices.ServiceRecord
+	extraProjects     map[string]testhierarchy.ProjectRecord
+	extraEnvironments map[string]testhierarchy.EnvironmentRecord
+}
+
+func (r *authoringRoundtripRepository) GetProject(
+	ctx context.Context, id string,
+) (testkeyvalue.Versioned[testhierarchy.ProjectRecord], error) {
+	if record, exists := r.extraProjects[id]; exists {
+		return testkeyvalue.Versioned[testhierarchy.ProjectRecord]{Record: record, Revision: 1, ReadRevision: 1}, nil
+	}
+	return r.blueprintPreflightRepository.GetProject(ctx, id)
+}
+
+func (r *authoringRoundtripRepository) GetEnvironment(
+	ctx context.Context, id string,
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
+	if record, exists := r.extraEnvironments[id]; exists {
+		return testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record:       record,
+			Revision:     1,
+			ReadRevision: 1,
+		}, nil
+	}
+	return r.blueprintPreflightRepository.GetEnvironment(ctx, id)
+}
+
+func (r *authoringRoundtripRepository) GetService(
+	_ context.Context, id string,
+) (testkeyvalue.Versioned[testservices.ServiceRecord], error) {
+	return testkeyvalue.Versioned[testservices.ServiceRecord]{Record: r.services[id], Revision: 1, ReadRevision: 1}, nil
 }
 
 func (r *authoringRoundtripRepository) GetEnvironmentDesiredInput(
@@ -214,10 +280,14 @@ func (r *authoringRoundtripRepository) ListScripts(
 	return testkeyvalue.Page[testscripts.Record]{Revision: 1, Items: items}, nil
 }
 
-func (*authoringRoundtripRepository) ListAttaches(
+func (r *authoringRoundtripRepository) ListAttaches(
 	context.Context,
 	string, testkeyvalue.PageRequest,
 
 ) (testkeyvalue.Page[testattachments.Record], error) {
-	return testkeyvalue.Page[testattachments.Record]{Revision: 1}, nil
+	items := make([]testkeyvalue.Versioned[testattachments.Record], len(r.attaches))
+	for index, record := range r.attaches {
+		items[index] = testkeyvalue.Versioned[testattachments.Record]{Record: record, Revision: 1, ReadRevision: 1}
+	}
+	return testkeyvalue.Page[testattachments.Record]{Revision: 1, Items: items}, nil
 }

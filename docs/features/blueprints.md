@@ -36,6 +36,11 @@ secret literal starts with an empty value. Set or rotate its value through the
 Entry action, never by putting plaintext into a Blueprint.
 The Console review marks a newly declared key-only secret Entry as empty.
 
+Directly created Attaches also appear in canonical export. A later Blueprint
+can keep a ready Attach by declaring the same name, consumer Service, Backing
+Service, credential owner and grants. Validate rejects an in-place change to
+that binding; detach it separately before replacing it.
+
 Persistent Volume omission is rejected: use its impact-checked Remove action
 before applying a Blueprint without it. If a Backing Zone serves external
 Attaches, use its impact-approved Remove action before omitting it from the

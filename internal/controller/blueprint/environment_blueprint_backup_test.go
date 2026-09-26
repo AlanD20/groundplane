@@ -403,7 +403,7 @@ func TestEnvironmentBlueprintBackupValidationResolvesFixedRevisionDependencies(t
 	changes := environmentBlueprintChanges(
 		blueprintparser.AuthoringDocument{Backup: &core.BackupSpec{}},
 		blueprintparser.Result{Project: &composetypes.Project{}, Extensions: blueprintparser.Extensions{}},
-		true, nil,
+		true, nil, nil,
 	)
 	found := false
 	for _, change := range changes {
