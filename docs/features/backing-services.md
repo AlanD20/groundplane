@@ -158,6 +158,14 @@ the Attach id's random tail. A credential-backed Attach rejects Service names
 longer than 56 bytes rather than truncating the resulting 63-byte-bounded
 adapter identity.
 
+New PostgreSQL databases accept connections only after provisioning has removed
+default public database privileges and granted their owner access. Another
+credential owner needs an explicit grant to connect. Retrying provisioning
+preserves explicit grants. This does not migrate previously provisioned databases.
+Detach disables the departing role's login and transfers its owned database
+objects to the backing administrator before removing the role; it retains data.
+Revoking a connection grant blocks new connections, not already-open sessions.
+
 A grant exposes an additional prefixed fact set for another owner-selected
 Attach. Omitting a grant in an Entry fact reference selects the credential
 owner's own set; naming a grant selects that granted set. Credential reuse and

@@ -53,7 +53,8 @@ func (a *adapter) ProvisionSteps(p adapters.Input) []adapters.Step {
 		" WITH LOGIN; END IF; END $groundplane$",
 	)
 	roleStatement = append(roleStatement, passwordSQL("ALTER ROLE "+role+" PASSWORD ", p.Password, "")...)
-	createDatabase := "CREATE DATABASE " + database + " OWNER " + role
+	// A new database must not accept connections before its private ACL is set.
+	createDatabase := "CREATE DATABASE " + database + " OWNER " + role + " ALLOW_CONNECTIONS false"
 	databaseStatement := []byte(
 		"SELECT " + quoteLiteral(createDatabase) + " WHERE NOT EXISTS " +
 			"(SELECT 1 FROM pg_catalog.pg_database WHERE datname = " + quoteLiteral(p.Database) + ")\n\\gexec\n",
@@ -63,7 +64,9 @@ func (a *adapter) ProvisionSteps(p adapters.Input) []adapters.Step {
 		{Op: adapters.StepSQL, Database: "postgres", Stdin: roleStatement},
 		{Op: adapters.StepSQL, Database: "postgres", Stdin: databaseStatement},
 		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
-			"GRANT ALL PRIVILEGES ON DATABASE ", database, " TO ", role,
+			"BEGIN; REVOKE ALL PRIVILEGES ON DATABASE ", database, " FROM PUBLIC; ",
+			"GRANT ALL PRIVILEGES ON DATABASE ", database, " TO ", role, "; ",
+			"ALTER DATABASE ", database, " ALLOW_CONNECTIONS true; COMMIT",
 		)},
 	}
 }
@@ -116,14 +119,28 @@ func (a *adapter) RevokeSteps(p adapters.Input) []adapters.Step {
 }
 
 func (a *adapter) DetachSteps(p adapters.Input) []adapters.Step {
+	role := quoteIdentifier(p.Role)
+	database := quoteIdentifier(p.Database)
+	ifRoleExists := "DO $groundplane$ BEGIN IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = " +
+		quoteLiteral(p.Role) + ") THEN "
+	endIf := "; END IF; END $groundplane$"
 	return []adapters.Step{
 		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
-			"REVOKE ALL PRIVILEGES ON DATABASE ", quoteIdentifier(p.Database), " FROM ", quoteIdentifier(p.Role),
+			"BEGIN; ", ifRoleExists, "ALTER ROLE ", role, " NOLOGIN; ",
+			"REVOKE ALL PRIVILEGES ON DATABASE ", database, " FROM ", role, endIf, "; ",
+			"REVOKE ALL PRIVILEGES ON DATABASE ", database, " FROM PUBLIC; ",
+			// A partially provisioned database may still reject every connection.
+			// Open it only after removing default access and disabling its role.
+			"ALTER DATABASE ", database, " ALLOW_CONNECTIONS true; COMMIT",
 		)},
-		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
-			"ALTER DATABASE ", quoteIdentifier(p.Database), " OWNER TO postgres",
+		// Reassign data before dropping residual grants/default privileges. Dropping
+		// owned objects directly would erase the application's retained tables.
+		{Op: adapters.StepSQL, Database: p.Database, Stdin: sql(
+			ifRoleExists, "REASSIGN OWNED BY ", role, " TO postgres; ",
+			"DROP OWNED BY ", role, endIf, "; ",
+			"ALTER DATABASE ", database, " OWNER TO postgres",
 		)},
-		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql("DROP ROLE IF EXISTS ", quoteIdentifier(p.Role))},
+		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql("DROP ROLE IF EXISTS ", role)},
 		// Dropping <db> itself is a SEPARATE, explicit confirmation in the
 		// Console/CLI — detach revokes access; it does not delete data
 		// unless the operator explicitly asks for that.
