@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/netip"
+	"slices"
 )
 
 type RunnerRuntimeStep string
@@ -101,6 +102,16 @@ func (plan RuntimePlan) Digest() string {
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
+// Clone keeps the journal's sealed inputs independent from caller-owned slices.
+func (plan RuntimePlan) Clone() RuntimePlan {
+	plan.Egress.DeniedCIDRs = slices.Clone(plan.Egress.DeniedCIDRs)
+	plan.Container.CapAdd = slices.Clone(plan.Container.CapAdd)
+	plan.Container.CapDrop = slices.Clone(plan.Container.CapDrop)
+	plan.Container.SecurityOptions = slices.Clone(plan.Container.SecurityOptions)
+	plan.Container.Labels = slices.Clone(plan.Container.Labels)
+	return plan
+}
+
 type RunnerRuntimeEvidence struct {
 	ContainerID  string `json:"container_id"`
 	DaemonNonce  string `json:"daemon_nonce"`
@@ -163,6 +174,8 @@ type RunnerRuntimeAttempt struct {
 }
 
 type RunnerRuntimeProgress struct {
+	Plan              RuntimePlan                 `json:"plan"`
+	BootID            string                      `json:"boot_id"`
 	RunnerID          string                      `json:"runner_id"`
 	TaskID            string                      `json:"task_id"`
 	Executor          string                      `json:"executor"`

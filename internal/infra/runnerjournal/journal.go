@@ -40,7 +40,10 @@ type headRecord struct {
 
 // Journal persists Controller-owned write-before-host-effect state. The trusted
 // root is constructor policy; no path from a persisted record is ever opened.
-type Journal struct{ root string }
+type Journal struct {
+	root   string
+	bootID func(context.Context) (string, error)
+}
 
 func New(root string) (*Journal, error) {
 	if !filepath.IsAbs(root) || filepath.Clean(root) != root || root == string(filepath.Separator) {
@@ -49,7 +52,7 @@ func New(root string) (*Journal, error) {
 	if err := ensureDirectory(root, 0o700); err != nil {
 		return nil, err
 	}
-	return &Journal{root: root}, nil
+	return &Journal{root: root, bootID: currentBootID}, nil
 }
 
 func (journal *Journal) Begin(
@@ -58,6 +61,10 @@ func (journal *Journal) Begin(
 	operation runnerallocation.RuntimeOperation,
 ) (runnerallocation.RunnerRuntimeProgress, error) {
 	if err := validateAttempt(ctx, attempt, operation); err != nil {
+		return runnerallocation.RunnerRuntimeProgress{}, err
+	}
+	bootID, err := journal.bootID(ctx)
+	if err != nil {
 		return runnerallocation.RunnerRuntimeProgress{}, err
 	}
 	directory, err := journal.operationDirectory(attempt)
@@ -75,7 +82,8 @@ func (journal *Journal) Begin(
 	if exists {
 		if current.RunnerID != attempt.Plan.RunnerID || current.TaskID != attempt.TaskID ||
 			current.Executor != attempt.Executor || current.Operation != operation ||
-			current.PlanDigest != digest || current.RuntimeEpoch != attempt.Plan.RuntimeEpoch {
+			current.PlanDigest != digest || current.RuntimeEpoch != attempt.Plan.RuntimeEpoch ||
+			current.OwnershipNonce != attempt.OwnershipNonce || current.BootID != bootID {
 			return runnerallocation.RunnerRuntimeProgress{}, errs.New(
 				errs.KindStateConflict,
 				"runner journal operation identity changed",
@@ -84,17 +92,18 @@ func (journal *Journal) Begin(
 		return current, nil
 	}
 	created := runnerallocation.RunnerRuntimeProgress{
+		Plan: attempt.Plan.Clone(), BootID: bootID,
 		RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
 		PlanDigest: digest, IdentityDigest: attempt.Plan.IdentityDigest(),
 		RuntimeEpoch: attempt.Plan.RuntimeEpoch, Operation: operation,
 		Status: runnerallocation.RuntimeStatusRunning, Revision: -1,
 		OwnershipNonce: attempt.OwnershipNonce,
 	}
-	return appendRevision(directory, created)
+	return journal.append(ctx, directory, created)
 }
 
 func (journal *Journal) Issue(
-	_ context.Context,
+	ctx context.Context,
 	current runnerallocation.RunnerRuntimeProgress,
 	step runnerallocation.RunnerRuntimeStep,
 ) (runnerallocation.RunnerRuntimeProgress, error) {
@@ -111,11 +120,11 @@ func (journal *Journal) Issue(
 		return runnerallocation.RunnerRuntimeProgress{}, err
 	}
 	current.ActiveStep = &step
-	return appendRevision(directory, current)
+	return journal.append(ctx, directory, current)
 }
 
 func (journal *Journal) Checkpoint(
-	_ context.Context,
+	ctx context.Context,
 	current runnerallocation.RunnerRuntimeProgress,
 	evidence runnerallocation.RunnerRuntimeStepEvidence,
 ) (runnerallocation.RunnerRuntimeProgress, error) {
@@ -141,10 +150,10 @@ func (journal *Journal) Checkpoint(
 	}
 	current.NextStep++
 	current.ActiveStep = nil
-	return appendRevision(directory, current)
+	return journal.append(ctx, directory, current)
 }
 
-func (journal *Journal) Fail(_ context.Context, current runnerallocation.RunnerRuntimeProgress) error {
+func (journal *Journal) Fail(ctx context.Context, current runnerallocation.RunnerRuntimeProgress) error {
 	if current.Status != runnerallocation.RuntimeStatusRunning {
 		return errs.New(errs.KindStateConflict, "runner journal lifecycle is not running")
 	}
@@ -153,12 +162,12 @@ func (journal *Journal) Fail(_ context.Context, current runnerallocation.RunnerR
 		return err
 	}
 	current.Status = runnerallocation.RuntimeStatusFailed
-	_, err = appendRevision(directory, current)
+	_, err = journal.append(ctx, directory, current)
 	return err
 }
 
 func (journal *Journal) Ready(
-	_ context.Context,
+	ctx context.Context,
 	current runnerallocation.RunnerRuntimeProgress,
 	evidence runnerallocation.RunnerRuntimeEvidence,
 ) error {
@@ -173,11 +182,11 @@ func (journal *Journal) Ready(
 		return err
 	}
 	current.Status = runnerallocation.RuntimeStatusReady
-	_, err = appendRevision(directory, current)
+	_, err = journal.append(ctx, directory, current)
 	return err
 }
 
-func (journal *Journal) Removed(_ context.Context, current runnerallocation.RunnerRuntimeProgress) error {
+func (journal *Journal) Removed(ctx context.Context, current runnerallocation.RunnerRuntimeProgress) error {
 	if current.Operation != runnerallocation.RuntimeOperationRemove ||
 		current.Status != runnerallocation.RuntimeStatusRunning || current.ActiveStep != nil ||
 		current.NextStep != len(runnerallocation.RemovalRuntimeSteps()) ||
@@ -189,7 +198,7 @@ func (journal *Journal) Removed(_ context.Context, current runnerallocation.Runn
 		return err
 	}
 	current.Status = runnerallocation.RuntimeStatusRemoved
-	_, err = appendRevision(directory, current)
+	_, err = journal.append(ctx, directory, current)
 	return err
 }
 
@@ -218,66 +227,9 @@ func operationDirectory(root, runnerID string, epoch uint64, taskID, nonce strin
 		epoch == 0 || !validLowerHex(nonce, maximumOwnershipNonceLen) {
 		return "", errs.New(errs.KindInternal, "runner journal path identity is invalid")
 	}
-	return filepath.Join(root, "v1", runnerID, strconv.FormatUint(epoch, 10), taskID+"."+nonce), nil
-}
-
-func appendRevision(
-	directory string,
-	progress runnerallocation.RunnerRuntimeProgress,
-) (runnerallocation.RunnerRuntimeProgress, error) {
-	previousRevision := progress.Revision
-	progress.Revision++
-	if progress.Revision >= maximumJournalRevisions {
-		return runnerallocation.RunnerRuntimeProgress{}, errs.New(errs.KindResourceInUse, "runner journal is exhausted")
-	}
-	if previousRevision < 0 {
-		progress.PredecessorSHA256 = ""
-	} else {
-		previous, err := readBounded(filepath.Join(directory, revisionName(previousRevision)))
-		if err != nil {
-			return runnerallocation.RunnerRuntimeProgress{}, corruptJournal()
-		}
-		progress.PredecessorSHA256 = digestBytes(previous)
-	}
-	value, err := encodeRevision(progress)
-	if err != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, err
-	}
-	defer clear(value)
-	name := filepath.Join(directory, revisionName(progress.Revision))
-	file, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL|unix.O_NOFOLLOW, 0o600)
-	if err != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, errs.Wrap(errs.KindStateConflict, err)
-	}
-	writeErr := writeSyncClose(file, value)
-	if writeErr != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, writeErr
-	}
-	if err := syncDirectory(directory); err != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, err
-	}
-	head, err := json.Marshal(headRecord{
-		Revision: strconv.FormatInt(progress.Revision, 10), Digest: digestBytes(value),
-	})
-	if err != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(head)
-	temporary := filepath.Join(directory, fmt.Sprintf(".HEAD.%d.%020d", os.Getpid(), progress.Revision))
-	headFile, err := os.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL|unix.O_NOFOLLOW, 0o600)
-	if err != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, errs.Wrap(errs.KindInternal, err)
-	}
-	if err := writeSyncClose(headFile, head); err != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, err
-	}
-	if err := os.Rename(temporary, filepath.Join(directory, "HEAD")); err != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, errs.Wrap(errs.KindInternal, err)
-	}
-	if err := syncDirectory(directory); err != nil {
-		return runnerallocation.RunnerRuntimeProgress{}, err
-	}
-	return progress, nil
+	// Plan or nonce drift must find the existing Task journal and conflict, not
+	// select a new empty directory and grant another host-effect attempt.
+	return filepath.Join(root, "v1", runnerID, strconv.FormatUint(epoch, 10), taskID), nil
 }
 
 func readLongestChain(directory string) (runnerallocation.RunnerRuntimeProgress, bool, error) {
@@ -289,7 +241,7 @@ func readLongestChain(directory string) (runnerallocation.RunnerRuntimeProgress,
 	maximum := int64(-1)
 	for _, entry := range entries {
 		name := entry.Name()
-		if name == "HEAD" || strings.HasPrefix(name, ".HEAD.") {
+		if name == "HEAD" || strings.HasPrefix(name, ".HEAD.") || strings.HasPrefix(name, ".revision.") {
 			continue
 		}
 		if entry.Type()&os.ModeSymlink != 0 || entry.IsDir() || len(name) != 25 || !strings.HasSuffix(name, ".json") {
@@ -319,7 +271,8 @@ func readLongestChain(directory string) (runnerallocation.RunnerRuntimeProgress,
 			return runnerallocation.RunnerRuntimeProgress{}, false, corruptJournal()
 		}
 		progress, decodeErr := decodeRevision(value)
-		if decodeErr != nil || progress.Revision != revision || progress.PredecessorSHA256 != wantPredecessor {
+		if decodeErr != nil || progress.Revision != revision || progress.PredecessorSHA256 != wantPredecessor ||
+			!validTransition(current, progress, revision > 0) {
 			return runnerallocation.RunnerRuntimeProgress{}, false, corruptJournal()
 		}
 		wantPredecessor = digestBytes(value)
@@ -374,6 +327,9 @@ func validateAttempt(
 
 func validateProgress(progress runnerallocation.RunnerRuntimeProgress) error {
 	if ids.Validate(ids.KindRunner, progress.RunnerID) != nil || ids.Validate(ids.KindTask, progress.TaskID) != nil ||
+		!validBootID(progress.BootID) || progress.Plan.RunnerID != progress.RunnerID ||
+		progress.Plan.RuntimeEpoch != progress.RuntimeEpoch || progress.Plan.Digest() != progress.PlanDigest ||
+		progress.Plan.IdentityDigest() != progress.IdentityDigest ||
 		progress.Executor != controllerExecutor || !validDigest(progress.PlanDigest) ||
 		!validDigest(progress.IdentityDigest) || progress.RuntimeEpoch == 0 ||
 		!validLowerHex(progress.OwnershipNonce, maximumOwnershipNonceLen) || progress.Revision < 0 ||
@@ -388,6 +344,9 @@ func validateProgress(progress runnerallocation.RunnerRuntimeProgress) error {
 	}
 	if progress.ActiveStep != nil &&
 		(progress.NextStep >= len(steps) || *progress.ActiveStep != steps[progress.NextStep]) {
+		return corruptJournal()
+	}
+	if !validLifecycleState(progress, steps) {
 		return corruptJournal()
 	}
 	return nil
@@ -405,6 +364,9 @@ func ensureDirectory(path string, mode os.FileMode) error {
 		if errors.Is(err, os.ErrNotExist) {
 			if err := os.Mkdir(current, mode); err != nil && !errors.Is(err, os.ErrExist) {
 				return errs.Wrap(errs.KindInternal, err)
+			}
+			if err := syncDirectory(filepath.Dir(current)); err != nil {
+				return err
 			}
 			info, err = os.Lstat(current)
 		}
@@ -427,21 +389,6 @@ func readBounded(path string) ([]byte, error) {
 		return nil, corruptJournal()
 	}
 	return value, nil
-}
-
-func writeSyncClose(file *os.File, value []byte) error {
-	if _, err := file.Write(value); err != nil {
-		_ = file.Close()
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	if err := file.Close(); err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	return nil
 }
 
 func syncDirectory(path string) error {

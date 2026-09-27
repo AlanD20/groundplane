@@ -211,13 +211,13 @@ func (lifecycle *Lifecycle) execute(
 					errs.New(errs.KindInternal, "runner lifecycle active step is corrupt"),
 				)
 			}
-			stepEvidence, err = lifecycle.observe(ctx, attempt.Plan, step)
+			stepEvidence, err = lifecycle.observe(ctx, progress.Plan, step)
 		} else {
 			progress, err = lifecycle.journal.Issue(ctx, progress, step)
 			if err == nil {
-				stepEvidence, err = lifecycle.apply(ctx, attempt.Plan, step, transient)
+				stepEvidence, err = lifecycle.apply(ctx, progress.Plan, step, transient)
 				if err != nil {
-					resolved, resolveErr := lifecycle.observe(ctx, attempt.Plan, step)
+					resolved, resolveErr := lifecycle.observe(ctx, progress.Plan, step)
 					if resolveErr == nil {
 						stepEvidence, err = resolved, nil
 					} else {

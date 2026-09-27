@@ -28,6 +28,7 @@ func TestCreateResolvesIssuedEffectWithoutRedispatch(t *testing.T) {
 	attempt := Attempt{TaskID: "task_create", Executor: "controller", Plan: testPlan()}
 	issued := corerunner.StepStartDaemon
 	journal.progress = Progress{
+		Plan:     attempt.Plan.Clone(),
 		RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
 		PlanDigest: attempt.Plan.Digest(), IdentityDigest: attempt.Plan.IdentityDigest(), RuntimeEpoch: 1,
 		Operation: OperationCreate, NextStep: 4, ActiveStep: &issued, Status: StatusRunning, Revision: 1,
@@ -96,6 +97,7 @@ func TestRemoveRecordsOrderedAbsenceReceipts(t *testing.T) {
 	t.Parallel()
 	journal := newMemoryJournal()
 	journal.progress = Progress{
+		Plan:     testPlan(),
 		RunnerID: testPlan().RunnerID, TaskID: "task_create", Executor: "controller",
 		PlanDigest: testPlan().Digest(), IdentityDigest: testPlan().IdentityDigest(), RuntimeEpoch: 1,
 		Operation: OperationCreate, NextStep: len(corerunner.CreationSteps()), Status: StatusReady, Revision: 1,
@@ -160,6 +162,7 @@ func (journal *memoryJournal) Begin(_ context.Context, attempt Attempt, operatio
 	digest := attempt.Plan.Digest()
 	if journal.progress.Status == "" {
 		journal.progress = Progress{
+			Plan:     attempt.Plan.Clone(),
 			RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
 			PlanDigest: digest, IdentityDigest: attempt.Plan.IdentityDigest(), RuntimeEpoch: attempt.Plan.RuntimeEpoch,
 			Operation: operation, Status: StatusRunning, Revision: 1,
@@ -175,6 +178,7 @@ func (journal *memoryJournal) Begin(_ context.Context, attempt Attempt, operatio
 	if operation == OperationRemove &&
 		(journal.progress.Status == StatusReady || journal.progress.Status == StatusFailed) {
 		journal.progress = Progress{
+			Plan:     attempt.Plan.Clone(),
 			RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
 			PlanDigest: digest, IdentityDigest: attempt.Plan.IdentityDigest(), RuntimeEpoch: attempt.Plan.RuntimeEpoch,
 			Operation: operation, Status: StatusRunning, Revision: journal.progress.Revision + 1,
