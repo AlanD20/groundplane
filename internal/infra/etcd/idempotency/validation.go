@@ -56,7 +56,7 @@ func ValidateIdempotencyMarker(marker IdempotencyMarker) error {
 		}
 	case IdempotencyMarkerTask:
 		if ids.Validate(ids.KindTask, marker.TaskID) != nil ||
-			(!ValidTaskResponse(marker.Response, marker.TaskID) && !validEntryMutationTaskResponse(marker)) {
+			!validTaskMarkerResponse(marker) {
 			return CorruptIdempotencyMarker()
 		}
 		switch marker.State {
@@ -75,6 +75,13 @@ func ValidateIdempotencyMarker(marker IdempotencyMarker) error {
 		return CorruptIdempotencyMarker()
 	}
 	return nil
+}
+
+func validTaskMarkerResponse(marker IdempotencyMarker) bool {
+	if marker.Locator.Method == http.MethodPut && marker.Locator.Route == "/components/{id}/config" {
+		return validComponentConfigTaskResponse(marker)
+	}
+	return ValidTaskResponse(marker.Response, marker.TaskID) || validEntryMutationTaskResponse(marker)
 }
 
 func validEntryMutationTaskResponse(marker IdempotencyMarker) bool {
