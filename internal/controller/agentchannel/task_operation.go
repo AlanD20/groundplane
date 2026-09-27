@@ -9,6 +9,11 @@ import (
 )
 
 func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord) bool {
+	if task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute &&
+		(task.Type == taskjournal.TaskCreate || task.Type == taskjournal.TaskUpdate) {
+		return ids.Validate(ids.KindRoute, task.Target) == nil &&
+			operation == agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
+	}
 	switch task.Type {
 	case taskjournal.TaskScript:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_SCRIPT

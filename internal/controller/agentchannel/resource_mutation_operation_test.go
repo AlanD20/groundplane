@@ -8,21 +8,29 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// Rationale: a real QA Volume rename was quarantined after claim because its
-// read-only reconcile plan was mistaken for an unmarked Environment reconcile.
+// QA: HTTP-11. Rationale: live Route creation and Volume rename were quarantined
+// because their sealed reconcile operations were mistaken for Environment work.
 func TestOperationMatchesDirectResourceMutations(t *testing.T) {
-	for _, test := range []struct{ kind, target string }{
-		{testtaskjournal.TaskResourceVolume, "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
-		{testtaskjournal.TaskResourceEntry, "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
+	for _, test := range []struct {
+		kind, target string
+		taskType     testtaskjournal.TaskType
+	}{
+		{testtaskjournal.TaskResourceVolume, "vol_01ARZ3NDEKTSV4RRFFQ69G5FAV", testtaskjournal.TaskUpdate},
+		{testtaskjournal.TaskResourceEntry, "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", testtaskjournal.TaskUpdate},
+		{testtaskjournal.TaskResourceRoute, "rte_01ARZ3NDEKTSV4RRFFQ69G5FAV", testtaskjournal.TaskCreate},
+		{testtaskjournal.TaskResourceRoute, "rte_01ARZ3NDEKTSV4RRFFQ69G5FAV", testtaskjournal.TaskUpdate},
 	} {
-		t.Run(test.kind, func(t *testing.T) {
-			task := etcd.TaskRecord{Type: testtaskjournal.TaskUpdate, Target: test.target,
+		t.Run(test.kind+"/"+string(test.taskType), func(t *testing.T) {
+			task := etcd.TaskRecord{Type: test.taskType, Target: test.target,
 				Params: map[string]string{testtaskjournal.TaskResourceKindParam: test.kind}}
 			if !operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, task) {
 				t.Fatal("direct resource mutation rejected its sealed reconcile operation")
 			}
 			if operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, task) {
 				t.Fatal("direct resource mutation accepted Blueprint Apply")
+			}
+			if operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE, task) {
+				t.Fatal("direct resource mutation accepted Environment creation")
 			}
 			task.Target = "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 			if operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, task) {
