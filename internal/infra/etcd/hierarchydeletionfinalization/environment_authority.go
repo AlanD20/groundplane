@@ -30,7 +30,14 @@ func RequireEnvironmentDeletionLiveAuthorityEmpty(
 	revision int64,
 	projectedKeys ...string,
 ) error {
-	directKeys := append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...)
+	return requireEnvironmentDeletionAuthorityEmpty(ctx, store, environmentID, operationID, revision,
+		append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...))
+}
+
+func requireEnvironmentDeletionAuthorityEmpty(
+	ctx context.Context, store finalizationStore, environmentID, operationID string,
+	revision int64, directKeys []string,
+) error {
 	direct, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: directKeys, Revision: revision,
 	})
@@ -94,6 +101,10 @@ func EnvironmentDeletionLiveAuthorityConditions(
 	environmentID string, operationID string, projectedKeys ...string,
 ) []etcdstore.Condition {
 	keys := append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...)
+	return environmentDeletionAuthorityConditions(environmentID, operationID, keys)
+}
+
+func environmentDeletionAuthorityConditions(environmentID, operationID string, keys []string) []etcdstore.Condition {
 	conditions := make([]etcdstore.Condition, 0, len(keys)+18)
 	for _, key := range keys {
 		conditions = append(conditions, etcdstore.Condition{Key: key})
@@ -109,12 +120,15 @@ func EnvironmentDeletionLiveAuthorityConditions(
 }
 
 func environmentDeletionLiveAuthorityKeys(environmentID string) []string {
+	return append(environmentDeletionChildAuthorityKeys(environmentID),
+		coordinationrecord.Key(environmentID), backuppolicy.BackupPolicyKey(environmentID))
+}
+
+func environmentDeletionChildAuthorityKeys(environmentID string) []string {
 	return []string{
 		networkreservations.ZonePoolRegistryKey(environmentID),
-		coordinationrecord.Key(environmentID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 		removalrecord.EnvironmentLockKey(environmentID),
-		backuppolicy.BackupPolicyKey(environmentID),
 		backuppolicy.BackupKeyKey(environmentID),
 		backuppolicy.BackupKeyValueKey(environmentID),
 	}

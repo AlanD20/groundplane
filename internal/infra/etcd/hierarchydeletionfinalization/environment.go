@@ -2,7 +2,9 @@ package hierarchydeletionfinalization
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
@@ -72,11 +74,12 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 			record.ID,
 		), projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID),
 		groupstore.ReleaseGroupCollectionEpochKey(record.ID),
+		backuppolicy.BackupPolicyKey(record.ID), coordinationrecord.Key(record.ID),
 	}})
 	if err != nil {
 		return Effects{}, err
 	}
-	if indexes == nil || len(indexes.Values) != 5 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
+	if indexes == nil || len(indexes.Values) != 7 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != record.ID || string(indexes.Values[1].Value) != record.ID {
 		if indexes != nil {
 			etcdstore.ClearValues(indexes.Values)
@@ -84,8 +87,13 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	defer etcdstore.ClearValues(indexes.Values)
-	if err := RequireEnvironmentDeletionLiveAuthorityEmpty(
+	metadata, err := prepareIdleEnvironmentMetadata(record.ID, indexes.Values[5], indexes.Values[6])
+	if err != nil {
+		return Effects{}, err
+	}
+	if err := requireEnvironmentDeletionAuthorityEmpty(
 		ctx, repository.store, record.ID, operation.Tombstone.OperationID, indexes.ReadRevision,
+		environmentDeletionChildAuthorityKeys(record.ID),
 	); err != nil {
 		return Effects{}, err
 	}
@@ -120,7 +128,9 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 	}
 	conditions = append(
 		conditions,
-		EnvironmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
+		environmentDeletionAuthorityConditions(record.ID, operation.Tombstone.OperationID,
+			environmentDeletionChildAuthorityKeys(record.ID))...)
+	conditions = append(conditions, metadata.conditions...)
 	conditions = append(
 		conditions,
 		etcdstore.Condition{Key: blueprints.EnvironmentBlueprintRevisionsPrefix(record.ID), Prefix: true},
@@ -139,6 +149,7 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptSetEnvironmentPrefix(record.ID), Prefix: true},
 		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
 	}
+	mutations = append(mutations, metadata.mutations...)
 	return Effects{
 		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(
 			primary.Value,
