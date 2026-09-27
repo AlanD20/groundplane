@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -67,6 +68,7 @@ type ProvisioningService struct {
 	broker      *TokenBroker
 	allocation  runnerallocation.RunnerAllocationConfig
 	imageRef    string
+	policy      corerunner.IsolationPolicy
 	now         func() time.Time
 }
 
@@ -79,6 +81,7 @@ func NewProvisioningService(
 	broker *TokenBroker,
 	allocation runnerallocation.RunnerAllocationConfig,
 	imageRef string,
+	policy corerunner.IsolationPolicy,
 ) (*ProvisioningService, error) {
 	if runners == nil || tasks == nil || projects == nil || idempotency == nil || coordinator == nil ||
 		broker == nil || imageRef == "" {
@@ -90,7 +93,7 @@ func NewProvisioningService(
 	return &ProvisioningService{
 		runners: runners, tasks: tasks, projects: projects,
 		idempotency: idempotency, coordinator: coordinator, broker: broker,
-		allocation: allocation, imageRef: imageRef, now: time.Now,
+		allocation: allocation, imageRef: imageRef, policy: policy, now: time.Now,
 	}, nil
 }
 
@@ -137,6 +140,9 @@ func (service *ProvisioningService) CreateRunner(
 		return cloneResponse(resolution.Response), nil
 	}
 
+	if err := service.policy.RequireControllerEndpoint(); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
 	now := service.now().UTC()
 	task, err := newRunnerCreateTask(desired, idempotencyKey, now)
 	if err != nil {
@@ -200,6 +206,9 @@ func (service *ProvisioningService) RetryRunner(
 			)
 		}
 		return cloneResponse(resolution.Response), nil
+	}
+	if err := service.policy.RequireControllerEndpoint(); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	source, err := service.tasks.GetTask(ctx, current.Record.CreateTaskID)
 	if err != nil {

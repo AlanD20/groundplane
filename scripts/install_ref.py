@@ -69,8 +69,9 @@ def build(source: Path, output: Path, version: str, identity: str,
             agent_version = "agent/" + version.split("/")[-1] if re.fullmatch(r"(?:(?:agent|controller)/)?v[0-9]+\.[0-9]+\.[0-9]+", version) else version
             argument = (f"AGENT_VERSION={agent_version}" if kind == "agent" else
                         f"RUNNER_VERSION={(source / '.runner-version').read_text().strip()}")
+            version_args = ["--build-arg", f"VERSION={version}"] if kind == "runner" else []
             run(*common, "--file", f"Dockerfile.{kind}", "--build-arg", argument,
-                "--tag", tag, "--output", "type=docker,rewrite-timestamp=true", ".", cwd=source)
+                *version_args, "--tag", tag, "--output", "type=docker,rewrite-timestamp=true", ".", cwd=source)
     finally:
         # An interrupted client may leave its container running despite --rm.
         subprocess.run(["docker", "container", "rm", "--force", client],

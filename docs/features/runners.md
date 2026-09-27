@@ -46,30 +46,32 @@ forbidden.
 
 Each Runner gets a `/29` from the separate `runner.network_pool`, configured as
 a `/24`, `/25` or `/26`. It joins no Environment, backing, platform or other
-Runner network. Egress policy blocks GP private pools except the authenticated
-Controller endpoint while allowing DNS and ordinary internet access. Same-Tenant
+Runner network. Egress policy blocks direct access to GP private pools except the
+private Controller API endpoint while allowing DNS and ordinary internet access. Same-Tenant
 ownership does not permit communication with another Runner.
 
 ## GP command access and image delivery
 
-**Accepted, not yet implemented:** workflows may run GP commands against resources
-in their Runner's immutable scope. A Tenant Runner covers that Tenant and its
-Projects and Environments; a Project Runner covers that Project and its
-Environments; an Environment Runner covers only that Environment. This is not a
-Service deployment allowlist.
+**Accepted, not yet integrated:** a Runner executes ordinary GitHub Actions
+workflows. Jobs may use the existing GP CLI or private API with full operator
+authority. Tenant, Project and Environment ownership organizes Runners and their
+lifecycle; it does not limit their GP commands or accessible resources.
 
-The Controller checks the target and referenced resources, not just the command
-name or a client-supplied scope. Lists, logs, Tasks and replay responses must stay
-within the same boundary. A Runner cannot access its parent or sibling scopes,
-manage host-wide resources, or create another Runner with broader authority.
-Existing product protections, deletion approvals and concurrency checks still
-apply; Runner authentication does not bypass them.
+There is no Runner-specific API gateway, command allowlist or permission system.
+Normal validation, deletion approvals, concurrency and replay checks still apply.
+Only trusted workflows should run here: they can manage other projects, shared
+Backing Services, Secrets and host-wide GP operations. Direct network isolation
+does not prevent actions that a workflow requests through GP.
 
-Jobs use a separate authenticated channel. GP's unauthenticated human API remains
-private and is not a workflow endpoint. Image delivery transfers a specific built
-image from the Runner's daemon to the host under Controller authority, then uses
-the ordinary scoped Deploy operation. It must not expose host Docker or replace
-a serving Release after a failed build or failed handoff.
+The image includes the GP CLI. Jobs receive `GROUNDPLANE_HOST` pointing to the
+first trusted private address in the Controller's `listen.http` configuration.
+A loopback-only Controller cannot create or retry a Runner: configure a private
+listener first. No public listener or API relay is created automatically.
+
+The API remains private; Runner access does not require public exposure. Image
+delivery transfers a specific built image from the Runner's daemon to the host
+under Controller authority, then uses ordinary Deploy. It must not expose host
+Docker or replace a serving Release after a failed build or failed handoff.
 
 ## Status and removal
 

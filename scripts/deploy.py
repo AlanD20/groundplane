@@ -551,10 +551,10 @@ def build_environment() -> dict[str, str]:
 
 
 def image_input_digest(kind: str, version: str) -> str:
-    if kind == "agent":
+    if kind in ("agent", "runner"):
         fixed_paths = [
             REPOSITORY_ROOT / ".dockerignore",
-            REPOSITORY_ROOT / "Dockerfile.agent",
+            REPOSITORY_ROOT / f"Dockerfile.{kind}",
             REPOSITORY_ROOT / "Makefile",
             REPOSITORY_ROOT / "go.mod",
             REPOSITORY_ROOT / "go.sum",
@@ -577,15 +577,11 @@ def image_input_digest(kind: str, version: str) -> str:
             root = REPOSITORY_ROOT / source_root
             source_paths.extend(root.rglob("*.go"))
             source_paths.extend(root.rglob("*.proto"))
-    elif kind == "runner":
-        fixed_paths = [
-            REPOSITORY_ROOT / ".dockerignore",
-            REPOSITORY_ROOT / "Dockerfile.runner",
-            REPOSITORY_ROOT / "Makefile",
-            REPOSITORY_ROOT / ".runner-version",
-            REPOSITORY_ROOT / "release" / "runner" / "entrypoint.sh",
-        ]
-        source_paths = []
+        if kind == "runner":
+            fixed_paths.extend([
+                REPOSITORY_ROOT / ".runner-version",
+                REPOSITORY_ROOT / "release" / "runner" / "entrypoint.sh",
+            ])
     else:
         raise ValueError(f"unsupported image kind: {kind}")
 
@@ -630,6 +626,8 @@ def build_artifacts(deployment: Deployment, invocation_id: str, *, include_runne
             command = ["make", f"{kind}-image", f"{kind.upper()}_IMAGE={cache}"]
             if kind == "agent":
                 command.append(f"AGENT_VERSION={deployment.version}")
+            else:
+                command.append(f"VERSION={deployment.version}")
             run(command, cwd=REPOSITORY_ROOT)
         else:
             print(f"Reusing cached {kind} image: {cache}", flush=True)

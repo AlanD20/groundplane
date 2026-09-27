@@ -205,6 +205,7 @@ func runnerContainerOptions(plan corerunner.Plan) client.ContainerCreateOptions 
 			AttachStdin: true, OpenStdin: true, StdinOnce: true,
 			Env: []string{
 				"HOME=/runner", "DOCKER_HOST=unix:///var/run/docker.sock", "RUNNER_ALLOW_RUNASROOT=1",
+				"GROUNDPLANE_HOST=http://" + plan.Egress.ControllerEndpoint.String(),
 			},
 			Labels: map[string]string{
 				"groundplane.runner.id":     plan.RunnerID,

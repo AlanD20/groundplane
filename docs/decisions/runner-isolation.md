@@ -10,9 +10,9 @@
 The native Controller Task executor is the only Runner executor. It owns
 planning, the host slot, journal, Docker calls, helper invocations, inspection,
 recovery, and cleanup. The persistent Agent has no Runner Task payload,
-credential, helper, journal, inspection, or host-mutation role. Untrusted
-workflow code therefore never receives the Agent channel or another
-Groundplane control-plane credential.
+credential, helper, journal, inspection, or host-mutation role. Workflow code
+never receives the Agent channel or its credentials; it uses the existing GP
+API as a trusted operator, as described below.
 
 The Runner id is the stable identity. Its mutable slug is only the Groundplane
 operator label; the GitHub-visible name derives from the id and is not another
@@ -199,8 +199,8 @@ accepted decision, determine what operators can rely on.
   daemon, proxy, Network, and firewall policy per Runner.
 - A Controller restart may intentionally lose an unused registration token;
   fresh explicit retry is the safe recovery contract.
-- Host-root compromise remains outside the threat model. Workflow uid code and
-  nested containers remain untrusted.
+- Host-root compromise remains outside the threat model. Workflows have GP
+  operator authority but do not receive direct host-root or host Docker access.
 - Drift and ambiguous recovery make the Runner unavailable until exact
   reconciliation; availability never overrides ownership proof.
 - Rootless port publishing, Runner self-update, operator-selected names or
@@ -228,22 +228,21 @@ The one-use token owner is
 These are navigation pointers to partial current code, not claims that the
 accepted isolation and recovery design is implemented or qualified.
 
-## Scoped command authority
+## Existing GP command access
 
 The [Runner guide](../features/runners.md#gp-command-access-and-image-delivery)
-owns the Tenant, Project and Environment command-access rule. Authentication and
-authorization are separate from the Docker policy proxy: building an image does
-not itself authorize a GP resource mutation.
+owns command access. Workflows are trusted operators and use the existing private
+CLI/API. Ownership selects organization and lifecycle, not API permissions.
+Reusing that API avoids a second command gateway, authorization model or deployment
+pipeline. Its normal product safety checks still apply.
 
-The authenticated channel must resolve its principal from Controller-owned Runner
-identity and current lifecycle, never from request headers or a requested Tenant
-id. It reuses current GP operations after checking their resources and references.
-It does not forward unchecked requests to the private human API or implement a
-second deployment pipeline. Unknown operations fail closed until their scope
-handling is defined. Revocation and deletion prevent new admissions without
-rewriting already-published Task authority.
+This deliberately permits GP operations outside the Runner's owner, including
+shared Backing Services and host-wide administration. Rootless Docker and network
+isolation constrain direct host access, not the authority of GP commands. They do
+not make untrusted workflows safe to run with operator access. The API remains
+private under the existing product trust boundary.
 
 Image handoff binds the inspected image id to the originating Runner epoch and
-the requested scoped operation. Mutable tags are not transfer authority. The
+the requested operation. Mutable tags are not transfer authority. The
 host imports through its trusted Controller boundary; workflow code never gains
 the host daemon's socket or general registry-administration credentials.

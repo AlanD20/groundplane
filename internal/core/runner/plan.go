@@ -172,6 +172,9 @@ func validatePolicy(
 	allocationConfig runnerallocation.RunnerAllocationConfig,
 	policy IsolationPolicy,
 ) error {
+	if err := policy.RequireControllerEndpoint(); err != nil {
+		return err
+	}
 	if !policy.RunnerPool.IsValid() || !policy.RunnerPool.Addr().Is4() ||
 		policy.RunnerPool != policy.RunnerPool.Masked() ||
 		policy.RunnerPool.Bits() > runnerallocation.RunnerSubnetBits ||

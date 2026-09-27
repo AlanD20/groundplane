@@ -52,7 +52,7 @@ agent-image-smoke: agent-image
 		test "$$compose_version" = '2.40.3'
 
 runner-image:
-	$(DOCKER) build --pull --file Dockerfile.runner --build-arg RUNNER_VERSION="$(RUNNER_VERSION)" --tag "$(RUNNER_IMAGE)" .
+	$(DOCKER) build --pull --file Dockerfile.runner --build-arg RUNNER_VERSION="$(RUNNER_VERSION)" --build-arg VERSION="$(VERSION)" --tag "$(RUNNER_IMAGE)" .
 
 runner-image-smoke: runner-image
 	@set -eu; \

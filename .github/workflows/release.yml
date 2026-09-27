@@ -85,7 +85,7 @@ jobs:
               --image "$IMAGE_ROOT-agent:v$VERSION-$ARCH" --push > ".tmp/release-images/agent-$ARCH"
           fi
           if [[ "$SCOPE" != agent ]]; then
-            make runner-image-smoke RUNNER_IMAGE="$IMAGE_ROOT-runner:v$VERSION-$ARCH"
+            make runner-image-smoke VERSION="$VERSION" RUNNER_IMAGE="$IMAGE_ROOT-runner:v$VERSION-$ARCH"
             docker push "$IMAGE_ROOT-runner:v$VERSION-$ARCH"
             docker image inspect "$IMAGE_ROOT-runner:v$VERSION-$ARCH" \
               --format '{{index .RepoDigests 0}}' > ".tmp/release-images/runner-$ARCH"

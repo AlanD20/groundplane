@@ -520,7 +520,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		bootstrap.logger,
 		authority.runnerRecords,
 		runnerComposition.tokens,
-		cfg,
+		runnerComposition.policy,
 		runnerComposition.pools,
 	)
 	if err != nil {

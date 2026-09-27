@@ -8,7 +8,7 @@
   "frozen_totals": [
     {
       "path": "internal/app",
-      "lines": 3639
+      "lines": 3619
     },
     {
       "path": "internal/infra/etcd",
