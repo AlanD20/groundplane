@@ -18,11 +18,10 @@ import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { CopyButton } from '@/components/common/copy-button'
 import { useStore } from '@/lib/store'
 import type { TaskStep, TaskType } from '@/lib/types'
+import type { TaskResponse } from '@/features/task/api'
 import { cn } from '@/lib/utils'
 
 type Phase = 'review' | 'running' | 'done' | 'dispatched' | 'failed'
-
-export type TaskStepState = 'pending' | 'running' | 'done' | 'failed'
 
 export function TaskRunnerDialog({
   open,
@@ -65,7 +64,7 @@ export function TaskRunnerDialog({
 }) {
   const { abortTask, getTask, watchTaskEvents } = useStore()
   const [phase, setPhase] = useState<Phase>('review')
-  const [stepStates, setStepStates] = useState<TaskStepState[]>([])
+  const [reportedSteps, setReportedSteps] = useState<NonNullable<TaskResponse['steps']>>([])
   const [typed, setTyped] = useState('')
   const [taskId, setTaskId] = useState('')
   const [taskStatus, setTaskStatus] = useState('')
@@ -84,7 +83,7 @@ export function TaskRunnerDialog({
   useEffect(() => {
     if (open) {
       setPhase('review')
-      setStepStates(steps.map(() => 'pending'))
+      setReportedSteps([])
       setTyped('')
       setTaskId('')
       setTaskStatus('')
@@ -111,15 +110,7 @@ export function TaskRunnerDialog({
         if (controller.signal.aborted) return
         setTaskStatus(task.status)
         setStatusFailure('')
-        setStepStates(
-          steps.map((_, index) => {
-            const status = task.steps?.[index]?.status
-            if (status === 'completed') return 'done'
-            if (status === 'failed' || status === 'timed_out' || status === 'aborted') return 'failed'
-            if (status === 'running') return 'running'
-            return 'pending'
-          }),
-        )
+        setReportedSteps(task.steps ?? [])
 		if (task.status === 'completed' && committedTaskId.current !== task.id) {
 			committedTaskId.current = task.id
 			setPhase('done')
@@ -270,31 +261,34 @@ export function TaskRunnerDialog({
         </div>
       )}
 
-      {phase !== 'review' && taskId && (
+      {phase !== 'review' && taskId && reportedSteps.length > 0 && (
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-[oklch(0.14_0.01_260)] p-3 font-mono text-xs">
-          {steps.map((step, index) => {
-            const state = stepStates[index] ?? 'pending'
+          {reportedSteps.map((step) => {
+            const state = step.status
+            const failed = ['failed', 'timed_out', 'aborted'].includes(state)
             return (
-              <div key={step.label} className="flex items-center gap-2 py-0.5">
-                {state === 'done' ? (
+              <div key={step.name} className="flex items-center gap-2 py-0.5">
+                {state === 'completed' ? (
                   <CheckCircle2 className="size-3.5 text-success" />
                 ) : state === 'running' ? (
                   <Loader2 className="size-3.5 animate-spin text-info" />
-                ) : state === 'failed' ? (
+                ) : failed ? (
                   <XCircle className="size-3.5 text-destructive" />
                 ) : (
                   <Circle className="size-3.5 text-muted-foreground/50" />
                 )}
                 <span
                   className={cn(
-                    state === 'done' && 'text-foreground',
+                    state === 'completed' && 'text-foreground',
                     state === 'running' && 'text-info',
                     state === 'pending' && 'text-muted-foreground/60',
                   )}
                 >
-                  {step.label}
+                  {step.script_slug ?? step.name}
                 </span>
-                {state === 'done' && <span className="ml-auto text-[10px] text-success">acked</span>}
+                <span className={cn('ml-auto text-[10px]', state === 'completed' && 'text-success', failed && 'text-destructive')}>
+                  {state.replaceAll('_', ' ')}
+                </span>
               </div>
             )
           })}
