@@ -17032,6 +17032,7 @@ type ManagedConfigHelperRequest struct {
 	TransactionId          string                 `protobuf:"bytes,7,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	ExpectedPreviousSha256 []byte                 `protobuf:"bytes,8,opt,name=expected_previous_sha256,json=expectedPreviousSha256,proto3" json:"expected_previous_sha256,omitempty"` // empty means the live target must be absent
 	Generation             uint64                 `protobuf:"varint,9,opt,name=generation,proto3" json:"generation,omitempty"`
+	RetryOfTransactionId   string                 `protobuf:"bytes,10,opt,name=retry_of_transaction_id,json=retryOfTransactionId,proto3" json:"retry_of_transaction_id,omitempty"` // exact preceding attempt of the same captured operation
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -17127,6 +17128,13 @@ func (x *ManagedConfigHelperRequest) GetGeneration() uint64 {
 		return x.Generation
 	}
 	return 0
+}
+
+func (x *ManagedConfigHelperRequest) GetRetryOfTransactionId() string {
+	if x != nil {
+		return x.RetryOfTransactionId
+	}
+	return ""
 }
 
 type ManagedConfigHelperResponse struct {
@@ -19143,7 +19151,7 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\fcomponent_id\x18\x01 \x01(\tR\vcomponentId\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x02 \x01(\x04R\n" +
-	"generation\"\xf9\x02\n" +
+	"generation\"\xb0\x03\n" +
 	"\x1aManagedConfigHelperRequest\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12\x1f\n" +
 	"\vartifact_id\x18\x02 \x01(\tR\n" +
@@ -19156,7 +19164,9 @@ const file_proto_agent_proto_rawDesc = "" +
 	"\x18expected_previous_sha256\x18\b \x01(\fR\x16expectedPreviousSha256\x12\x1e\n" +
 	"\n" +
 	"generation\x18\t \x01(\x04R\n" +
-	"generation\"\x8a\x03\n" +
+	"generation\x125\n" +
+	"\x17retry_of_transaction_id\x18\n" +
+	" \x01(\tR\x14retryOfTransactionId\"\x8a\x03\n" +
 	"\x1bManagedConfigHelperResponse\x12\x16\n" +
 	"\x06schema\x18\x01 \x01(\rR\x06schema\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12J\n" +

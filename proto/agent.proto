@@ -1920,6 +1920,7 @@ message ManagedConfigHelperRequest {
   string transaction_id = 7;
   bytes expected_previous_sha256 = 8; // empty means the live target must be absent
   uint64 generation = 9;
+  string retry_of_transaction_id = 10; // exact preceding attempt of the same captured operation
 }
 
 enum ManagedConfigOperation {

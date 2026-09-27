@@ -155,6 +155,10 @@ func publish(
 	if err != nil {
 		return nil, err
 	}
+	if request.RetryOfTransactionId != "" && ownerExists && owner == request.RetryOfTransactionId &&
+		existed && digestEqual(previous, request.Sha256) {
+		return publishRetry(ctx, root, tx, request)
+	}
 	if len(request.ExpectedPreviousSha256) == 0 {
 		if existed {
 			if ownerExists {
@@ -333,6 +337,15 @@ func replayPublish(
 	}
 	switch {
 	case candidateLive && targetOwnerMatches(owner, ownerExists, request.TransactionId, true):
+	case candidateLive && request.RetryOfTransactionId != "" &&
+		targetOwnerMatches(owner, ownerExists, request.RetryOfTransactionId, true):
+		if _, err := retrySource(root, request); err != nil {
+			return nil, err
+		}
+		if err := writeTargetOwner(ctx, root, request.RelativePath, request.TransactionId); err != nil {
+			return nil, err
+		}
+		disposition = agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_RECOVERED
 	case candidateLive && recoveryOwnershipMatches:
 		if err := writeTargetOwner(ctx, root, request.RelativePath, request.TransactionId); err != nil {
 			return nil, err
@@ -445,6 +458,8 @@ func validateRequest(request *agentpb.ManagedConfigHelperRequest) (*agentpb.Mana
 	if request == nil || request.GetSchema() != SchemaVersion || !validArtifactID(request.GetArtifactId()) ||
 		!validRelativePath(request.GetRelativePath()) ||
 		!validTransactionID(request.GetTransactionId()) ||
+		request.GetRetryOfTransactionId() != "" && (!validTransactionID(request.GetRetryOfTransactionId()) ||
+			request.GetRetryOfTransactionId() == request.GetTransactionId()) ||
 		request.GetGeneration() == 0 ||
 		len(request.GetSha256()) != sha256.Size ||
 		len(request.GetExpectedPreviousSha256()) != 0 && len(request.GetExpectedPreviousSha256()) != sha256.Size {

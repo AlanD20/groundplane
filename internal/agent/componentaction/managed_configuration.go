@@ -81,19 +81,27 @@ func managedConfigRequest(
 	relativePath string,
 	operation agentpb.ManagedConfigOperation,
 ) *agentpb.ManagedConfigHelperRequest {
+	request := &agentpb.ManagedConfigHelperRequest{
+		Schema: managedconfighelper.SchemaVersion, ArtifactId: action.GetArtifactId(),
+		RelativePath: relativePath, Sha256: append([]byte(nil), action.GetArtifactDigest()...),
+		ExpectedPreviousSha256: append([]byte(nil), action.GetExpectedPreviousArtifactDigest()...),
+		Operation:              operation, TransactionId: managedConfigTransactionID(assignment.OperationID, assignment.TaskID, action),
+		Generation: action.GetGeneration(),
+	}
+	if assignment.RetryOf != "" {
+		request.RetryOfTransactionId = managedConfigTransactionID(assignment.OperationID, assignment.RetryOf, action)
+	}
+	return request
+}
+
+func managedConfigTransactionID(operationID, taskID string, action *agentpb.ComponentApply) string {
 	digest := sha256.New()
 	for _, value := range []string{
-		assignment.OperationID, assignment.TaskID, action.GetComponentId(), action.GetArtifactId(),
+		operationID, taskID, action.GetComponentId(), action.GetArtifactId(),
 		strconv.FormatUint(action.GetGeneration(), 10),
 	} {
 		_, _ = digest.Write([]byte(value))
 		_, _ = digest.Write([]byte{0})
 	}
-	return &agentpb.ManagedConfigHelperRequest{
-		Schema: managedconfighelper.SchemaVersion, ArtifactId: action.GetArtifactId(),
-		RelativePath: relativePath, Sha256: append([]byte(nil), action.GetArtifactDigest()...),
-		ExpectedPreviousSha256: append([]byte(nil), action.GetExpectedPreviousArtifactDigest()...),
-		Operation:              operation, TransactionId: "mct_" + hex.EncodeToString(digest.Sum(nil)),
-		Generation: action.GetGeneration(),
-	}
+	return "mct_" + hex.EncodeToString(digest.Sum(nil))
 }

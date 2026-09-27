@@ -28,7 +28,9 @@ func TestManagedConfigRequestIdentityIsTaskAttemptScoped(t *testing.T) {
 		"config/Corefile",
 		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK,
 	)
-	retry := managedConfigRequest(testtaskassignment.Assignment{OperationID: "op_exact", TaskID: "task_retry"}, action,
+	retry := managedConfigRequest(
+		testtaskassignment.Assignment{OperationID: "op_exact", TaskID: "task_retry", RetryOf: "task_first"},
+		action,
 		"config/Corefile",
 		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH,
 	)
@@ -41,5 +43,8 @@ func TestManagedConfigRequestIdentityIsTaskAttemptScoped(t *testing.T) {
 	}
 	if first.GetTransactionId() == retry.GetTransactionId() {
 		t.Fatalf("retry reused compensated transaction identity %q", first.GetTransactionId())
+	}
+	if retry.GetRetryOfTransactionId() != first.GetTransactionId() {
+		t.Fatal("retry lost the exact predecessor transaction authority")
 	}
 }

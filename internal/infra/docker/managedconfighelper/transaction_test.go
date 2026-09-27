@@ -501,6 +501,7 @@ func terminalRequest(
 		ExpectedPreviousSha256: append([]byte(nil), request.ExpectedPreviousSha256...),
 		Operation:              operation,
 		TransactionId:          request.TransactionId,
+		RetryOfTransactionId:   request.RetryOfTransactionId,
 		Generation:             request.Generation,
 	}
 }

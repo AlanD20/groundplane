@@ -84,6 +84,7 @@ func sameTransaction(manifest, request *agentpb.ManagedConfigHelperRequest) bool
 		manifest.ArtifactId == request.ArtifactId &&
 		manifest.RelativePath == request.RelativePath &&
 		manifest.TransactionId == request.TransactionId &&
+		manifest.RetryOfTransactionId == request.RetryOfTransactionId &&
 		manifest.Generation == request.Generation &&
 		subtle.ConstantTimeCompare(manifest.Sha256, request.Sha256) == 1 &&
 		subtle.ConstantTimeCompare(manifest.ExpectedPreviousSha256, request.ExpectedPreviousSha256) == 1
