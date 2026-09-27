@@ -68,6 +68,26 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 			},
 		},
 		{
+			name: "missing environment", ownerKind: testrunners.RunnerOwnerEnvironment, wantedKind: errs.KindEnvironmentNotFound,
+			mutate: func(t *testing.T, store *memoryHierarchyStore, record testrunners.RunnerRecord) {
+				connectorDeletionDeleteKey(t, store, testhierarchy.EnvironmentKey(record.Desired.OwnerID))
+			},
+		},
+		{
+			name: "environment tombstone", ownerKind: testrunners.RunnerOwnerEnvironment, wantedKind: errs.KindResourceInUse,
+			mutate: func(t *testing.T, store *memoryHierarchyStore, record testrunners.RunnerRecord) {
+				connectorDeletionPutKey(
+					t,
+					store,
+					testdeletions.TombstoneKey(
+						string(testdeletions.DeletionTargetEnvironment),
+						record.Desired.OwnerID,
+					),
+					[]byte("fenced"),
+				)
+			},
+		},
+		{
 			name: "missing owner index", ownerKind: testrunners.RunnerOwnerTenant, wantedKind: errs.KindInternal,
 			mutate: func(t *testing.T, store *memoryHierarchyStore, record testrunners.RunnerRecord) {
 				connectorDeletionDeleteKey(t, store, testrunners.RunnerOwnerKey(
@@ -83,8 +103,13 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 			ownerID := tenantID
 			if test.ownerKind == testrunners.RunnerOwnerProject {
 				ownerID = projectID
+			} else if test.ownerKind == testrunners.RunnerOwnerEnvironment {
+				ownerID = runnerTestEnvironment(t, store, tenantID, projectID)
 			}
 			desired := runnerTestDesired(380+index, test.ownerKind, ownerID, tenantID)
+			if test.ownerKind == testrunners.RunnerOwnerEnvironment {
+				desired.ParentProjectID = projectID
+			}
 			createTask := runnerTestTask(
 				desired,
 				testtaskjournal.TaskCreate,
@@ -139,6 +164,9 @@ func TestRunnerRemovalRetryClassifiesOwnerEvidenceAndDeletionFences(t *testing.T
 			if test.ownerKind == testrunners.RunnerOwnerProject {
 				retryMarker.Locator.ScopeKind = testidempotency.IdempotencyScopeProject
 				retryMarker.Locator.ScopeID = projectID
+			} else if test.ownerKind == testrunners.RunnerOwnerEnvironment {
+				retryMarker.Locator.ScopeKind = testidempotency.IdempotencyScopeEnvironment
+				retryMarker.Locator.ScopeID = ownerID
 			} else {
 				retryMarker.Locator.ScopeKind = testidempotency.IdempotencyScopeTenant
 				retryMarker.Locator.ScopeID = tenantID

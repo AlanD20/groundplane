@@ -327,6 +327,7 @@ export type Runner = {
   slug: string;
   tenantId: string;
   projectId: string | null;
+  environmentId: string | null;
   githubUrl: string;
   name: string;
   labels: string[];

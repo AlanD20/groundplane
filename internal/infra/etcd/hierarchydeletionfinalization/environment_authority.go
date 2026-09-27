@@ -16,6 +16,7 @@ import (
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -136,6 +137,7 @@ func environmentDeletionChildAuthorityKeys(environmentID string) []string {
 
 func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID string) []string {
 	return []string{
+		runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerEnvironment, environmentID),
 		blueprints.EnvironmentBlueprintRevisionsPrefix(environmentID),
 		routerecord.OwnerPrefix(environmentID),
 		entries.EntryOwnerCollectionPrefix(environmentID),

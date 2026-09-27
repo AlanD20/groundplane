@@ -3,9 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -78,45 +76,10 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	parentKeys := []string{
-		hierarchyrecord.TenantKey(record.Desired.TenantID),
-		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), record.Desired.TenantID),
-	}
-	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		parentKeys = append(parentKeys,
-			hierarchyrecord.ProjectKey(record.Desired.OwnerID),
-			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), record.Desired.OwnerID),
-		)
-	}
-	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: parentKeys, Revision: revision})
+	parents, err := runnerrecord.NewReader(repository.store).
+		ResolveRunnerParentsAtRevision(ctx, record.Desired, revision)
 	if err != nil {
 		return runnerTaskChange{}, err
-	}
-	if parents == nil || len(parents.Values) != len(parentKeys) {
-		return runnerTaskChange{}, errs.New(errs.KindInternal, "runner owner evidence is incomplete")
-	}
-	if parents.Values[0] == nil {
-		return runnerTaskChange{}, errs.New(errs.KindTenantNotFound, "tenant was not found")
-	}
-	if parents.Values[1] != nil {
-		return runnerTaskChange{}, errs.New(errs.KindResourceInUse, "tenant deletion is in progress")
-	}
-	tenant, err := hierarchyrecord.DecodeTenant(parents.Values[0].Value)
-	if err != nil || tenant.ID != record.Desired.TenantID {
-		return runnerTaskChange{}, recordcodec.CorruptRecord()
-	}
-	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		if parents.Values[2] == nil {
-			return runnerTaskChange{}, errs.New(errs.KindProjectNotFound, "project was not found")
-		}
-		if parents.Values[3] != nil {
-			return runnerTaskChange{}, errs.New(errs.KindResourceInUse, "project deletion is in progress")
-		}
-		project, decodeErr := hierarchyrecord.DecodeProject(parents.Values[2].Value)
-		if decodeErr != nil || project.ID != record.Desired.OwnerID || project.TenantID != tenant.ID ||
-			project.Kind != hierarchyrecord.ProjectKindTenant {
-			return runnerTaskChange{}, recordcodec.CorruptRecord()
-		}
 	}
 	tombstone := deletionrecord.DeletionTombstoneRecord{
 		TargetKind: deletionrecord.DeletionTargetRunner, TargetID: source.Target,
@@ -127,6 +90,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		RunnerID: record.Desired.ID, TaskID: retry.ID,
 		OwnerKind: record.Desired.OwnerKind, OwnerID: record.Desired.OwnerID,
 		TenantID: record.Desired.TenantID, Allocation: record.Allocation, CreatedAt: retry.CreatedAt,
+		ParentProjectID: record.Desired.ParentProjectID,
 	}
 	if !retryEvidence.matchesIntent(intent) {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner removal retry intent changed")
@@ -169,8 +133,6 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 			},
 			{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
 			{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
-			{Key: hierarchyrecord.TenantKey(record.Desired.TenantID), ModRevision: parents.Values[0].ModRevision},
-			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), record.Desired.TenantID)},
 		},
 		mutations: []etcdstore.Mutation{
 			{
@@ -182,17 +144,6 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		},
 		values: [][]byte{tombstoneValue, intentValue, lifecycleValue},
 	}
-	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		change.conditions = append(
-			change.conditions,
-			etcdstore.Condition{
-				Key:         hierarchyrecord.ProjectKey(record.Desired.OwnerID),
-				ModRevision: parents.Values[2].ModRevision,
-			},
-			etcdstore.Condition{
-				Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), record.Desired.OwnerID),
-			},
-		)
-	}
+	change.conditions = append(change.conditions, parents.AdmissionConditions()...)
 	return change, nil
 }

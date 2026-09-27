@@ -16,6 +16,7 @@ const (
 	RunnerTenantIDParam                 = "runner_tenant_id"
 	RunnerOwnerKindParam                = "runner_owner_kind"
 	RunnerOwnerIDParam                  = "runner_owner_id"
+	RunnerParentProjectIDParam          = "runner_parent_project_id"
 	RunnerHostSlotParam                 = "runner_host_slot"
 	RunnerNetworkCIDRParam              = "runner_network_cidr"
 	runnerRemovalIntentPrefix           = "/v1/runtime/runner-removal-intents/"
@@ -29,19 +30,21 @@ func RunnerRemovalTaskParams(record RunnerRecord) map[string]string {
 		RunnerTenantIDParam:               record.Desired.TenantID,
 		RunnerOwnerKindParam:              string(record.Desired.OwnerKind),
 		RunnerOwnerIDParam:                record.Desired.OwnerID,
+		RunnerParentProjectIDParam:        record.Desired.ParentProjectID,
 		RunnerHostSlotParam:               RunnerHostSlotSegment(record.Allocation.Slot),
 		RunnerNetworkCIDRParam:            record.Allocation.NetworkCIDR,
 	}
 }
 
 type RunnerRemovalIntent struct {
-	RunnerID   string                                      `json:"runner_id"`
-	TaskID     string                                      `json:"task_id"`
-	OwnerKind  RunnerOwnerKind                             `json:"owner_kind"`
-	OwnerID    string                                      `json:"owner_id"`
-	TenantID   string                                      `json:"tenant_id"`
-	Allocation runnerallocation.RunnerHostAllocationRecord `json:"allocation"`
-	CreatedAt  time.Time                                   `json:"created_at"`
+	RunnerID        string                                      `json:"runner_id"`
+	TaskID          string                                      `json:"task_id"`
+	OwnerKind       RunnerOwnerKind                             `json:"owner_kind"`
+	OwnerID         string                                      `json:"owner_id"`
+	TenantID        string                                      `json:"tenant_id"`
+	ParentProjectID string                                      `json:"parent_project_id,omitempty"`
+	Allocation      runnerallocation.RunnerHostAllocationRecord `json:"allocation"`
+	CreatedAt       time.Time                                   `json:"created_at"`
 }
 
 func RunnerRemovalIntentKey(runnerID string) string {
@@ -51,6 +54,7 @@ func RunnerRemovalIntentKey(runnerID string) string {
 func validateRunnerRemovalIntent(intent RunnerRemovalIntent) error {
 	desired := RunnerDesiredRecord{
 		ID: intent.RunnerID, OwnerKind: intent.OwnerKind, OwnerID: intent.OwnerID, TenantID: intent.TenantID,
+		ParentProjectID: intent.ParentProjectID,
 	}
 	if ValidateRunnerOwnership(desired) != nil || ids.Validate(ids.KindTask, intent.TaskID) != nil ||
 		intent.Allocation.Validate() != nil || !recordcodec.IsCanonicalUTC(intent.CreatedAt) {
@@ -119,5 +123,6 @@ func DecodeRunnerDeletionTombstone(value []byte) (deletionrecord.DeletionTombsto
 func RunnerIntentMatchesRecord(intent RunnerRemovalIntent, record RunnerRecord, taskID string) bool {
 	return intent.RunnerID == record.Desired.ID && intent.TaskID == taskID &&
 		intent.OwnerKind == record.Desired.OwnerKind && intent.OwnerID == record.Desired.OwnerID &&
-		intent.TenantID == record.Desired.TenantID && intent.Allocation == record.Allocation
+		intent.TenantID == record.Desired.TenantID && intent.ParentProjectID == record.Desired.ParentProjectID &&
+		intent.Allocation == record.Allocation
 }

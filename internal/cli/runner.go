@@ -11,8 +11,7 @@ import (
 
 const maximumGitHubRegistrationTokenBytes = 4096
 
-// runner: list | add | show | edit | retry | remove. Scope = tenant (org-scoped) OR
-// project (repo-scoped) — see api-cli.md: "`?tenant=` or `?project=`".
+// Runner ownership follows the selected Tenant, Project or Environment scope.
 // The GitHub registration token is operator-provided and short-lived —
 // Groundplane never generates or auto-fetches it. See mvp.md, "Runner".
 func newRunnerCmd() *cobra.Command {
@@ -26,8 +25,11 @@ func newRunnerCmd() *cobra.Command {
 			app := fromContext(cmd)
 			tenantID := ""
 			projectID := ""
+			environmentID := ""
 			var err error
-			if app.Scope.Project != "" {
+			if app.Scope.Environment != "" {
+				environmentID, err = resolveEnvironmentTarget(cmd, app.Scope.Environment)
+			} else if app.Scope.Project != "" {
 				projectID, err = resolveProjectTarget(cmd, app.Scope.Project)
 			} else {
 				tenantID, err = resolveTenantTarget(cmd, app.Scope.Tenant)
@@ -35,7 +37,7 @@ func newRunnerCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			page, err := app.Client.ListRunners(cmd.Context(), tenantID, projectID, 0, "")
+			page, err := app.Client.ListRunners(cmd.Context(), tenantID, projectID, environmentID, 0, "")
 			if err != nil {
 				return err
 			}
@@ -49,22 +51,20 @@ func newRunnerCmd() *cobra.Command {
 	}
 	cmd.AddCommand(list)
 
-	var project, tokenFile, githubURL string
+	var tokenFile, githubURL string
 	var labels []string
 	add := &cobra.Command{
 		Use:   "add <slug>",
-		Short: "Register a runner (repo-scoped with -p/--project, org-scoped without)",
+		Short: "Register a Runner in the selected Tenant, Project or Environment",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app := fromContext(cmd)
-			proj := project
-			if proj == "" {
-				proj = app.Scope.Project
-			}
 			request := apiTypes.RunnerCreateRequest{Slug: args[0], GitHubURL: githubURL, Labels: labels}
 			var err error
-			if proj != "" {
-				request.ProjectID, err = resolveProjectTarget(cmd, proj)
+			if app.Scope.Environment != "" {
+				request.EnvironmentID, err = resolveEnvironmentTarget(cmd, app.Scope.Environment)
+			} else if app.Scope.Project != "" {
+				request.ProjectID, err = resolveProjectTarget(cmd, app.Scope.Project)
 			} else {
 				request.TenantID, err = resolveTenantTarget(cmd, app.Scope.Tenant)
 			}
@@ -84,8 +84,6 @@ func newRunnerCmd() *cobra.Command {
 			return app.Out.Render(headers, rows, accepted)
 		},
 	}
-	add.Flags().
-		StringVar(&project, "project", "", "repo-scoped: the project slug (defaults to -p/--project; omit both for org-scoped)")
 	add.Flags().
 		StringVar(&tokenFile, "registration-token-file", "", "read the short-lived GitHub registration token from PATH, or - for stdin")
 	add.Flags().StringVar(&githubURL, "github-url", "", "GitHub organization or repository URL")
@@ -206,8 +204,11 @@ func resolveRunnerTarget(cmd *cobra.Command, argument string) (string, error) {
 	}
 	tenantID := ""
 	projectID := ""
+	environmentID := ""
 	var err error
-	if app.Scope.Project != "" {
+	if app.Scope.Environment != "" {
+		environmentID, err = resolveEnvironmentTarget(cmd, app.Scope.Environment)
+	} else if app.Scope.Project != "" {
 		projectID, err = resolveProjectTarget(cmd, app.Scope.Project)
 	} else {
 		tenantID, err = resolveTenantTarget(cmd, app.Scope.Tenant)
@@ -216,7 +217,7 @@ func resolveRunnerTarget(cmd *cobra.Command, argument string) (string, error) {
 		return "", err
 	}
 	for cursor := ""; ; {
-		page, err := app.Client.ListRunners(cmd.Context(), tenantID, projectID, 200, cursor)
+		page, err := app.Client.ListRunners(cmd.Context(), tenantID, projectID, environmentID, 200, cursor)
 		if err != nil {
 			return "", err
 		}
@@ -238,6 +239,7 @@ func runnerFields(runner apiTypes.Runner) map[string]any {
 		"slug":           runner.Slug,
 		"tenant_id":      runner.TenantID,
 		"project_id":     runner.ProjectID,
+		"environment_id": runner.EnvironmentID,
 		"github_url":     runner.GitHubURL,
 		"name":           runner.Name,
 		"labels":         runner.Labels,

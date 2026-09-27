@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -100,7 +99,8 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		RunnerID: current.Record.Desired.ID, TaskID: task.ID,
 		OwnerKind: current.Record.Desired.OwnerKind, OwnerID: current.Record.Desired.OwnerID,
 		TenantID: current.Record.Desired.TenantID, Allocation: current.Record.Allocation,
-		CreatedAt: task.CreatedAt,
+		ParentProjectID: current.Record.Desired.ParentProjectID,
+		CreatedAt:       task.CreatedAt,
 	}
 	task = bindRunnerTaskMarker(task, marker)
 	if err := ValidateTaskRecord(task); err != nil {
@@ -164,29 +164,8 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: taskjournal.TaskStorageKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
 		{Key: runnerrecord.RunnerRemovalIntentKey(current.Record.Desired.ID)},
-		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.Tenant().Revision},
-		{
-			Key: deletionrecord.TombstoneKey(
-				string(deletionrecord.DeletionTargetTenant),
-				current.Record.Desired.TenantID,
-			),
-		},
 	}
-	if current.Record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		conditions = append(
-			conditions,
-			etcdstore.Condition{
-				Key:         hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID),
-				ModRevision: parents.Project().Revision,
-			},
-			etcdstore.Condition{
-				Key: deletionrecord.TombstoneKey(
-					string(deletionrecord.DeletionTargetProject),
-					current.Record.Desired.OwnerID,
-				),
-			},
-		)
-	}
+	conditions = append(conditions, parents.AdmissionConditions()...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{

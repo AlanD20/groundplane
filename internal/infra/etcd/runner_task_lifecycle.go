@@ -8,30 +8,26 @@ import (
 )
 
 type runnerRemovalTaskEvidence struct {
-	tenantID    string
-	ownerKind   runnerrecord.RunnerOwnerKind
-	ownerID     string
-	hostSlot    uint32
-	networkCIDR string
+	tenantID        string
+	ownerKind       runnerrecord.RunnerOwnerKind
+	ownerID         string
+	parentProjectID string
+	hostSlot        uint32
+	networkCIDR     string
 }
 
 func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence, error) {
 	if task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
-		ids.Validate(ids.KindRunner, task.Target) != nil || len(task.Params) != 6 ||
+		ids.Validate(ids.KindRunner, task.Target) != nil || len(task.Params) != 7 ||
 		task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner ||
 		ids.Validate(ids.KindTenant, task.Params[runnerrecord.RunnerTenantIDParam]) != nil {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
 	}
 	ownerKind := runnerrecord.RunnerOwnerKind(task.Params[runnerrecord.RunnerOwnerKindParam])
 	ownerID := task.Params[runnerrecord.RunnerOwnerIDParam]
-	if (ownerKind == runnerrecord.RunnerOwnerTenant &&
-		(ids.Validate(ids.KindTenant, ownerID) != nil || ownerID != task.Params[runnerrecord.RunnerTenantIDParam])) ||
-		(ownerKind == runnerrecord.RunnerOwnerProject && ids.Validate(ids.KindProject, ownerID) != nil) ||
-		(ownerKind != runnerrecord.RunnerOwnerTenant && ownerKind != runnerrecord.RunnerOwnerProject) {
-		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
-	}
 	expectedOwner, err := runnerTaskOwner(runnerrecord.RunnerDesiredRecord{
 		ID: task.Target, OwnerKind: ownerKind, OwnerID: ownerID, TenantID: task.Params[runnerrecord.RunnerTenantIDParam],
+		ParentProjectID: task.Params[runnerrecord.RunnerParentProjectIDParam],
 	})
 	if err != nil || task.Owner != expectedOwner {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid owner")
@@ -45,18 +41,21 @@ func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence
 	}
 	return runnerRemovalTaskEvidence{
 		tenantID: task.Params[runnerrecord.RunnerTenantIDParam], ownerKind: ownerKind, ownerID: ownerID,
-		hostSlot: hostSlot, networkCIDR: task.Params[runnerrecord.RunnerNetworkCIDRParam],
+		parentProjectID: task.Params[runnerrecord.RunnerParentProjectIDParam],
+		hostSlot:        hostSlot, networkCIDR: task.Params[runnerrecord.RunnerNetworkCIDRParam],
 	}, nil
 }
 
 func (evidence runnerRemovalTaskEvidence) matchesRecord(record runnerrecord.RunnerRecord) bool {
 	return evidence.tenantID == record.Desired.TenantID &&
+		evidence.parentProjectID == record.Desired.ParentProjectID &&
 		evidence.ownerKind == record.Desired.OwnerKind && evidence.ownerID == record.Desired.OwnerID &&
 		evidence.hostSlot == record.Allocation.Slot && evidence.networkCIDR == record.Allocation.NetworkCIDR
 }
 
 func (evidence runnerRemovalTaskEvidence) matchesIntent(intent runnerrecord.RunnerRemovalIntent) bool {
 	return evidence.tenantID == intent.TenantID && evidence.ownerKind == intent.OwnerKind &&
+		evidence.parentProjectID == intent.ParentProjectID &&
 		evidence.ownerID == intent.OwnerID && evidence.hostSlot == intent.Allocation.Slot &&
 		evidence.networkCIDR == intent.Allocation.NetworkCIDR
 }

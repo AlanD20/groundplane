@@ -30,12 +30,17 @@ func ValidateRunnerOwnership(desired RunnerDesiredRecord) error {
 	}
 	switch desired.OwnerKind {
 	case RunnerOwnerTenant:
-		if desired.OwnerID != desired.TenantID {
+		if desired.OwnerID != desired.TenantID || desired.ParentProjectID != "" {
 			return errs.New(errs.KindValidationFailed, "tenant-owned runner has mismatched ownership")
 		}
 	case RunnerOwnerProject:
-		if ids.Validate(ids.KindProject, desired.OwnerID) != nil {
+		if ids.Validate(ids.KindProject, desired.OwnerID) != nil || desired.ParentProjectID != "" {
 			return errs.New(errs.KindValidationFailed, "project-owned runner owner is invalid")
+		}
+	case RunnerOwnerEnvironment:
+		if ids.Validate(ids.KindEnvironment, desired.OwnerID) != nil ||
+			ids.Validate(ids.KindProject, desired.ParentProjectID) != nil {
+			return errs.New(errs.KindValidationFailed, "environment-owned runner owner is invalid")
 		}
 	default:
 		return errs.New(errs.KindValidationFailed, "runner owner kind is invalid")
@@ -105,9 +110,12 @@ func CanonicalRunnerGitHubURL(ownerKind RunnerOwnerKind, value string) (string, 
 		if len(parts) != 1 {
 			return "", errs.New(errs.KindValidationFailed, "tenant runner github_url must identify an organization")
 		}
-	case RunnerOwnerProject:
+	case RunnerOwnerProject, RunnerOwnerEnvironment:
 		if len(parts) != 2 || !validGitHubRepository(parts[1]) {
-			return "", errs.New(errs.KindValidationFailed, "project runner github_url must identify a repository")
+			return "", errs.New(
+				errs.KindValidationFailed,
+				"project or environment runner github_url must identify a repository",
+			)
 		}
 	default:
 		return "", errs.New(errs.KindValidationFailed, "runner owner kind is invalid")

@@ -4,18 +4,18 @@
 This guide records the accepted capability and operator constraints; it is not a
 claim that current GP can safely host production CI jobs.
 
-A Runner is a persistent GitHub Actions self-hosted runner owned by a Tenant or
-Project. It is not a Project or an ordinary Agent workload. The native Controller
+A Runner is a persistent GitHub Actions self-hosted runner owned by a Tenant,
+Project or Environment. It is not a Project or an ordinary Agent workload. The native Controller
 owns its local lifecycle and registration.
 
 ## Creation and limits
 
-Creation selects one Tenant or Project owner, a canonical GitHub repository or
+Creation selects one Tenant, Project or Environment owner, a canonical GitHub repository or
 organization URL, a slug, optional custom labels and a fresh short-lived GitHub
 registration token. Obtain the token through GitHub settings; GP does not create
 or fetch it.
 
-A Tenant can have at most five Runner records across direct and Project scopes.
+A Tenant can have at most five Runner records across all three ownership scopes.
 Provisioning, failed and deleting records count until cleanup releases them.
 Host identity slots, subordinate UID/GID ranges and network space are also finite;
 exhaustion reports `resource.in_use`, not automatic pool expansion.
@@ -49,6 +49,27 @@ a `/24`, `/25` or `/26`. It joins no Environment, backing, platform or other
 Runner network. Egress policy blocks GP private pools except the authenticated
 Controller endpoint while allowing DNS and ordinary internet access. Same-Tenant
 ownership does not permit communication with another Runner.
+
+## GP command access and image delivery
+
+**Accepted, not yet implemented:** workflows may run GP commands against resources
+in their Runner's immutable scope. A Tenant Runner covers that Tenant and its
+Projects and Environments; a Project Runner covers that Project and its
+Environments; an Environment Runner covers only that Environment. This is not a
+Service deployment allowlist.
+
+The Controller checks the target and referenced resources, not just the command
+name or a client-supplied scope. Lists, logs, Tasks and replay responses must stay
+within the same boundary. A Runner cannot access its parent or sibling scopes,
+manage host-wide resources, or create another Runner with broader authority.
+Existing product protections, deletion approvals and concurrency checks still
+apply; Runner authentication does not bypass them.
+
+Jobs use a separate authenticated channel. GP's unauthenticated human API remains
+private and is not a workflow endpoint. Image delivery transfers a specific built
+image from the Runner's daemon to the host under Controller authority, then uses
+the ordinary scoped Deploy operation. It must not expose host Docker or replace
+a serving Release after a failed build or failed handoff.
 
 ## Status and removal
 

@@ -17,10 +17,6 @@ func PublicProjection(
 	if err != nil {
 		return apiTypes.Runner{}, err
 	}
-	projectID := ""
-	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		projectID = record.Desired.OwnerID
-	}
 	lifecycle := apiTypes.RunnerLifecycle(record.ProvisioningState)
 	var removeTaskID *string
 	if tombstone != nil {
@@ -37,8 +33,9 @@ func PublicProjection(
 	}
 	return apiTypes.Runner{
 		ID: record.Desired.ID, Slug: record.Desired.Slug,
-		TenantID: record.Desired.TenantID, ProjectID: projectID,
-		GitHubURL: record.Desired.GitHubURL, Name: name,
+		TenantID: record.Desired.TenantID, ProjectID: record.Desired.ProjectID(),
+		EnvironmentID: record.Desired.EnvironmentID(),
+		GitHubURL:     record.Desired.GitHubURL, Name: name,
 		Labels: append([]string(nil), record.Desired.Labels...), Lifecycle: lifecycle,
 		CreateTaskID: record.CreateTaskID, RemoveTaskID: removeTaskID,
 		Online: online, ObservedAt: observedAt,

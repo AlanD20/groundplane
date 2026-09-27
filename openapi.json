@@ -4346,6 +4346,9 @@
           "created_at": {
             "type": "string"
           },
+          "environment_id": {
+            "type": "string"
+          },
           "github_url": {
             "type": "string"
           },
@@ -4423,6 +4426,9 @@
             ],
             "format": "uri",
             "readOnly": true,
+            "type": "string"
+          },
+          "environment_id": {
             "type": "string"
           },
           "github_url": {
@@ -10944,6 +10950,15 @@
             "name": "project",
             "schema": {
               "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "environment",
+            "schema": {
+              "pattern": "^env_[0-9A-HJKMNP-TV-Z]{26}$",
               "type": "string"
             }
           },

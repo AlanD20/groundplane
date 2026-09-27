@@ -50,7 +50,7 @@ without manual repair. GP software upgrades must preserve application service.
 | Script | A Service-associated manual action or deployment hook |
 | Release / Release Group | Immutable deployment history / an explicitly ordered group operation |
 | Task | Durable asynchronous work, including progress, failure, Retry and Abort |
-| Runner | A Tenant- or Project-owned isolated GitHub Actions runtime |
+| Runner | A Tenant-, Project- or Environment-owned isolated GitHub Actions runtime |
 | Component | A compiled integration using granted GP capabilities; not the Controller or Agent |
 
 Stable ids are references. Slugs and Environment names are scoped human labels;

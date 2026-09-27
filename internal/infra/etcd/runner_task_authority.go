@@ -1,9 +1,7 @@
 package etcd
 
 import (
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,19 +17,7 @@ func newRunnerTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	fences := []etcdstore.Condition{
-		{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.Tenant().Revision},
-	}
-	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		fences = append(
-			fences,
-			etcdstore.Condition{
-				Key:         hierarchyrecord.ProjectKey(desired.OwnerID),
-				ModRevision: parents.Project().Revision,
-			},
-		)
-	}
-	return newTaskInitiation(owner, actor, fences...)
+	return newTaskInitiation(owner, actor, parents.ExistenceConditions()...)
 }
 
 func validateRunnerCreateTask(desired runnerrecord.RunnerDesiredRecord, task TaskRecord) error {
@@ -53,13 +39,7 @@ func validateRunnerCreateTask(desired runnerrecord.RunnerDesiredRecord, task Tas
 }
 
 func runnerTaskOwner(desired runnerrecord.RunnerDesiredRecord) (taskjournal.TaskOwner, error) {
-	if err := runnerrecord.ValidateRunnerOwnership(desired); err != nil {
-		return taskjournal.TaskOwner{}, err
-	}
-	if desired.OwnerKind == runnerrecord.RunnerOwnerTenant {
-		return taskjournal.TenantTaskOwner(desired.TenantID)
-	}
-	return taskjournal.TenantProjectTaskOwner(desired.TenantID, desired.OwnerID)
+	return runnerrecord.TaskOwner(desired)
 }
 
 func validateRunnerCreateMarker(
@@ -110,7 +90,8 @@ func validateRunnerOperationMarker(
 
 func validateRunnerRetryMarkerEnvelope(task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {
 	if marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeTenant &&
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject {
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject &&
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment {
 		return errs.New(errs.KindValidationFailed, "runner retry marker scope is invalid")
 	}
 	return validateRunnerMarkerEnvelope(task, marker, http.MethodPost, "/runners/{id}/retry", nil, false)
@@ -140,10 +121,7 @@ func validateRunnerMarkerScope(
 	desired runnerrecord.RunnerDesiredRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
-	scopeKind := idempotencyrecord.IdempotencyScopeTenant
-	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		scopeKind = idempotencyrecord.IdempotencyScopeProject
-	}
+	scopeKind := desired.IdempotencyScope()
 	if marker.Locator.ScopeKind != scopeKind || marker.Locator.ScopeID != desired.OwnerID {
 		return errs.New(errs.KindValidationFailed, "runner task marker does not match its owner-scoped task")
 	}

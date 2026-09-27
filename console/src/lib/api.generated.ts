@@ -2805,6 +2805,7 @@ export interface components {
             readonly $schema?: string;
             create_task_id: string;
             created_at: string;
+            environment_id?: string;
             github_url: string;
             id: string;
             labels?: string[] | null;
@@ -2825,6 +2826,7 @@ export interface components {
              * @example /api/v1/RunnerCreateRequest.json
              */
             readonly $schema?: string;
+            environment_id?: string;
             github_url: string;
             labels?: string[] | null;
             project_id?: string;
@@ -6131,6 +6133,7 @@ export interface operations {
             query?: {
                 tenant?: string;
                 project?: string;
+                environment?: string;
                 limit?: number;
                 cursor?: string;
             };

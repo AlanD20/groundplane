@@ -14,6 +14,7 @@ func (c *Client) ListRunners(
 	ctx context.Context,
 	tenantID string,
 	projectID string,
+	environmentID string,
 	limit int,
 	cursor string,
 ) (apiTypes.RunnerPage, error) {
@@ -27,6 +28,9 @@ func (c *Client) ListRunners(
 	}
 	if projectID != "" {
 		params.Project = &projectID
+	}
+	if environmentID != "" {
+		params.Environment = &environmentID
 	}
 	if limit != 0 {
 		value := int64(limit)
@@ -103,6 +107,9 @@ func (c *Client) CreateRunner(
 	}
 	if request.ProjectID != "" {
 		body.ProjectId = &request.ProjectID
+	}
+	if request.EnvironmentID != "" {
+		body.EnvironmentId = &request.EnvironmentID
 	}
 	if request.Labels != nil {
 		labels := append([]string(nil), request.Labels...)
@@ -196,6 +203,10 @@ func (c *Client) RemoveRunner(ctx context.Context, id string) (apiTypes.TaskAcce
 }
 
 func runnerFromGenerated(runner generated.Runner) apiTypes.Runner {
+	environmentID := ""
+	if runner.EnvironmentId != nil {
+		environmentID = *runner.EnvironmentId
+	}
 	projectID := ""
 	if runner.ProjectId != nil {
 		projectID = *runner.ProjectId
@@ -206,7 +217,8 @@ func runnerFromGenerated(runner generated.Runner) apiTypes.Runner {
 	}
 	return apiTypes.Runner{
 		ID: runner.Id, Slug: runner.Slug, TenantID: runner.TenantId, ProjectID: projectID,
-		GitHubURL: runner.GithubUrl, Name: runner.Name, Labels: labels,
+		EnvironmentID: environmentID,
+		GitHubURL:     runner.GithubUrl, Name: runner.Name, Labels: labels,
 		Lifecycle: apiTypes.RunnerLifecycle(runner.Lifecycle), CreateTaskID: runner.CreateTaskId,
 		RemoveTaskID: runner.RemoveTaskId, Online: runner.Online,
 		ObservedAt: runner.ObservedAt, CreatedAt: runner.CreatedAt,

@@ -56,10 +56,11 @@ type RunnerProvisioner interface {
 }
 
 type runnerListInput struct {
-	Tenant  string `query:"tenant" pattern:"^tnt_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Project string `query:"project" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Limit   int    `query:"limit" required:"false" minimum:"1" maximum:"200"`
-	Cursor  string `query:"cursor" required:"false"`
+	Tenant      string `query:"tenant" pattern:"^tnt_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Project     string `query:"project" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Environment string `query:"environment" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Limit       int    `query:"limit" required:"false" minimum:"1" maximum:"200"`
+	Cursor      string `query:"cursor" required:"false"`
 }
 
 type runnerShowInput struct {
@@ -95,11 +96,8 @@ func (s *Server) listRunners(
 	if s.runners == nil {
 		return nil, errs.New(errs.KindInternal, "Runner reader is not configured")
 	}
-	if (request.Tenant == "") == (request.Project == "") {
-		return nil, errs.New(errs.KindValidationFailed, "Runner list requires exactly one Tenant or Project")
-	}
 	page, err := s.runners.ListRunners(ctx, runnerrecord.RunnerFilter{
-		TenantID: request.Tenant, ProjectID: request.Project,
+		TenantID: request.Tenant, ProjectID: request.Project, EnvironmentID: request.Environment,
 	}, etcdstore.PageRequest{Limit: request.Limit, Cursor: request.Cursor})
 	if err != nil {
 		return nil, normalizeProjectError(err)

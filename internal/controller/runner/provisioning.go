@@ -52,6 +52,7 @@ type runnerTaskReader interface {
 
 type runnerProjectReader interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 }
 
 // ProvisioningService turns Runner create and failed-create retry requests
@@ -231,12 +232,20 @@ func (service *ProvisioningService) normalizeCreate(
 		Labels: slices.Clone(request.Labels), ImageRef: service.imageRef,
 	}
 	switch {
-	case request.TenantID != "" && request.ProjectID == "":
+	case request.TenantID != "" && request.ProjectID == "" && request.EnvironmentID == "":
 		desired.OwnerKind = runnerrecord.RunnerOwnerTenant
 		desired.OwnerID = request.TenantID
 		desired.TenantID = request.TenantID
-	case request.ProjectID != "" && request.TenantID == "":
-		project, err := service.projects.GetProject(ctx, request.ProjectID)
+	case request.TenantID == "" && ((request.ProjectID != "") != (request.EnvironmentID != "")):
+		projectID := request.ProjectID
+		if request.EnvironmentID != "" {
+			environment, err := service.projects.GetEnvironment(ctx, request.EnvironmentID)
+			if err != nil {
+				return runnerrecord.RunnerDesiredRecord{}, err
+			}
+			projectID = environment.Record.ProjectID
+		}
+		project, err := service.projects.GetProject(ctx, projectID)
 		if err != nil {
 			return runnerrecord.RunnerDesiredRecord{}, err
 		}
@@ -249,10 +258,15 @@ func (service *ProvisioningService) normalizeCreate(
 		desired.OwnerKind = runnerrecord.RunnerOwnerProject
 		desired.OwnerID = project.Record.ID
 		desired.TenantID = project.Record.TenantID
+		if request.EnvironmentID != "" {
+			desired.OwnerKind = runnerrecord.RunnerOwnerEnvironment
+			desired.OwnerID = request.EnvironmentID
+			desired.ParentProjectID = project.Record.ID
+		}
 	default:
 		return runnerrecord.RunnerDesiredRecord{}, errs.New(
 			errs.KindValidationFailed,
-			"Runner creation requires exactly one of tenant_id or project_id",
+			"Runner creation requires exactly one of tenant_id, project_id or environment_id",
 		)
 	}
 	return runnerrecord.NormalizeRunnerDesired(desired)
@@ -269,12 +283,8 @@ func runnerProvisioningLocator(
 	route string,
 	key string,
 ) idempotencyrecord.IdempotencyLocator {
-	scopeKind := idempotencyrecord.IdempotencyScopeTenant
-	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		scopeKind = idempotencyrecord.IdempotencyScopeProject
-	}
 	return idempotencyrecord.IdempotencyLocator{
-		ScopeKind: scopeKind, ScopeID: desired.OwnerID, Method: method, Route: route, Key: key,
+		ScopeKind: desired.IdempotencyScope(), ScopeID: desired.OwnerID, Method: method, Route: route, Key: key,
 	}
 }
 
@@ -290,6 +300,8 @@ func (service *ProvisioningService) protectCreateIntent(
 	ownerField := requestidempotency.Field{Name: "tenant_id", Value: requestidempotency.String(desired.OwnerID)}
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		ownerField = requestidempotency.Field{Name: "project_id", Value: requestidempotency.String(desired.OwnerID)}
+	} else if desired.OwnerKind == runnerrecord.RunnerOwnerEnvironment {
+		ownerField = requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(desired.OwnerID)}
 	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: runnerCreateRoute,
@@ -332,6 +344,8 @@ func runnerIntentScope(locator idempotencyrecord.IdempotencyLocator) requestidem
 	kind := requestidempotency.ScopeTenant
 	if locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject {
 		kind = requestidempotency.ScopeProject
+	} else if locator.ScopeKind == idempotencyrecord.IdempotencyScopeEnvironment {
+		kind = requestidempotency.ScopeEnvironment
 	}
 	return requestidempotency.Scope{Kind: kind, ID: locator.ScopeID}
 }
@@ -422,13 +436,13 @@ func newRunnerCreateTask(
 	idempotencyKey string,
 	now time.Time,
 ) (etcd.TaskRecord, error) {
-	owner, err := runnerTaskOwnerForController(desired)
+	owner, err := runnerrecord.TaskOwner(desired)
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
 	planInput := strings.Join([]string{
 		"groundplane.runner-create.v1", desired.ID, desired.TenantID, string(desired.OwnerKind),
-		desired.OwnerID, desired.Slug, desired.GitHubURL, strings.Join(desired.Labels, "\x1f"), desired.ImageRef,
+		desired.OwnerID, desired.ParentProjectID, desired.Slug, desired.GitHubURL, strings.Join(desired.Labels, "\x1f"), desired.ImageRef,
 	}, "\x00")
 	planDigest := sha256.Sum256([]byte(planInput))
 	return etcd.TaskRecord{
@@ -457,16 +471,6 @@ func newRunnerRetryTask(source etcd.TaskRecord, now time.Time) etcd.TaskRecord {
 		Materializations: slices.Clone(source.Materializations), TimeoutSeconds: source.TimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
-}
-
-func runnerTaskOwnerForController(desired runnerrecord.RunnerDesiredRecord) (taskjournal.TaskOwner, error) {
-	if desired.OwnerKind == runnerrecord.RunnerOwnerTenant {
-		return taskjournal.TenantTaskOwner(desired.TenantID)
-	}
-	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		return taskjournal.TenantProjectTaskOwner(desired.TenantID, desired.OwnerID)
-	}
-	return taskjournal.TaskOwner{}, errs.New(errs.KindValidationFailed, "Runner owner is invalid")
 }
 
 func cloneRunnerTaskParams(source map[string]string) map[string]string {

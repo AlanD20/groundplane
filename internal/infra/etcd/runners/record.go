@@ -21,8 +21,9 @@ const (
 type RunnerOwnerKind string
 
 const (
-	RunnerOwnerTenant  RunnerOwnerKind = "tenant"
-	RunnerOwnerProject RunnerOwnerKind = "project"
+	RunnerOwnerTenant      RunnerOwnerKind = "tenant"
+	RunnerOwnerProject     RunnerOwnerKind = "project"
+	RunnerOwnerEnvironment RunnerOwnerKind = "environment"
 )
 
 type RunnerProvisioningState string
@@ -41,9 +42,12 @@ type RunnerDesiredRecord struct {
 	OwnerKind RunnerOwnerKind `json:"owner_kind"`
 	OwnerID   string          `json:"owner_id"`
 	TenantID  string          `json:"tenant_id"`
-	GitHubURL string          `json:"github_url"`
-	Labels    []string        `json:"labels,omitempty"`
-	ImageRef  string          `json:"image_ref"`
+	// ParentProjectID is present only for Environment ownership. Project
+	// ownership already identifies its Project through OwnerID.
+	ParentProjectID string   `json:"parent_project_id,omitempty"`
+	GitHubURL       string   `json:"github_url"`
+	Labels          []string `json:"labels,omitempty"`
+	ImageRef        string   `json:"image_ref"`
 }
 
 type RunnerRecord struct {

@@ -2268,20 +2268,21 @@ type Runner struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Runner.json
-	Schema       *string         `json:"$schema,omitempty"`
-	CreateTaskId string          `json:"create_task_id"`
-	CreatedAt    string          `json:"created_at"`
-	GithubUrl    string          `json:"github_url"`
-	Id           string          `json:"id"`
-	Labels       *[]string       `json:"labels,omitempty"`
-	Lifecycle    RunnerLifecycle `json:"lifecycle"`
-	Name         string          `json:"name"`
-	ObservedAt   *string         `json:"observed_at"`
-	Online       bool            `json:"online"`
-	ProjectId    *string         `json:"project_id,omitempty"`
-	RemoveTaskId *string         `json:"remove_task_id"`
-	Slug         string          `json:"slug"`
-	TenantId     string          `json:"tenant_id"`
+	Schema        *string         `json:"$schema,omitempty"`
+	CreateTaskId  string          `json:"create_task_id"`
+	CreatedAt     string          `json:"created_at"`
+	EnvironmentId *string         `json:"environment_id,omitempty"`
+	GithubUrl     string          `json:"github_url"`
+	Id            string          `json:"id"`
+	Labels        *[]string       `json:"labels,omitempty"`
+	Lifecycle     RunnerLifecycle `json:"lifecycle"`
+	Name          string          `json:"name"`
+	ObservedAt    *string         `json:"observed_at"`
+	Online        bool            `json:"online"`
+	ProjectId     *string         `json:"project_id,omitempty"`
+	RemoveTaskId  *string         `json:"remove_task_id"`
+	Slug          string          `json:"slug"`
+	TenantId      string          `json:"tenant_id"`
 }
 
 // RunnerLifecycle defines model for Runner.Lifecycle.
@@ -2293,6 +2294,7 @@ type RunnerCreateRequest struct {
 	//
 	// Examples: /api/v1/RunnerCreateRequest.json
 	Schema            *string   `json:"$schema,omitempty"`
+	EnvironmentId     *string   `json:"environment_id,omitempty"`
 	GithubUrl         string    `json:"github_url"`
 	Labels            *[]string `json:"labels,omitempty"`
 	ProjectId         *string   `json:"project_id,omitempty"`
@@ -3231,10 +3233,11 @@ type RouteEditParams struct {
 
 // RunnerListParams defines parameters for RunnerList.
 type RunnerListParams struct {
-	Tenant  *string `form:"tenant,omitempty" json:"tenant,omitempty"`
-	Project *string `form:"project,omitempty" json:"project,omitempty"`
-	Limit   *int64  `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor  *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Tenant      *string `form:"tenant,omitempty" json:"tenant,omitempty"`
+	Project     *string `form:"project,omitempty" json:"project,omitempty"`
+	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
+	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // RunnerCreateParams defines parameters for RunnerCreate.
@@ -12689,6 +12692,18 @@ func NewRunnerListRequest(server string, params *RunnerListParams) (*http.Reques
 		if params.Project != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "project", *params.Project, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Environment != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "environment", *params.Environment, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {

@@ -200,7 +200,7 @@ func runnerTestDesired(
 }
 
 func runnerTestGitHubURL(ownerKind testrunners.RunnerOwnerKind) string {
-	if ownerKind == testrunners.RunnerOwnerProject {
+	if ownerKind == testrunners.RunnerOwnerProject || ownerKind == testrunners.RunnerOwnerEnvironment {
 		return "https://github.com/aland20/groundplane"
 	}
 	return "https://github.com/aland20"
@@ -216,6 +216,8 @@ func runnerTestTask(
 	owner := testtaskjournal.TaskOwner{WorkspaceType: testtaskjournal.TaskWorkspaceTenant, TenantID: desired.TenantID}
 	if desired.OwnerKind == testrunners.RunnerOwnerProject {
 		owner.ProjectID = desired.OwnerID
+	} else if desired.OwnerKind == testrunners.RunnerOwnerEnvironment {
+		owner.ProjectID, owner.EnvironmentID = desired.ParentProjectID, desired.OwnerID
 	}
 	task.ID = ids.NewAt(ids.KindTask, taskJournalTime(), runnerTaskEntropyBase+int64(offset))
 	task.OperationID = ids.NewAt(ids.KindOperation, taskJournalTime(), runnerOperationEntropyBase+int64(offset))
@@ -237,6 +239,8 @@ func runnerTestMarker(task TaskRecord, desired testrunners.RunnerDesiredRecord) 
 	marker.Locator.ScopeKind = testidempotency.IdempotencyScopeTenant
 	if desired.OwnerKind == testrunners.RunnerOwnerProject {
 		marker.Locator.ScopeKind = testidempotency.IdempotencyScopeProject
+	} else if desired.OwnerKind == testrunners.RunnerOwnerEnvironment {
+		marker.Locator.ScopeKind = testidempotency.IdempotencyScopeEnvironment
 	}
 	marker.Locator.ScopeID = desired.OwnerID
 	marker.Locator.Route = "/runners"
@@ -253,4 +257,23 @@ func runnerTestMarker(task TaskRecord, desired testrunners.RunnerDesiredRecord) 
 	}
 	marker.Locator.Key = task.IdempotencyKey
 	return marker
+}
+
+func runnerTestEnvironment(t *testing.T, store *memoryHierarchyStore, tenantID, projectID string) string {
+	t.Helper()
+	hierarchy, err := newHierarchyRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environmentID := ids.NewAt(ids.KindEnvironment, taskJournalTime(), 702)
+	_, err = hierarchy.CreateEnvironment(context.Background(), testhierarchy.EnvironmentRecord{
+		ID: environmentID, ProjectID: projectID, Name: "ci", NetworkPool: "10.242.0.0/24",
+		VolumeDir:         "/var/lib/groundplane/vol/" + tenantID + "/" + projectID + "/" + environmentID,
+		ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
+		CreateTaskID:      ids.NewAt(ids.KindTask, taskJournalTime(), 703), CreatedAt: taskJournalTime(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return environmentID
 }

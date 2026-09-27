@@ -100,14 +100,20 @@ func TestRunnerCreatePublishesOneOwnerAndLowestFreeAllocations(t *testing.T) {
 func TestRunnerCreateReplayAndCombinedTenantQuota(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	_, repository, tenantID, projectID := newRunnerRepositoryFixture(t)
+	store, repository, tenantID, projectID := newRunnerRepositoryFixture(t)
+	environmentID := runnerTestEnvironment(t, store, tenantID, projectID)
 	config := runnerTestAllocationConfig()
 	for index := 0; index < runnerallocation.MaximumTenantRunners; index++ {
 		ownerKind, ownerID := testrunners.RunnerOwnerTenant, tenantID
-		if index%2 == 1 {
+		if index%3 == 1 {
 			ownerKind, ownerID = testrunners.RunnerOwnerProject, projectID
+		} else if index%3 == 2 {
+			ownerKind, ownerID = testrunners.RunnerOwnerEnvironment, environmentID
 		}
 		desired := runnerTestDesired(30+index, ownerKind, ownerID, tenantID)
+		if ownerKind == testrunners.RunnerOwnerEnvironment {
+			desired.ParentProjectID = projectID
+		}
 		key := "runner-quota-key-000" + string(rune('0'+index))
 		task := runnerTestTask(desired, testtaskjournal.TaskCreate, 40+index, key)
 		_, err := repository.CreateRunnerWithTask(ctx, config, desired, task, runnerTestMarker(task, desired))

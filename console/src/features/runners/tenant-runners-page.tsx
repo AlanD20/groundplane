@@ -25,8 +25,12 @@ export default function TenantRunnersPage() {
     () => store.tenantProjects.filter((project) => project.tenantId === tenantId),
     [store.tenantProjects, tenantId],
   )
-  const projectIds = useMemo(() => projects.map((project) => project.id).sort(), [projects])
-  const projectKey = projectIds.join(',')
+  const environments = useMemo(
+    () => projects.flatMap((project) => (project.environments ?? []).map((environment) => ({
+      id: environment.id, label: `${project.slug} / ${environment.name}`,
+    }))),
+    [projects],
+  )
   const [editing, setEditing] = useState<Runner | null>(null)
   const [slug, setSlug] = useState('')
   const [saving, setSaving] = useState(false)
@@ -48,8 +52,8 @@ export default function TenantRunnersPage() {
 
   useEffect(() => {
     if (tenantId === '') return
-    void store.refreshRunners(tenantId, projectIds)
-  }, [projectKey, store.refreshRunners, tenantId])
+    void store.refreshRunners(tenantId)
+  }, [store.refreshRunners, tenantId])
 
   if (!tenant) {
     if (store.tenantsLoading) return <EmptyState icon={<Cpu />} title="Loading tenant" />
@@ -57,6 +61,7 @@ export default function TenantRunnersPage() {
   }
 
   const projectLabels = new Map(projects.map((project) => [project.id, project.slug]))
+  const environmentLabels = new Map(environments.map((environment) => [environment.id, environment.label]))
   const runners = store.runners.filter((runner) => runner.tenantId === tenant.id)
   const normalizedSlug = slug.trim()
   const validSlug = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(normalizedSlug) && !normalizedSlug.includes('--')
@@ -96,7 +101,7 @@ export default function TenantRunnersPage() {
         <EmptyState
           icon={<Cpu />}
           title="No runners"
-          description="No Tenant- or Project-scoped Runner records exist for this Tenant."
+          description="No Tenant-, Project- or Environment-scoped Runners exist for this Tenant."
         />
       ) : (
         <div className="flex flex-col gap-1.5">
@@ -111,7 +116,9 @@ export default function TenantRunnersPage() {
                   <span className="truncate text-sm font-medium">{runner.slug}</span>
                   <span className="truncate font-mono text-xs text-muted-foreground">{runner.id} · {runner.name}</span>
                   <span className="font-mono text-xs text-muted-foreground">
-                    {runner.projectId
+                    {runner.environmentId
+                      ? `environment · ${environmentLabels.get(runner.environmentId) ?? runner.environmentId}`
+                      : runner.projectId
                       ? `project · ${projectLabels.get(runner.projectId) ?? runner.projectId}`
                       : `tenant · ${tenant.slug}`}
                   </span>
@@ -181,7 +188,8 @@ export default function TenantRunnersPage() {
                   const taskId = await store.createRunner({
                     slug: createSlug.trim(),
                     tenantId: createOwner === 'tenant' ? tenant.id : undefined,
-                    projectId: createOwner === 'tenant' ? undefined : createOwner,
+                    projectId: projects.some((project) => project.id === createOwner) ? createOwner : undefined,
+                    environmentId: environments.some((environment) => environment.id === createOwner) ? createOwner : undefined,
                     githubUrl: githubUrl.trim(),
                     labels: normalizedLabels,
                     registrationToken,
@@ -189,7 +197,7 @@ export default function TenantRunnersPage() {
                   setAcceptedTaskId(taskId)
                   setRegistrationToken('')
                   setCreating(false)
-                  await store.refreshRunners(tenant.id, projectIds)
+                  await store.refreshRunners(tenant.id)
                 } catch (error) {
                   setCreateError(error instanceof Error ? error.message : 'Unable to create Runner')
                 } finally {
@@ -205,7 +213,12 @@ export default function TenantRunnersPage() {
             <div className="space-y-2">
               <Label htmlFor="runner-create-owner">Owner</Label>
               <Select id="runner-create-owner" value={createOwner} onValueChange={setCreateOwner}
-                options={[{ value: 'tenant', label: `Tenant · ${tenant.slug}` }, ...projects.map((project) => ({ value: project.id, label: `Project · ${project.slug}` }))]} />
+                options={[
+                  { value: 'tenant', label: `Tenant · ${tenant.slug}` },
+                  ...projects.map((project) => ({ value: project.id, label: `Project · ${project.slug}` })),
+                  ...environments.map((environment) => ({ value: environment.id, label: `Environment · ${environment.label}` })),
+                ]} />
+              <p className="text-xs text-muted-foreground">Owner is permanent. Workflow GP commands are limited to this scope and its descendants.</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="runner-create-github">GitHub URL</Label>
@@ -252,7 +265,7 @@ export default function TenantRunnersPage() {
                   setAcceptedTaskId(taskId)
                   setRetryToken('')
                   setRetrying(null)
-                  await store.refreshRunners(tenant.id, projectIds)
+                  await store.refreshRunners(tenant.id)
                 } catch (error) {
                   setRetryError(error instanceof Error ? error.message : 'Unable to retry Runner')
                 } finally {
@@ -337,7 +350,7 @@ export default function TenantRunnersPage() {
 		onDispatch={() => removing ? store.removeRunner(removing.id) : Promise.reject(new Error('No Runner selected'))}
 		onCommit={() => {
 			setRemoving(null)
-			void store.refreshRunners(tenant.id, projectIds).catch(() => undefined)
+			void store.refreshRunners(tenant.id).catch(() => undefined)
 		}}
 	  />
     </div>

@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -192,27 +191,25 @@ func (values *runnerCreateValues) clear() {
 }
 
 type runnerCreateEvidence struct {
-	conditions      []etcdstore.Condition
-	task            int
-	operation       int
-	active          int
-	queue           int
-	runner          int
-	lifecycle       int
-	slug            int
-	owner           int
-	quota           int
-	system          int
-	tenant          int
-	runnerDeletion  int
-	tenantDeletion  int
-	project         int
-	projectDeletion int
-	host            int
-	desired         runnerrecord.RunnerDesiredRecord
-	parents         runnerrecord.RunnerParents
-	allocation      runnerAllocationState
-	operationID     string
+	conditions     []etcdstore.Condition
+	task           int
+	operation      int
+	active         int
+	queue          int
+	runner         int
+	lifecycle      int
+	slug           int
+	owner          int
+	quota          int
+	system         int
+	runnerDeletion int
+	parentsStart   int
+	parentsEnd     int
+	host           int
+	desired        runnerrecord.RunnerDesiredRecord
+	parents        runnerrecord.RunnerParents
+	allocation     runnerAllocationState
+	operationID    string
 }
 
 func newRunnerCreateEvidence(
@@ -222,7 +219,7 @@ func newRunnerCreateEvidence(
 	task TaskRecord,
 ) runnerCreateEvidence {
 	evidence := runnerCreateEvidence{
-		project: -1, projectDeletion: -1, desired: desired, parents: parents,
+		desired: desired, parents: parents,
 		allocation: allocation, operationID: task.OperationID,
 	}
 	add := func(condition etcdstore.Condition) int {
@@ -249,30 +246,12 @@ func newRunnerCreateEvidence(
 	evidence.system = add(
 		etcdstore.Condition{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.Revision},
 	)
-	evidence.tenant = add(
-		etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.Tenant().Revision},
-	)
 	evidence.runnerDeletion = add(
 		etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)},
 	)
-	evidence.tenantDeletion = add(
-		etcdstore.Condition{
-			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), desired.TenantID),
-		},
-	)
-	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		evidence.project = add(
-			etcdstore.Condition{
-				Key:         hierarchyrecord.ProjectKey(desired.OwnerID),
-				ModRevision: parents.Project().Revision,
-			},
-		)
-		evidence.projectDeletion = add(
-			etcdstore.Condition{
-				Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), desired.OwnerID),
-			},
-		)
-	}
+	evidence.parentsStart = len(evidence.conditions)
+	evidence.conditions = append(evidence.conditions, parents.AdmissionConditions()...)
+	evidence.parentsEnd = len(evidence.conditions)
 	evidence.host = add(allocation.host.condition)
 	return evidence
 }
@@ -311,25 +290,11 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 		if etcdstore.RevisionChanged(values[evidence.system], evidence.allocation.system.Revision) {
 			return recordcodec.StateConflict("system pool registry", "global")
 		}
-		if values[evidence.tenant] == nil {
-			return errs.New(errs.KindTenantNotFound, "tenant was not found")
-		}
-		if values[evidence.tenant].ModRevision != evidence.parents.Tenant().Revision {
-			return recordcodec.StateConflict("tenant", evidence.desired.TenantID)
-		}
-		if values[evidence.runnerDeletion] != nil || values[evidence.tenantDeletion] != nil {
+		if values[evidence.runnerDeletion] != nil {
 			return errs.New(errs.KindResourceInUse, "runner hierarchy deletion is in progress")
 		}
-		if evidence.project >= 0 {
-			if values[evidence.project] == nil {
-				return errs.New(errs.KindProjectNotFound, "project was not found")
-			}
-			if values[evidence.project].ModRevision != evidence.parents.Project().Revision {
-				return recordcodec.StateConflict("project", evidence.desired.OwnerID)
-			}
-			if values[evidence.projectDeletion] != nil {
-				return errs.New(errs.KindResourceInUse, "runner hierarchy deletion is in progress")
-			}
+		if err := evidence.parents.ClassifyAdmissionConflict(values[evidence.parentsStart:evidence.parentsEnd]); err != nil {
+			return err
 		}
 		if values[evidence.host] != nil {
 			return recordcodec.StateConflict("runner host slot", evidence.desired.ID)

@@ -3,7 +3,6 @@ package runners
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
@@ -49,30 +48,9 @@ func (repository *Repository) PutRunnerObservation(
 		{Key: RunnerObservationKey(record.RunnerID), ModRevision: expectedRevision},
 		{Key: RunnerKey(record.RunnerID), ModRevision: current.Revision},
 		{Key: RunnerLifecycleKey(record.RunnerID), ModRevision: current.Record.LifecycleRevision},
-		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.Tenant().Revision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), record.RunnerID)},
-		{
-			Key: deletionrecord.TombstoneKey(
-				string(deletionrecord.DeletionTargetTenant),
-				current.Record.Desired.TenantID,
-			),
-		},
 	}
-	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
-		conditions = append(
-			conditions,
-			etcdstore.Condition{
-				Key:         hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID),
-				ModRevision: parents.Project().Revision,
-			},
-			etcdstore.Condition{
-				Key: deletionrecord.TombstoneKey(
-					string(deletionrecord.DeletionTargetProject),
-					current.Record.Desired.OwnerID,
-				),
-			},
-		)
-	}
+	conditions = append(conditions, parents.AdmissionConditions()...)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
 		Type: etcdstore.MutationPut, Key: RunnerObservationKey(record.RunnerID), Value: value,
 	}})

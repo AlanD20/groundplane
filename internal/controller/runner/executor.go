@@ -120,7 +120,7 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 func (executor *Executor) ExecuteRemove(ctx context.Context, task etcd.TaskRecord) error {
 	if ctx == nil || task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindTask, task.ID) != nil || ids.Validate(ids.KindRunner, task.Target) != nil ||
-		len(task.Params) != 6 || task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
+		len(task.Params) != 7 || task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
 		return errs.New(errs.KindValidationFailed, "Controller Task Runner removal is invalid")
 	}
 	current, err := executor.repository.GetRunner(ctx, task.Target)
@@ -128,6 +128,7 @@ func (executor *Executor) ExecuteRemove(ctx context.Context, task etcd.TaskRecor
 		return err
 	}
 	if task.Params[runnerrecord.RunnerTenantIDParam] != current.Record.Desired.TenantID ||
+		task.Params[runnerrecord.RunnerParentProjectIDParam] != current.Record.Desired.ParentProjectID ||
 		task.Params[runnerrecord.RunnerOwnerKindParam] != string(current.Record.Desired.OwnerKind) ||
 		task.Params[runnerrecord.RunnerOwnerIDParam] != current.Record.Desired.OwnerID {
 		return errs.New(errs.KindStateConflict, "Runner removal Task target changed")

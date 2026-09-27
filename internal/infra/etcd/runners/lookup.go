@@ -134,23 +134,33 @@ func (repository *Reader) ListRunners(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[RunnerRecord]{}, err
 	}
-	if (filter.TenantID == "") == (filter.ProjectID == "") {
+	count := 0
+	for _, scopeID := range []string{filter.TenantID, filter.ProjectID, filter.EnvironmentID} {
+		if scopeID != "" {
+			count++
+		}
+	}
+	if count != 1 {
 		return etcdstore.Page[RunnerRecord]{}, errs.New(
 			errs.KindValidationFailed,
-			"runner list requires exactly one tenant or project filter",
+			"runner list requires exactly one tenant, project or environment filter",
 		)
 	}
-	if filter.ProjectID != "" {
-		if err := recordcodec.ValidateID(ids.KindProject, filter.ProjectID); err != nil {
+	if filter.ProjectID != "" || filter.EnvironmentID != "" {
+		ownerKind, ownerID, idKind := RunnerOwnerProject, filter.ProjectID, ids.KindProject
+		if filter.EnvironmentID != "" {
+			ownerKind, ownerID, idKind = RunnerOwnerEnvironment, filter.EnvironmentID, ids.KindEnvironment
+		}
+		if err := recordcodec.ValidateID(idKind, ownerID); err != nil {
 			return etcdstore.Page[RunnerRecord]{}, err
 		}
 		page, err := recordquery.ListIndex(
-			ctx, repository.store, "runners", "project", filter.ProjectID,
-			RunnerOwnerPrefix(RunnerOwnerProject, filter.ProjectID), RunnerKey, ids.KindRunner, request,
+			ctx, repository.store, "runners", string(ownerKind), ownerID,
+			RunnerOwnerPrefix(ownerKind, ownerID), RunnerKey, ids.KindRunner, request,
 			DecodeRunnerDesiredAggregate,
 			func(record RunnerRecord) string { return record.Desired.ID },
 			func(record RunnerRecord) bool {
-				return record.Desired.OwnerKind == RunnerOwnerProject && record.Desired.OwnerID == filter.ProjectID
+				return record.Desired.OwnerKind == ownerKind && record.Desired.OwnerID == ownerID
 			},
 		)
 		if err != nil {

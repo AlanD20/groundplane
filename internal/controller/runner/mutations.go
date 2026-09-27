@@ -232,13 +232,9 @@ func (service *MutationService) protectIntent(
 	runnerID string,
 	slugValue string,
 ) (requestidempotency.ProtectedEvidence, error) {
-	scopeKind := requestidempotency.ScopeTenant
-	if locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject {
-		scopeKind = requestidempotency.ScopeProject
-	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPatch, Route: runnerEditRoute,
-		Scope: requestidempotency.Scope{Kind: scopeKind, ID: locator.ScopeID},
+		Scope: runnerIntentScope(locator),
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: runnerID}},
 		Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
@@ -252,12 +248,8 @@ func (service *MutationService) protectIntent(
 }
 
 func runnerLocator(desired runnerrecord.RunnerDesiredRecord, key string) idempotencyrecord.IdempotencyLocator {
-	scopeKind := idempotencyrecord.IdempotencyScopeTenant
-	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		scopeKind = idempotencyrecord.IdempotencyScopeProject
-	}
 	return idempotencyrecord.IdempotencyLocator{
-		ScopeKind: scopeKind, ScopeID: desired.OwnerID,
+		ScopeKind: desired.IdempotencyScope(), ScopeID: desired.OwnerID,
 		Method: http.MethodPatch, Route: runnerEditRoute, Key: key,
 	}
 }

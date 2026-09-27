@@ -421,17 +421,19 @@ and any external GitHub effects require appropriate authority.
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
-| RUN-01 | Add direct Tenant and Project Runners; validate GitHub URL/labels; rename slug. | One immutable owner and canonical registration fields; slug edit changes no runtime identity, epoch, image or registration. | U |
-| RUN-02 | Race creation across direct/Project scopes at the five-per-Tenant quota. | All non-deleted lifecycle states count; no sixth allocation; failed/pending removal does not release quota early. | U |
+| RUN-01 | Add Tenant, Project and Environment Runners; validate GitHub URL/labels; rename slug. | One immutable owner and canonical registration fields; full parent chain remains bound through retry; slug edit changes no runtime identity, epoch, image or registration. | U |
+| RUN-02 | Race creation across Tenant/Project/Environment scopes at the five-per-Tenant quota. | All non-deleted lifecycle states count; no sixth allocation; failed/pending removal does not release quota early. | U |
 | RUN-03 | Allocate/remove/reallocate Runners; exhaust slots, subordinate ranges and network inventory. | Lowest free persisted UID/GID slot, unique 65,536 subordinate blocks and owned /29; fail safely without expanding pools or guessing. | U |
 | RUN-04 | Run an actual build/job and service container; probe host Docker, privileged capabilities, host ports and other private scopes. | Job uses its dedicated rootless daemon; forbidden host/other-runner/Environment/backing access denied; documented DNS/internet/authenticated Controller access works. | U |
-| RUN-05 | Create with invalid owner/URL/labels or missing fresh token; observe valid provisioning order. | No invalid host effect; valid resource/quota/allocation/Task authority durably published before host mutation. | U |
+| RUN-05 | Create with invalid owner/URL/labels or missing fresh token; race removal of each parent; observe valid provisioning order. | No invalid host effect or partial publication; the entire immutable owner chain and its deletion fences participate in admission. | U |
 | RUN-06 | Inspect token handling across configure, job start, publication failure, partial delivery and reconnect. | Token consumed once by configure and absent from Listener/jobs, logs, argv, persistent records/digests; uncertain delivery is not resent. | U |
 | RUN-07 | Fail registration; attempt generic Task Retry, then Runner Retry with fresh token; replay original create. | Correct registration_token_required failure; only supported retry creates new attempt preserving allocation; original replay never feeds a replacement token. | U |
 | RUN-08 | Make local ownership/readiness evidence stale, missing or mismatched; attempt operator online mutation. | Actual offline/observed-time projection without private allocation details; online is observation, not operator desired state. | U |
 | RUN-09 | Remove Runner; fail cleanup then Retry; check registration separately. | Local exact-ownership absence precedes quota/allocation release; failure retains authority; GP does not silently deregister GitHub. | U |
 | RUN-10 | Restart same boot and reboot at journal boundaries; use zero/one/multiple discovered runtimes and corrupt authority. | Only uniquely sealed identity is adopted; uncertain authority quiesces; old epoch is cleaned before next; no foreign cleanup. | U |
 | RUN-11 | Repeat supported job, denial and lifecycle journeys on amd64 and arm64. | Same accepted product outcomes on each real architecture, with exact release/runtime identities; no emulation substituted for host proof. | U |
+| RUN-12 | Run GP commands, lists, logs, Tasks and replays from each Runner ownership level; reference siblings, ancestors and host resources. | Scope and descendant access only; referenced-resource checks and ordinary safety protections remain enforced; broader Runner creation is denied. | U |
+| RUN-13 | Build, deliver the exact image and Deploy through a workflow; fail build or handoff and replay requests. | Controller-proved image identity; no host Docker access; serving Release unchanged after failed delivery and no duplicate deployment on replay. | U |
 
 ## Scripts and hooks
 

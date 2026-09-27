@@ -1,6 +1,7 @@
 package runners
 
 type RunnerFilter struct {
-	TenantID  string
-	ProjectID string
+	TenantID      string
+	ProjectID     string
+	EnvironmentID string
 }

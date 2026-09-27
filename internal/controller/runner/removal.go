@@ -201,13 +201,9 @@ func (service *RemovalService) protectIntent(
 	locator idempotencyrecord.IdempotencyLocator,
 	runnerID string,
 ) (requestidempotency.ProtectedEvidence, error) {
-	scopeKind := requestidempotency.ScopeTenant
-	if locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject {
-		scopeKind = requestidempotency.ScopeProject
-	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: runnerRemoveRoute,
-		Scope: requestidempotency.Scope{Kind: scopeKind, ID: locator.ScopeID},
+		Scope: runnerIntentScope(locator),
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: runnerID}},
 		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
 	})
@@ -218,24 +214,20 @@ func (service *RemovalService) protectIntent(
 }
 
 func runnerRemovalLocator(desired runnerrecord.RunnerDesiredRecord, key string) idempotencyrecord.IdempotencyLocator {
-	scopeKind := idempotencyrecord.IdempotencyScopeTenant
-	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		scopeKind = idempotencyrecord.IdempotencyScopeProject
-	}
 	return idempotencyrecord.IdempotencyLocator{
-		ScopeKind: scopeKind, ScopeID: desired.OwnerID,
+		ScopeKind: desired.IdempotencyScope(), ScopeID: desired.OwnerID,
 		Method: http.MethodDelete, Route: runnerRemoveRoute, Key: key,
 	}
 }
 
 func newRunnerRemovalTask(record runnerrecord.RunnerRecord, key string, now time.Time) etcd.TaskRecord {
-	owner := taskjournal.TaskOwner{WorkspaceType: taskjournal.TaskWorkspaceTenant, TenantID: record.Desired.TenantID}
-	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		owner.ProjectID = record.Desired.OwnerID
+	owner := taskjournal.TaskOwner{
+		WorkspaceType: taskjournal.TaskWorkspaceTenant, TenantID: record.Desired.TenantID,
+		ProjectID: record.Desired.ProjectID(), EnvironmentID: record.Desired.EnvironmentID(),
 	}
 	planInput := strings.Join([]string{
 		"groundplane.runner-remove.v1", record.Desired.ID, record.Desired.TenantID,
-		string(record.Desired.OwnerKind), record.Desired.OwnerID,
+		string(record.Desired.OwnerKind), record.Desired.OwnerID, record.Desired.ParentProjectID,
 		record.Allocation.NetworkCIDR,
 	}, "\x00")
 	planDigest := sha256.Sum256([]byte(planInput))

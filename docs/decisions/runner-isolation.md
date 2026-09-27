@@ -227,3 +227,23 @@ The one-use token owner is
 [`internal/controller/runner/token_broker.go`](../../internal/controller/runner/token_broker.go).
 These are navigation pointers to partial current code, not claims that the
 accepted isolation and recovery design is implemented or qualified.
+
+## Scoped command authority
+
+The [Runner guide](../features/runners.md#gp-command-access-and-image-delivery)
+owns the Tenant, Project and Environment command-access rule. Authentication and
+authorization are separate from the Docker policy proxy: building an image does
+not itself authorize a GP resource mutation.
+
+The authenticated channel must resolve its principal from Controller-owned Runner
+identity and current lifecycle, never from request headers or a requested Tenant
+id. It reuses current GP operations after checking their resources and references.
+It does not forward unchecked requests to the private human API or implement a
+second deployment pipeline. Unknown operations fail closed until their scope
+handling is defined. Revocation and deletion prevent new admissions without
+rewriting already-published Task authority.
+
+Image handoff binds the inspected image id to the originating Runner epoch and
+the requested scoped operation. Mutable tags are not transfer authority. The
+host imports through its trusted Controller boundary; workflow code never gains
+the host daemon's socket or general registry-administration credentials.

@@ -14,6 +14,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
@@ -45,6 +46,14 @@ func (repository *Planner) freezeEnvironmentMembership(
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	descriptors := []hierarchyDeletionIndexedResource{
+		{
+			targetKind: "runner", actionKind: hierarchydeletion.HierarchyDeletionRunnerLocalRemove,
+			ownerPrefix: func(owner string) string {
+				return runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerEnvironment, owner)
+			},
+			primaryKey: runnerrecord.RunnerKey, stableIDKind: ids.KindRunner,
+			validateOwner: validateHierarchyDeletionRunnerOwner, controller: true,
+		},
 		{
 			targetKind:    "attach",
 			actionKind:    hierarchydeletion.HierarchyDeletionAttachGrantRevoke,

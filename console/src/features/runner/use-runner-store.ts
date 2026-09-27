@@ -25,11 +25,12 @@ export type RunnerState = {
   runnerError: string | null;
 };
 export type RunnerActions = {
-  refreshRunners: (tenantId: string, projectIds: string[]) => Promise<void>;
+  refreshRunners: (tenantId: string) => Promise<void>;
   createRunner: (input: {
     slug: string;
     tenantId?: string;
     projectId?: string;
+    environmentId?: string;
     githubUrl: string;
     labels: string[];
     registrationToken: string;
@@ -41,40 +42,35 @@ export type RunnerActions = {
 type UpdateRunners = (change: (draft: RunnerState) => void) => void;
 export function useRunnerStore(update: UpdateRunners): RunnerActions {
   const refreshRunners = useCallback(
-    async (tenantId: string, projectIds: string[]) => {
+    async (tenantId: string) => {
       update((draft) => {
         draft.runnersLoading = true;
         draft.runnerError = null;
       });
       try {
-        const paths = [
+        // The Tenant list contains all ownership levels, bounded by its quota.
+        const page = await controllerRequest<RunnerPageResponse>(
           `/runners?tenant=${encodeURIComponent(tenantId)}`,
-          ...projectIds.map(
-            (projectId) => `/runners?project=${encodeURIComponent(projectId)}`,
-          ),
-        ];
-        const pages = await Promise.all(
-          paths.map((path) => controllerRequest<RunnerPageResponse>(path, 200)),
+          200,
         );
         const runners = new Map<string, Runner>();
-        for (const page of pages) {
-          for (const runner of page.items ?? []) {
-            runners.set(runner.id, {
-              id: runner.id,
-              slug: runner.slug,
-              tenantId: runner.tenant_id,
-              projectId: runner.project_id ?? null,
-              githubUrl: runner.github_url,
-              name: runner.name,
-              labels: runner.labels ?? [],
-              lifecycle: runner.lifecycle,
-              createTaskId: runner.create_task_id,
-              removeTaskId: runner.remove_task_id,
-              online: runner.online,
-              observedAt: runner.observed_at,
-              createdAt: runner.created_at,
-            });
-          }
+        for (const runner of page.items ?? []) {
+          runners.set(runner.id, {
+            id: runner.id,
+            slug: runner.slug,
+            tenantId: runner.tenant_id,
+            projectId: runner.project_id ?? null,
+            environmentId: runner.environment_id ?? null,
+            githubUrl: runner.github_url,
+            name: runner.name,
+            labels: runner.labels ?? [],
+            lifecycle: runner.lifecycle,
+            createTaskId: runner.create_task_id,
+            removeTaskId: runner.remove_task_id,
+            online: runner.online,
+            observedAt: runner.observed_at,
+            createdAt: runner.created_at,
+          });
         }
         update((draft) => {
           draft.runners = [...runners.values()].sort((left, right) =>
@@ -97,6 +93,7 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
       slug: string;
       tenantId?: string;
       projectId?: string;
+      environmentId?: string;
       githubUrl: string;
       labels: string[];
       registrationToken: string;
@@ -106,9 +103,9 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
         github_url: input.githubUrl,
         labels: input.labels,
         registration_token: input.registrationToken,
-        ...(input.projectId
-          ? { project_id: input.projectId }
-          : { tenant_id: input.tenantId }),
+        tenant_id: input.tenantId,
+        project_id: input.projectId,
+        environment_id: input.environmentId,
       };
       const response = await controllerRequest<RunnerCreateResponse>(
         "/runners",
@@ -137,6 +134,7 @@ export function useRunnerStore(update: UpdateRunners): RunnerActions {
         slug: response.slug,
         tenantId: response.tenant_id,
         projectId: response.project_id ?? null,
+        environmentId: response.environment_id ?? null,
         githubUrl: response.github_url,
         name: response.name,
         labels: response.labels ?? [],

@@ -17,8 +17,9 @@ import (
 type OwnerKind string
 
 const (
-	OwnerTenant  OwnerKind = "tenant"
-	OwnerProject OwnerKind = "project"
+	OwnerTenant      OwnerKind = "tenant"
+	OwnerProject     OwnerKind = "project"
+	OwnerEnvironment OwnerKind = "environment"
 )
 
 type Target struct {
@@ -140,6 +141,10 @@ func validateTarget(target Target) error {
 		if ids.Validate(ids.KindProject, target.OwnerID) != nil {
 			return errs.New(errs.KindValidationFailed, "runner project ownership is invalid")
 		}
+	case OwnerEnvironment:
+		if ids.Validate(ids.KindEnvironment, target.OwnerID) != nil {
+			return errs.New(errs.KindValidationFailed, "runner environment ownership is invalid")
+		}
 	default:
 		return errs.New(errs.KindValidationFailed, "runner owner kind is invalid")
 	}
@@ -149,7 +154,7 @@ func validateTarget(target Target) error {
 	}
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	wantSegments := 1
-	if target.OwnerKind == OwnerProject {
+	if target.OwnerKind == OwnerProject || target.OwnerKind == OwnerEnvironment {
 		wantSegments = 2
 	}
 	if parsed.Scheme != "https" || parsed.Host != "github.com" || parsed.RawQuery != "" ||
