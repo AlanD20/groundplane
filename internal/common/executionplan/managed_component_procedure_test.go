@@ -82,6 +82,45 @@ func TestSealAcceptsDistinctManagedSourcesSharingArtifact(t *testing.T) {
 	if _, err := Seal(duplicate); err == nil {
 		t.Fatal("Seal(duplicate managed service source) accepted conflicting authority")
 	}
+
+	// CMP-01/04: enabling Tunnel after Caddy retains the older Caddy ownership
+	// inside the same snapshot. Teardown must accept those exact distinct
+	// authorities, but never a source claiming a future generation.
+	for _, pair := range services[0].ExpectedLabels {
+		if pair.Key == labelPlanID {
+			pair.Value = "plan_01ARZ3NDEKTSV4RRFFQ69G5FAW"
+		}
+		if pair.Key == labelRenderGen {
+			pair.Value = "6"
+		}
+	}
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixedDigest := sha256.Sum256(encoded)
+	for _, source := range plan.ManagedComponentProcedure.Services {
+		source.SourceArtifactSha256 = mixedDigest[:]
+	}
+	if _, err := Seal(plan); err != nil {
+		t.Fatalf("Seal(distinct retained Component generations) error = %v", err)
+	}
+	for _, pair := range services[0].ExpectedLabels {
+		if pair.Key == labelRenderGen {
+			pair.Value = "8"
+		}
+	}
+	encoded, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	futureDigest := sha256.Sum256(encoded)
+	for _, source := range plan.ManagedComponentProcedure.Services {
+		source.SourceArtifactSha256 = futureDigest[:]
+	}
+	if _, err := Seal(plan); err == nil {
+		t.Fatal("Seal(future Component generation) accepted invalid authority")
+	}
 }
 
 // The diagnostic must identify the closed predicate branch without exposing

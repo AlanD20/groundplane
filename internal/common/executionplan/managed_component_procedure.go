@@ -13,15 +13,14 @@ import (
 
 const maximumManagedComponentServices = 2
 
-func managedComponentArtifactValidationPlan(
+func validateManagedComponentSourceOwnership(
 	plan *agentpb.ExecutionPlan,
 	artifact *agentpb.ComposeArtifact,
-) (*agentpb.ExecutionPlan, error) {
+) error {
 	procedure := plan.GetManagedComponentProcedure()
 	if procedure == nil || artifact == nil {
-		return plan, nil
+		return nil
 	}
-	var validationPlan *agentpb.ExecutionPlan
 	seenServices := make(map[string]struct{})
 	seenComponents := make(map[string]struct{})
 	for _, candidate := range procedure.GetServices() {
@@ -29,37 +28,29 @@ func managedComponentArtifactValidationPlan(
 			continue
 		}
 		if _, duplicate := seenServices[candidate.GetServiceId()]; duplicate {
-			return nil, errs.New(errs.KindValidationFailed, "managed Component source service identity is duplicated")
+			return errs.New(errs.KindValidationFailed, "managed Component source service identity is duplicated")
 		}
 		if _, duplicate := seenComponents[candidate.GetComponentId()]; duplicate {
-			return nil, errs.New(errs.KindValidationFailed, "managed Component source Component identity is duplicated")
+			return errs.New(errs.KindValidationFailed, "managed Component source Component identity is duplicated")
 		}
 		service := artifactService(artifact, candidate.GetServiceId())
 		if service == nil || service.GetOwnerComponentId() != candidate.GetComponentId() ||
 			service.GetComposeName() != candidate.GetComposeServiceName() {
-			return nil, errs.New(errs.KindValidationFailed, "managed Component source service identity changed")
+			return errs.New(errs.KindValidationFailed, "managed Component source service identity changed")
 		}
 		labels := labelValues(service.GetExpectedLabels())
 		generation, generationErr := strconv.ParseUint(labels[labelRenderGen], 10, 64)
 		if validateID(ids.KindPlan, labels[labelPlanID]) != nil || generationErr != nil || generation == 0 ||
 			labels[labelComponentID] != candidate.GetComponentId() || labels[labelServiceID] != candidate.GetServiceId() {
-			return nil, errs.New(errs.KindValidationFailed, "managed Component source ownership is invalid")
-		}
-		if validationPlan == nil {
-			validationPlan = proto.Clone(plan).(*agentpb.ExecutionPlan)
-			validationPlan.PlanId = labels[labelPlanID]
-			validationPlan.RenderGeneration = generation
-		} else if validationPlan.GetPlanId() != labels[labelPlanID] ||
-			validationPlan.GetRenderGeneration() != generation {
-			return nil, errs.New(errs.KindValidationFailed, "managed Component source artifact authority conflicts")
+			return errs.New(errs.KindValidationFailed, "managed Component source ownership is invalid")
 		}
 		seenServices[candidate.GetServiceId()] = struct{}{}
 		seenComponents[candidate.GetComponentId()] = struct{}{}
 	}
-	if validationPlan == nil {
-		return plan, nil
-	}
-	return validationPlan, nil
+	// A captured Environment artifact may retain Components from different
+	// successful Tasks. Validate each source's exact identity here; normal label
+	// validation uses the actual new plan and bounds every retained generation.
+	return nil
 }
 
 func validateManagedComponentProcedure(

@@ -191,7 +191,7 @@ func validateShape(plan *agentpb.ExecutionPlan) error {
 			return identityErr
 		}
 		if !lifecycle {
-			validationPlan, identityErr = managedComponentArtifactValidationPlan(plan, artifact)
+			identityErr = validateManagedComponentSourceOwnership(plan, artifact)
 			if identityErr == nil {
 				validationPlan, identityErr = componentArtifactValidationPlan(validationPlan, artifact)
 			}
