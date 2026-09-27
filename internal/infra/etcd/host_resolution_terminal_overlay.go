@@ -20,8 +20,8 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 	removal := ""
 	routeOverride := make(map[string]routerecord.Record)
 	componentOverride := make(map[string]componentrecord.Record)
-	switch task.Params[taskjournal.TaskResourceKindParam] {
-	case taskjournal.TaskResourceRoute:
+	switch {
+	case task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute:
 		mutationRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{environmentchanges.RouteMutationIntentKey(task.ID)}, Revision: revision,
 		})
@@ -71,7 +71,8 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 				routeOverride[route.Desired.ID] = route
 			}
 		}
-	case taskjournal.TaskResourceComponent:
+	case task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceComponent ||
+		task.Params[componentTaskBlueprintProcedureParam] != "":
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{environmentchanges.ComponentTaskIntentKey(task.ID)}, Revision: revision,
 		})

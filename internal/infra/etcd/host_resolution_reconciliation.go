@@ -86,10 +86,8 @@ func clearHostResolutionReconciliationChange(change hostResolutionReconciliation
 	}
 }
 
-// prepareHostResolutionReconciliation scans the complete Route collection at
-// one journal revision and overlays the terminal change being committed. The
-// projection therefore never combines Route and Component state from
-// different MVCC views.
+// Reconcile Route and Component effects, including Blueprint-owned Components,
+// from one MVCC snapshot plus the terminal changes being committed.
 func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	ctx context.Context,
 	task TaskRecord,
@@ -99,7 +97,8 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	platformChange platformComponentTaskChange,
 ) (hostResolutionReconciliationChange, error) {
 	resource := task.Params[taskjournal.TaskResourceKindParam]
-	if resource != taskjournal.TaskResourceRoute && resource != taskjournal.TaskResourceComponent {
+	if resource != taskjournal.TaskResourceRoute && resource != taskjournal.TaskResourceComponent &&
+		task.Params[componentTaskBlueprintProcedureParam] == "" {
 		return hostResolutionReconciliationChange{}, nil
 	}
 	if revision <= 0 {
