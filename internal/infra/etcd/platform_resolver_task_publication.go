@@ -270,7 +270,23 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		finalLineage = &lineage
 		priorObservation = platformResolverObservationForLineage(predecessorInput, lineage, priorObservation)
 	}
-	renderInput, err := repository.platformResolverTaskPreparer(ctx, current, projection, task, priorObservation)
+	renderInput, marker, err := repository.platformResolverTaskPreparer(
+		ctx,
+		current,
+		projection,
+		task,
+		priorObservation,
+	)
+	defer clear(marker.Intent.Ciphertext)
+	defer clear(marker.Response.Body)
+	if err != nil {
+		return hostResolutionReconciliationChange{}, err
+	}
+	task, err = bindPlatformComponentTaskMarker(task, marker)
+	if err != nil {
+		return hostResolutionReconciliationChange{}, err
+	}
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		return hostResolutionReconciliationChange{}, err
 	}
@@ -343,8 +359,16 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		clear(taskValue)
 		return hostResolutionReconciliationChange{}, err
 	}
+	markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(marker)
+	if err != nil {
+		clear(renderValue)
+		clear(taskValue)
+		clear(reference)
+		return hostResolutionReconciliationChange{}, err
+	}
 	conditions := append([]etcdstore.Condition(nil), baseConditions...)
 	for _, condition := range []etcdstore.Condition{
+		{Key: markerKey},
 		{Key: componentrecord.RecordKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: platformcomponents.PlatformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
@@ -361,6 +385,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	conditions = appendHostResolutionCondition(conditions, activeCondition)
 	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
@@ -383,6 +408,6 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	return hostResolutionReconciliationChange{
 		applies: true, conditions: conditions, mutations: mutations,
-		values: [][]byte{renderValue, taskValue, reference, []byte(task.ID)},
+		values: [][]byte{renderValue, taskValue, reference, markerValue, []byte(task.ID)},
 	}, nil
 }

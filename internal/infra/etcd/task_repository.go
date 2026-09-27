@@ -36,7 +36,7 @@ type PlatformResolverTaskPreparer func(
 	resolutionrecord.HostResolutionProjectionRecord,
 	TaskRecord,
 	*platformcomponents.ComponentObservationRecord,
-) (platformcomponents.PlatformComponentTaskRenderInput, error)
+) (platformcomponents.PlatformComponentTaskRenderInput, idempotencyrecord.IdempotencyMarker, error)
 
 // PlatformResolverComponentSelector selects the platform Component that
 // provides the registered dns-resolver capability. The repository supplies

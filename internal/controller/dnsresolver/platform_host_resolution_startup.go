@@ -2,20 +2,16 @@ package dnsresolver
 
 import (
 	"context"
-	"encoding/json"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
-	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"net/http"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -80,31 +76,12 @@ func EnsurePlatformResolverTask(
 	if err != nil {
 		return err
 	}
-	task.IdempotencyKey = task.OperationID
-	intent, err := platformComponentLifecycleIntent(
-		ctx, coordinator, task.Target, "update", platformComponentUpdateRoute,
-	)
+	marker, err := prepareResolverTaskMarker(ctx, coordinator, task)
 	if err != nil {
 		return err
 	}
-	defer clear(intent.durable.Ciphertext)
-	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
-	if err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	defer clear(responseBody)
-	marker := idempotencyrecord.IdempotencyMarker{
-		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: idempotencyrecord.IdempotencyLocator{
-			ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPost,
-			Route: platformComponentUpdateRoute, Key: task.IdempotencyKey,
-		},
-		Intent: intent.durable,
-		Response: idempotencyrecord.IdempotencyResponse{
-			Status: http.StatusAccepted, ContentKind: "application/json", Body: responseBody,
-		},
-		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
-	}
+	defer clear(marker.Intent.Ciphertext)
+	defer clear(marker.Response.Body)
 	return tasks.PublishPlatformDNSResolverTask(ctx, current, empty, task, renderInput, marker)
 }
 

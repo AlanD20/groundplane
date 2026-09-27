@@ -112,7 +112,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	}
 	preparedTasks := make(map[string]TaskRecord)
 	preparedInputs := make(map[string]testplatformcomponents.PlatformComponentTaskRenderInput)
-	tasks.platformResolverTaskPreparer = func(_ context.Context, component testkeyvalue.Versioned[testcomponents.Record], input testhostresolution.HostResolutionProjectionRecord, task TaskRecord, observation *testplatformcomponents.ComponentObservationRecord) (testplatformcomponents.PlatformComponentTaskRenderInput, error) {
+	tasks.platformResolverTaskPreparer = func(_ context.Context, component testkeyvalue.Versioned[testcomponents.Record], input testhostresolution.HostResolutionProjectionRecord, task TaskRecord, observation *testplatformcomponents.ComponentObservationRecord) (testplatformcomponents.PlatformComponentTaskRenderInput, testidempotency.IdempotencyMarker, error) {
 		prepared := testplatformcomponents.PlatformComponentTaskRenderInput{
 			PlanID:                      task.PlanID,
 			TaskID:                      task.ID,
@@ -182,13 +182,18 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 			captured.RollbackComposeArtifact = proto.Clone(prepared.RollbackComposeArtifact).(*agentpb.ComposeArtifact)
 		}
 		preparedInputs[task.ID] = captured
-		return prepared, nil
+		marker := pendingTaskMarker(task)
+		marker.Locator.ScopeKind = testidempotency.IdempotencyScopePlatform
+		marker.Locator.ScopeID = "-"
+		marker.Locator.Route = "/components/{id}/update"
+		marker.Locator.Key = task.OperationID
+		return prepared, marker, nil
 	}
 	operatorTask := newPlatformDNSResolverTask(current.Record.Desired.ID, now.Add(-time.Second))
 	operatorTask.Actor = testtaskjournal.TaskActorOperator
 	operatorTask.IdempotencyKey = "platform-component-abort-0001"
 	delete(operatorTask.Params, TaskAutomaticReconcileParam)
-	operatorInput, err := tasks.platformResolverTaskPreparer(
+	operatorInput, _, err := tasks.platformResolverTaskPreparer(
 		ctx, current, projection, operatorTask, nil,
 	)
 	if err != nil {
@@ -245,6 +250,12 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		t.Fatalf("first resolver Task transaction = %#v, %v", result, err)
 	}
 	clearHostResolutionReconciliationChange(firstChange)
+	// Automatic publication must produce executable work, not just a queue row.
+	agentID := ids.NewAt(ids.KindAgent, now, 8)
+	firstClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, now.Add(time.Second))
+	if err != nil || !found || firstClaim.Task.Record.ID != first.ID {
+		t.Fatalf("claim automatic resolver Task = %v, %v", found, err)
+	}
 	activeEntry, err := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID))
 	if err != nil || activeEntry.Entry == nil {
 		t.Fatalf("active resolver Task = %#v, %v", activeEntry, err)
@@ -340,7 +351,6 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	// immutable predecessor lineage rather than the pre-transaction revision.
 	observedAt := now.Add(2 * time.Second)
 	proofResult := platformDNSProof(secondInput, uint64(secondRecord.RenderGeneration), observedAt)
-	agentID := ids.NewAt(ids.KindAgent, now, 8)
 	predecessorObservation := testplatformcomponents.ComponentObservationRecord{
 		ComponentID: secondInput.ComponentID, ServiceID: secondInput.GeneratedServiceID,
 		PlanID: secondInput.OwnershipPlanID, ComposeArtifactID: secondInput.ComposeArtifactID,
@@ -366,12 +376,19 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || !seedObservation.Succeeded {
 		t.Fatalf("seed predecessor observation = %#v, %v", seedObservation, err)
 	}
+	secondClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, observedAt)
+	if err != nil || !found || secondClaim.Task.Record.ID != second.ID {
+		t.Fatalf("claim automatic successor = %v, %v", found, err)
+	}
 	finishedAt := observedAt.Add(time.Second)
 	secondRecord.FinishedAt = &finishedAt
 	secondRecord.TerminalAssignment = &testtaskjournal.TaskTerminalAssignmentRecord{
 		AssignmentID: ids.NewAt(ids.KindAssignment, now, 10), AgentID: agentID, AgentGeneration: 1,
 	}
-	terminalResult := platformDNSProof(secondInput, uint64(secondRecord.RenderGeneration), finishedAt)
+	terminalResult := completedComposeTaskResult()
+	terminalResult.DNSResolverCandidateObservation = platformDNSProof(
+		secondInput, uint64(secondRecord.RenderGeneration), finishedAt,
+	).DNSResolverCandidateObservation
 	ackChange, err := tasks.preparePlatformComponentTaskAcknowledgement(
 		ctx, secondRecord, testtaskjournal.TaskStatusCompleted, &terminalResult, seedObservation.Revision,
 	)
@@ -401,11 +418,46 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || !restoredFence.Succeeded {
 		t.Fatalf("restore active fence = %#v, %v", restoredFence, err)
 	}
-	updated.Entry.ModRevision = restoredFence.Revision
-	if _, err := store.Transact(ctx, []testkeyvalue.Condition{{
-		Key: platformComponentTaskActiveKey(current.Record.Desired.ID), ModRevision: updated.Entry.ModRevision,
-	}}, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: platformComponentTaskActiveKey(current.Record.Desired.ID)}}); err != nil {
-		t.Fatalf("clear terminal resolver fence: %v", err)
+	terminal, err := tasks.AcknowledgeTask(ctx, agentID, 1, second.ID,
+		taskAssignmentIDForTest(t, tasks, second.ID), testtaskjournal.TaskStatusCompleted, terminalResult, finishedAt)
+	if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
+		t.Fatalf("complete automatic successor = %v", err)
+	}
+	replay, err := tasks.AcknowledgeTask(
+		ctx,
+		agentID,
+		1,
+		second.ID,
+		taskAssignmentIDForTest(
+			t,
+			tasks,
+			second.ID,
+		),
+		testtaskjournal.TaskStatusCompleted,
+		terminalResult,
+		finishedAt.Add(time.Second),
+	)
+	if err != nil || replay.Revision != terminal.Revision {
+		t.Fatalf("replay automatic successor completion = %v", err)
+	}
+	activeAfter, err := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID))
+	if err != nil || activeAfter.Entry != nil {
+		t.Fatalf("completed resolver retained active fence: %v", err)
+	}
+	markerKey, err := testidempotency.IdempotencyMarkerKey(*terminal.Record.idempotencyMarker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markerRead, err := store.Get(ctx, markerKey)
+	if err != nil || markerRead.Entry == nil || markerRead.Entry.ModRevision != terminal.Revision {
+		t.Fatalf("resolver marker not committed with terminal Task: %v", err)
+	}
+	completedMarker, err := testidempotency.DecodeIdempotencyMarker(
+		markerRead.Entry.Value,
+		*terminal.Record.idempotencyMarker,
+	)
+	if err != nil || completedMarker.State != testidempotency.IdempotencyMarkerCompleted {
+		t.Fatalf("resolver marker not completed: %v", err)
 	}
 	sourceRead, err := store.Get(ctx, testtaskjournal.TaskStorageKey(second.ID))
 	if err != nil || sourceRead.Entry == nil {

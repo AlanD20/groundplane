@@ -9,10 +9,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
-	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
 )
@@ -54,21 +51,9 @@ func newControllerResolverComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize platform Component render planner: %w", err)
 	}
-	if err := tasks.SetPlatformResolverTaskPreparer(func(
-		ctx context.Context,
-		current etcdstore.Versioned[componentrecord.Record],
-		projection resolutionrecord.HostResolutionProjectionRecord,
-		task etcd.TaskRecord,
-		priorObservation *platformcomponents.ComponentObservationRecord,
-	) (platformcomponents.PlatformComponentTaskRenderInput, error) {
-		desired, err := componentrecord.ProjectRecord(current.Record)
-		if err != nil {
-			return platformcomponents.PlatformComponentTaskRenderInput{}, err
-		}
-		return platformRenderPlanner.PrepareConfigTaskAtProjection(
-			ctx, current, desired, task, projection, priorObservation,
-		)
-	}); err != nil {
+	if err := tasks.SetPlatformResolverTaskPreparer(controllerdns.NewPlatformResolverTaskPreparer(
+		platformRenderPlanner, intentCoordinator,
+	)); err != nil {
 		return nil, fmt.Errorf("controller: configure platform resolver Task preparer: %w", err)
 	}
 	if err := tasks.SetPlatformResolverComponentSelector(platformRenderPlanner.SelectResolver); err != nil {
