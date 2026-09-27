@@ -20,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/dnsname"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 )
 
 // Document is implemented by every top-level Blueprint document.
@@ -298,6 +299,9 @@ func (e EnvEntry) Validate() error {
 // service set and is checked in Environment.Validate's caller
 // (internal/controller); this method checks the shape it can see alone.
 func (r Route) Validate() error {
+	if r.Host == imagefetch.RegistryHostname {
+		return fmt.Errorf("route: host is reserved for the private image registry")
+	}
 	if r.TargetServiceID == "" {
 		return fmt.Errorf("route: target_service_id is required")
 	}

@@ -115,9 +115,10 @@ class ProvisioningHarness:
             "fuse-overlayfs",
             "newuidmap",
             "nft",
+            "openssl",
+            "htpasswd",
             "rootlesskit",
             "slirp4netns",
-            "socat",
         ):
             self._command(name, "exit 0\n")
 

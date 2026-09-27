@@ -2,6 +2,8 @@ package app
 
 import (
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
+	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
@@ -12,13 +14,18 @@ import (
 )
 
 func newComponentReadService(
+	cfg config.ControllerConfig,
 	components *etcd.ComponentRepository,
 	baselines *resolverbaseline.Repository,
 	projections *resolutionrecord.Repository,
 	network *networketcd.Repository,
 	catalog []componentrender.EnvironmentComponentRegistration,
 ) (*componentcapability.ReadService, error) {
-	platform, err := componentregistration.NewDNSManagedConfigProjector(projections, baselines)
+	platform, err := componentregistration.NewDNSManagedConfigProjector(
+		projections,
+		baselines,
+		imagefetch.RegistryAddress(cfg.Listen.HTTP),
+	)
 	if err != nil {
 		return nil, err
 	}

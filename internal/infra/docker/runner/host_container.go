@@ -2,7 +2,6 @@ package runner
 
 import (
 	"context"
-	"errors"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,7 +10,7 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
-	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,7 +23,7 @@ func (operations *localOperations) StartRunner(
 	plan corerunner.Plan,
 	token []byte,
 ) (runnerallocation.RunnerRuntimeEvidence, error) {
-	engine, err := newEngine(plan.Paths.ProxySocket)
+	engine, err := newEngine(hostDockerSocket)
 	if err != nil {
 		return runnerallocation.RunnerRuntimeEvidence{}, err
 	}
@@ -92,7 +91,7 @@ func (operations *localOperations) ObserveRunner(
 	ctx context.Context,
 	plan corerunner.Plan,
 ) (corerunner.StepEvidence, error) {
-	engine, err := newEngine(plan.Paths.ProxySocket)
+	engine, err := newEngine(hostDockerSocket)
 	if err != nil {
 		return corerunner.StepEvidence{}, err
 	}
@@ -110,12 +109,22 @@ func (operations *localOperations) ObserveRunner(
 }
 
 func (operations *localOperations) StopRunner(ctx context.Context, plan corerunner.Plan) (string, error) {
-	engine, err := newEngine(plan.Paths.ProxySocket)
+	engine, err := newEngine(hostDockerSocket)
 	if err != nil {
 		return "", err
 	}
 	defer engine.Close()
-	_, err = engine.ContainerRemove(ctx, plan.Container.Name, client.ContainerRemoveOptions{Force: true})
+	inspected, err := engine.ContainerInspect(ctx, plan.Container.Name, client.ContainerInspectOptions{})
+	if containerderrdefs.IsNotFound(err) {
+		return receipt(plan, corerunner.StepStopRunner), nil
+	}
+	if err != nil {
+		return "", dockerError(ctx, "inspect Runner before removal", err)
+	}
+	if err := validateRunnerContainer(inspected.Container, plan); err != nil {
+		return "", err
+	}
+	_, err = engine.ContainerRemove(ctx, inspected.Container.ID, client.ContainerRemoveOptions{Force: true})
 	if err != nil && !containerderrdefs.IsNotFound(err) {
 		return "", dockerError(ctx, "remove Runner container", err)
 	}
@@ -126,7 +135,7 @@ func (operations *localOperations) ObserveRunnerAbsent(
 	ctx context.Context,
 	plan corerunner.Plan,
 ) (corerunner.StepEvidence, error) {
-	engine, err := newEngine(plan.Paths.ProxySocket)
+	engine, err := newEngine(hostDockerSocket)
 	if err != nil {
 		return corerunner.StepEvidence{}, err
 	}
@@ -154,12 +163,17 @@ func (operations *localOperations) inspectRunner(
 		return runnerallocation.RunnerRuntimeEvidence{}, false, dockerError(ctx, "inspect Runner container", err)
 	}
 	inspected := result.Container
-	if inspected.ID == "" || inspected.Config == nil || inspected.Config.Image != plan.Container.ImageRef ||
-		inspected.State == nil || !inspected.State.Running {
+	if err := validateRunnerContainer(inspected, plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, false, err
+	}
+	if inspected.State == nil || !inspected.State.Running {
 		return runnerallocation.RunnerRuntimeEvidence{}, false, errs.New(
 			errs.KindStateConflict,
 			"Runner container identity changed",
 		)
+	}
+	if err := registrationPresent(plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, false, err
 	}
 	device, inode, err := socketIdentity(plan.Paths.RawSocket)
 	if err != nil {
@@ -174,25 +188,16 @@ func (operations *localOperations) inspectRunner(
 	}, true, nil
 }
 
-func importImage(ctx context.Context, destination *client.Client, imageRef string) error {
-	source, err := newEngine(hostDockerSocket)
-	if err != nil {
-		return err
-	}
-	defer source.Close()
-	stream, err := source.ImageSave(ctx, []string{imageRef})
-	if err != nil {
-		return dockerError(ctx, "export Runner image", err)
-	}
-	defer stream.Close()
-	loaded, err := destination.ImageLoad(ctx, stream, client.ImageLoadWithQuiet(true))
-	if err != nil {
-		return dockerError(ctx, "import Runner image", err)
-	}
-	_, copyErr := io.Copy(io.Discard, loaded)
-	closeErr := loaded.Close()
-	if copyErr != nil || closeErr != nil {
-		return errs.Wrap(errs.KindInternal, errors.Join(copyErr, closeErr))
+func validateRunnerContainer(inspected container.InspectResponse, plan corerunner.Plan) error {
+	if inspected.ID == "" || inspected.Config == nil || inspected.HostConfig == nil ||
+		inspected.Config.Image != plan.Container.ImageRef || inspected.Config.User != plan.Container.User ||
+		inspected.Config.WorkingDir != plan.Paths.RunnerHome ||
+		inspected.Config.Labels["groundplane.runner.id"] != plan.RunnerID ||
+		inspected.Config.Labels["groundplane.runtime.epoch"] != strconv.FormatUint(plan.RuntimeEpoch, 10) ||
+		inspected.Config.Labels["groundplane.runner.plan"] != plan.Digest() ||
+		inspected.HostConfig.Privileged || !inspected.HostConfig.ReadonlyRootfs ||
+		string(inspected.HostConfig.NetworkMode) != plan.Network.Name {
+		return errs.New(errs.KindStateConflict, "Runner container ownership changed")
 	}
 	return nil
 }
@@ -201,20 +206,23 @@ func runnerContainerOptions(plan corerunner.Plan) client.ContainerCreateOptions 
 	return client.ContainerCreateOptions{
 		Name: plan.Container.Name,
 		Config: &container.Config{
-			Image: plan.Container.ImageRef, User: "0:0", WorkingDir: "/runner",
+			Image: plan.Container.ImageRef, User: plan.Container.User, WorkingDir: plan.Paths.RunnerHome,
 			AttachStdin: true, OpenStdin: true, StdinOnce: true,
 			Env: []string{
-				"HOME=/runner", "DOCKER_HOST=unix:///var/run/docker.sock", "RUNNER_ALLOW_RUNASROOT=1",
+				"HOME=" + plan.Paths.RunnerHome, "DOCKER_HOST=unix://" + plan.Container.DockerSocketTarget,
+				"DOCKER_CONFIG=" + runnerDockerConfig(plan),
 				"GROUNDPLANE_HOST=http://" + plan.Egress.ControllerEndpoint.String(),
 			},
 			Labels: map[string]string{
 				"groundplane.runner.id":     plan.RunnerID,
+				"groundplane.runner.plan":   plan.Digest(),
 				"groundplane.runtime.epoch": strconv.FormatUint(plan.RuntimeEpoch, 10),
 			},
 		},
 		HostConfig: &container.HostConfig{
+			DNS:            []netip.Addr{plan.Egress.ControllerEndpoint.Addr()},
 			NetworkMode:    container.NetworkMode(plan.Network.Name),
-			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyUnlessStopped},
+			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyDisabled},
 			ReadonlyRootfs: plan.Container.ReadOnlyRootFS,
 			CapDrop:        append([]string(nil), plan.Container.CapDrop...),
 			SecurityOpt:    append([]string(nil), plan.Container.SecurityOptions...),
@@ -222,14 +230,76 @@ func runnerContainerOptions(plan corerunner.Plan) client.ContainerCreateOptions 
 				"/tmp": "rw,noexec,nosuid,nodev,size=256m", "/run": "rw,noexec,nosuid,nodev,size=64m",
 			},
 			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: plan.Paths.RunnerHome, Target: "/runner"},
-				{Type: mount.TypeBind, Source: plan.Paths.ProxySocket, Target: plan.Container.DockerSocketTarget},
+				{Type: mount.TypeBind, Source: plan.Paths.RunnerHome, Target: plan.Paths.RunnerHome},
+				{
+					Type:     mount.TypeBind,
+					Source:   filepath.Dir(plan.Paths.RawSocket),
+					Target:   filepath.Dir(plan.Container.DockerSocketTarget),
+					ReadOnly: true,
+				},
 			},
 		},
 		NetworkingConfig: &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{
 			plan.Network.Name: {IPAMConfig: &network.EndpointIPAMConfig{IPv4Address: plan.Network.RunnerAddress}},
 		}},
 	}
+}
+
+func (operations *localOperations) ResumeRunner(
+	ctx context.Context,
+	plan corerunner.Plan,
+	containerID string,
+) (runnerallocation.RunnerRuntimeEvidence, error) {
+	if err := registrationPresent(plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
+	engine, err := newEngine(hostDockerSocket)
+	if err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
+	defer engine.Close()
+	result, err := engine.ContainerInspect(ctx, plan.Container.Name, client.ContainerInspectOptions{})
+	if err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, dockerError(ctx, "inspect registered Runner", err)
+	}
+	if err := validateRunnerContainer(result.Container, plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
+	if result.Container.ID != containerID {
+		return runnerallocation.RunnerRuntimeEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"Runner container differs from its registered identity",
+		)
+	}
+	if result.Container.State == nil || !result.Container.State.Running {
+		if _, err := engine.ContainerStart(ctx, result.Container.ID, client.ContainerStartOptions{}); err != nil {
+			return runnerallocation.RunnerRuntimeEvidence{}, dockerError(ctx, "resume registered Runner", err)
+		}
+	}
+	evidence, found, err := operations.inspectRunner(ctx, engine, plan)
+	if err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
+	if !found {
+		return runnerallocation.RunnerRuntimeEvidence{}, errs.New(
+			errs.KindStateConflict,
+			"registered Runner disappeared",
+		)
+	}
+	return evidence, nil
+}
+
+func registrationPresent(plan corerunner.Plan) error {
+	for _, name := range []string{".runner", ".credentials", ".credentials_rsaparams"} {
+		info, err := os.Lstat(filepath.Join(plan.Paths.RunnerHome, name))
+		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+			return errs.New(
+				errs.KindStateConflict,
+				"Runner registration is incomplete; a fresh registration is required",
+			)
+		}
+	}
+	return nil
 }
 
 func registrationDocument(plan corerunner.Plan, token []byte) []byte {
@@ -249,8 +319,7 @@ func registrationDocument(plan corerunner.Plan, token []byte) []byte {
 func waitForRunnerConfiguration(ctx context.Context, engine *client.Client, plan corerunner.Plan) error {
 	deadline := time.Now().Add(startupTimeout)
 	for {
-		if info, err := os.Stat(filepath.Join(plan.Paths.RunnerHome, ".runner")); err == nil &&
-			info.Mode().IsRegular() {
+		if err := registrationPresent(plan); err == nil {
 			return nil
 		}
 		inspected, err := engine.ContainerInspect(ctx, plan.Container.Name, client.ContainerInspectOptions{})

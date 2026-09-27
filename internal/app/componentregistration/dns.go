@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
+	"net/netip"
 )
 
 func validateRegisteredCoreDNSComponent() error {
@@ -21,6 +22,7 @@ func NewDNSRenderer() (dnsresolver.Renderer, error) {
 func NewDNSManagedConfigProjector(
 	projections controllerdns.PlatformProjectionReader,
 	baselines controllerdns.ResolverBaselineReader,
+	registryAddress netip.Addr,
 ) (*controllerdns.ManagedConfigProjector, error) {
 	renderer, err := NewDNSRenderer()
 	if err != nil {
@@ -31,5 +33,6 @@ func NewDNSManagedConfigProjector(
 		baselines,
 		renderer,
 		registeredcoredns.CorefileTarget,
+		registryAddress,
 	)
 }

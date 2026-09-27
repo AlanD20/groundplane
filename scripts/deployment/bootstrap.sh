@@ -181,7 +181,13 @@ command -v curl >/dev/null
 command -v flock >/dev/null
 command -v python3 >/dev/null
 systemctl is-active --quiet docker.service
-curl -fsS http://127.0.0.1:5000/v2/ >/dev/null
+export DOCKER_CONFIG=/etc/groundplane/registry/client
+registry_status=$(curl -sS --cacert /etc/groundplane/registry/tls.crt \
+    -o /dev/null -w '%{http_code}' https://127.0.0.1:5000/v2/ || true)
+if test "$registry_status" != 401; then
+    echo "managed TLS registry is unavailable or does not require authentication" >&2
+    exit 1
+fi
 
 resolve_repo_digest() {
     image=$1

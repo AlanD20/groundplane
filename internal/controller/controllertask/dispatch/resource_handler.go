@@ -26,6 +26,7 @@ type ResourceHandler struct {
 	backingZones    backingZoneCascadeExecutor
 	runners         controllerTaskRunners
 	runnerLifecycle controllerTaskRunnerLifecycle
+	images          controllerTaskExecutor
 }
 
 type backingZoneCascadeExecutor interface {
@@ -45,9 +46,10 @@ func NewResourceHandler(
 	agents controllerTaskLocalAgents,
 	backingZones backingZoneCascadeExecutor,
 	runners controllerTaskRunners,
+	images controllerTaskExecutor,
 	runnerLifecycle ...controllerTaskRunnerLifecycle,
 ) (*ResourceHandler, error) {
-	if agents == nil || backingZones == nil || runners == nil {
+	if agents == nil || backingZones == nil || runners == nil || images == nil {
 		return nil, errs.New(errs.KindInternal, "Controller Task handlers are not configured")
 	}
 	var lifecycle controllerTaskRunnerLifecycle
@@ -58,7 +60,7 @@ func NewResourceHandler(
 		lifecycle = runnerLifecycle[0]
 	}
 	return &ResourceHandler{
-		agents: agents, backingZones: backingZones, runners: runners, runnerLifecycle: lifecycle,
+		agents: agents, backingZones: backingZones, runners: runners, runnerLifecycle: lifecycle, images: images,
 	}, nil
 }
 
@@ -73,6 +75,8 @@ func (handler *ResourceHandler) Execute(
 		return errs.New(errs.KindValidationFailed, "Controller Task identity is invalid")
 	}
 	switch task.Params[taskjournal.TaskResourceKindParam] {
+	case taskjournal.TaskResourceImage:
+		return handler.images.Execute(ctx, task)
 	case taskjournal.TaskResourceAgent:
 		if ids.Validate(ids.KindAgent, task.Target) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Agent target is invalid")

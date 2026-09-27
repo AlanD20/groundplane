@@ -17,6 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"net/netip"
 	"runtime"
 	"time"
 )
@@ -67,6 +68,7 @@ type PlatformRenderPlanner struct {
 	catalog             ActionCatalog
 	managedConfigAction componentsdk.ActionID
 	bootstrapProvenance bool
+	registryAddress     netip.Addr
 }
 
 func NewPlatformRenderPlanner(
@@ -78,6 +80,7 @@ func NewPlatformRenderPlanner(
 	environmentPlanner EnvironmentPlanner,
 	catalog ActionCatalog,
 	managedConfigAction componentsdk.ActionID,
+	registryAddress netip.Addr,
 ) (*PlatformRenderPlanner, error) {
 	if projections == nil || baselines == nil || observations == nil || capture == nil || renderer == nil ||
 		environmentPlanner == nil ||
@@ -88,6 +91,7 @@ func NewPlatformRenderPlanner(
 		projections: projections, baselines: baselines, observations: observations, capture: capture,
 		renderer: renderer, environmentPlanner: environmentPlanner, catalog: catalog,
 		managedConfigAction: managedConfigAction,
+		registryAddress:     registryAddress,
 	}, nil
 }
 
@@ -147,6 +151,7 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		hostResolution.Record,
 		baseline.Record.Generation,
 		resolvers,
+		planner.registryAddress,
 	)
 	if err != nil {
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
@@ -191,7 +196,10 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
 	selectedRenderInput, err := BuildRenderInput(
-		resolverInput.HostResolution.Hosts, decodedConfig, resolverInput.Baseline.Resolvers,
+		resolverInput.HostResolution.Hosts,
+		decodedConfig,
+		resolverInput.Baseline.Resolvers,
+		resolverInput.PrivateListener,
 	)
 	if err != nil {
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
@@ -314,6 +322,9 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		ArtifactSHA256: hex.EncodeToString(intent.ArtifactSHA256[:]),
 		ArtifactLength: intent.ArtifactLength,
 		PlanSHA256:     hex.EncodeToString(intent.PlanSHA256[:]),
+	}
+	if resolverInput.PrivateListener.IsValid() {
+		input.PrivateListener = resolverInput.PrivateListener.String()
 	}
 	return sealPlatformComponentTaskPlanHash(task, input, selectedPlan.Services[0].ObservationAction)
 }

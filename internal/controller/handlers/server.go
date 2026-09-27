@@ -36,6 +36,7 @@ type Server struct {
 	host                    HostReader
 	controllerConfig        ControllerConfigStore
 	controllerUpdates       ControllerUpdater
+	images                  ImageFetcher
 	agents                  AgentReader
 	agentMutations          AgentMutator
 	tenants                 TenantReader
@@ -105,6 +106,7 @@ type Options struct {
 	Host                    HostReader
 	ControllerConfig        ControllerConfigStore
 	ControllerUpdates       ControllerUpdater
+	Images                  ImageFetcher
 	Agents                  AgentReader
 	AgentMutations          AgentMutator
 	Tenants                 TenantReader
@@ -191,6 +193,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		host:                    options.Host,
 		controllerConfig:        options.ControllerConfig,
 		controllerUpdates:       options.ControllerUpdates,
+		images:                  options.Images,
 		agents:                  options.Agents,
 		agentMutations:          options.AgentMutations,
 		tenants:                 options.Tenants,
@@ -262,6 +265,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerBackingServices()
 	s.registerControllerConfig()
 	s.registerControllerUpdate()
+	s.registerImageFetch()
 	s.registerComponents()
 	s.registerEnvironments()
 	registerHierarchyDeletionRoutes(s.API, s.hierarchyDeletions, s.Logger)

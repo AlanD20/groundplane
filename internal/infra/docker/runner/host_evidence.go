@@ -32,10 +32,6 @@ func daemonUnit(plan corerunner.Plan) string {
 	return "groundplane-runner-" + runnerToken(plan) + "-daemon.service"
 }
 
-func proxyUnit(plan corerunner.Plan) string {
-	return "groundplane-runner-" + runnerToken(plan) + "-proxy.service"
-}
-
 func nftTable(plan corerunner.Plan) string { return "gpr_" + runnerToken(plan) }
 
 func dockerError(ctx context.Context, operation string, err error) error {

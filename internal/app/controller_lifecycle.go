@@ -31,6 +31,20 @@ func (c *Controller) Run(ctx context.Context) error {
 		defer close(localAgentDone)
 		c.localAgent.Run(runCtx)
 	}()
+	runnersDone := make(chan struct{})
+	go func() {
+		defer close(runnersDone)
+		if c.runners != nil {
+			c.runners.Run(runCtx)
+		}
+	}()
+	resolverDone := make(chan struct{})
+	go func() {
+		defer close(resolverDone)
+		if c.resolverListener != nil {
+			c.resolverListener.Run(runCtx)
+		}
+	}()
 
 	type runtimeResult struct {
 		name string
@@ -70,6 +84,8 @@ func (c *Controller) Run(ctx context.Context) error {
 	<-schedulerDone
 	<-controllerTasksDone
 	<-localAgentDone
+	<-runnersDone
+	<-resolverDone
 
 	containerCloseErr := c.container.Close()
 	closeErr := c.store.Close()

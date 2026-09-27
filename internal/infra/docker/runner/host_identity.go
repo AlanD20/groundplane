@@ -15,6 +15,9 @@ import (
 )
 
 func (operations *localOperations) EnsureIdentity(ctx context.Context, plan corerunner.Plan) error {
+	if err := operations.claimSlot(ctx, plan); err != nil {
+		return err
+	}
 	if err := operations.ensureGroup(ctx, plan); err != nil {
 		return err
 	}
@@ -28,7 +31,9 @@ func (operations *localOperations) EnsureIdentity(ctx context.Context, plan core
 		return err
 	}
 	for _, directory := range []string{
-		filepath.Dir(plan.Paths.SlotRoot), runnerallocation.RuntimeDirectory(plan.RunnerID),
+		filepath.Dir(plan.Paths.SlotRoot),
+		filepath.Dir(runnerallocation.RuntimeDirectory(plan.RunnerID)),
+		runnerallocation.RuntimeDirectory(plan.RunnerID),
 	} {
 		if err := ensureOwnedDirectory(directory, 0, 0, 0o755); err != nil {
 			return err
@@ -43,7 +48,6 @@ func (operations *localOperations) EnsureIdentity(ctx context.Context, plan core
 		plan.Paths.DataRoot,
 		filepath.Join(plan.Paths.SlotRoot, "control"),
 		filepath.Dir(plan.Paths.RawSocket),
-		filepath.Dir(plan.Paths.ProxySocket),
 	} {
 		if err := ensureOwnedDirectory(path, plan.Identity.UID, plan.Identity.GID, 0o700); err != nil {
 			return err
@@ -63,23 +67,49 @@ func (operations *localOperations) ObserveIdentity(
 }
 
 func (operations *localOperations) RemoveIdentity(ctx context.Context, plan corerunner.Plan) (string, error) {
-	_, _ = operations.run(ctx, "loginctl", "disable-linger", plan.Identity.User)
+	if _, err := os.Lstat(plan.Paths.SlotRoot); errors.Is(err, os.ErrNotExist) {
+		if _, err := operations.ObserveIdentityAbsent(ctx, plan); err != nil {
+			return "", err
+		}
+		return receipt(plan, corerunner.StepRemoveIdentity), nil
+	}
+	if err := observeSlotClaim(plan); err != nil {
+		return "", err
+	}
+	user, userErr := operations.run(ctx, "getent", "passwd", plan.Identity.User)
+	if userErr == nil {
+		if err := validatePasswd(user.Stdout, plan); err != nil {
+			return "", err
+		}
+	} else if user.ExitCode != 2 {
+		return "", userErr
+	}
+	group, groupErr := operations.run(ctx, "getent", "group", plan.Identity.Group)
+	if groupErr == nil {
+		fields := strings.Split(strings.TrimSpace(string(group.Stdout)), ":")
+		if len(fields) < 3 || fields[0] != plan.Identity.Group ||
+			fields[2] != strconv.FormatUint(uint64(plan.Identity.GID), 10) {
+			return "", errs.New(errs.KindStateConflict, "Runner group changed before cleanup")
+		}
+	} else if group.ExitCode != 2 {
+		return "", groupErr
+	}
 	if _, err := operations.run(ctx, "userdel", plan.Identity.User); err != nil {
 		result, probeErr := operations.run(ctx, "getent", "passwd", plan.Identity.User)
-		if probeErr == nil || result.ExitCode == 0 {
+		if probeErr == nil || result.ExitCode != 2 {
 			return "", err
 		}
 	}
 	if _, err := operations.run(ctx, "groupdel", plan.Identity.Group); err != nil {
 		result, probeErr := operations.run(ctx, "getent", "group", plan.Identity.Group)
-		if probeErr == nil || result.ExitCode == 0 {
+		if probeErr == nil || result.ExitCode != 2 {
 			return "", err
 		}
 	}
-	if err := os.RemoveAll(plan.Paths.SlotRoot); err != nil {
+	if err := os.RemoveAll(runnerallocation.RuntimeDirectory(plan.RunnerID)); err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}
-	if err := os.RemoveAll(runnerallocation.RuntimeDirectory(plan.RunnerID)); err != nil {
+	if err := os.RemoveAll(plan.Paths.SlotRoot); err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}
 	return receipt(plan, corerunner.StepRemoveIdentity), nil
@@ -89,8 +119,14 @@ func (operations *localOperations) ObserveIdentityAbsent(
 	ctx context.Context,
 	plan corerunner.Plan,
 ) (corerunner.StepEvidence, error) {
-	if result, err := operations.run(ctx, "getent", "passwd", plan.Identity.User); err == nil || result.ExitCode == 0 {
-		return corerunner.StepEvidence{}, errs.New(errs.KindStateConflict, "Runner host user still exists")
+	for _, database := range []string{"passwd", "group"} {
+		if result, err := operations.run(ctx, "getent", database, plan.Identity.User); err == nil ||
+			result.ExitCode != 2 {
+			return corerunner.StepEvidence{}, errs.New(
+				errs.KindStateConflict,
+				"Runner host account absence is unproven",
+			)
+		}
 	}
 	if _, err := os.Lstat(plan.Paths.SlotRoot); err == nil || !errors.Is(err, os.ErrNotExist) {
 		return corerunner.StepEvidence{}, errs.New(errs.KindStateConflict, "Runner slot root still exists")
@@ -142,6 +178,9 @@ func (operations *localOperations) ensureUser(ctx context.Context, plan corerunn
 }
 
 func (operations *localOperations) identityMatches(ctx context.Context, plan corerunner.Plan) error {
+	if err := observeSlotClaim(plan); err != nil {
+		return err
+	}
 	group, err := operations.run(ctx, "getent", "group", plan.Identity.Group)
 	if err != nil {
 		return err
@@ -165,7 +204,14 @@ func (operations *localOperations) identityMatches(ctx context.Context, plan cor
 }
 
 func ensureOwnedDirectory(path string, uid uint32, gid uint32, mode os.FileMode) error {
-	if err := os.MkdirAll(path, mode); err != nil {
+	if _, err := os.Lstat(path); err == nil {
+		return observeOwnedDirectory(path, uid, gid, mode)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return errs.Wrap(errs.KindInternal, err)
+	}
+	if err := os.Mkdir(path, mode); errors.Is(err, os.ErrExist) {
+		return observeOwnedDirectory(path, uid, gid, mode)
+	} else if err != nil {
 		return errs.Wrap(errs.KindInternal, err)
 	}
 	if err := os.Chown(path, int(uid), int(gid)); err != nil {

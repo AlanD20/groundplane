@@ -8,13 +8,14 @@ import (
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"log/slog"
 	"net/netip"
 )
 
 type controllerRunnerComposition struct {
 	pools        config.AllocationPools
-	policy       corerunner.IsolationPolicy
-	tokens       *runnercapability.TokenBroker
+	lifecycle    *runnercapability.Executor
+	maintenance  *runnercapability.Maintenance
 	provisioning *runnercapability.ProvisioningService
 	mutations    *runnercapability.MutationService
 	removals     *runnercapability.RemovalService
@@ -27,6 +28,7 @@ func newControllerRunnerComposition(
 	hierarchyRecords *etcd.HierarchyRepository,
 	idempotency *etcd.IdempotencyRepository,
 	intentCoordinator *requestidempotency.Coordinator,
+	logger *slog.Logger,
 ) (*controllerRunnerComposition, error) {
 	runnerPools, err := cfg.AllocationPools()
 	if err != nil {
@@ -54,8 +56,12 @@ func newControllerRunnerComposition(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Runner removal service: %w", err)
 	}
+	lifecycle, maintenance, err := newRunnerLifecycleExecutor(logger, runnerRecords, runnerTokens, policy, runnerPools)
+	if err != nil {
+		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
+	}
 	return &controllerRunnerComposition{
-		pools: runnerPools, policy: policy, tokens: runnerTokens, provisioning: runnerProvisioning,
+		pools: runnerPools, lifecycle: lifecycle, maintenance: maintenance, provisioning: runnerProvisioning,
 		mutations: runnerMutations, removals: runnerRemovals,
 	}, nil
 }

@@ -23,7 +23,12 @@ func TestLocalAgentControllerTaskHandlerEnrollsFromImmutableTaskInput(t *testing
 
 	task := testAgentEnrollmentTask()
 	agents := &fakeControllerTaskLocalAgents{healthErr: errs.New(errs.KindAgentNotFound, "missing")}
-	handler, err := NewResourceHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
+	handler, err := NewResourceHandler(
+		agents,
+		testBackingZoneCascade(t),
+		&fakeControllerTaskRunners{},
+		&recordingControllerTaskExecutor{},
+	)
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
@@ -68,7 +73,7 @@ func TestControllerTaskHandlerFinalizesOwnershipFreeFailedRunner(t *testing.T) {
 		}},
 	}
 	handler, err := NewResourceHandler(
-		&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), runners,
+		&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), runners, &recordingControllerTaskExecutor{},
 	)
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
@@ -85,7 +90,12 @@ func TestLocalAgentControllerTaskHandlerReconcilesMatchingReplay(t *testing.T) {
 	agents := &fakeControllerTaskLocalAgents{health: localagent.Health{Agent: localagent.Agent{
 		ID: task.Target, EnrollmentTaskID: task.ID, Phase: localagent.PhaseReady,
 	}}}
-	handler, err := NewResourceHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
+	handler, err := NewResourceHandler(
+		agents,
+		testBackingZoneCascade(t),
+		&fakeControllerTaskRunners{},
+		&recordingControllerTaskExecutor{},
+	)
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
@@ -115,7 +125,7 @@ func TestLocalAgentControllerTaskHandlerReconcilesEnrollmentRetry(t *testing.T) 
 	handler, err := NewResourceHandler(
 		agents,
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{},
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
 	)
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
@@ -142,7 +152,12 @@ func TestLocalAgentControllerTaskHandlerRejectsAnotherEnrollmentOwner(t *testing
 		EnrollmentTaskID: ids.NewAt(ids.KindTask, task.CreatedAt.Add(time.Second), 22),
 		Phase:            localagent.PhaseReady,
 	}}}
-	handler, err := NewResourceHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
+	handler, err := NewResourceHandler(
+		agents,
+		testBackingZoneCascade(t),
+		&fakeControllerTaskRunners{},
+		&recordingControllerTaskExecutor{},
+	)
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
@@ -160,7 +175,7 @@ func TestLocalAgentControllerTaskHandlerRejectsUnclosedParams(t *testing.T) {
 	handler, err := NewResourceHandler(
 		&fakeControllerTaskLocalAgents{},
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{},
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
 	)
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)

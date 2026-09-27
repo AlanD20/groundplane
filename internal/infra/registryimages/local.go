@@ -1,0 +1,53 @@
+package registryimages
+
+import (
+	"context"
+	"errors"
+	"runtime"
+
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	"github.com/AlanD20/groundplane/internal/infra/registryconfiguration"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/moby/moby/client"
+)
+
+// Local opens managed credentials and host clients for each operation. No
+// credential snapshot or background client outlives the requesting operation.
+type Local struct{}
+
+func (Local) Resolve(ctx context.Context, requested string) (imagefetch.Plan, error) {
+	registryClient, err := NewLocal(ctx)
+	if err != nil {
+		return imagefetch.Plan{}, err
+	}
+	plan, err := registryClient.Resolve(ctx, requested)
+	return plan, errors.Join(err, registryClient.Close())
+}
+
+func (Local) Fetch(ctx context.Context, plan imagefetch.Plan) (string, error) {
+	registryClient, err := NewLocal(ctx)
+	if err != nil {
+		return "", err
+	}
+	imageID, err := registryClient.Fetch(ctx, plan)
+	return imageID, errors.Join(err, registryClient.Close())
+}
+
+// NewLocal owns the host Docker client and uses only installer-managed registry
+// credentials and trust. Its caller must Close it after the operation finishes.
+func NewLocal(ctx context.Context) (*Client, error) {
+	settings, err := registryconfiguration.Read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	engine, err := client.New(client.WithHost("unix:///var/run/docker.sock"))
+	if err != nil {
+		return nil, errs.Wrap(errs.KindInternal, err)
+	}
+	registryClient, err := New(engine, settings.Certificate, settings.Username, settings.Password, runtime.GOARCH)
+	if err != nil {
+		return nil, errors.Join(err, engine.Close())
+	}
+	registryClient.ownedEngine = engine
+	return registryClient, nil
+}

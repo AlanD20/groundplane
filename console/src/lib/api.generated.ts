@@ -718,6 +718,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/images/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fetch selected private-registry content into host Docker without deploying */
+        post: operations["image.fetch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects": {
         parameters: {
             query?: never;
@@ -2250,6 +2267,29 @@ export interface components {
             /** Format: int64 */
             used_pct: number;
         };
+        ImageFetchAccepted: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ImageFetchAccepted.json
+             */
+            readonly $schema?: string;
+            /** @description Immutable registry reference selected for this operation */
+            image: string;
+            /** @description Expected host image ID, verified before Task completion */
+            image_id: string;
+            task_id: string;
+        };
+        ImageFetchRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ImageFetchRequest.json
+             */
+            readonly $schema?: string;
+            /** @description Explicit tag or SHA-256 digest in the managed private registry */
+            image: string;
+        };
         LogEvent: {
             container_id: string;
             container_name: string;
@@ -3169,7 +3209,7 @@ export interface components {
             target: string;
             tenant_id?: string;
             /** @enum {string} */
-            type: "deploy" | "rollback" | "backup" | "backup_prune" | "restore" | "attach" | "detach" | "run" | "script" | "provision" | "create" | "update" | "remove" | "start" | "stop" | "destroy" | "rotate";
+            type: "deploy" | "rollback" | "backup" | "backup_prune" | "restore" | "attach" | "detach" | "run" | "script" | "provision" | "create" | "update" | "remove" | "start" | "stop" | "destroy" | "rotate" | "fetch";
             /** Format: date-time */
             updated_at: string;
             /** @enum {string} */
@@ -5384,6 +5424,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Host"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "image.fetch": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageFetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageFetchAccepted"];
                 };
             };
             /** @description Error */

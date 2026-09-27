@@ -37,6 +37,11 @@ It supports upstream resolvers and per-domain forwarding. Tailnet detection
 provides an overridable default. A network Zone is not a DNS zone and does not
 automatically become a DNS name.
 
+The accepted local-registry design also uses this resolver for its managed
+internal name. That integration is not yet available: the current resolver binds
+only to host loopback; Runner daemon access requires a private listener and
+resolver wiring. It must not expose a public DNS resolver. See [Runners](runners.md).
+
 Provide a full Corefile containing exactly one `{groundplane}` marker for GP's
 managed directives. Invalid configuration must leave serving configuration in
 place. Removing DNS restores the captured predecessor resolver configuration.

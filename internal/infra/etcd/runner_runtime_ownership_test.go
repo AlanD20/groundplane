@@ -49,9 +49,8 @@ func TestRunnerRuntimeOwnershipAttestationAndReplay(t *testing.T) {
 	}
 }
 
-// Rationale: an attested create failure must retain exact ownership until a
-// cleanup epoch proves removal; retry may start only after that proof deletes
-// the old ownership record.
+// RUN-07/09: retry admission retains the failed runtime's exact ownership.
+// Only the running retry may clear it after cleanup; admission alone is no proof.
 func TestRunnerFailedAttestedRuntimeCleanupThenRetry(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -82,24 +81,40 @@ func TestRunnerFailedAttestedRuntimeCleanupThenRetry(t *testing.T) {
 	retry.OperationID = source.OperationID
 	retryMarker := runnerTestMarker(retry, desired)
 	retryMarker.Locator.Key = "runner-failed-runtime-retry-01"
-	blocked, err := repository.RetryRunnerCreationWithTask(ctx, source.ID, retry, retryMarker)
+	accepted, err := repository.RetryRunnerCreationWithTask(ctx, source.ID, retry, retryMarker)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, conflict, classifyErr := blocked.Classify(); classifyErr != nil || conflict == nil {
+	if _, _, conflict, classifyErr := accepted.Classify(); classifyErr != nil || conflict != nil {
 		t.Fatalf("retry with retained ownership conflict/error = %#v/%v", conflict, classifyErr)
 	}
-	cleanup, err := repository.BeginFailedRunnerRuntimeCleanup(ctx, failed)
+	cleanup, err := repository.GetRunner(ctx, desired.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cleanup.Record.RuntimeEpoch != failed.Record.RuntimeEpoch+1 || cleanup.Record.ContainerID != containerID {
+	if cleanup.Record.RuntimeEpoch != failed.Record.RuntimeEpoch+1 || cleanup.Record.ContainerID != "" ||
+		cleanup.Record.CreateTaskID != retry.ID || cleanup.Record.ProvisioningState != testrunners.RunnerProvisioningProvisioning {
 		t.Fatalf("cleanup lifecycle = %#v", cleanup.Record.RunnerLifecycleRecord)
 	}
-	replay, err := repository.BeginFailedRunnerRuntimeCleanup(ctx, failed)
-	if err != nil || replay.Record.RuntimeEpoch != cleanup.Record.RuntimeEpoch ||
-		replay.Record.LifecycleRevision != cleanup.Record.LifecycleRevision {
-		t.Fatalf("cleanup replay = %#v, %v", replay, err)
+	stored, found, err := repository.GetRunnerRuntimeOwnership(ctx, desired.ID)
+	if err != nil || !found || stored.Record != ownership {
+		t.Fatalf("retry admission discarded ownership: %#v/%t/%v", stored, found, err)
+	}
+	if _, err := repository.DeleteRunnerRuntimeOwnershipAfterCleanup(ctx, cleanup, ownership); err == nil {
+		t.Fatal("pending retry cleared ownership before execution")
+	}
+	tasks, err := newTaskRepository(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claimed, found, err := tasks.ClaimNextControllerTask(ctx, retry.CreatedAt.Add(3*time.Second)); err != nil ||
+		!found ||
+		claimed.Task.Record.ID != retry.ID {
+		t.Fatalf("claim retry = %#v/%t/%v", claimed, found, err)
+	}
+	cleanup, err = repository.GetRunner(ctx, desired.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
 	wrong := ownership
 	wrong.SocketInode++
@@ -118,7 +133,7 @@ func TestRunnerFailedAttestedRuntimeCleanupThenRetry(t *testing.T) {
 	retried, err := repository.GetRunner(ctx, desired.ID)
 	if err != nil || retried.Record.ProvisioningState != testrunners.RunnerProvisioningProvisioning ||
 		retried.Record.CreateTaskID != retry.ID || retried.Record.ContainerID != "" ||
-		retried.Record.RuntimeEpoch != cleanup.Record.RuntimeEpoch+1 {
+		retried.Record.RuntimeEpoch != cleanup.Record.RuntimeEpoch {
 		t.Fatalf("retried lifecycle = %#v, %v", retried.Record.RunnerLifecycleRecord, err)
 	}
 }

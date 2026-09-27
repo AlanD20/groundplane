@@ -54,12 +54,10 @@ const (
 	StepEnsureIdentity = runnerallocation.StepEnsureIdentity
 	StepEnsureNetwork  = runnerallocation.StepEnsureNetwork
 	StepEnsureEgress   = runnerallocation.StepEnsureEgress
-	StepStartProxy     = runnerallocation.StepStartProxy
 	StepStartDaemon    = runnerallocation.StepStartDaemon
 	StepStartRunner    = runnerallocation.StepStartRunner
 	StepStopRunner     = runnerallocation.StepStopRunner
 	StepStopDaemon     = runnerallocation.StepStopDaemon
-	StepStopProxy      = runnerallocation.StepStopProxy
 	StepRemoveNetwork  = runnerallocation.StepRemoveNetwork
 	StepRemoveEgress   = runnerallocation.StepRemoveEgress
 	StepRemoveIdentity = runnerallocation.StepRemoveIdentity
@@ -81,10 +79,9 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 	gateway := prefix.Addr().Next()
 	runnerAddress := gateway.Next()
 	identityToken := stableToken(target.RunnerID)
-	account := "gp_runner_" + identityToken
+	account := "gpr_" + identityToken
 	slotRoot := fmt.Sprintf("/var/lib/groundplane/runner-slots/slot-%02d", target.Allocation.Slot)
 	home := path.Join(slotRoot, "runner")
-	proxySocket := path.Join(runnerallocation.RuntimeDirectory(target.RunnerID), "proxy", "docker.sock")
 	labels := append([]string(nil), target.Labels...)
 	denied := append([]netip.Prefix(nil), policy.DeniedCIDRs...)
 	return Plan{
@@ -99,7 +96,7 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 		Paths: Paths{
 			SlotRoot: slotRoot, RunnerHome: home, WorkRoot: path.Join(home, "_work"),
 			DataRoot:  path.Join(slotRoot, "docker"),
-			RawSocket: runnerallocation.DaemonSocketPath(target.RunnerID), ProxySocket: proxySocket,
+			RawSocket: runnerallocation.DaemonSocketPath(target.RunnerID),
 		},
 		Network: Network{
 			Name: "gp_runner_" + target.RunnerID, BridgeName: fmt.Sprintf("gpr%d", target.Allocation.Slot),
@@ -121,7 +118,9 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 			),
 			ReadOnlyRootFS: true, CapDrop: []string{"ALL"}, SecurityOptions: []string{"no-new-privileges=true"},
 			NetworkName: "gp_runner_" + target.RunnerID, NetworkAddress: runnerAddress,
-			DockerSocketSource: proxySocket, DockerSocketTarget: "/var/run/docker.sock",
+			DockerSocketSource: runnerallocation.DaemonSocketPath(
+				target.RunnerID,
+			), DockerSocketTarget: "/var/run/groundplane-docker/docker.sock",
 			GitHubURL: target.GitHubURL, RunnerName: "gp-" + identityToken, Labels: labels,
 		},
 	}, nil

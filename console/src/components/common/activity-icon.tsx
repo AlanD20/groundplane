@@ -1,6 +1,7 @@
 import {
   ArrowUpCircle,
   DatabaseBackup,
+  Download,
   History,
   KeyRound,
   Link2,
@@ -34,6 +35,7 @@ const ICONS: Record<TaskType, React.ReactNode> = {
   remove: <Trash2 />,
   update: <Settings2 />,
   rotate: <KeyRound />,
+  fetch: <Download />,
 }
 
 export function ActivityIcon({ type, status }: { type: TaskType; status: TaskStatus }) {

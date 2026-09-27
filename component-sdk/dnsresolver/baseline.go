@@ -126,11 +126,15 @@ func (projection HostResolutionProjection) Validate() error {
 }
 
 type ResolverInput struct {
-	Baseline       ResolverBaseline
-	HostResolution HostResolutionProjection
+	Baseline        ResolverBaseline
+	HostResolution  HostResolutionProjection
+	PrivateListener netip.Addr
 }
 
 func (input ResolverInput) Validate() error {
+	if input.PrivateListener.IsValid() && (!input.PrivateListener.Is4() || !input.PrivateListener.IsPrivate()) {
+		return fmt.Errorf("dns resolver: additional listener must be private IPv4")
+	}
 	if err := input.Baseline.Validate(); err != nil {
 		return err
 	}

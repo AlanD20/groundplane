@@ -98,6 +98,7 @@ function taskTitle(type: TaskType, target: string): string {
     remove: "Remove",
     update: "Update",
     rotate: "Rotate",
+    fetch: "Fetch image",
   };
   return `${labels[type]} · ${target}`;
 }

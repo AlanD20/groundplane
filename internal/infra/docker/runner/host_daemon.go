@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/moby/moby/client"
@@ -17,11 +18,13 @@ import (
 )
 
 func (operations *localOperations) StartDaemon(ctx context.Context, plan corerunner.Plan) error {
-	// Identity allocation must not start Runner-uid processes before egress rules.
-	if _, err := operations.run(ctx, "loginctl", "enable-linger", plan.Identity.User); err != nil {
+	if err := observeSlotClaim(plan); err != nil {
 		return err
 	}
-	controlRoot := filepath.Join(plan.Paths.SlotRoot, "control")
+	if err := prepareRunnerRegistry(ctx, plan); err != nil {
+		return err
+	}
+	controlRoot := filepath.Dir(plan.Paths.RawSocket)
 	for _, path := range []string{
 		filepath.Join(controlRoot, "rootlesskit"),
 		filepath.Join(controlRoot, "docker-exec"),
@@ -33,6 +36,7 @@ func (operations *localOperations) StartDaemon(ctx context.Context, plan corerun
 	unit := daemonUnit(plan)
 	args := []string{
 		"--quiet", "--unit=" + unit,
+		"--description=" + daemonDescription(plan),
 		"--property=User=" + plan.Identity.User,
 		"--property=Group=" + plan.Identity.Group,
 		"--property=Environment=HOME=" + plan.Paths.RunnerHome,
@@ -42,13 +46,18 @@ func (operations *localOperations) StartDaemon(ctx context.Context, plan corerun
 		"--state-dir=" + filepath.Join(controlRoot, "rootlesskit"),
 		"--net=slirp4netns", "--mtu=65520", "--disable-host-loopback",
 		"--copy-up=/etc", "--copy-up=/run", "--propagation=rslave",
+		// RootlessKit mounts its own resolver file inside the copied-up /etc.
+		// Set daemon resolution there, not on the host and not only in jobs.
+		"/bin/sh", "-eu", "-c", `printf 'nameserver %s\n' "$1" > /etc/resolv.conf; shift; exec "$@"`,
+		"groundplane-rootless-docker", plan.Egress.ControllerEndpoint.Addr().String(),
 		"/usr/bin/dockerd", "--rootless", "--host=unix://" + plan.Paths.RawSocket,
+		"--dns=" + plan.Egress.ControllerEndpoint.Addr().String(),
 		"--data-root=" + plan.Paths.DataRoot,
 		"--exec-root=" + filepath.Join(controlRoot, "docker-exec"),
 		"--pidfile=" + filepath.Join(controlRoot, "dockerd.pid"),
 		"--storage-driver=fuse-overlayfs",
 	}
-	if err := operations.ensureUnit(ctx, unit, args); err != nil {
+	if err := operations.ensureUnit(ctx, plan, args); err != nil {
 		return err
 	}
 	engine, err := waitForEngine(ctx, plan.Paths.RawSocket)
@@ -56,17 +65,39 @@ func (operations *localOperations) StartDaemon(ctx context.Context, plan corerun
 		return err
 	}
 	defer engine.Close()
-	if err := ensureNetwork(ctx, engine, plan, false); err != nil {
-		return err
+	return nil
+}
+
+// Resume reconstructs only the already registered Runner's volatile runtime.
+// Its persisted plan remains the authority; it never performs registration.
+func (control *HostControl) Resume(
+	ctx context.Context,
+	plan corerunner.Plan,
+	containerID string,
+) (runnerallocation.RunnerRuntimeEvidence, error) {
+	if err := validateCall(ctx, plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
 	}
-	return importImage(ctx, engine, plan.Container.ImageRef)
+	if _, err := control.EnsureIdentity(ctx, plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
+	if _, err := control.EnsureNetwork(ctx, plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
+	if _, err := control.EnsureEgress(ctx, plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
+	if _, err := control.StartDaemon(ctx, plan); err != nil {
+		return runnerallocation.RunnerRuntimeEvidence{}, err
+	}
+	return control.operations.ResumeRunner(ctx, plan, containerID)
 }
 
 func (operations *localOperations) ObserveDaemon(
 	ctx context.Context,
 	plan corerunner.Plan,
 ) (corerunner.StepEvidence, error) {
-	if err := operations.observeUnit(ctx, daemonUnit(plan)); err != nil {
+	if err := operations.observeUnit(ctx, plan); err != nil {
 		return corerunner.StepEvidence{}, err
 	}
 	engine, err := newEngine(plan.Paths.RawSocket)
@@ -77,14 +108,11 @@ func (operations *localOperations) ObserveDaemon(
 	if _, err := engine.ServerVersion(ctx, client.ServerVersionOptions{}); err != nil {
 		return corerunner.StepEvidence{}, dockerError(ctx, "inspect Runner daemon", err)
 	}
-	if err := observeNetwork(ctx, engine, plan, false); err != nil {
-		return corerunner.StepEvidence{}, err
-	}
 	return applied(corerunner.StepStartDaemon), nil
 }
 
 func (operations *localOperations) StopDaemon(ctx context.Context, plan corerunner.Plan) (string, error) {
-	if err := operations.stopUnit(ctx, daemonUnit(plan)); err != nil {
+	if err := operations.stopUnit(ctx, plan); err != nil {
 		return "", err
 	}
 	return receipt(plan, corerunner.StepStopDaemon), nil
@@ -94,7 +122,7 @@ func (operations *localOperations) ObserveDaemonAbsent(
 	ctx context.Context,
 	plan corerunner.Plan,
 ) (corerunner.StepEvidence, error) {
-	if err := operations.observeUnitAbsent(ctx, daemonUnit(plan)); err != nil {
+	if err := operations.observeUnitAbsent(ctx, plan); err != nil {
 		return corerunner.StepEvidence{}, err
 	}
 	return absent(plan, corerunner.StepStopDaemon), nil
@@ -139,22 +167,6 @@ func waitForEngine(ctx context.Context, socket string) (*client.Client, error) {
 		}
 		if time.Now().After(deadline) {
 			return nil, errs.New(errs.KindInternal, "Runner Docker daemon did not become ready")
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-}
-
-func waitForSocket(ctx context.Context, path string) error {
-	deadline := time.Now().Add(startupTimeout)
-	for {
-		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSocket != 0 {
-			return nil
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if time.Now().After(deadline) {
-			return errs.New(errs.KindInternal, "Runner socket did not become ready")
 		}
 		time.Sleep(250 * time.Millisecond)
 	}

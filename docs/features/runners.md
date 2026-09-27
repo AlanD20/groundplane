@@ -41,13 +41,14 @@ original request does not replace the token in an existing attempt.
 Each Runner owns a dedicated rootless Docker daemon, unprivileged host identity
 and distinct subordinate UID/GID ranges. It receives that daemon's socket, never
 the host Docker socket. Jobs and service containers stay inside its user namespace.
-Host networking, privileged mode, `CAP_NET_ADMIN` and published host ports are
-forbidden.
+Jobs use ordinary Docker commands directly; no custom Docker proxy filters them.
+Docker privileges and networking options are bounded by the rootless daemon's
+namespace, not host-root authority. Only trusted workflows may run here.
 
 Each Runner gets a `/29` from the separate `runner.network_pool`, configured as
 a `/24`, `/25` or `/26`. It joins no Environment, backing, platform or other
 Runner network. Egress policy blocks direct access to GP private pools except the
-private Controller API endpoint while allowing DNS and ordinary internet access. Same-Tenant
+private Controller API and local registry endpoints while allowing DNS and ordinary internet access. Same-Tenant
 ownership does not permit communication with another Runner.
 
 ## GP command access and image delivery
@@ -68,10 +69,28 @@ first trusted private address in the Controller's `listen.http` configuration.
 A loopback-only Controller cannot create or retry a Runner: configure a private
 listener first. No public listener or API relay is created automatically.
 
-The API remains private; Runner access does not require public exposure. Image
-delivery transfers a specific built image from the Runner's daemon to the host
-under Controller authority, then uses ordinary Deploy. It must not expose host
-Docker or replace a serving Release after a failed build or failed handoff.
+The API remains private; Runner access does not require public exposure.
+
+**Accepted, not yet integrated:** jobs build and push with ordinary Docker commands
+to a private registry on the same host. CoreDNS supplies its internal name to both
+the Runner's rootless daemon and host Docker. An explicit GP image-fetch operation
+then loads the selected image into host Docker before ordinary Service Deploy.
+No external registry or public DNS configuration is required.
+
+The working implementation exposes **Host → Fetch image** in the Console and
+`groundplane image fetch <reference>` in the CLI. Use an explicit tag or digest
+under `registry.groundplane.internal:5000`. Acceptance returns a Task and its
+selected immutable reference; it does not mean the image is available yet.
+Wait for the Task to complete, then use that reference in ordinary Deploy.
+Task Retry keeps the original selection, even if the tag has moved. A new Fetch
+is a new selection. The CLI's `--idempotency-key` lets automation resolve uncertain
+acceptance without creating another operation. This path is not live-qualified.
+
+The two Docker daemons have separate image stores: a successful build or push
+alone does not make an image available for GP Deploy. Fetch must complete first.
+Failed build, push or fetch leaves the serving Release unchanged. Removing a
+Runner preserves shared registry data and application images. See the
+[runtime design](../decisions/runner-isolation.md) for identity and access rules.
 
 ## Status and removal
 

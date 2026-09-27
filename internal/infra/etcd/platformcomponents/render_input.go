@@ -38,6 +38,7 @@ type PlatformComponentTaskRenderInput struct {
 	HostResolutionSHA256           string                      `json:"host_resolution_sha256"`
 	Config                         core.CoreDNSComponentConfig `json:"config"`
 	Hosts                          []PlatformDNSHost           `json:"hosts,omitempty"`
+	PrivateListener                string                      `json:"private_listener,omitempty"`
 	GeneratedServiceID             string                      `json:"generated_service_id"`
 	EnsureService                  bool                        `json:"ensure_service"`
 	DisableService                 bool                        `json:"disable_service"`
@@ -101,6 +102,12 @@ func DecodePlatformComponentTaskRenderInput(value []byte) (PlatformComponentTask
 }
 
 func ValidatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInput) error {
+	if input.PrivateListener != "" {
+		address, err := netip.ParseAddr(input.PrivateListener)
+		if err != nil || !address.Is4() || !address.IsPrivate() || address.String() != input.PrivateListener {
+			return errs.New(errs.KindValidationFailed, "platform resolver private listener is invalid")
+		}
+	}
 	if ids.Validate(ids.KindPlan, input.PlanID) != nil || ids.Validate(ids.KindTask, input.TaskID) != nil ||
 		ids.Validate(ids.KindComponent, input.ComponentID) != nil ||
 		ids.Validate(ids.KindService, input.GeneratedServiceID) != nil || input.HostResolutionInputRevision <= 0 ||

@@ -147,7 +147,12 @@ func (Renderer) Render(input dnsresolver.RenderInput) ([]byte, error) {
 		return nil, err
 	}
 	var output strings.Builder
-	output.WriteString("bind 127.0.0.1\n")
+	output.WriteString("bind 127.0.0.1")
+	if normalized.PrivateListener.IsValid() {
+		output.WriteByte(' ')
+		output.WriteString(normalized.PrivateListener.String())
+	}
+	output.WriteByte('\n')
 	if len(normalized.Hosts) > 0 {
 		output.WriteString("    hosts {\n")
 		for _, host := range normalized.Hosts {
@@ -186,6 +191,9 @@ func (Renderer) Digest(input dnsresolver.RenderInput) ([sha256.Size]byte, error)
 
 func normalize(input dnsresolver.RenderInput) (dnsresolver.RenderInput, error) {
 	input = dnsresolver.CloneRenderInput(input)
+	if input.PrivateListener.IsValid() && (!input.PrivateListener.Is4() || !input.PrivateListener.IsPrivate()) {
+		return dnsresolver.RenderInput{}, fmt.Errorf("coredns: additional listener must be private IPv4")
+	}
 	if len(input.CorefileTemplate) == 0 || len(input.CorefileTemplate) > maxCorefileTemplateBytes ||
 		!utf8.ValidString(input.CorefileTemplate) || !strings.HasSuffix(input.CorefileTemplate, "\n") ||
 		strings.ContainsRune(input.CorefileTemplate, '\x00') || strings.ContainsRune(input.CorefileTemplate, '\r') ||
@@ -208,6 +216,7 @@ func normalize(input dnsresolver.RenderInput) (dnsresolver.RenderInput, error) {
 	}
 	return dnsresolver.RenderInput{
 		CorefileTemplate: input.CorefileTemplate,
+		PrivateListener:  input.PrivateListener,
 		Hosts:            hosts, Forwarders: forwarders, CatchAll: catchAll,
 	}, nil
 }

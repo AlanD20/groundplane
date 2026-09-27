@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"sync"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -17,6 +18,10 @@ import (
 )
 
 const controllerRunnerExecutor = "controller"
+
+type creationJournal interface {
+	LatestCreation(context.Context, string) (runnerallocation.RunnerRuntimeProgress, bool, error)
+}
 
 type executionRepository interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
@@ -44,8 +49,10 @@ type executionRepository interface {
 // Executor owns the native Controller portion of Runner creation. Host effects
 // remain inside Lifecycle; this module binds them to durable Runner ownership.
 type Executor struct {
+	mu         sync.Mutex
 	repository executionRepository
 	lifecycle  *Lifecycle
+	journal    creationJournal
 	broker     *TokenBroker
 	allocation runnerallocation.RunnerAllocationConfig
 	policy     corerunner.IsolationPolicy
@@ -55,23 +62,26 @@ type Executor struct {
 func NewExecutor(
 	repository executionRepository,
 	lifecycle *Lifecycle,
+	journal creationJournal,
 	broker *TokenBroker,
 	allocation runnerallocation.RunnerAllocationConfig,
 	policy corerunner.IsolationPolicy,
 ) (*Executor, error) {
-	if repository == nil || lifecycle == nil || broker == nil {
+	if repository == nil || lifecycle == nil || journal == nil || broker == nil {
 		return nil, errs.New(errs.KindInternal, "Runner executor is not configured")
 	}
 	if _, err := allocation.Validate(); err != nil {
 		return nil, err
 	}
 	return &Executor{
-		repository: repository, lifecycle: lifecycle, broker: broker,
+		repository: repository, lifecycle: lifecycle, journal: journal, broker: broker,
 		allocation: allocation, policy: policy, now: time.Now,
 	}, nil
 }
 
 func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecord) error {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
 	if ctx == nil || task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskCreate ||
 		ids.Validate(ids.KindTask, task.ID) != nil || ids.Validate(ids.KindRunner, task.Target) != nil ||
 		len(task.Params) != 2 || task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner ||
@@ -86,9 +96,38 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 		current.Record.CreateTaskID != task.ID || current.Record.RuntimeEpoch == ^uint64(0) {
 		return errs.New(errs.KindStateConflict, "Runner creation Task does not own provisioning")
 	}
-	plan, err := executor.runtimePlan(current.Record, current.Record.RuntimeEpoch+1)
+	previous, found, err := executor.journal.LatestCreation(ctx, task.Target)
 	if err != nil {
 		return err
+	}
+	var plan corerunner.Plan
+	if found && previous.TaskID == task.ID {
+		plan = previous.Plan
+	} else {
+		if found {
+			if task.RetryOf == "" || previous.RuntimeEpoch > current.Record.RuntimeEpoch {
+				return errs.New(errs.KindStateConflict, "Runner creation journal does not belong to this retry")
+			}
+			if err := executor.cleanupAttempt(ctx, task.ID, current.Record, previous.Plan); err != nil {
+				return err
+			}
+			ownership, exists, err := executor.repository.GetRunnerRuntimeOwnership(ctx, task.Target)
+			if err != nil {
+				return err
+			}
+			if exists {
+				if ownership.Record.RuntimeEpoch != previous.RuntimeEpoch {
+					return errs.New(errs.KindStateConflict, "Runner retry cleanup ownership changed")
+				}
+				if _, err := executor.repository.DeleteRunnerRuntimeOwnershipAfterCleanup(ctx, current, ownership.Record); err != nil {
+					return err
+				}
+			}
+		}
+		plan, err = executor.runtimePlan(current.Record, current.Record.RuntimeEpoch+1)
+		if err != nil {
+			return err
+		}
 	}
 	attempt := Attempt{
 		TaskID: task.ID, Executor: controllerRunnerExecutor,
@@ -99,16 +138,29 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 	if err != nil {
 		return err
 	}
+	ownership := runnerrecord.RunnerRuntimeOwnershipRecord{
+		RunnerID: current.Record.Desired.ID, RuntimeEpoch: plan.RuntimeEpoch,
+		DaemonSocketEndpoint: "unix://" + plan.Paths.RawSocket, DaemonInstanceNonce: evidence.DaemonNonce,
+		SocketDevice: evidence.SocketDevice, SocketInode: evidence.SocketInode,
+		CreatedAt: executor.now().UTC(),
+	}
+	prior, exists, err := executor.repository.GetRunnerRuntimeOwnership(ctx, task.Target)
+	if err != nil {
+		return err
+	}
+	if exists {
+		// Readiness publication can be interrupted after ownership commits.
+		// Replay its original timestamp, never manufacture a different record.
+		ownership.CreatedAt = prior.Record.CreatedAt
+		if ownership != prior.Record || current.Record.ContainerID != evidence.ContainerID {
+			return errs.New(errs.KindStateConflict, "Runner creation replay ownership changed")
+		}
+	}
 	_, err = executor.repository.AttestRunnerRuntimeOwnership(
 		ctx,
 		current,
 		evidence.ContainerID,
-		runnerrecord.RunnerRuntimeOwnershipRecord{
-			RunnerID: current.Record.Desired.ID, RuntimeEpoch: plan.RuntimeEpoch,
-			DaemonSocketEndpoint: "unix://" + plan.Paths.RawSocket, DaemonInstanceNonce: evidence.DaemonNonce,
-			SocketDevice: evidence.SocketDevice, SocketInode: evidence.SocketInode,
-			CreatedAt: executor.now().UTC(),
-		},
+		ownership,
 	)
 	if err != nil {
 		return err
@@ -118,6 +170,8 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 }
 
 func (executor *Executor) ExecuteRemove(ctx context.Context, task etcd.TaskRecord) error {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
 	if ctx == nil || task.Executor != taskjournal.TaskExecutorController || task.Type != taskjournal.TaskRemove ||
 		ids.Validate(ids.KindTask, task.ID) != nil || ids.Validate(ids.KindRunner, task.Target) != nil ||
 		len(task.Params) != 7 || task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
@@ -137,30 +191,46 @@ func (executor *Executor) ExecuteRemove(ctx context.Context, task etcd.TaskRecor
 	if err != nil {
 		return err
 	}
+	previous, found, err := executor.journal.LatestCreation(ctx, task.Target)
+	if err != nil {
+		return err
+	}
 	if !exists {
 		if current.Record.ProvisioningState != runnerrecord.RunnerProvisioningFailed ||
 			current.Record.ContainerID != "" {
 			return errs.New(errs.KindStateConflict, "Runner removal lost runtime ownership")
 		}
-		return nil
+		if !found {
+			return nil // Every host effect requires a published creation journal.
+		}
+		return executor.cleanupAttempt(ctx, task.ID, current.Record, previous.Plan)
 	}
 	if current.Record.ContainerID == "" || ownership.Record.RunnerID != current.Record.Desired.ID ||
-		ownership.Record.RuntimeEpoch >= current.Record.RuntimeEpoch {
+		ownership.Record.RuntimeEpoch >= current.Record.RuntimeEpoch || !found ||
+		previous.Plan.RuntimeEpoch != ownership.Record.RuntimeEpoch {
 		return errs.New(errs.KindStateConflict, "Runner removal ownership changed")
 	}
-	plan, err := executor.runtimePlan(current.Record, ownership.Record.RuntimeEpoch)
-	if err != nil {
-		return err
-	}
-	attempt := Attempt{
-		TaskID: task.ID, Executor: controllerRunnerExecutor,
-		OwnershipNonce: runnerOwnershipNonce(task.ID, plan.Digest()), Plan: plan,
-	}
-	if err := executor.lifecycle.Remove(ctx, attempt); err != nil {
+	if err := executor.cleanupAttempt(ctx, task.ID, current.Record, previous.Plan); err != nil {
 		return err
 	}
 	_, err = executor.repository.DeleteRunnerRuntimeOwnershipAfterCleanup(ctx, current, ownership.Record)
 	return err
+}
+
+func (executor *Executor) cleanupAttempt(
+	ctx context.Context,
+	taskID string,
+	record runnerrecord.RunnerRecord,
+	plan corerunner.Plan,
+) error {
+	if plan.RunnerID != record.Desired.ID || plan.Allocation != record.Allocation ||
+		plan.RuntimeEpoch > record.RuntimeEpoch {
+		return errs.New(errs.KindStateConflict, "Runner cleanup journal does not own this allocation")
+	}
+	return executor.lifecycle.Remove(ctx, Attempt{
+		TaskID: taskID, Executor: controllerRunnerExecutor,
+		OwnershipNonce: runnerOwnershipNonce(taskID, plan.Digest()), Plan: plan,
+	})
 }
 
 func (executor *Executor) runtimePlan(record runnerrecord.RunnerRecord, epoch uint64) (corerunner.Plan, error) {

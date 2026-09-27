@@ -21,24 +21,30 @@ func newRunnerLifecycleExecutor(
 	broker *runnercapability.TokenBroker,
 	policy corerunner.IsolationPolicy,
 	pools config.AllocationPools,
-) (*runnercapability.Executor, error) {
+) (*runnercapability.Executor, *runnercapability.Maintenance, error) {
 	host, err := dockerrunner.NewLocal(commandrunner.New(logger))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	journal, err := runnerjournal.New(runnerJournalRoot)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	lifecycle, err := runnercapability.NewLifecycle(journal, host)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return runnercapability.NewExecutor(
+	executor, err := runnercapability.NewExecutor(
 		repository,
 		lifecycle,
+		journal,
 		broker,
 		runnerallocation.RunnerAllocationConfigFromPools(pools),
 		policy,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+	maintenance, err := runnercapability.NewMaintenance(repository, journal, host, executor, logger)
+	return executor, maintenance, err
 }

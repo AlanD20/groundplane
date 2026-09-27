@@ -116,7 +116,7 @@ def install(source: Path, output: Path, version: str, identity: str,
         if scope == "agent":
             runtime_tag = f"localhost:5000/groundplane-agent:ref-{identity}"
             run("docker", "tag", tags[0], runtime_tag)
-            run("docker", "push", runtime_tag)
+            run("docker", "--config", "/etc/groundplane/registry/client", "push", runtime_tag)
             image = subprocess.check_output(["docker", "image", "inspect", runtime_tag,
                                             "--format", "{{index .RepoDigests 0}}"], text=True).strip()
             install_agent.install(image)

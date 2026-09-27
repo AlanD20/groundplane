@@ -2,6 +2,7 @@ package componentregistration
 
 import (
 	"context"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestRegisteredCoreDNSManagedConfigProjectorUsesCompiledRenderer(t *testing.
 		t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 	}
 	records := registeredCoreDNSPreviewRecords{projection: projection}
-	projector, err := NewDNSManagedConfigProjector(records, records)
+	projector, err := NewDNSManagedConfigProjector(records, records, netip.MustParseAddr("127.0.0.1"))
 	if err != nil {
 		t.Fatalf("NewDNSManagedConfigProjector() error = %v", err)
 	}

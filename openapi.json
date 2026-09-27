@@ -2674,6 +2674,61 @@
         ],
         "type": "object"
       },
+      "ImageFetchAccepted": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ImageFetchAccepted.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "image": {
+            "description": "Immutable registry reference selected for this operation",
+            "type": "string"
+          },
+          "image_id": {
+            "description": "Expected host image ID, verified before Task completion",
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "image",
+          "image_id"
+        ],
+        "type": "object"
+      },
+      "ImageFetchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ImageFetchRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "image": {
+            "description": "Explicit tag or SHA-256 digest in the managed private registry",
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "type": "object"
+      },
       "LogEvent": {
         "additionalProperties": false,
         "properties": {
@@ -5574,7 +5629,8 @@
               "start",
               "stop",
               "destroy",
-              "rotate"
+              "rotate",
+              "fetch"
             ],
             "type": "string"
           },
@@ -9677,6 +9733,67 @@
         "summary": "Show host health",
         "tags": [
           "Host"
+        ]
+      }
+    },
+    "/images/fetch": {
+      "post": {
+        "operationId": "image.fetch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageFetchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageFetchAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Fetch selected private-registry content into host Docker without deploying",
+        "tags": [
+          "Images"
         ]
       }
     },

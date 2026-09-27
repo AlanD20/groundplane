@@ -15,6 +15,7 @@ import (
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
+	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	"github.com/AlanD20/groundplane/internal/controller/releasegroup"
@@ -23,6 +24,7 @@ import (
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
+	"github.com/AlanD20/groundplane/internal/infra/registryimages"
 )
 
 // NewController constructs the Controller composition root.
@@ -60,13 +62,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	resolverComposition, err := newControllerResolverComposition(
 		ctx,
-		cfg.Storage.VolumeRoot,
+		cfg,
 		dataServices.componentRecords,
 		dataServices.resolverBaselines,
 		dataServices.resolutionProjections,
 		authority.tasks,
 		authority.intentCoordinator,
 		execution.planResolver,
+		bootstrap.logger,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -109,6 +112,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		authority.hierarchyRecords,
 		authority.idempotency,
 		authority.intentCoordinator,
+		bootstrap.logger,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -188,6 +192,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Network desired revision persistence: %w", err)
 	}
 	componentReads, err := newComponentReadService(
+		cfg,
 		dataServices.componentRecords,
 		dataServices.resolverBaselines,
 		dataServices.resolutionProjections,
@@ -516,23 +521,23 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize platform runtime: %w", err)
 	}
-	runnerLifecycle, err := newRunnerLifecycleExecutor(
-		bootstrap.logger,
-		authority.runnerRecords,
-		runnerComposition.tokens,
-		runnerComposition.policy,
-		runnerComposition.pools,
+	imageDelivery, err := imagedelivery.New(
+		registryimages.Local{},
+		authority.tasks,
+		authority.idempotency,
+		authority.intentCoordinator,
 	)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
+		return nil, err
 	}
 	controllerTaskHandler, err := taskdispatch.NewResourceHandler(
 		platform.agents,
 		backingZoneCascades,
 		authority.runnerRecords,
-		runnerLifecycle,
+		imageDelivery,
+		runnerComposition.lifecycle,
 	)
 	if err != nil {
 		_ = platform.Close()
@@ -548,12 +553,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task runner: %w", err)
 	}
-	taskAborts, err := taskoperations.NewAbortService(authority.tasks, agentRuntime.Registry, controllerTaskRunner)
-	if err != nil {
-		_ = platform.Close()
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
-	}
 	wired, err := newControllerHTTPComposition(controllerHTTPDependencies{
 		bootstrap:               bootstrap,
 		store:                   store,
@@ -561,6 +560,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		dataServices:            dataServices,
 		execution:               execution,
 		platform:                platform,
+		images:                  imageDelivery,
 		agentRuntime:            agentRuntime,
 		runner:                  runnerComposition,
 		backup:                  backupComposition,
@@ -582,7 +582,6 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		hierarchyDeletions:      hierarchyDeletions,
 		attachMutations:         attachMutations,
 		taskMutations:           taskMutations,
-		taskAborts:              taskAborts,
 		controllerTasks:         controllerTaskRunner,
 		staleTasks:              staleTasks,
 	})
@@ -590,5 +589,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, err
 	}
 	keepEtcdLifecycle = true
+	wired.runners = runnerComposition.maintenance
+	wired.resolverListener = resolverComposition.listener
 	return wired, nil
 }

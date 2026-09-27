@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
@@ -16,6 +17,7 @@ func resolverInputFromProjection(
 	record resolutionrecord.HostResolutionProjectionRecord,
 	baselineGeneration uint64,
 	resolvers []componentdns.ResolverEndpoint,
+	registryAddress netip.Addr,
 ) (componentdns.ResolverInput, []platformcomponents.PlatformDNSHost, error) {
 	baseline, err := componentdns.NewResolverBaseline(baselineGeneration, resolvers)
 	if err != nil {
@@ -31,7 +33,17 @@ func resolverInputFromProjection(
 	var digest [32]byte
 	copy(digest[:], digestBytes)
 	byAddress := make(map[netip.Addr][]string)
+	if !registryAddress.Is4() || !(registryAddress.IsPrivate() || registryAddress == netip.MustParseAddr("127.0.0.1")) {
+		return componentdns.ResolverInput{}, nil, errs.New(errs.KindInternal, "private registry address is invalid")
+	}
+	byAddress[registryAddress] = []string{imagefetch.RegistryHostname}
 	for _, route := range record.Routes {
+		if route.Hostname == imagefetch.RegistryHostname {
+			return componentdns.ResolverInput{}, nil, errs.New(
+				errs.KindStateConflict,
+				"Route hostname is reserved for the private registry",
+			)
+		}
 		address, parseErr := netip.ParseAddr(route.IPv4)
 		if parseErr != nil {
 			return componentdns.ResolverInput{}, nil, errs.New(errs.KindInternal, "host-resolution address is corrupt")
@@ -53,7 +65,11 @@ func resolverInputFromProjection(
 			Hostnames: append([]string(nil), host.Hostnames...),
 		}
 	}
-	return componentdns.ResolverInput{Baseline: baseline, HostResolution: projection}, durable, nil
+	input := componentdns.ResolverInput{Baseline: baseline, HostResolution: projection}
+	if registryAddress.IsPrivate() {
+		input.PrivateListener = registryAddress
+	}
+	return input, durable, nil
 }
 
 func ensureHostResolverBaseline(

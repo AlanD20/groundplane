@@ -15,7 +15,7 @@ func TestControllerTaskHandlerAcceptsOnlyExactConnectorRemoval(t *testing.T) {
 	handler, err := NewResourceHandler(
 		&fakeControllerTaskLocalAgents{},
 		testBackingZoneCascade(t),
-		&fakeControllerTaskRunners{},
+		&fakeControllerTaskRunners{}, &recordingControllerTaskExecutor{},
 	)
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)

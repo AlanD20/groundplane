@@ -17,7 +17,6 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/gowebpki/jcs v1.0.1
 	github.com/jedib0t/go-pretty/v6 v6.5.9
-	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/moby/api v1.55.0
 	github.com/moby/moby/client v0.5.1
 	github.com/oapi-codegen/runtime v1.2.0
@@ -74,6 +73,7 @@ require (
 	github.com/mattn/go-isatty v0.0.23 // indirect
 	github.com/mattn/go-shellwords v1.0.12 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
+	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/oapi-codegen/oapi-codegen/v2 v2.8.0 // indirect
 	github.com/oasdiff/yaml v0.1.1 // indirect
 	github.com/oasdiff/yaml3 v0.0.14 // indirect

@@ -22,6 +22,7 @@ from pathlib import Path
 
 from image_transfer import prepare_images, transfer_images
 from deployment_capacity import require_capacity, TRANSFER_HEADROOM
+from private_registry import setup_script as registry_setup_script
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -92,13 +93,15 @@ fi
 if ! command -v python3 >/dev/null; then
     packages="$packages python3"
 fi
+if ! command -v openssl >/dev/null || ! command -v htpasswd >/dev/null; then
+    packages="$packages openssl apache2-utils"
+fi
 if ! command -v rootlesskit >/dev/null ||
     ! command -v newuidmap >/dev/null ||
     ! command -v slirp4netns >/dev/null ||
     ! command -v fuse-overlayfs >/dev/null ||
-    ! command -v socat >/dev/null ||
     ! command -v nft >/dev/null; then
-    packages="$packages rootlesskit uidmap slirp4netns fuse-overlayfs socat nftables"
+    packages="$packages rootlesskit uidmap slirp4netns fuse-overlayfs nftables"
 fi
 if test "$docker_fresh" -eq 1; then
     packages="$packages $docker_packages"
@@ -116,46 +119,7 @@ if ! systemctl is-active --quiet docker.service; then
 fi
 docker version >/dev/null
 docker compose version >/dev/null
-registry_container_exists=0
-if docker container inspect groundplane-registry >/dev/null 2>&1; then
-    registry_container_exists=1
-    registry_container_image=$(docker container inspect \
-        --format '{{{{.Config.Image}}}}' groundplane-registry)
-    if test "$registry_container_image" != "{REGISTRY_IMAGE}"; then
-        echo "groundplane-registry exists with an unexpected image; refusing replacement" >&2
-        exit 1
-    fi
-fi
-if ! curl -fsS http://127.0.0.1:5000/v2/ >/dev/null 2>&1; then
-    if test "$registry_container_exists" -eq 1; then
-        if ! docker container inspect --format '{{{{.State.Running}}}}' groundplane-registry |
-            grep -qx true; then
-            docker start groundplane-registry >/dev/null
-        fi
-    else
-        docker run \
-            --detach \
-            --restart unless-stopped \
-            --name groundplane-registry \
-            --publish 127.0.0.1:5000:5000 \
-            {REGISTRY_IMAGE} >/dev/null
-    fi
-
-    ready=0
-    attempt=0
-    while test "$attempt" -lt 30; do
-        if curl -fsS http://127.0.0.1:5000/v2/ >/dev/null 2>&1; then
-            ready=1
-            break
-        fi
-        attempt=$((attempt + 1))
-        sleep 1
-    done
-    if test "$ready" -ne 1; then
-        echo "loopback OCI registry did not become ready" >&2
-        exit 1
-    fi
-fi
+""" + registry_setup_script(REGISTRY_IMAGE) + r"""
 
 printf 'Docker: '
 docker --version

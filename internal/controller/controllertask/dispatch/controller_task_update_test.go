@@ -13,7 +13,10 @@ import (
 // through the ordinary handler would bypass startup holds and timeout recovery.
 func TestControllerTaskHandlerCannotBypassAgentUpdateRecovery(t *testing.T) {
 	handler, err := NewResourceHandler(
-		&fakeControllerTaskLocalAgents{}, testBackingZoneCascade(t), &fakeControllerTaskRunners{},
+		&fakeControllerTaskLocalAgents{},
+		testBackingZoneCascade(t),
+		&fakeControllerTaskRunners{},
+		&recordingControllerTaskExecutor{},
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -5,6 +5,8 @@ const (
 	TaskResourceKindParam                = "resource_kind"
 	TaskResourceAgent                    = "agent"
 	TaskResourceController               = "controller"
+	TaskResourceImage                    = "image"
+	TaskImageFetchInputParam             = "image_fetch_input"
 	TaskResourceEntry                    = "entry"
 	TaskResourceRoute                    = "route"
 	TaskResourceScript                   = "script"

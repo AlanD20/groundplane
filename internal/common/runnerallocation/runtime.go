@@ -14,12 +14,10 @@ const (
 	StepEnsureIdentity RunnerRuntimeStep = "ensure_identity"
 	StepEnsureNetwork  RunnerRuntimeStep = "ensure_network"
 	StepEnsureEgress   RunnerRuntimeStep = "ensure_egress"
-	StepStartProxy     RunnerRuntimeStep = "start_proxy"
 	StepStartDaemon    RunnerRuntimeStep = "start_daemon"
 	StepStartRunner    RunnerRuntimeStep = "start_runner"
 	StepStopRunner     RunnerRuntimeStep = "stop_runner"
 	StepStopDaemon     RunnerRuntimeStep = "stop_daemon"
-	StepStopProxy      RunnerRuntimeStep = "stop_proxy"
 	StepRemoveNetwork  RunnerRuntimeStep = "remove_network"
 	StepRemoveEgress   RunnerRuntimeStep = "remove_egress"
 	StepRemoveIdentity RunnerRuntimeStep = "remove_identity"
@@ -37,12 +35,11 @@ type RunnerRuntimeIdentity struct {
 }
 
 type RunnerRuntimePaths struct {
-	SlotRoot    string
-	RunnerHome  string
-	WorkRoot    string
-	DataRoot    string
-	RawSocket   string
-	ProxySocket string
+	SlotRoot   string
+	RunnerHome string
+	WorkRoot   string
+	DataRoot   string
+	RawSocket  string
 }
 
 type RunnerRuntimeNetwork struct {
@@ -224,13 +221,13 @@ func (plan RuntimePlan) IdentityDigest() string {
 func CreationRuntimeSteps() []RunnerRuntimeStep {
 	return []RunnerRuntimeStep{
 		StepEnsureIdentity, StepEnsureNetwork, StepEnsureEgress,
-		StepStartProxy, StepStartDaemon, StepStartRunner,
+		StepStartDaemon, StepStartRunner,
 	}
 }
 
 func RemovalRuntimeSteps() []RunnerRuntimeStep {
 	return []RunnerRuntimeStep{
-		StepStopRunner, StepStopDaemon, StepStopProxy, StepRemoveNetwork,
+		StepStopRunner, StepStopDaemon, StepRemoveNetwork,
 		StepRemoveIdentity, StepRemoveEgress,
 	}
 }

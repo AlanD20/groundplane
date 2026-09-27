@@ -22,6 +22,7 @@ const (
 	TaskStop        TaskType = "stop"
 	TaskDestroy     TaskType = "destroy"
 	TaskRotate      TaskType = "rotate"
+	TaskFetch       TaskType = "fetch"
 )
 
 // TaskExecutor is the immutable authority allowed to claim a Task. It is

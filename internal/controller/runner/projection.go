@@ -29,7 +29,8 @@ func PublicProjection(
 	if observation != nil {
 		value := observation.ObservedAt.UTC().Format(time.RFC3339Nano)
 		observedAt = &value
-		online = observation.Online
+		age := time.Since(observation.ObservedAt)
+		online = observation.Online && age >= 0 && age <= ObservationLifetime
 	}
 	return apiTypes.Runner{
 		ID: record.Desired.ID, Slug: record.Desired.Slug,

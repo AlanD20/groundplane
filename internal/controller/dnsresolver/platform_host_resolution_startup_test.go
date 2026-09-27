@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -92,6 +93,7 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 		renderPlannerObservationRepository{}, func(context.Context) ([]byte, error) {
 			return append([]byte(nil), baselineContent...), nil
 		}, rendererPin{}, environmentPlanner, renderPlannerCatalog{definition: definition}, "activate-config",
+		netip.MustParseAddr("127.0.0.1"),
 	)
 	if err != nil {
 		t.Fatalf("NewPlatformRenderPlanner() error = %v", err)

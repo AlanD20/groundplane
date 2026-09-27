@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/controller/imagedelivery"
+	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"time"
 
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
@@ -25,6 +27,7 @@ type controllerHTTPDependencies struct {
 	dataServices            controllerDataComposition
 	execution               controllerExecutionComposition
 	platform                *controllerPlatform
+	images                  *imagedelivery.Service
 	agentRuntime            *channeltransport.Runtime
 	runner                  *controllerRunnerComposition
 	backup                  *controllerBackupComposition
@@ -46,12 +49,19 @@ type controllerHTTPDependencies struct {
 	hierarchyDeletions      handlers.HierarchyDeletionService
 	attachMutations         *attachments.MutationService
 	taskMutations           handlers.TaskRetrier
-	taskAborts              handlers.TaskAborter
 	controllerTasks         *controllertask.Runner
 	staleTasks              controllerStaleTaskMaintenance
 }
 
 func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Controller, error) {
+	taskAborts, err := taskoperations.NewAbortService(
+		dependencies.authority.tasks, dependencies.agentRuntime.Registry, dependencies.controllerTasks,
+	)
+	if err != nil {
+		_ = dependencies.platform.Close()
+		_ = dependencies.store.Close()
+		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
+	}
 	serviceReads, err := newServiceReadResources(
 		dependencies.authority.hierarchyRecords,
 		dependencies.dataServices.serviceRecords,
@@ -69,6 +79,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	server := handlers.New(dependencies.store, dependencies.bootstrap.logger, handlers.Options{
 		Host: dependencies.platform.host, ControllerConfig: dependencies.bootstrap.controllerConfig,
 		ControllerUpdates: dependencies.platform.upgrades,
+		Images:            dependencies.images,
 		OnHTTPReady:       dependencies.platform.readiness.MarkHTTPReady, MutationAdmission: dependencies.platform.upgrades,
 		Agents: dependencies.platform.reads, AgentMutations: dependencies.platform.mutations,
 		Tenants:                 dependencies.authority.hierarchyService,
@@ -120,7 +131,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 		AttachMutations:         dependencies.attachMutations,
 		AttachFacts:             dependencies.execution.attachFactReads,
 		TaskMutations:           dependencies.taskMutations,
-		TaskAborts:              dependencies.taskAborts,
+		TaskAborts:              taskAborts,
 		ControllerTaskWake:      dependencies.controllerTasks.Wake,
 		AgentTaskWake:           dependencies.agentRuntime.Registry.WakeTaskDispatch,
 		TenantMutations:         dependencies.hierarchy.tenantMutations,

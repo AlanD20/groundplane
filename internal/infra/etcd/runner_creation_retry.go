@@ -115,6 +115,25 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	ownershipRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{
+			runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID),
+		}, Revision: current.ReadRevision,
+	})
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	if ownershipRead == nil || len(ownershipRead.Values) != 1 {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Runner retry ownership read is incomplete")
+	}
+	priorOwnership := ownershipRead.Values[0]
+	if priorOwnership != nil {
+		ownership, err := runnerrecord.DecodeRunnerRuntimeOwnership(priorOwnership.Value)
+		if err != nil || ownership.RunnerID != current.Record.Desired.ID ||
+			ownership.RuntimeEpoch > current.Record.RuntimeEpoch {
+			return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Runner retry ownership changed")
+		}
+	}
 	parents, err := repository.ResolveRunnerParents(ctx, current.Record.Desired)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -149,7 +168,10 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 			Key:         runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID),
 			ModRevision: current.Record.LifecycleRevision,
 		},
-		{Key: runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID)},
+		{
+			Key:         runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID),
+			ModRevision: etcdstore.RevisionOf(priorOwnership),
+		},
 		{
 			Key: runnerrecord.RunnerOwnerKey(
 				current.Record.Desired.OwnerKind,

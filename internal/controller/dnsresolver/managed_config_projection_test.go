@@ -3,6 +3,7 @@ package dnsresolver
 import (
 	"context"
 	"crypto/sha256"
+	"net/netip"
 	"testing"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
@@ -61,7 +62,7 @@ func TestManagedConfigProjectorUsesOnlyDurableReadInputs(t *testing.T) {
 	renderer := &previewRenderer{}
 	projector, err := NewManagedConfigProjector(
 		previewProjectionReader{record: projection}, baselines, renderer,
-		"/etc/groundplane/coredns/Corefile",
+		"/etc/groundplane/coredns/Corefile", netip.MustParseAddr("127.0.0.1"),
 	)
 	if err != nil {
 		t.Fatalf("NewManagedConfigProjector() error = %v", err)
@@ -97,7 +98,7 @@ func TestManagedConfigProjectorDoesNotCreateMissingBaseline(t *testing.T) {
 	baselines := &previewBaselineReader{}
 	projector, err := NewManagedConfigProjector(
 		previewProjectionReader{record: projection}, baselines, &previewRenderer{},
-		"/etc/groundplane/coredns/Corefile",
+		"/etc/groundplane/coredns/Corefile", netip.MustParseAddr("127.0.0.1"),
 	)
 	if err != nil {
 		t.Fatalf("NewManagedConfigProjector() error = %v", err)

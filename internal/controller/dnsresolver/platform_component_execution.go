@@ -275,7 +275,14 @@ func (planner *PlatformExecutionPlanner) resolve(
 	if err != nil {
 		return resolvedPlatformComponent{}, err
 	}
-	renderInput, err := BuildRenderInput(hostInput.Hosts, config, baselineInput.Resolvers)
+	var privateListener netip.Addr
+	if input.PrivateListener != "" {
+		privateListener, err = netip.ParseAddr(input.PrivateListener)
+		if err != nil {
+			return resolvedPlatformComponent{}, errs.New(errs.KindInternal, "platform resolver listener is corrupt")
+		}
+	}
+	renderInput, err := BuildRenderInput(hostInput.Hosts, config, baselineInput.Resolvers, privateListener)
 	if err != nil {
 		return resolvedPlatformComponent{}, err
 	}

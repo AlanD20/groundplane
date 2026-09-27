@@ -95,6 +95,14 @@ type recordingHost struct {
 	token     []byte
 }
 
+func (host *recordingHost) ResumeRunner(
+	context.Context,
+	corerunner.Plan,
+	string,
+) (runnerallocation.RunnerRuntimeEvidence, error) {
+	return runnerallocation.RunnerRuntimeEvidence{}, nil
+}
+
 func (host *recordingHost) EnsureIdentity(context.Context, corerunner.Plan) error {
 	host.steps = append(host.steps, corerunner.StepEnsureIdentity)
 	return nil
@@ -105,10 +113,6 @@ func (host *recordingHost) EnsureNetwork(context.Context, corerunner.Plan) error
 }
 func (host *recordingHost) EnsureEgress(context.Context, corerunner.Plan) error {
 	host.steps = append(host.steps, corerunner.StepEnsureEgress)
-	return nil
-}
-func (host *recordingHost) StartProxy(context.Context, corerunner.Plan) error {
-	host.steps = append(host.steps, corerunner.StepStartProxy)
 	return nil
 }
 func (host *recordingHost) StartDaemon(context.Context, corerunner.Plan) error {
@@ -133,10 +137,6 @@ func (host *recordingHost) StopRunner(context.Context, corerunner.Plan) (string,
 }
 func (host *recordingHost) StopDaemon(context.Context, corerunner.Plan) (string, error) {
 	host.steps = append(host.steps, corerunner.StepStopDaemon)
-	return cleanupReceipt(), nil
-}
-func (host *recordingHost) StopProxy(context.Context, corerunner.Plan) (string, error) {
-	host.steps = append(host.steps, corerunner.StepStopProxy)
 	return cleanupReceipt(), nil
 }
 func (host *recordingHost) RemoveNetwork(context.Context, corerunner.Plan) (string, error) {
@@ -166,9 +166,6 @@ func (host *recordingHost) ObserveNetwork(context.Context, corerunner.Plan) (cor
 func (host *recordingHost) ObserveEgress(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
 	return observed(corerunner.StepEnsureEgress, false)
 }
-func (host *recordingHost) ObserveProxy(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
-	return observed(corerunner.StepStartProxy, false)
-}
 func (host *recordingHost) ObserveDaemon(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
 	return observed(corerunner.StepStartDaemon, false)
 }
@@ -190,9 +187,6 @@ func (host *recordingHost) ObserveRunnerAbsent(context.Context, corerunner.Plan)
 }
 func (host *recordingHost) ObserveDaemonAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
 	return observed(corerunner.StepStopDaemon, true)
-}
-func (host *recordingHost) ObserveProxyAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
-	return observed(corerunner.StepStopProxy, true)
 }
 func (host *recordingHost) ObserveNetworkAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error) {
 	return observed(corerunner.StepRemoveNetwork, true)
@@ -218,8 +212,6 @@ func applyCapability(
 		return runtime.EnsureNetwork(ctx, plan)
 	case corerunner.StepEnsureEgress:
 		return runtime.EnsureEgress(ctx, plan)
-	case corerunner.StepStartProxy:
-		return runtime.StartProxy(ctx, plan)
 	case corerunner.StepStartDaemon:
 		return runtime.StartDaemon(ctx, plan)
 	case corerunner.StepStartRunner:
@@ -228,8 +220,6 @@ func applyCapability(
 		return runtime.StopRunner(ctx, plan)
 	case corerunner.StepStopDaemon:
 		return runtime.StopDaemon(ctx, plan)
-	case corerunner.StepStopProxy:
-		return runtime.StopProxy(ctx, plan)
 	case corerunner.StepRemoveNetwork:
 		return runtime.RemoveNetwork(ctx, plan)
 	case corerunner.StepRemoveIdentity:

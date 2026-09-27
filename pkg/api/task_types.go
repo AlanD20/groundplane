@@ -36,7 +36,7 @@ type Task struct {
 	OperationID   string            `json:"operation_id"`
 	RetryOf       string            `json:"retry_of,omitempty"`
 	PlanHash      string            `json:"plan_hash,omitempty"`
-	Type          string            `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate"`
+	Type          string            `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate,fetch"`
 	Target        string            `json:"target"`
 	Status        TaskStatus        `json:"status"`
 	WorkspaceType TaskWorkspaceType `json:"workspace_type"           enum:"platform,tenant"`

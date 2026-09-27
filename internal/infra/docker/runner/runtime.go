@@ -15,18 +15,15 @@ type hostOperations interface {
 	ObserveNetwork(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
 	EnsureEgress(context.Context, corerunner.Plan) error
 	ObserveEgress(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
-	StartProxy(context.Context, corerunner.Plan) error
-	ObserveProxy(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
 	StartDaemon(context.Context, corerunner.Plan) error
 	ObserveDaemon(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
 	StartRunner(context.Context, corerunner.Plan, []byte) (runnerallocation.RunnerRuntimeEvidence, error)
+	ResumeRunner(context.Context, corerunner.Plan, string) (runnerallocation.RunnerRuntimeEvidence, error)
 	ObserveRunner(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
 	StopRunner(context.Context, corerunner.Plan) (string, error)
 	ObserveRunnerAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
 	StopDaemon(context.Context, corerunner.Plan) (string, error)
 	ObserveDaemonAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
-	StopProxy(context.Context, corerunner.Plan) (string, error)
-	ObserveProxyAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
 	RemoveNetwork(context.Context, corerunner.Plan) (string, error)
 	ObserveNetworkAbsent(context.Context, corerunner.Plan) (corerunner.StepEvidence, error)
 	RemoveIdentity(context.Context, corerunner.Plan) (string, error)
@@ -67,12 +64,6 @@ func (control *HostControl) EnsureEgress(ctx context.Context, plan corerunner.Pl
 }
 func (control *HostControl) ObserveEgress(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepEnsureEgress, false, control.operations.ObserveEgress)
-}
-func (control *HostControl) StartProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
-	return control.ensure(ctx, plan, corerunner.StepStartProxy, control.operations.StartProxy)
-}
-func (control *HostControl) ObserveProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
-	return control.observe(ctx, plan, corerunner.StepStartProxy, false, control.operations.ObserveProxy)
 }
 func (control *HostControl) StartDaemon(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.ensure(ctx, plan, corerunner.StepStartDaemon, control.operations.StartDaemon)
@@ -129,16 +120,7 @@ func (control *HostControl) ObserveDaemonAbsent(
 ) (corerunner.StepEvidence, error) {
 	return control.observe(ctx, plan, corerunner.StepStopDaemon, true, control.operations.ObserveDaemonAbsent)
 }
-func (control *HostControl) StopProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
-	return control.remove(ctx, plan, corerunner.StepStopProxy, control.operations.StopProxy)
-}
 
-func (control *HostControl) ObserveProxyAbsent(
-	ctx context.Context,
-	plan corerunner.Plan,
-) (corerunner.StepEvidence, error) {
-	return control.observe(ctx, plan, corerunner.StepStopProxy, true, control.operations.ObserveProxyAbsent)
-}
 func (control *HostControl) RemoveNetwork(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
 	return control.remove(ctx, plan, corerunner.StepRemoveNetwork, control.operations.RemoveNetwork)
 }

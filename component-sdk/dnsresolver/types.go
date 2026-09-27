@@ -27,6 +27,7 @@ type Forwarder struct {
 
 type RenderInput struct {
 	CorefileTemplate string
+	PrivateListener  netip.Addr
 	Hosts            []Host
 	Forwarders       []Forwarder
 	CatchAll         []ResolverEndpoint
@@ -40,6 +41,7 @@ type Renderer interface {
 func CloneRenderInput(input RenderInput) RenderInput {
 	cloned := RenderInput{
 		CorefileTemplate: input.CorefileTemplate,
+		PrivateListener:  input.PrivateListener,
 		Hosts:            make([]Host, len(input.Hosts)),
 		Forwarders:       make([]Forwarder, len(input.Forwarders)),
 		CatchAll:         append([]ResolverEndpoint(nil), input.CatchAll...),

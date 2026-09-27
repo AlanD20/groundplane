@@ -72,6 +72,7 @@ func BuildIntent(
 		config,
 		resolverInput.Baseline.Resolvers,
 	)
+	input.PrivateListener = resolverInput.PrivateListener
 	if err != nil {
 		return componentdns.Intent{}, err
 	}
@@ -140,8 +141,11 @@ func BuildRenderInput(
 	hosts []componentdns.Host,
 	config Config,
 	baseline []componentdns.ResolverEndpoint,
+	privateListener netip.Addr,
 ) (componentdns.RenderInput, error) {
-	return buildRenderInput(hosts, config, baseline)
+	input, err := buildRenderInput(hosts, config, baseline)
+	input.PrivateListener = privateListener
+	return input, err
 }
 
 func validationResolvers(config Config) []componentdns.ResolverEndpoint {

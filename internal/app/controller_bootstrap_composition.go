@@ -11,10 +11,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/app/adaptercompiler"
 	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/controllerconfig"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
+	"github.com/AlanD20/groundplane/internal/infra/docker/registryhost"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -68,6 +70,9 @@ func newControllerBootstrapComposition(
 			"controller: validate Environment volume root: %w",
 			err,
 		)
+	}
+	if err := registryhost.Reconcile(ctx, imagefetch.RegistryAddress(cfg.Listen.HTTP)); err != nil {
+		return controllerBootstrapComposition{}, fmt.Errorf("controller: reconcile private registry: %w", err)
 	}
 	tick, err := time.ParseDuration(cfg.Scheduler.TickInterval)
 	if err != nil {

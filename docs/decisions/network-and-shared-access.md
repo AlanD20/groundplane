@@ -37,6 +37,16 @@ tenant network isolation; strict peer firewalling is post-MVP.
 Current source: [network reservation planner](../../internal/infra/etcd/networkreservations)
 and [network persistence](../../internal/infra/etcd/network).
 
+## Runner registry resolution
+
+The accepted [Runner delivery design](runner-isolation.md#one-private-registry-and-existing-dns)
+reuses CoreDNS for the same-host registry. Keep one managed name/address mapping
+and make it reachable from the host Docker daemon and the Runner's rootless
+daemon. A container-only DNS setting cannot govern a daemon's image push/pull.
+This requires private DNS reachability, not a public listener or a second resolver.
+The registry is shared infrastructure, not an Environment Zone or a public Route.
+The integration remains unimplemented; existing Route DNS behavior is unchanged.
+
 ## Connector and credentials
 
 The MVP Connector kind is `s3-compatible`. A Connector belongs to exactly one

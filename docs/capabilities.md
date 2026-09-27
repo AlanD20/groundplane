@@ -24,7 +24,7 @@ it does not redefine the [product contract](mvp.md) or authorize implementation.
 | Components and ingress | CoreDNS, Caddy and Cloudflare Tunnel integrations exist. | Real DNS, template/reload, restart and selected public/private ingress continuity. Provider setup is not performed by GP. |
 | Secrets and Connectors | Scoped Secret lifecycle and Environment-owned Connector metadata exist. | Current execution pin/deletion races and provider use. Connector creation does not validate remote storage. |
 | Backup/Restore | Policy, source, key and Recovery Point scaffolding plus partial execution exist. | Incomplete and deferred. Restore is not operationally qualified; Valkey has no safe accepted source/artifact contract. |
-| GitHub Runners | Durable lifecycle and allocation code exists. | The full accepted host-isolation, transient-token, helper/proxy and reboot contract is incomplete and unqualified. Real jobs need a fresh operator token. |
+| GitHub Runners | Durable lifecycle, allocation and packaged GP CLI exist. Working migration includes direct-rootless runtime, private registry/DNS wiring and explicit image fetch through API/CLI/Console with pinned Task input. | DNS reconciliation on private-address changes and Runner retry/restart integration remain incomplete. Fetch failure/replay and the full delivery workflow are not qualified. Real jobs need a fresh operator token. |
 | Console, CLI and API | Production surfaces and generated clients exist. | Current generation/build cleanliness and complete operator-action parity. Packaging or schema generation alone does not prove parity. |
 
 ## Release boundary

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	resolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
+	"net/netip"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -23,10 +24,11 @@ type ResolverBaselineReader interface {
 // ManagedConfigProjector derives the CoreDNS managed file from durable desired
 // state and already-persisted resolver inputs without publishing state.
 type ManagedConfigProjector struct {
-	projections PlatformProjectionReader
-	baselines   ResolverBaselineReader
-	renderer    componentdns.Renderer
-	path        string
+	projections     PlatformProjectionReader
+	baselines       ResolverBaselineReader
+	renderer        componentdns.Renderer
+	path            string
+	registryAddress netip.Addr
 }
 
 func NewManagedConfigProjector(
@@ -34,12 +36,13 @@ func NewManagedConfigProjector(
 	baselines ResolverBaselineReader,
 	renderer componentdns.Renderer,
 	path string,
+	registryAddress netip.Addr,
 ) (*ManagedConfigProjector, error) {
 	if projections == nil || baselines == nil || renderer == nil || path == "" {
 		return nil, errs.New(errs.KindInternal, "managed-config projector dependencies are required")
 	}
 	return &ManagedConfigProjector{
-		projections: projections, baselines: baselines, renderer: renderer, path: path,
+		projections: projections, baselines: baselines, renderer: renderer, path: path, registryAddress: registryAddress,
 	}, nil
 }
 
@@ -74,6 +77,7 @@ func (projector *ManagedConfigProjector) ProjectManagedConfigFiles(
 		projection.Record,
 		baseline.Record.Generation,
 		resolvers,
+		projector.registryAddress,
 	)
 	if err != nil {
 		return nil, err
@@ -86,6 +90,7 @@ func (projector *ManagedConfigProjector) ProjectManagedConfigFiles(
 		resolverInput.HostResolution.Hosts,
 		config,
 		resolverInput.Baseline.Resolvers,
+		resolverInput.PrivateListener,
 	)
 	if err != nil {
 		return nil, err

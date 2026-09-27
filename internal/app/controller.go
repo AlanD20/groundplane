@@ -38,15 +38,17 @@ type Controller struct {
 	Config config.ControllerConfig
 	Logger *slog.Logger
 
-	server          controllerServer
-	agent           controllerAgentChannel
-	scheduler       controllerScheduler
-	controllerTasks controllerScheduler
-	localAgent      controllerScheduler
-	attachMutations *attachments.MutationService
-	container       ownedStore
-	etcdContainer   controllerEtcdLifecycle
-	store           ownedStore
+	server           controllerServer
+	agent            controllerAgentChannel
+	scheduler        controllerScheduler
+	controllerTasks  controllerScheduler
+	runners          controllerScheduler
+	resolverListener controllerScheduler
+	localAgent       controllerScheduler
+	attachMutations  *attachments.MutationService
+	container        ownedStore
+	etcdContainer    controllerEtcdLifecycle
+	store            ownedStore
 }
 
 type controllerServer interface {

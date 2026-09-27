@@ -40,8 +40,6 @@ type Runtime interface {
 	ObserveNetwork(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	EnsureEgress(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	ObserveEgress(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	StartProxy(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	ObserveProxy(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	StartDaemon(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	ObserveDaemon(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	StartRunner(
@@ -57,11 +55,6 @@ type Runtime interface {
 	) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	StopDaemon(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
 	ObserveDaemonAbsent(
-		context.Context,
-		runnerallocation.RuntimePlan,
-	) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	StopProxy(context.Context, runnerallocation.RuntimePlan) (runnerallocation.RunnerRuntimeStepEvidence, error)
-	ObserveProxyAbsent(
 		context.Context,
 		runnerallocation.RuntimePlan,
 	) (runnerallocation.RunnerRuntimeStepEvidence, error)
@@ -143,15 +136,6 @@ func (lifecycle *Lifecycle) CreateWithEvidence(
 	attempt Attempt,
 	token *RegistrationToken,
 ) (RuntimeEvidence, error) {
-	if token == nil || !validRegistrationToken(token.value) {
-		if token != nil {
-			token.clear()
-		}
-		return RuntimeEvidence{}, errs.New(
-			errs.KindValidationFailed,
-			"registration_token_required",
-		)
-	}
 	defer token.clear()
 	var evidence RuntimeEvidence
 	err := lifecycle.execute(
@@ -191,6 +175,16 @@ func (lifecycle *Lifecycle) execute(
 	}
 	if progress.Status == StatusFailed {
 		return errs.New(errs.KindStateConflict, "runner lifecycle attempt is already failed")
+	}
+	// A completed registration or an issued registration being observed does
+	// not consume another token. Reject missing input before any new host setup.
+	if operation == OperationCreate && (token == nil || !validRegistrationToken(token.value)) {
+		for index := progress.NextStep; index < len(steps); index++ {
+			if steps[index] == runnerallocation.StepStartRunner &&
+				(progress.ActiveStep == nil || *progress.ActiveStep != runnerallocation.StepStartRunner) {
+				return errs.New(errs.KindValidationFailed, "registration_token_required")
+			}
+		}
 	}
 	for index := progress.NextStep; index < len(steps); index++ {
 		step := steps[index]
@@ -279,8 +273,6 @@ func (lifecycle *Lifecycle) apply(
 		return lifecycle.runtime.EnsureNetwork(ctx, plan)
 	case runnerallocation.StepEnsureEgress:
 		return lifecycle.runtime.EnsureEgress(ctx, plan)
-	case runnerallocation.StepStartProxy:
-		return lifecycle.runtime.StartProxy(ctx, plan)
 	case runnerallocation.StepStartDaemon:
 		return lifecycle.runtime.StartDaemon(ctx, plan)
 	case runnerallocation.StepStartRunner:
@@ -289,8 +281,6 @@ func (lifecycle *Lifecycle) apply(
 		return lifecycle.runtime.StopRunner(ctx, plan)
 	case runnerallocation.StepStopDaemon:
 		return lifecycle.runtime.StopDaemon(ctx, plan)
-	case runnerallocation.StepStopProxy:
-		return lifecycle.runtime.StopProxy(ctx, plan)
 	case runnerallocation.StepRemoveNetwork:
 		return lifecycle.runtime.RemoveNetwork(ctx, plan)
 	case runnerallocation.StepRemoveIdentity:
@@ -317,8 +307,6 @@ func (lifecycle *Lifecycle) observe(
 		return lifecycle.runtime.ObserveNetwork(ctx, plan)
 	case runnerallocation.StepEnsureEgress:
 		return lifecycle.runtime.ObserveEgress(ctx, plan)
-	case runnerallocation.StepStartProxy:
-		return lifecycle.runtime.ObserveProxy(ctx, plan)
 	case runnerallocation.StepStartDaemon:
 		return lifecycle.runtime.ObserveDaemon(ctx, plan)
 	case runnerallocation.StepStartRunner:
@@ -327,8 +315,6 @@ func (lifecycle *Lifecycle) observe(
 		return lifecycle.runtime.ObserveRunnerAbsent(ctx, plan)
 	case runnerallocation.StepStopDaemon:
 		return lifecycle.runtime.ObserveDaemonAbsent(ctx, plan)
-	case runnerallocation.StepStopProxy:
-		return lifecycle.runtime.ObserveProxyAbsent(ctx, plan)
 	case runnerallocation.StepRemoveNetwork:
 		return lifecycle.runtime.ObserveNetworkAbsent(ctx, plan)
 	case runnerallocation.StepRemoveIdentity:

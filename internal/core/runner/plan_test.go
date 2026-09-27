@@ -37,7 +37,6 @@ func TestNewPlanBuildsDedicatedRootlessRuntime(t *testing.T) {
 	}
 	if plan.Paths.SlotRoot != "/var/lib/groundplane/runner-slots/slot-03" ||
 		plan.Paths.DataRoot != "/var/lib/groundplane/runner-slots/slot-03/docker" ||
-		plan.Paths.ProxySocket != "/run/groundplane-runners/"+runnerID+"/proxy/docker.sock" ||
 		plan.Paths.RawSocket != "/run/groundplane-runners/"+runnerID+"/xdg/docker.sock" {
 		t.Fatalf("paths = %#v", plan.Paths)
 	}
@@ -53,7 +52,7 @@ func TestNewPlanBuildsDedicatedRootlessRuntime(t *testing.T) {
 	if container.User != "200003:200003" || container.Privileged || !container.ReadOnlyRootFS ||
 		container.NetworkName != plan.Network.Name || container.NetworkAddress != plan.Network.RunnerAddress ||
 		!slices.Equal(container.CapDrop, []string{"ALL"}) || len(container.CapAdd) != 0 ||
-		container.DockerSocketSource != plan.Paths.ProxySocket || container.DockerSocketTarget != "/var/run/docker.sock" ||
+		container.DockerSocketSource != plan.Paths.RawSocket || container.DockerSocketTarget != "/var/run/groundplane-docker/docker.sock" ||
 		container.DockerSocketSource == "/var/run/docker.sock" {
 		t.Fatalf("container = %#v", container)
 	}

@@ -31,7 +31,7 @@ func TestCreateResolvesIssuedEffectWithoutRedispatch(t *testing.T) {
 		Plan:     attempt.Plan.Clone(),
 		RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID, Executor: attempt.Executor,
 		PlanDigest: attempt.Plan.Digest(), IdentityDigest: attempt.Plan.IdentityDigest(), RuntimeEpoch: 1,
-		Operation: OperationCreate, NextStep: 4, ActiveStep: &issued, Status: StatusRunning, Revision: 1,
+		Operation: OperationCreate, NextStep: 3, ActiveStep: &issued, Status: StatusRunning, Revision: 1,
 	}
 	if err := lifecycle.Create(context.Background(), attempt, token); err != nil {
 		t.Fatalf("Create(recovery) error = %v", err)
@@ -52,8 +52,8 @@ func TestCreateResolvesIssuedEffectWithoutRedispatch(t *testing.T) {
 	}
 }
 
-// Rationale: Controller restart or broker corruption must expose the stable
-// retry reason before a journal entry or host effect can occur.
+// RUN-06/07: a missing token must be rejected before host effects. Reading or
+// beginning the journal is necessary to distinguish completed registration.
 func TestCreateWithoutUsableTokenRequiresFreshRegistrationToken(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -81,13 +81,53 @@ func TestCreateWithoutUsableTokenRequiresFreshRegistrationToken(t *testing.T) {
 			if !errors.As(err, &domainError) || domainError.Detail != "registration_token_required" {
 				t.Fatalf("Create(without usable token) error = %v", err)
 			}
-			if len(runtime.steps) != 0 || journal.progress.Status != "" {
+			if len(runtime.steps) != 0 || journal.progress.ActiveStep != nil || journal.progress.NextStep != 0 {
 				t.Fatalf("host steps = %v, progress = %#v", runtime.steps, journal.progress)
 			}
 			if test.token != nil && len(test.token.value) != 0 {
 				t.Fatal("rejected registration token bytes were not cleared")
 			}
 		})
+	}
+}
+
+// RUN-06/10: losing the response after registration must not register twice or
+// require a new token merely to observe the issued effect or replay readiness.
+func TestCreateReplaysRegistrationWithoutToken(t *testing.T) {
+	for _, ready := range []bool{false, true} {
+		journal := newMemoryJournal()
+		runtime := &recordingRuntime{}
+		lifecycle, err := NewLifecycle(journal, runtime)
+		if err != nil {
+			t.Fatal(err)
+		}
+		attempt := Attempt{TaskID: "task_create", Executor: "controller", Plan: testPlan()}
+		registration := corerunner.StepStartRunner
+		ownership := RuntimeEvidence{
+			ContainerID: repeat("a", 64), DaemonNonce: repeat("b", 64), SocketDevice: 1, SocketInode: 2,
+		}
+		journal.progress = Progress{
+			Plan: attempt.Plan.Clone(), RunnerID: attempt.Plan.RunnerID, TaskID: attempt.TaskID,
+			Executor: attempt.Executor, PlanDigest: attempt.Plan.Digest(), IdentityDigest: attempt.Plan.IdentityDigest(),
+			RuntimeEpoch: 1, Operation: OperationCreate, NextStep: len(corerunner.CreationSteps()) - 1,
+			ActiveStep: &registration, Status: StatusRunning, Revision: 1,
+		}
+		if ready {
+			journal.progress.Status = StatusReady
+			journal.progress.NextStep++
+			journal.progress.ActiveStep = nil
+			journal.progress.Evidence = &ownership
+		}
+		got, err := lifecycle.CreateWithEvidence(context.Background(), attempt, nil)
+		if err != nil || got != ownership || len(runtime.steps) != 0 || journal.progress.Status != StatusReady {
+			t.Fatalf("ready=%t: replay evidence=%#v, steps=%v, error=%v", ready, got, runtime.steps, err)
+		}
+		if !ready && !slices.Equal(runtime.resolved, []corerunner.Step{registration}) {
+			t.Fatalf("registration was not observed: %v", runtime.resolved)
+		}
+		if ready && len(runtime.resolved) != 0 {
+			t.Fatal("completed replay touched the runtime")
+		}
 	}
 }
 
@@ -112,7 +152,7 @@ func TestRemoveRecordsOrderedAbsenceReceipts(t *testing.T) {
 		t.Fatalf("Remove() error = %v", err)
 	}
 	if !slices.Equal(runtime.steps, []corerunner.Step{
-		corerunner.StepStopRunner, corerunner.StepStopDaemon, corerunner.StepStopProxy,
+		corerunner.StepStopRunner, corerunner.StepStopDaemon,
 		corerunner.StepRemoveNetwork, corerunner.StepRemoveIdentity, corerunner.StepRemoveEgress,
 	}) {
 		t.Fatalf("cleanup steps = %v", runtime.steps)
@@ -282,6 +322,11 @@ func (runtime *recordingRuntime) resolve(
 	if runtime.resolveErr != nil {
 		return corerunner.StepEvidence{}, runtime.resolveErr
 	}
+	if step == corerunner.StepStartRunner {
+		return corerunner.StepEvidence{Step: step, State: corerunner.EffectApplied, Ownership: &RuntimeEvidence{
+			ContainerID: repeat("a", 64), DaemonNonce: repeat("b", 64), SocketDevice: 1, SocketInode: 2,
+		}}, nil
+	}
 	return corerunner.StepEvidence{Step: step, State: corerunner.EffectApplied}, nil
 }
 
@@ -325,20 +370,6 @@ func (runtime *recordingRuntime) ObserveEgress(
 	plan corerunner.Plan,
 ) (corerunner.StepEvidence, error) {
 	return runtime.resolve(ctx, plan, corerunner.StepEnsureEgress)
-}
-
-func (runtime *recordingRuntime) StartProxy(
-	ctx context.Context,
-	plan corerunner.Plan,
-) (corerunner.StepEvidence, error) {
-	return runtime.apply(ctx, plan, corerunner.StepStartProxy, nil)
-}
-
-func (runtime *recordingRuntime) ObserveProxy(
-	ctx context.Context,
-	plan corerunner.Plan,
-) (corerunner.StepEvidence, error) {
-	return runtime.resolve(ctx, plan, corerunner.StepStartProxy)
 }
 
 func (runtime *recordingRuntime) StartDaemon(
@@ -396,16 +427,6 @@ func (runtime *recordingRuntime) ObserveDaemonAbsent(
 	plan corerunner.Plan,
 ) (corerunner.StepEvidence, error) {
 	return runtime.removalObservation(ctx, plan, corerunner.StepStopDaemon)
-}
-func (runtime *recordingRuntime) StopProxy(ctx context.Context, plan corerunner.Plan) (corerunner.StepEvidence, error) {
-	return runtime.apply(ctx, plan, corerunner.StepStopProxy, nil)
-}
-
-func (runtime *recordingRuntime) ObserveProxyAbsent(
-	ctx context.Context,
-	plan corerunner.Plan,
-) (corerunner.StepEvidence, error) {
-	return runtime.removalObservation(ctx, plan, corerunner.StepStopProxy)
 }
 
 func (runtime *recordingRuntime) RemoveNetwork(

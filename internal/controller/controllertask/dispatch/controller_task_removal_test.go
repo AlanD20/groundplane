@@ -20,7 +20,12 @@ func TestControllerTaskHandlerExecutesExactAgentRemoval(t *testing.T) {
 	t.Parallel()
 
 	agents := &removalTaskAgents{}
-	handler, err := NewResourceHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
+	handler, err := NewResourceHandler(
+		agents,
+		testBackingZoneCascade(t),
+		&fakeControllerTaskRunners{},
+		&recordingControllerTaskExecutor{},
+	)
 	if err != nil {
 		t.Fatalf("NewResourceHandler() error = %v", err)
 	}
@@ -44,7 +49,12 @@ func TestControllerTaskHandlerRejectsInvalidAgentRemovalParameters(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			agents := &removalTaskAgents{}
-			handler, err := NewResourceHandler(agents, testBackingZoneCascade(t), &fakeControllerTaskRunners{})
+			handler, err := NewResourceHandler(
+				agents,
+				testBackingZoneCascade(t),
+				&fakeControllerTaskRunners{},
+				&recordingControllerTaskExecutor{},
+			)
 			if err != nil {
 				t.Fatalf("NewResourceHandler() error = %v", err)
 			}

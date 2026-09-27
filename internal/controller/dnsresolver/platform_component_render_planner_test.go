@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -163,7 +164,7 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 				renderPlannerObservationRepository{}, func(context.Context) ([]byte, error) {
 					return append([]byte(nil), baselineContent...), nil
 				}, rendererPin{}, renderPlannerEnvironmentPlanner{}, renderPlannerCatalog{definition: definition},
-				"activate-config",
+				"activate-config", netip.MustParseAddr("127.0.0.1"),
 			)
 			if err != nil {
 				t.Fatalf("NewPlatformRenderPlanner() error = %v", err)

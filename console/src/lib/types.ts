@@ -397,7 +397,8 @@ export type TaskType =
   | "destroy"
   | "remove"
   | "update"
-  | "rotate";
+  | "rotate"
+  | "fetch";
 
 export type TaskStepState = "pending" | "running" | "done" | "failed";
 

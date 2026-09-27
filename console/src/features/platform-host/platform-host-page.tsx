@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge } from '@/components/common/status-badge'
 import { HostAgentsTable } from './host-agents-table'
 import { MetaPill } from '@/components/common/meta-pill'
+import { ImageFetchCard } from '@/features/image-delivery/image-fetch-card'
 
 export default function PlatformHostPage() {
   const { host, hostLoading, hostError } = useStore()
@@ -26,6 +27,7 @@ export default function PlatformHostPage() {
         </Card>
         <Link to="/platform/host/controller" className="text-sm text-primary">Controller settings</Link>
         <HostAgentsTable />
+        <ImageFetchCard />
       </div>
     )
   }
@@ -114,6 +116,7 @@ export default function PlatformHostPage() {
         </div>
       </div>
       <HostAgentsTable />
+      <ImageFetchCard />
     </div>
   )
 }

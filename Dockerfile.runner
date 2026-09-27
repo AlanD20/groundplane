@@ -37,6 +37,7 @@ RUN set -eu; \
     printf '%s\n' "$RUNNER_VERSION" > /opt/actions-runner/.groundplane-runner-version; \
     chown -R 1000:1000 /opt/actions-runner /runner
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY --from=compose /docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY --from=cli /out/groundplane /usr/local/bin/groundplane
 COPY release/runner/entrypoint.sh /usr/local/bin/groundplane-runner

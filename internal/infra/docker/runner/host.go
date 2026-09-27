@@ -18,8 +18,9 @@ const (
 type localOperations struct{ commands commandrunner.Runner }
 
 // NewLocal fixes the production Linux host boundary behind the validated
-// HostControl facade. Docker API traffic uses the Runner's private socket;
-// host administration commands retain the repository-wide subprocess seam.
+// HostControl facade. The Controller manages the listener on host Docker;
+// workflows use only their dedicated rootless socket. Host administration
+// commands retain the repository-wide subprocess seam.
 func NewLocal(commands commandrunner.Runner) (*HostControl, error) {
 	if commands == nil {
 		return nil, errs.New(errs.KindInternal, "runner host command runner is required")
