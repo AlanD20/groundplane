@@ -72,33 +72,6 @@ class ControllerBootstrapTest(unittest.TestCase):
             self.layout.remove_empty()
         self.assertTrue((self.root / "releases" / "candidate").is_dir())
 
-    # QA: HOST-02, UP-04; local preflight pagination, not admission/drain atomicity.
-    # Rationale: later-page active work or unreadable history must prevent bootstrap.
-    def test_bootstrap_idle_check_requires_every_page_terminal(self):
-        class Pages:
-            def __init__(self, replies):
-                self.replies = iter(replies)
-                self.calls = []
-
-            def request(self, method, path):
-                self.calls.append((method, path))
-                return next(self.replies)
-
-        pages = Pages([(200, {"items": [{"status": "completed"}], "next_cursor": "next"}),
-                       (200, {"items": [{"status": "failed"}]})])
-        bootstrap.require_idle(pages)
-        self.assertEqual(len(pages.calls), 2)
-        with self.assertRaisesRegex(ValueError, "all Tasks terminal"):
-            bootstrap.require_idle(Pages([
-                (200, {"items": [{"status": "completed"}], "next_cursor": "next"}),
-                (200, {"items": [{"status": "running"}]}),
-            ]))
-        for response in ((200, {"items": [{"status": "running"}]}),
-                         (503, None), (200, {"items": [{"status": "unknown"}]})):
-            with self.subTest(response=response):
-                with self.assertRaises(ValueError):
-                    bootstrap.require_idle(Pages([response]))
-
 
 if __name__ == "__main__":
     unittest.main()

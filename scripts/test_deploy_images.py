@@ -11,7 +11,7 @@ import deploy
 
 def target():
     return deploy.Deployment(Path("/keys/qa"), ipaddress.ip_address("192.0.2.42"),
-                             "0.0.1", False, None, None, False, False)
+                             "0.0.1", False, None, None, False)
 
 
 class DeploymentImagesTest(unittest.TestCase):
@@ -20,6 +20,7 @@ class DeploymentImagesTest(unittest.TestCase):
     def test_native_compilation_has_bounded_parallelism_without_changing_parent_environment(self):
         parent = {"GOMAXPROCS": "64", "PRESERVED": "yes"}
         with patch.object(deploy, "run") as run, \
+                patch.object(deploy, "require_capacity"), \
                 patch.object(deploy, "build_environment", return_value=parent), \
                 patch.object(deploy, "local_image_id", return_value="sha256:" + "b" * 64), \
                 patch.object(deploy, "image_input_digest", return_value="c" * 64):
@@ -58,6 +59,7 @@ class DeploymentImagesTest(unittest.TestCase):
     def test_native_artifact_build_does_not_build_inspect_or_tag_runner(self):
         commands = []
         with patch.object(deploy, "run", side_effect=lambda command, **kwargs: commands.append(command)), \
+                patch.object(deploy, "require_capacity"), \
                 patch.object(deploy, "build_environment", return_value={}), \
                 patch.object(deploy, "local_image_id", return_value="sha256:" + "b" * 64), \
                 patch.object(deploy, "image_input_digest", return_value="c" * 64) as digest:

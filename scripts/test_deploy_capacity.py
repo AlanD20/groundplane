@@ -10,7 +10,7 @@ import deploy
 
 def target():
     return deploy.Deployment(Path("/keys/qa"), ipaddress.ip_address("192.0.2.42"),
-                             "0.0.1", False, None, None, False, False)
+                             "0.0.1", False, None, None, False)
 
 
 class DeploymentCapacityTest(unittest.TestCase):

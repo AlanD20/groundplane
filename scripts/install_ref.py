@@ -100,7 +100,7 @@ def install(source: Path, output: Path, version: str, identity: str,
         if stage_only:
             raise ValueError("--stage-only requires an existing native installation")
         if Path("/usr/local/libexec/groundplane/controller").exists():
-            raise ValueError("legacy installation requires explicit maintenance bootstrap")
+            raise ValueError("incompatible installation: guarded updates require native recovery")
     elif config:
         raise ValueError("--config is initial-install only")
     if config and (not Path(config).is_file() or Path(config).is_symlink()):

@@ -240,23 +240,22 @@ publish_image() {
 }
 
 deployment_mode=$(python3 "$deploy_dir/controller_bootstrap.py" mode)
-if test "$deployment_mode" = native; then
-    if test "$bootstrap" -eq 1; then
-        echo "native recovery is already installed; omit --bootstrap and use a normal update" >&2
+require_fresh_installation() {
+    if test -e /usr/local/libexec/groundplane/controller || test -L /usr/local/libexec/groundplane/controller; then
+        echo "incompatible Controller installation; refusing unguarded replacement" >&2
         exit 1
     fi
-else
+    if systemctl is-active --quiet groundplane-controller.service; then
+        echo "active Controller has no recovery guard; refusing unguarded replacement" >&2
+        exit 1
+    fi
+}
+if test "$deployment_mode" != native; then
     if test "$stage_only" -eq 1; then
         echo "--stage-only requires an existing native recovery installation" >&2
         exit 1
     fi
-    if test -e /usr/local/libexec/groundplane/controller && test "$bootstrap" -ne 1; then
-        echo "legacy Controller requires an explicit --bootstrap maintenance invocation" >&2
-        exit 1
-    fi
-    if systemctl is-active --quiet groundplane-controller.service; then
-        python3 "$deploy_dir/controller_bootstrap.py" require-idle
-    fi
+    require_fresh_installation
 fi
 
 agent_ref=$(publish_image groundplane-agent "$source_agent_image" Agent)
@@ -318,12 +317,7 @@ backup_path /etc/groundplane/controller.yaml controller-config
 backup_path /etc/groundplane/controller.age controller-age
 rollback=1
 
-# Legacy binaries cannot fence new work: --bootstrap is an explicit maintenance
-# boundary. Recheck immediately before stopping; never abort existing Tasks.
-if test "$service_was_active" -eq 1; then
-    python3 "$deploy_dir/controller_bootstrap.py" require-idle
-    systemctl stop groundplane-controller.service
-fi
+require_fresh_installation
 python3 "$deploy_dir/controller_bootstrap.py" initialize
 native_initialized=1
 

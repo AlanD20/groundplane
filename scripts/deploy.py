@@ -216,7 +216,6 @@ source_agent_image=$4
 source_runner_image=$5
 listen_ip=$6
 stage_only=$7
-bootstrap=$8
 
 """ + REMOTE_DEPLOY_GUARD + r"""
 
@@ -273,7 +272,7 @@ tar -xf - -C "$deploy_dir"
 trap - EXIT HUP INT TERM
 exec sh "$deploy_dir/remote-deploy.sh" \
     "$setup" "$deploy_dir" "$version" "$source_agent_image" "$source_runner_image" \
-    "$listen_ip" "$stage_only" "$bootstrap"
+    "$listen_ip" "$stage_only"
 """
 
 REMOTE_INSTALL = r"""
@@ -285,7 +284,6 @@ source_agent_image=$3
 source_runner_image=$4
 listen_ip=$5
 stage_only=$6
-bootstrap=$7
 
 """ + REMOTE_DEPLOY_GUARD + (REPOSITORY_ROOT / "scripts" / "deployment" / "bootstrap.sh").read_text(encoding="utf-8") + \
     (REPOSITORY_ROOT / "scripts" / "deployment" / "agent.sh").read_text(encoding="utf-8")
@@ -300,7 +298,6 @@ class Deployment:
     expose_port: int | None
     known_hosts: Path | None
     stage_only: bool
-    bootstrap: bool
 
     @property
     def ssh_target(self) -> str:
@@ -369,7 +366,6 @@ def parse_arguments() -> Deployment:
         help="Controller and Agent release version; defaults to development identity 'dev'",
     )
     parser.add_argument("--stage-only", action="store_true", help="stage a release on a guarded host without activating it")
-    parser.add_argument("--bootstrap", action="store_true", help="explicit first recovery-guard installation on an idle legacy host")
     parser.add_argument(
         "--known-hosts",
         type=Path,
@@ -398,8 +394,6 @@ def parse_arguments() -> Deployment:
         parser.error("--expose must be between 1 and 65535")
     if VERSION_PATTERN.fullmatch(arguments.version) is None:
         parser.error("--version must be 'dev' or a semantic version")
-    if arguments.bootstrap and arguments.stage_only:
-        parser.error("--bootstrap and --stage-only are mutually exclusive")
 
     return Deployment(
         key=key,
@@ -409,7 +403,6 @@ def parse_arguments() -> Deployment:
         expose_port=arguments.expose,
         known_hosts=known_hosts,
         stage_only=arguments.stage_only,
-        bootstrap=arguments.bootstrap,
     )
 
 
@@ -696,7 +689,6 @@ def transfer_and_deploy(
             source_runner_image,
             deployment.ip.compressed,
             "1" if deployment.stage_only else "0",
-            "1" if deployment.bootstrap else "0",
         ],
     )
     command = [*deployment.ssh_base, remote_command]
@@ -765,7 +757,6 @@ def deploy(deployment: Deployment) -> None:
                     expose_port=deployment.expose_port,
                     known_hosts=deployment.known_hosts,
                     stage_only=deployment.stage_only,
-                    bootstrap=deployment.bootstrap,
                 ),
                 remote_directory,
                 source_agent_image,

@@ -258,21 +258,6 @@ func (spec *ReleaseGroupSpec) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// ParseEnvelope reads just the envelope fields (kind/schema/metadata)
-// from a raw Blueprint document — the first step of blueprint.md's
-// lifecycle ("Parse the envelope and Compose body"). Callers dispatch on
-// Kind to decode the rest (EnvironmentDocument, ConnectorDocument, …).
-func ParseEnvelope(raw []byte) (Envelope, error) {
-	var env Envelope
-	if err := yaml.Unmarshal(raw, &env); err != nil {
-		return Envelope{}, fmt.Errorf("envelope: %w", err)
-	}
-	if env.Schema == 0 {
-		env.Schema = EnvelopeSchema
-	}
-	return env, nil
-}
-
 // ParseConnectorDocument decodes a full `kind: connector` document.
 func ParseConnectorDocument(raw []byte) (ConnectorDocument, error) {
 	var doc ConnectorDocument

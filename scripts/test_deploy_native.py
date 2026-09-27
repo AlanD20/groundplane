@@ -1,4 +1,4 @@
-"""Rationale: guarded deployments exit before legacy installation and preserve uncertainty."""
+"""Rationale: guarded updates and fresh installs cannot bypass recovery authority."""
 from pathlib import Path
 import os
 import re
@@ -32,8 +32,9 @@ class NativeDeployBranchTest(unittest.TestCase):
                 self.assertEqual((binaries / name).read_bytes(), b"immutable predecessor")
                 self.assertEqual((binaries / name).stat().st_mode & 0o777, 0o500)
 
-    def run_branch(self, *, stage_only=False, update_status=0, bootstrap=False,
-                   activate_status=0, matching_cli=False, candidate_missing=False):
+    def run_branch(self, *, stage_only=False, update_status=0,
+                   activate_status=0, matching_cli=False, candidate_missing=False,
+                   mode="native", existing_controller=False, active_controller=False):
         parent = Path(__file__).resolve().parents[1] / ".tmp" / "test-deploy-native"
         parent.mkdir(mode=0o700, exist_ok=True)
         temporary = tempfile.TemporaryDirectory(dir=parent)
@@ -47,33 +48,37 @@ class NativeDeployBranchTest(unittest.TestCase):
         cli_target.write_bytes(b"new CLI" if matching_cli else b"old CLI")
         cli_target.chmod(0o755)
         original_cli_inode = cli_target.stat().st_ino
+        controller = root / "controller"
+        if existing_controller:
+            controller.write_bytes(b"unguarded Controller")
         finish = re.search(r"(?ms)^finish\(\) \{\n.*?^\}\n", deploy.REMOTE_INSTALL).group(0)
         start = deploy.REMOTE_INSTALL.index("deployment_mode=$(python3")
         end = deploy.REMOTE_INSTALL.index("runner_ref=$(publish_image", start)
         branch = deploy.REMOTE_INSTALL[start:end]
         branch = branch.replace("sync -f /usr/local/bin", f"sync -f {root}")
         branch = branch.replace("/usr/local/bin/groundplane", str(cli_target))
+        branch = branch.replace("/usr/local/libexec/groundplane/controller", str(controller))
         branch = branch.replace("'0:1:755'", f"'{os.geteuid()}:1:755'")
         branch = branch.replace(" -o root -g root", "")
         script = "\n".join([
             "set -eu", "deploy_dir=$1", "calls=$2",
             "deploy_id=0123456789abcdef0123456789abcdef", "source_agent_image=agent",
             "rollback=0", "retain_recovery=0", 'cli_stage=""', "cli_activation_pending=0",
-            f"stage_only={int(stage_only)}", f"bootstrap={int(bootstrap)}",
+            f"stage_only={int(stage_only)}",
             "publish_image() { echo pinned-agent; }",
-            'systemctl() { echo "unexpected systemctl" >&2; exit 90; }',
+            f'systemctl() {{ return {0 if active_controller else 1}; }}',
             f'mv() {{ if test {activate_status} -ne 0; then return {activate_status}; fi; command mv "$@"; }}',
             'python3() {',
             '  printf "%s\\n" "$*" >> "$calls"',
             '  case "$1" in',
-            '    */controller_bootstrap.py) echo native ;;',
+            f'    */controller_bootstrap.py) echo {mode} ;;',
             '    */controller_release.py) echo sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;;',
             f'    */controller_update.py) return {update_status} ;;',
             '    *) exit 91 ;;',
             '  esac',
             '}',
             finish, "trap finish EXIT HUP INT TERM", branch,
-            'echo "unsafe legacy fallthrough" >&2', "exit 92",
+            'echo "fresh installation branch reached" >&2', "exit 92",
         ])
         calls = root / "calls"
         result = subprocess.run(["sh", "-c", script, "--", str(bundle), str(calls)],
@@ -140,12 +145,18 @@ class NativeDeployBranchTest(unittest.TestCase):
         self.assertIn("controller_update.py sha256:", calls)
 
     # QA: UP-03; installer admission only, not host discovery.
-    # Rationale: an explicit bootstrap flag cannot bypass native recovery authority.
-    def test_native_installation_refuses_bootstrap_override(self):
-        result, bundle, calls, _, _ = self.run_branch(bootstrap=True)
-        self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertNotIn("controller_release.py", calls)
-        self.assertFalse(bundle.exists())
+    # Rationale: existing unguarded binaries or processes must never be adopted
+    # through the fresh-install path, even if no recovery layout exists.
+    def test_unguarded_installation_is_rejected_without_activation(self):
+        for state in ({"existing_controller": True}, {"active_controller": True}):
+            with self.subTest(state=state):
+                result, bundle, calls, cli, _ = self.run_branch(mode="bootstrap", **state)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn("refusing unguarded replacement", result.stderr)
+                self.assertNotIn("controller_release.py", calls)
+                self.assertNotIn("controller_update.py", calls)
+                self.assertEqual(cli.read_bytes(), b"old CLI")
+                self.assertFalse(bundle.exists())
 
 
 if __name__ == "__main__":

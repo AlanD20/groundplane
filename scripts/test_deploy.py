@@ -53,7 +53,6 @@ class DeployConnectionArgumentsTest(unittest.TestCase):
             expose_port=None,
             known_hosts=Path("/etc/groundplane/known_hosts"),
             stage_only=False,
-            bootstrap=False,
         )
 
         commands = (

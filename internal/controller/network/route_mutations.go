@@ -26,6 +26,9 @@ type routeMutationRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	GetRoute(context.Context, string) (etcdstore.Versioned[routerecord.Record], error)
+	GetEnvironmentComposeProjection(
+		context.Context, string,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	BeginRouteMutationWithTask(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
@@ -37,18 +40,6 @@ type routeMutationRepository interface {
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-}
-
-type routeMutationProjectionRepository interface {
-	GetEnvironmentAppliedComposeProjection(
-		context.Context, string,
-	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
-}
-
-type routeMutationDesiredProjectionRepository interface {
-	GetEnvironmentComposeProjection(
-		context.Context, string,
-	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 }
 
 type routeMutationTaskPlanner interface {
@@ -76,16 +67,9 @@ type routeMutationService struct {
 func newRouteMutationService(
 	repository routeMutationRepository,
 	idempotency routeMutationIdempotency,
-) (*routeMutationService, error) {
-	return newRouteMutationServiceWithPlanner(repository, idempotency, nil)
-}
-
-func newRouteMutationServiceWithPlanner(
-	repository routeMutationRepository,
-	idempotency routeMutationIdempotency,
 	planner routeMutationTaskPlanner,
 ) (*routeMutationService, error) {
-	if repository == nil || idempotency == nil {
+	if repository == nil || idempotency == nil || planner == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutation service is not configured")
 	}
 	return &routeMutationService{

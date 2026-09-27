@@ -11,8 +11,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -33,6 +35,21 @@ type fakeRouteMutationRepository struct {
 	createCalls int
 	task        etcd.TaskRecord
 	intent      testenvironmentchanges.RouteMutationIntent
+}
+
+func (fake *fakeRouteMutationRepository) GetEnvironmentComposeProjection(
+	context.Context, string,
+) (testkeyvalue.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
+	return testkeyvalue.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, nil
+}
+
+func routeTestPlanner(t *testing.T) *taskplanning.TaskPlanResolver {
+	t.Helper()
+	planner, err := taskplanning.NewTaskPlanResolver("/var/lib/groundplane/volumes", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return planner
 }
 
 func (fake *fakeRouteMutationRepository) GetEnvironment(
@@ -142,7 +159,7 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 	idempotency := &fakeRouteMutationIdempotency{
 		evidence: routeMutationEvidence{durable: networkTestProtectedIntent()},
 	}
-	service, err := newRouteMutationService(repository, idempotency)
+	service, err := newRouteMutationService(repository, idempotency, routeTestPlanner(t))
 	if err != nil {
 		t.Fatalf("newRouteMutationService() error = %v", err)
 	}
@@ -185,7 +202,7 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 func TestRouteCreationRejectsUnsafePathBeforePersistence(t *testing.T) {
 	t.Parallel()
 	repository := &fakeRouteMutationRepository{}
-	service, err := newRouteMutationService(repository, &fakeRouteMutationIdempotency{})
+	service, err := newRouteMutationService(repository, &fakeRouteMutationIdempotency{}, routeTestPlanner(t))
 	if err != nil {
 		t.Fatalf("newRouteMutationService() error = %v", err)
 	}
@@ -231,7 +248,7 @@ func TestRouteCreationRejectsUnexposedTargetPort(t *testing.T) {
 	repository.target.Record.Desired.Expose = []string{"9000", "8080/udp"}
 	service, err := newRouteMutationService(repository, &fakeRouteMutationIdempotency{
 		evidence: routeMutationEvidence{durable: networkTestProtectedIntent()},
-	})
+	}, routeTestPlanner(t))
 	if err != nil {
 		t.Fatalf("newRouteMutationService() error = %v", err)
 	}

@@ -6,33 +6,12 @@ import os
 from pathlib import Path
 import stat
 import sys
-from urllib.parse import urlencode
 
 from controller_release import DIRECTORY_FLAGS, MAX_BINARY, RELEASE_ROOT, ReleaseStore, directory, regular
-from controller_update import TERMINAL, Transport
 
 GUARD = Path("/usr/local/libexec/groundplane/controller-recovery")
 UNIT = Path("/etc/systemd/system/groundplane-controller.service")
 GUARD_LINE = "ExecStartPre=/usr/local/libexec/groundplane/controller-recovery --upgrade-guard"
-
-
-def require_idle(transport):
-    cursor = ""
-    seen = set()
-    for _ in range(100):
-        status, page = transport.request("GET", "/tasks?" + urlencode({"limit": 100, "cursor": cursor}))
-        if status != 200 or not isinstance(page, dict) or not isinstance(page.get("items"), list):
-            raise ValueError("cannot prove bootstrap host is idle")
-        for task in page["items"]:
-            if not isinstance(task, dict) or task.get("status") not in TERMINAL - {"rejected"}:
-                raise ValueError("bootstrap requires all Tasks terminal; wait without aborting active work")
-        cursor = page.get("next_cursor", "")
-        if not isinstance(cursor, str) or len(cursor) > 8192 or cursor in seen:
-            raise ValueError("invalid bootstrap Task page cursor")
-        if not cursor:
-            return
-        seen.add(cursor)
-    raise ValueError("bootstrap idle check exceeded bounded Task history")
 
 
 class Layout:
@@ -122,7 +101,7 @@ class Layout:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("mode", "initialize", "remove-empty", "require-idle"))
+    parser.add_argument("action", choices=("mode", "initialize", "remove-empty"))
     args = parser.parse_args()
     if os.geteuid() != 0:
         raise ValueError("native bootstrap requires root")
@@ -133,8 +112,6 @@ def main():
         layout.initialize()
     elif args.action == "remove-empty":
         layout.remove_empty()
-    else:
-        require_idle(Transport())
 
 
 if __name__ == "__main__":

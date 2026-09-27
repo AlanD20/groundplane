@@ -163,10 +163,10 @@ SSH for explicitly authorized development hosts. Its help owns the command
 options. Supply a private identity and independently verified known-hosts file;
 provisioning is not implied by a documentation example.
 
-The helper reuses the same native stager and update operation. Bootstrap or a
-one-time legacy transition is separate, requires an idle host and may need a
-maintenance window. It refuses retained nonterminal work and does not abort it.
-Guarded hosts cannot use the legacy bootstrap path. Unresolved recovery files
+The helper initializes fresh hosts and uses the native stager and guarded update
+operation for existing installations. An existing Controller without native
+recovery is rejected; there is no unguarded conversion or replacement option.
+Partial recovery installations are also rejected. Unresolved recovery files
 remain until the reported outcome is resolved.
 
 Build-space checks do not reserve capacity: do not fill a filesystem that also

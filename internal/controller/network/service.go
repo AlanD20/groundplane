@@ -91,7 +91,7 @@ func NewEtcdService(
 	if err := plans.EnableRoutePlans(repository); err != nil {
 		return nil, err
 	}
-	routeMutations, err := newRouteMutationServiceWithPlanner(repository, routeMutationIdempotency, plans)
+	routeMutations, err := newRouteMutationService(repository, routeMutationIdempotency, plans)
 	if err != nil {
 		return nil, err
 	}

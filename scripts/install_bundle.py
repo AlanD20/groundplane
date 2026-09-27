@@ -48,7 +48,7 @@ def install(bundle: Path, args, manifest: dict, layout: Layout) -> None:
         if args.stage_only:
             raise ValueError("--stage-only requires an existing native installation")
         if Path("/usr/local/libexec/groundplane/controller").exists():
-            raise ValueError("legacy installation needs the documented explicit maintenance bootstrap")
+            raise ValueError("incompatible installation: guarded updates require native recovery")
     elif args.config:
         raise ValueError("--config is initial-install only; normal updates preserve configuration")
     if shutil.disk_usage(bundle).free < 2 * 1024**3:

@@ -2,9 +2,6 @@ package network
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -25,28 +22,13 @@ func (service *routeMutationService) prepareRouteMutationTask(
 	previous *etcdstore.Versioned[routerecord.Record],
 	idempotencyKey string,
 ) (etcd.RouteMutationTaskPreparation, error) {
-	var applied *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
-	{
-		var projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
-		var found bool
-		var err error
-		if projectionRepository, ok := service.repository.(routeMutationDesiredProjectionRepository); ok {
-			projection, found, err = projectionRepository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
-		} else if service.planner != nil {
-			return etcd.RouteMutationTaskPreparation{}, errs.New(
-				errs.KindInternal, "Route desired projection repository is not configured",
-			)
-		} else if projectionRepository, ok := service.repository.(routeMutationProjectionRepository); ok {
-			projection, found, err = projectionRepository.GetEnvironmentAppliedComposeProjection(ctx, environment.Record.ID)
-		} else {
-			found = false
-		}
-		if err != nil {
-			return etcd.RouteMutationTaskPreparation{}, err
-		}
-		if found {
-			applied = &projection
-		}
+	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
+	if err != nil {
+		return etcd.RouteMutationTaskPreparation{}, err
+	}
+	var desired *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
+	if found {
+		desired = &projection
 	}
 	taskID := ids.New(ids.KindTask)
 	operationID := ids.New(ids.KindOperation)
@@ -66,27 +48,10 @@ func (service *routeMutationService) prepareRouteMutationTask(
 		task.Type = taskjournal.TaskUpdate
 	}
 	intent, err := environmentchanges.NewRouteMutationIntent(
-		taskID, operationID, environment.Record.ID, record, previous, applied, now,
+		taskID, operationID, environment.Record.ID, record, previous, desired, now,
 	)
 	if err != nil {
 		return etcd.RouteMutationTaskPreparation{}, err
-	}
-	if service.planner == nil && applied != nil {
-		candidate, applyErr := projectionrecord.ApplyEnvironmentRoute(applied.Record, intent.Route)
-		if applyErr != nil {
-			return etcd.RouteMutationTaskPreparation{}, applyErr
-		}
-		candidate.RevisionID = task.ID
-		intent.CandidateProjection = &candidate
-	}
-	if service.planner == nil && applied == nil {
-		intent.CurrentProjection = nil
-		intent.CurrentProjectionRevision = 0
-		task, err = prepareControllerRouteMutationTask(task, intent)
-		if err != nil {
-			return etcd.RouteMutationTaskPreparation{}, err
-		}
-		return etcd.RouteMutationTaskPreparation{Intent: intent, Task: task}, nil
 	}
 	procedures := environmentchanges.RouteMutationProcedureIDs{
 		ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
@@ -137,34 +102,4 @@ func (service *routeMutationService) routeHierarchy(
 			etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
 	return environment, project, target, nil
-}
-
-func prepareControllerRouteMutationTask(
-	task etcd.TaskRecord,
-	intent environmentchanges.RouteMutationIntent,
-) (etcd.TaskRecord, error) {
-	if intent.Provider != nil || intent.CurrentProjection != nil || intent.CandidateProjection != nil {
-		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "desired-only Route mutation has provider state")
-	}
-	task.Executor = taskjournal.TaskExecutorController
-	task.TimeoutSeconds = 30
-	task.RenderGeneration = int32(intent.Route.DesiredGeneration)
-	task.Params = map[string]string{
-		taskjournal.TaskResourceKindParam:     taskjournal.TaskResourceRoute,
-		taskjournal.TaskRouteEnvironmentParam: intent.EnvironmentID,
-	}
-	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
-	value, err := json.Marshal(struct {
-		Version    int    `json:"version"`
-		TaskID     string `json:"task_id"`
-		RouteID    string `json:"route_id"`
-		Generation uint64 `json:"generation"`
-	}{1, task.ID, intent.RouteID, intent.Route.DesiredGeneration})
-	if err != nil {
-		return etcd.TaskRecord{}, errs.Wrap(errs.KindInternal, err)
-	}
-	digest := sha256.Sum256(value)
-	clear(value)
-	task.PlanHash = hex.EncodeToString(digest[:])
-	return task, nil
 }
