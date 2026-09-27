@@ -302,7 +302,7 @@ func TestRunnerRuntimeOwnershipValidationAndEncoding(t *testing.T) {
 			record.DaemonSocketEndpoint = "unix:///run/../tmp/runner.sock"
 		},
 		func(record *testrunners.RunnerRuntimeOwnershipRecord) {
-			record.DaemonSocketEndpoint = "unix:///run/groundplane/runners/other/xdg/docker.sock"
+			record.DaemonSocketEndpoint = "unix:///run/groundplane-runners/other/xdg/docker.sock"
 		},
 		func(record *testrunners.RunnerRuntimeOwnershipRecord) {
 			record.DaemonInstanceNonce = strings.Repeat("A", 64)
@@ -382,7 +382,7 @@ func TestRunnerPersistenceStrictBoundsAndEpochExhaustion(t *testing.T) {
 func runnerTestRuntimeOwnership(runnerID string, epoch uint64) testrunners.RunnerRuntimeOwnershipRecord {
 	return testrunners.RunnerRuntimeOwnershipRecord{
 		RunnerID: runnerID, RuntimeEpoch: epoch,
-		DaemonSocketEndpoint: "unix:///run/groundplane/runners/" + runnerID + "/xdg/docker.sock",
+		DaemonSocketEndpoint: "unix:///run/groundplane-runners/" + runnerID + "/xdg/docker.sock",
 		DaemonInstanceNonce:  strings.Repeat("a", 64), SocketDevice: 123, SocketInode: 456,
 		CreatedAt: taskJournalTime().Add(time.Second),
 	}

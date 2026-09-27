@@ -84,7 +84,7 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 	account := "gp_runner_" + identityToken
 	slotRoot := fmt.Sprintf("/var/lib/groundplane/runner-slots/slot-%02d", target.Allocation.Slot)
 	home := path.Join(slotRoot, "runner")
-	proxySocket := fmt.Sprintf("/run/user/%d/groundplane-docker-proxy/docker.sock", target.Allocation.HostUID)
+	proxySocket := path.Join(runnerallocation.RuntimeDirectory(target.RunnerID), "proxy", "docker.sock")
 	labels := append([]string(nil), target.Labels...)
 	denied := append([]netip.Prefix(nil), policy.DeniedCIDRs...)
 	return Plan{
@@ -98,11 +98,11 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 		},
 		Paths: Paths{
 			SlotRoot: slotRoot, RunnerHome: home, WorkRoot: path.Join(home, "_work"),
-			DataRoot:  path.Join(home, ".local/share/docker"),
-			RawSocket: fmt.Sprintf("/run/user/%d/docker.sock", target.Allocation.HostUID), ProxySocket: proxySocket,
+			DataRoot:  path.Join(slotRoot, "docker"),
+			RawSocket: runnerallocation.DaemonSocketPath(target.RunnerID), ProxySocket: proxySocket,
 		},
 		Network: Network{
-			Name: "gp_runner_" + target.RunnerID, BridgeName: "g" + identityToken,
+			Name: "gp_runner_" + target.RunnerID, BridgeName: fmt.Sprintf("gpr%d", target.Allocation.Slot),
 			RunnerPool: policy.RunnerPool, Subnet: prefix, Gateway: gateway, RunnerAddress: runnerAddress,
 		},
 		Egress: Egress{

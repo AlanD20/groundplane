@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"os"
@@ -26,10 +27,14 @@ func (operations *localOperations) EnsureIdentity(ctx context.Context, plan core
 	if err := ensureSubordinateRange("/etc/subgid", plan.Identity.User, plan.Identity.SubGIDStart, plan.Identity.SubGIDCount); err != nil {
 		return err
 	}
-	if _, err := operations.run(ctx, "loginctl", "enable-linger", plan.Identity.User); err != nil {
-		return err
+	for _, directory := range []string{
+		filepath.Dir(plan.Paths.SlotRoot), runnerallocation.RuntimeDirectory(plan.RunnerID),
+	} {
+		if err := ensureOwnedDirectory(directory, 0, 0, 0o755); err != nil {
+			return err
+		}
 	}
-	if err := ensureOwnedDirectory(plan.Paths.SlotRoot, 0, 0, 0o700); err != nil {
+	if err := ensureOwnedDirectory(plan.Paths.SlotRoot, 0, plan.Identity.GID, 0o710); err != nil {
 		return err
 	}
 	for _, path := range []string{
@@ -37,6 +42,7 @@ func (operations *localOperations) EnsureIdentity(ctx context.Context, plan core
 		plan.Paths.WorkRoot,
 		plan.Paths.DataRoot,
 		filepath.Join(plan.Paths.SlotRoot, "control"),
+		filepath.Dir(plan.Paths.RawSocket),
 		filepath.Dir(plan.Paths.ProxySocket),
 	} {
 		if err := ensureOwnedDirectory(path, plan.Identity.UID, plan.Identity.GID, 0o700); err != nil {
@@ -73,6 +79,9 @@ func (operations *localOperations) RemoveIdentity(ctx context.Context, plan core
 	if err := os.RemoveAll(plan.Paths.SlotRoot); err != nil {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}
+	if err := os.RemoveAll(runnerallocation.RuntimeDirectory(plan.RunnerID)); err != nil {
+		return "", errs.Wrap(errs.KindInternal, err)
+	}
 	return receipt(plan, corerunner.StepRemoveIdentity), nil
 }
 
@@ -85,6 +94,10 @@ func (operations *localOperations) ObserveIdentityAbsent(
 	}
 	if _, err := os.Lstat(plan.Paths.SlotRoot); err == nil || !errors.Is(err, os.ErrNotExist) {
 		return corerunner.StepEvidence{}, errs.New(errs.KindStateConflict, "Runner slot root still exists")
+	}
+	if _, err := os.Lstat(runnerallocation.RuntimeDirectory(plan.RunnerID)); err == nil ||
+		!errors.Is(err, os.ErrNotExist) {
+		return corerunner.StepEvidence{}, errs.New(errs.KindStateConflict, "Runner runtime directory still exists")
 	}
 	return absent(plan, corerunner.StepRemoveIdentity), nil
 }

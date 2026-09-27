@@ -36,8 +36,9 @@ func TestNewPlanBuildsDedicatedRootlessRuntime(t *testing.T) {
 		t.Fatalf("NewPlan() error = %v", err)
 	}
 	if plan.Paths.SlotRoot != "/var/lib/groundplane/runner-slots/slot-03" ||
-		plan.Paths.DataRoot != "/var/lib/groundplane/runner-slots/slot-03/runner/.local/share/docker" ||
-		plan.Paths.ProxySocket != "/run/user/200003/groundplane-docker-proxy/docker.sock" {
+		plan.Paths.DataRoot != "/var/lib/groundplane/runner-slots/slot-03/docker" ||
+		plan.Paths.ProxySocket != "/run/groundplane-runners/"+runnerID+"/proxy/docker.sock" ||
+		plan.Paths.RawSocket != "/run/groundplane-runners/"+runnerID+"/xdg/docker.sock" {
 		t.Fatalf("paths = %#v", plan.Paths)
 	}
 	if plan.Network.Subnet.String() != "10.240.0.24/29" ||

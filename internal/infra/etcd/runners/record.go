@@ -217,7 +217,7 @@ func ValidateRunnerObservation(record RunnerObservationRecord) error {
 }
 
 func ValidateRunnerRuntimeOwnership(record RunnerRuntimeOwnershipRecord) error {
-	expectedEndpoint := "unix:///run/groundplane/runners/" + record.RunnerID + "/xdg/docker.sock"
+	expectedEndpoint := "unix://" + runnerallocation.DaemonSocketPath(record.RunnerID)
 	if ids.Validate(ids.KindRunner, record.RunnerID) != nil || record.RuntimeEpoch == 0 ||
 		!utf8.ValidString(record.DaemonSocketEndpoint) || len(record.DaemonSocketEndpoint) > 240 ||
 		record.DaemonSocketEndpoint != expectedEndpoint || record.SocketDevice == 0 || record.SocketInode == 0 ||

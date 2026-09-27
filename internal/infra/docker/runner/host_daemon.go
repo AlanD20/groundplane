@@ -17,6 +17,10 @@ import (
 )
 
 func (operations *localOperations) StartDaemon(ctx context.Context, plan corerunner.Plan) error {
+	// Identity allocation must not start Runner-uid processes before egress rules.
+	if _, err := operations.run(ctx, "loginctl", "enable-linger", plan.Identity.User); err != nil {
+		return err
+	}
 	controlRoot := filepath.Join(plan.Paths.SlotRoot, "control")
 	for _, path := range []string{
 		filepath.Join(controlRoot, "rootlesskit"),

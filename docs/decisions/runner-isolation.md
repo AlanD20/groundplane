@@ -101,6 +101,8 @@ reconciliation; live rewriting is not a repair path.
 Every Runner has a dedicated host uid/gid, subordinate ranges, home, data root,
 private rootless Docker daemon, rootful bridge Network, and fail-closed nftables
 policy. Firewall isolation is installed before any Runner-uid process starts.
+Runner sockets live outside the root-only Controller runtime directory so the
+rootless daemon can reach them without loosening Controller credential permissions.
 Cleanup removes the rootful Runner first, then daemon and proxy state, the
 Network and user runtime, proves no process with the Runner uid while the
 firewall remains installed, and removes the firewall last.

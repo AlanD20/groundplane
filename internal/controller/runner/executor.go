@@ -105,7 +105,7 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 		evidence.ContainerID,
 		runnerrecord.RunnerRuntimeOwnershipRecord{
 			RunnerID: current.Record.Desired.ID, RuntimeEpoch: plan.RuntimeEpoch,
-			DaemonSocketEndpoint: plan.Paths.RawSocket, DaemonInstanceNonce: evidence.DaemonNonce,
+			DaemonSocketEndpoint: "unix://" + plan.Paths.RawSocket, DaemonInstanceNonce: evidence.DaemonNonce,
 			SocketDevice: evidence.SocketDevice, SocketInode: evidence.SocketInode,
 			CreatedAt: executor.now().UTC(),
 		},
