@@ -41,7 +41,7 @@ import { useStore } from "@/lib/store";
 import {
   type BlueprintDocumentResponse,
   type BlueprintValidationResponse,
-  pendingBlueprintApply,
+  readBlueprintApplyRecovery,
   resolvePendingBlueprintApply,
   settleBlueprintApply,
 } from "./api";
@@ -76,35 +76,44 @@ export function BlueprintWorkspace({
   const [prepared, setPrepared] = useState<PreparedBlueprint | null>(null);
   const [dispatched, setDispatched] = useState(false);
   const [confirmRefresh, setConfirmRefresh] = useState(false);
-  const [pendingApply, setPendingApply] = useState(() => pendingBlueprintApply());
+  const [recovery, setRecovery] = useState(readBlueprintApplyRecovery);
+  const pendingApply = recovery.pending;
+  const applyBlocked = pendingApply !== null || recovery.error !== "";
+  const refreshRecovery = useCallback(() => setRecovery(readBlueprintApplyRecovery()), []);
   const [resolveError, setResolveError] = useState("");
   const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     if (!pendingApply?.taskId) return;
     let active = true;
+    let polling = false;
     const timer = window.setInterval(() => {
+      if (polling) return;
+      polling = true;
       void getTask(pendingApply.taskId!).then((task) => {
         if (!active) return;
+        if (task.id !== pendingApply.taskId) throw new Error("Controller returned a different Task.");
+        setResolveError("");
         if (["completed", "failed", "timed_out", "aborted"].includes(task.status)) {
           settleBlueprintApply(task.id);
-          setPendingApply(pendingBlueprintApply());
+          refreshRecovery();
         }
-      }).catch(() => undefined);
+      }).catch((cause: unknown) => {
+        if (active) setResolveError(cause instanceof Error ? cause.message : "Task status is unavailable.");
+      }).finally(() => { polling = false; });
     }, 2000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [getTask, pendingApply]);
+  }, [getTask, pendingApply, refreshRecovery]);
 
   async function resolveApply() {
     setResolving(true);
     setResolveError("");
     try {
       await resolvePendingBlueprintApply();
-      setPendingApply(pendingBlueprintApply());
     } catch (cause) {
       setResolveError(cause instanceof Error ? cause.message : "Unable to resolve Blueprint Apply.");
-      setPendingApply(pendingBlueprintApply());
     } finally {
+      refreshRecovery();
       setResolving(false);
     }
   }
@@ -204,8 +213,8 @@ export function BlueprintWorkspace({
             <BlueprintApplyAction
               environment={environment}
               workspace={workspace}
-              disabled={pendingApply !== null}
-              onIntentChange={() => setPendingApply(pendingBlueprintApply())}
+              disabled={applyBlocked}
+              onIntentChange={refreshRecovery}
             />
             <Button
               variant="outline"
@@ -234,6 +243,7 @@ export function BlueprintWorkspace({
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {recovery.error && <p role="alert" className="text-sm text-destructive">Apply is unavailable: {recovery.error}</p>}
           {pendingApply && (
             <div role="status" className="space-y-2 rounded-lg border border-warning/40 p-3 text-sm">
               <p>A Blueprint Apply is unresolved for Environment <code>{pendingApply.environmentId}</code>. Do not submit another Apply until the original Task settles.</p>
@@ -285,7 +295,7 @@ export function BlueprintWorkspace({
                   </Button>
                   <Button
                     size="sm"
-                    disabled={working || !draft.trim() || pendingApply !== null}
+                    disabled={working || !draft.trim() || applyBlocked}
                     onClick={() => void reviewDraft()}
                   >
                     <Upload /> {working ? "Validating…" : "Review apply"}
@@ -347,7 +357,7 @@ export function BlueprintWorkspace({
               setDispatched(true);
               return accepted.task_id;
             } finally {
-              setPendingApply(pendingBlueprintApply());
+              refreshRecovery();
             }
           }}
           variant="dialog"

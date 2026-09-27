@@ -280,7 +280,10 @@ func (c *Client) ApplyEnvironmentBlueprint(
 		http.MethodPut, path, response.HTTPResponse, response.Body, http.StatusAccepted,
 	); err != nil {
 		return apiTypes.TaskAccepted{}, response.HTTPResponse == nil ||
-			response.StatusCode() < http.StatusMultipleChoices, err
+			response.StatusCode() < http.StatusMultipleChoices ||
+			response.StatusCode() >= http.StatusInternalServerError ||
+			response.StatusCode() == http.StatusRequestTimeout ||
+			response.StatusCode() == http.StatusTooManyRequests, err
 	}
 	parsed := response.JSON202
 	if parsed == nil {

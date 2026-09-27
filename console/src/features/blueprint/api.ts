@@ -36,11 +36,22 @@ export type BlueprintActions = {
 
 let applyIntent: BlueprintApplyIntent | null = null;
 function intent() {
-  applyIntent ??= new BlueprintApplyIntent(sessionStorage);
+  applyIntent ??= new BlueprintApplyIntent({
+    getItem: (key) => sessionStorage.getItem(key),
+    setItem: (key, value) => sessionStorage.setItem(key, value),
+    removeItem: (key) => sessionStorage.removeItem(key),
+  });
   return applyIntent;
 }
 
 export function pendingBlueprintApply() { return intent().current; }
+export function readBlueprintApplyRecovery() {
+  try {
+    return { pending: pendingBlueprintApply(), error: "" };
+  } catch (cause) {
+    return { pending: null, error: cause instanceof Error ? cause.message : "Unable to read the saved Apply request." };
+  }
+}
 export function settleBlueprintApply(taskId: string) { intent().settle(taskId); }
 
 async function sendBlueprintApply(

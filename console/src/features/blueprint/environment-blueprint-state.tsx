@@ -8,5 +8,5 @@ import type { Environment } from "@/lib/types";
 
 export function BlueprintState({ env }: { env: Environment }) {
   const params = useRequiredParams("tenant");
-  return <BlueprintWorkspace environment={env} workspace={params.tenant} />;
+  return <BlueprintWorkspace key={env.id} environment={env} workspace={params.tenant} />;
 }

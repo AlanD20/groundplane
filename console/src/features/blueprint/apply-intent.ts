@@ -92,10 +92,11 @@ export class BlueprintApplyIntent {
   }
 
   async #capture(environmentId: string, request: BlueprintApplyRequest, revision: string, key: string) {
+    const manifest = structuredClone(request.manifest)
     const parts = await Promise.all(request.parts.map(async ({ part, content }) => ({
       part, bytes: encode(new Uint8Array(await content.arrayBuffer())),
     })))
-    this.#save({ version: 1, environmentId, revision, key, manifest: request.manifest, parts })
+    this.#save({ version: 1, environmentId, revision, key, manifest, parts })
   }
 
   publish(send: (environmentId: string, request: BlueprintApplyRequest, revision: string, key: string) => Promise<{ task_id: string }>, rejected: (error: unknown) => boolean) {

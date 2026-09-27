@@ -72,6 +72,7 @@ export function TaskRunnerDialog({
   const [failure, setFailure] = useState('')
   const [statusFailure, setStatusFailure] = useState('')
 	const [aborting, setAborting] = useState(false)
+  const [abortRequested, setAbortRequested] = useState(false)
 	const committedTaskId = useRef('')
 	const onCommitRef = useRef(onCommit)
 
@@ -90,6 +91,7 @@ export function TaskRunnerDialog({
       setFailure('')
       setStatusFailure('')
 		setAborting(false)
+      setAbortRequested(false)
 		committedTaskId.current = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,12 +172,12 @@ export function TaskRunnerDialog({
   }
 
   function abort() {
-    if (!taskId || aborting) return
+    if (!taskId || aborting || abortRequested) return
     setAborting(true)
     setStatusFailure('')
     void abortTask(taskId)
       .then(
-        () => setTaskStatus('aborted'),
+        () => setAbortRequested(true),
         (cause: unknown) => {
           setStatusFailure(cause instanceof Error ? cause.message : 'The Controller rejected the abort')
         },
@@ -250,14 +252,17 @@ export function TaskRunnerDialog({
           {phase === 'dispatched' && !taskInFlight && !taskTerminalFailure && <CheckCircle2 className="mt-0.5 size-4 text-success" />}
           {phase === 'dispatched' && taskTerminalFailure && <XCircle className="mt-0.5 size-4 text-destructive" />}
           {phase === 'failed' && <XCircle className="mt-0.5 size-4 text-destructive" />}
+          {phase === 'done' && <CheckCircle2 className="mt-0.5 size-4 text-success" />}
           <div className="min-w-0">
             <p className={cn('font-medium', (phase === 'failed' || taskTerminalFailure) && 'text-destructive')}>
               {phase === 'running' && 'Dispatching durable task'}
               {phase === 'dispatched' && taskStatusLabel}
               {phase === 'failed' && 'Request failed'}
+              {phase === 'done' && 'Task completed'}
             </p>
             {taskId && <code className="mt-1 block break-all text-xs text-muted-foreground">{taskId}</code>}
             {failure && <p className="mt-1 text-xs text-destructive">{failure}</p>}
+            {abortRequested && taskInFlight && <p className="mt-1 text-xs text-muted-foreground">Abort requested; waiting for the Controller to confirm the outcome.</p>}
             {statusFailure && (
               <p className="mt-1 text-xs text-warning">Task dispatched; status unavailable: {statusFailure}</p>
             )}
@@ -330,9 +335,9 @@ export function TaskRunnerDialog({
             </span>
             <div className="flex gap-2">
               {taskInFlight && (
-                <Button variant="destructive" disabled={aborting} onClick={abort}>
+                <Button variant="destructive" disabled={aborting || abortRequested} onClick={abort}>
                   {aborting && <Loader2 className="size-4 animate-spin" />}
-                  Abort task
+                  {abortRequested ? 'Abort requested' : 'Abort task'}
                 </Button>
               )}
               <Button onClick={() => onOpenChange(false)}>{taskStatus === 'completed' ? 'Done' : 'Close'}</Button>

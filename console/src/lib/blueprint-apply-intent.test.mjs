@@ -69,3 +69,23 @@ test('Blueprint Apply separates definite rejection from uncertain publication', 
   await assert.rejects(unavailable.begin('env_1', request(), 'revision-1', 'apply-key-00000003'), /storage blocked/)
   assert.equal(unavailable.current, null)
 })
+
+// QA: UI-04/05. Editing caller-owned metadata after dispatch must not change
+// the intent replayed in this tab or make it differ from a reloaded tab.
+test('Blueprint replay owns its captured manifest while the caller continues editing', async () => {
+  const saved = storage()
+  const intent = new BlueprintApplyIntent(saved)
+  const source = request()
+  source.manifest.interpolation.TAG = 'reviewed'
+  const capturing = intent.begin('env_1', source, 'revision-1', 'apply-key-00000001')
+  source.manifest.interpolation.TAG = 'edited'
+  await capturing
+  const seen = []
+  const send = async (_environment, replay) => {
+    seen.push(replay.manifest.interpolation.TAG)
+    throw new Error('response lost')
+  }
+  await assert.rejects(intent.publish(send, () => false), /response lost/)
+  await assert.rejects(new BlueprintApplyIntent(saved).publish(send, () => false), /response lost/)
+  assert.deepEqual(seen, ['reviewed', 'reviewed'])
+})
