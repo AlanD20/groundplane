@@ -411,8 +411,8 @@ func TestPrepareEnvironmentBlueprintServiceChangesStartsNewServiceRunning(t *tes
 }
 
 func TestPrepareEnvironmentBlueprintRouteChangesPreservesImmutableTarget(t *testing.T) {
-	// Rationale: Blueprint replacement may change Route exposure but must not
-	// silently retarget an existing immutable host/path identity.
+	// HTTP-01/DNS-04: preserving Routes during an unrelated Component change
+	// must retain serving observations; an actual exposure edit invalidates them.
 	t.Parallel()
 	at := time.Date(2026, 8, 22, 20, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 5)
@@ -425,7 +425,25 @@ func TestPrepareEnvironmentBlueprintRouteChangesPreservesImmutableTarget(t *test
 	if err != nil {
 		t.Fatalf("NewRouteRecord() error = %v", err)
 	}
+	record, err = testroutes.SetObservation(record, testroutes.Observation{
+		Status: testroutes.ObservedServed, DesiredGeneration: record.DesiredGeneration,
+		Provider: testroutes.ProviderObservation{
+			ComponentID: ids.NewAt(ids.KindComponent, at, 9), DefinitionDigest: strings.Repeat("a", 64),
+			CatalogDigest: strings.Repeat("b", 64), InputRevision: 7, InputGeneration: 1,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	current := testkeyvalue.Versioned[testroutes.Record]{Record: record, Revision: 7, ReadRevision: 9}
+	unchanged, err := prepareEnvironmentBlueprintRouteChanges(
+		environmentID,
+		[]core.Route{record.Desired},
+		[]testkeyvalue.Versioned[testroutes.Record]{current},
+	)
+	if err != nil || len(unchanged) != 1 || unchanged[0].Record != record {
+		t.Fatalf("unchanged Route lost its serving generation: %v, %v", unchanged, err)
+	}
 	desired := record.Desired
 	desired.Exposure = "internal"
 
@@ -439,6 +457,10 @@ func TestPrepareEnvironmentBlueprintRouteChangesPreservesImmutableTarget(t *test
 	}
 	if len(changes) != 1 || changes[0].Current == nil || changes[0].Record.Desired.Exposure != "internal" {
 		t.Fatalf("changes = %#v", changes)
+	}
+	if changes[0].Record.DesiredGeneration != record.DesiredGeneration+1 ||
+		changes[0].Record.Observed.Status != testroutes.ObservedUnserved {
+		t.Fatal("changed Route retained stale serving evidence")
 	}
 
 	retargeted := desired

@@ -62,6 +62,9 @@ func ReplaceDesired(record Record, desired core.Route) (Record, error) {
 	if err := ValidateRecord(record); err != nil {
 		return Record{}, err
 	}
+	if desired == record.Desired {
+		return record, nil
+	}
 	if desired.ID != record.Desired.ID || desired.Host != record.Desired.Host ||
 		desired.Path != record.Desired.Path || desired.TargetServiceID != record.Desired.TargetServiceID ||
 		desired.TargetPort != record.Desired.TargetPort {
