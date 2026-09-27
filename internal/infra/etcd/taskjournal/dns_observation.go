@@ -3,7 +3,6 @@ package taskjournal
 import (
 	"bytes"
 	"encoding/hex"
-	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"time"
@@ -46,14 +45,19 @@ func validateTaskDNSResolverObservationEvidence(
 	}
 	evidence := *candidate
 	canonical, canonicalErr := dnsproof.Unmarshal(evidence.CanonicalEvidence)
+	static := canonical.GetStaticQuery()
 	address, addressErr := netip.ParseAddr(evidence.StaticQueryIPv4)
 	staticValid := !evidence.StaticQueryPresent && evidence.StaticQueryName == "" &&
 		evidence.StaticQueryIPv4 == "" &&
-		!evidence.StaticQuerySucceeded
+		!evidence.StaticQuerySucceeded && static == nil
 	if evidence.StaticQueryPresent {
-		staticValid = resolutionrecord.ValidPlatformDNSName(evidence.StaticQueryName) && addressErr == nil &&
+		// Query names are absolute DNS names, not authored Route hostnames.
+		// The verified canonical proof owns their grammar and exact answer.
+		staticValid = canonicalErr == nil && static != nil &&
+			evidence.StaticQueryName == static.GetName() && len(static.GetAnswers()) == 1 && addressErr == nil &&
 			address.Is4() &&
 			!address.Is4In6() &&
+			bytes.Equal(address.AsSlice(), static.GetAnswers()[0].GetIpv4()) &&
 			evidence.StaticQuerySucceeded
 	}
 	if canonicalErr != nil || hex.EncodeToString(canonical.GetProofSha256()) != evidence.ProofSHA256 ||

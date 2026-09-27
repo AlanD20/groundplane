@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -30,6 +31,12 @@ func TestDurableComposeTaskResultPreservesDNSResolverObservation(t *testing.T) {
 		VerifiedImageDigest: bytes.Repeat([]byte{0xaa}, sha256.Size),
 		ImageConfigDigest:   bytes.Repeat([]byte{0xbb}, sha256.Size),
 		ListenEndpoint:      "127.0.0.1:53", ReloadSha512: reload[:], ObservedAt: timestamppb.New(now),
+		StaticQuery: &agentpb.DNSQueryProof{
+			Name: "app.internal.", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_A, Attempts: 1,
+			Answers: []*agentpb.DNSAnswerRecord{{
+				OwnerName: "app.internal.", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_A, Ipv4: []byte{10, 20, 0, 2},
+			}},
+		},
 		CatchAllQuery: &agentpb.DNSQueryProof{
 			Name: ".", Type: agentpb.DNSQueryType_DNS_QUERY_TYPE_NS, RecursionAvailable: true,
 			SelectedUpstream: "1.1.1.1:53", Attempts: 1,
@@ -82,6 +89,22 @@ func TestDurableComposeTaskResultPreservesDNSResolverObservation(t *testing.T) {
 		t.Fatalf("validateComposeTaskResult() error = %v", err)
 	}
 	durable := durableComposeTaskResult(ack)
+	// DNS-04: admission must accept the actual absolute query name from the
+	// Agent, rather than validate it using the authored Route-host grammar.
+	if err := taskjournal.ValidateTaskResult(durable, nil, taskjournal.TaskStatusFailed); err != nil {
+		t.Fatalf("persist exact DNS query proof: %v", err)
+	}
+	for _, change := range []func(*taskjournal.TaskDNSResolverObservationEvidence){
+		func(value *taskjournal.TaskDNSResolverObservationEvidence) { value.StaticQueryName = "app.internal" },
+		func(value *taskjournal.TaskDNSResolverObservationEvidence) { value.StaticQueryName = "other.internal." },
+		func(value *taskjournal.TaskDNSResolverObservationEvidence) { value.StaticQueryIPv4 = "10.20.0.3" },
+	} {
+		altered := taskjournal.CloneTaskResult(&durable)
+		change(altered.DNSResolverCandidateObservation)
+		if err := taskjournal.ValidateTaskResult(*altered, nil, taskjournal.TaskStatusFailed); err == nil {
+			t.Fatal("persist accepted a static query summary that differs from its canonical proof")
+		}
+	}
 	if durable.DNSResolverCandidateObservation == nil ||
 		durable.DNSResolverCandidateObservation.ComponentID != evidence.GetComponentId() ||
 		durable.DNSResolverCandidateObservation.ArtifactSHA256 != hex.EncodeToString(artifact[:]) ||
