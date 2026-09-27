@@ -27,12 +27,21 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func TestRouteMutationFileWriterPublishesConfigurationAuthority(t *testing.T) {
+// HTTP-11/SVC-15: router acknowledgement can be newer than its desired head.
+// A new Route must capture that acknowledged predecessor, not reject it or
+// capture an older source set for recovery.
+func TestRouteMutationFileWriterCapturesConfigurationNewerThanDesiredHead(t *testing.T) {
 	ctx := context.Background()
 	repository, store, environment, project, target := routeRepositoryTestHierarchy(t)
 	selected, found, err := testblueprints.ReadProjectionAtRevision(ctx, store, environment.Record.ID, 0)
 	if err != nil || !found {
 		t.Fatalf("currentEnvironmentProjectionAtRevision() = %#v/%v/%v", selected, found, err)
+	}
+	acknowledgedRevision := seedTestRuntimeConfigurationHead(
+		t, store, environment.Record.ID, selected.Record.RenderGeneration,
+	)
+	if acknowledgedRevision <= selected.Revision {
+		t.Fatal("fixture did not advance configuration beyond the desired head")
 	}
 	record := routeRepositoryTestRecord(t, environment.Record.ID, target.Record.Desired.ID, 1400, "/config/*")
 	createdAt := serviceRecordTestTime().Add(8 * time.Hour)
@@ -58,7 +67,11 @@ func TestRouteMutationFileWriterPublishesConfigurationAuthority(t *testing.T) {
 		t.Fatalf("BeginRouteMutationWithTask() error = %v", err)
 	}
 	assertAppliedResult(t, result)
-	assertPublishedTaskConfiguration(t, store, task.ID)
+	published := assertPublishedTaskConfiguration(t, store, task.ID)
+	if published.Configuration.Prior == nil || published.Configuration.PriorRevision != acknowledgedRevision {
+		t.Fatalf("Route captured stale configuration: %#v", published.Configuration)
+	}
+	assertRuntimeConfigurationHead(t, store, published, false)
 }
 
 // Rationale: SVC-15/JOURNEY-02 Route removal publication must bind the exact

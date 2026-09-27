@@ -69,13 +69,13 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	publicationCurrent := intent.CurrentProjection
 	publicationCandidate := intent.CandidateProjection
 	publicationRevision := intent.CurrentProjectionRevision
+	selected, found, readErr := blueprints.ReadCurrentProjection(
+		ctx, repository.store, intent.EnvironmentID, 0,
+	)
+	if readErr != nil || !found {
+		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
+	}
 	if publicationCurrent == nil && publicationCandidate == nil {
-		selected, found, readErr := blueprints.ReadCurrentProjection(
-			ctx, repository.store, intent.EnvironmentID, 0,
-		)
-		if readErr != nil || !found {
-			return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
-		}
 		candidate, applyErr := projectionrecord.ApplyEnvironmentRoute(selected.Record, record)
 		if applyErr != nil {
 			return IdempotencyTransactionResult{}, applyErr
@@ -84,7 +84,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		publicationCurrent = &selected.Record
 		publicationCandidate = &candidate
 		publicationRevision = selected.Revision
-	} else if publicationCurrent == nil || publicationCandidate == nil {
+	} else if publicationCurrent == nil || publicationCandidate == nil || selected.Revision != publicationRevision {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Route desired head is unavailable")
 	}
 	action := blueprints.EnvironmentRouteMutationEdit
@@ -133,7 +133,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		task.IdempotencyKey = directMarker.Locator.Key
 	}
 	configuration, err := prepareConfigurationTaskPublication(
-		ctx, repository.store, task, publicationRevision,
+		ctx, repository.store, task, selected.ReadRevision,
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
