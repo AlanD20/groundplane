@@ -80,7 +80,7 @@ func NewPlan(target Target, policy IsolationPolicy) (Plan, error) {
 	runnerAddress := gateway.Next()
 	identityToken := stableToken(target.RunnerID)
 	account := "gpr_" + identityToken
-	slotRoot := fmt.Sprintf("/var/lib/groundplane/runner-slots/slot-%02d", target.Allocation.Slot)
+	slotRoot := fmt.Sprintf("/var/lib/groundplane-runners/slot-%02d", target.Allocation.Slot)
 	home := path.Join(slotRoot, "runner")
 	labels := append([]string(nil), target.Labels...)
 	denied := append([]netip.Prefix(nil), policy.DeniedCIDRs...)

@@ -212,6 +212,8 @@ func validationCreateOptions(image string, arguments []string) client.ContainerC
 			RestartPolicy:  container.RestartPolicy{Name: container.RestartPolicyDisabled},
 			ReadonlyRootfs: true, CapDrop: []string{"ALL"}, CapAdd: []string{"NET_BIND_SERVICE"},
 			SecurityOpt: []string{"no-new-privileges"},
+			// Validate the actual private bind address without joining the host network.
+			Sysctls: map[string]string{"net.ipv4.ip_nonlocal_bind": "1"},
 		},
 	}
 }

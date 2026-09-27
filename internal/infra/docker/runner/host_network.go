@@ -53,7 +53,7 @@ func (operations *localOperations) EnsureEgress(ctx context.Context, plan coreru
 	denied = append(denied, plan.Network.RunnerPool.String())
 	source := fmt.Sprintf(
 		"table inet %s {\n comment \"%s\"\n"+
-			" chain outbound { ip daddr %s tcp dport { %d, 53, 5000 } accept; ip daddr %s udp dport 53 accept; ip daddr { %s } reject; }\n"+
+			" chain outbound { ip daddr %s tcp dport { %d, 53, 5000 } accept; ip daddr %s udp dport 53 accept; ip daddr { %s } drop; }\n"+
 			" chain output { type filter hook output priority 0; policy accept; meta skuid %d jump outbound; }\n"+
 			" chain input { type filter hook input priority 0; policy accept; iifname \"%s\" jump outbound; }\n"+
 			" chain forward { type filter hook forward priority 0; policy accept; iifname \"%s\" jump outbound; }\n}\n",
@@ -201,7 +201,7 @@ func ensureNetwork(ctx context.Context, engine *client.Client, plan corerunner.P
 	if err == nil {
 		return nil
 	}
-	if !containerderrdefs.IsNotFound(rootCause(err)) {
+	if !containerderrdefs.IsNotFound(err) {
 		return err
 	}
 	enableIPv4 := true

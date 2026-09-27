@@ -211,6 +211,7 @@ func runnerContainerOptions(plan corerunner.Plan) client.ContainerCreateOptions 
 			Env: []string{
 				"HOME=" + plan.Paths.RunnerHome, "DOCKER_HOST=unix://" + plan.Container.DockerSocketTarget,
 				"DOCKER_CONFIG=" + runnerDockerConfig(plan),
+				"SSL_CERT_FILE=" + runnerRegistryCA(plan),
 				"GROUNDPLANE_HOST=http://" + plan.Egress.ControllerEndpoint.String(),
 			},
 			Labels: map[string]string{

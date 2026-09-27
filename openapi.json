@@ -2686,12 +2686,12 @@
             "readOnly": true,
             "type": "string"
           },
-          "image": {
-            "description": "Immutable registry reference selected for this operation",
+          "config_digest": {
+            "description": "Pinned OCI configuration digest, verified before Task completion",
             "type": "string"
           },
-          "image_id": {
-            "description": "Expected host image ID, verified before Task completion",
+          "image": {
+            "description": "Immutable registry reference selected for this operation",
             "type": "string"
           },
           "task_id": {
@@ -2701,7 +2701,7 @@
         "required": [
           "task_id",
           "image",
-          "image_id"
+          "config_digest"
         ],
         "type": "object"
       },

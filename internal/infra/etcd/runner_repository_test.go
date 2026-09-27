@@ -93,6 +93,25 @@ func TestRunnerCreatePublishesOneOwnerAndLowestFreeAllocations(t *testing.T) {
 	if err != nil || len(next.Items) != 1 || next.NextCursor != "" {
 		t.Fatalf("ListRunners(second page) = %#v, %v", next, err)
 	}
+	// RUN-10: host maintenance must discover every ownership scope and hydrate
+	// its lifecycle, while operator listing still requires an explicit scope.
+	runtimePage, err := repository.ListRuntimeRunners(ctx, testkeyvalue.PageRequest{Limit: 1})
+	if err != nil || len(runtimePage.Items) != 1 || runtimePage.NextCursor == "" ||
+		runtimePage.Items[0].Record.Desired.ID != tenantRunner.ID ||
+		runtimePage.Items[0].Record.LifecycleRevision != firstRecord.Record.LifecycleRevision {
+		t.Fatalf("runtime first page = %#v, %v", runtimePage, err)
+	}
+	runtimeNext, err := repository.ListRuntimeRunners(ctx, testkeyvalue.PageRequest{
+		Limit: 1, Cursor: runtimePage.NextCursor, Revision: runtimePage.Revision,
+	})
+	if err != nil || len(runtimeNext.Items) != 1 || runtimeNext.NextCursor != "" ||
+		runtimeNext.Items[0].Record.Desired.ID != projectRunner.ID ||
+		runtimeNext.Items[0].Record.LifecycleRevision != secondRecord.Record.LifecycleRevision {
+		t.Fatalf("runtime next page = %#v, %v", runtimeNext, err)
+	}
+	if _, err := repository.ListRunners(ctx, testrunners.RunnerFilter{}, testkeyvalue.PageRequest{}); err == nil {
+		t.Fatal("operator listing accepted no ownership scope")
+	}
 }
 
 // Rationale: all ownership scopes consume one Tenant quota and exact

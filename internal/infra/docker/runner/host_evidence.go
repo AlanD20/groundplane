@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	corerunner "github.com/AlanD20/groundplane/internal/core/runner"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -39,11 +38,4 @@ func dockerError(ctx context.Context, operation string, err error) error {
 		return ctx.Err()
 	}
 	return errs.Wrap(errs.KindInternal, fmt.Errorf("%s: %w", operation, err))
-}
-
-func rootCause(err error) error {
-	for errors.Unwrap(err) != nil {
-		err = errors.Unwrap(err)
-	}
-	return err
 }

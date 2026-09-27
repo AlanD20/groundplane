@@ -45,7 +45,6 @@ func (operations *localOperations) EnsureIdentity(ctx context.Context, plan core
 	for _, path := range []string{
 		plan.Paths.RunnerHome,
 		plan.Paths.WorkRoot,
-		plan.Paths.DataRoot,
 		filepath.Join(plan.Paths.SlotRoot, "control"),
 		filepath.Dir(plan.Paths.RawSocket),
 	} {
@@ -53,7 +52,8 @@ func (operations *localOperations) EnsureIdentity(ctx context.Context, plan core
 			return err
 		}
 	}
-	return nil
+	// Docker maintains its data root with group traversal, unlike Runner home.
+	return ensureOwnedDirectory(plan.Paths.DataRoot, plan.Identity.UID, plan.Identity.GID, 0o710)
 }
 
 func (operations *localOperations) ObserveIdentity(

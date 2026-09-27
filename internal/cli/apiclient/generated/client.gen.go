@@ -1716,12 +1716,12 @@ type ImageFetchAccepted struct {
 	// Examples: /api/v1/ImageFetchAccepted.json
 	Schema *string `json:"$schema,omitempty"`
 
-	// Image Immutable registry reference selected for this operation
-	Image string `json:"image"`
+	// ConfigDigest Pinned OCI configuration digest, verified before Task completion
+	ConfigDigest string `json:"config_digest"`
 
-	// ImageId Expected host image ID, verified before Task completion
-	ImageId string `json:"image_id"`
-	TaskId  string `json:"task_id"`
+	// Image Immutable registry reference selected for this operation
+	Image  string `json:"image"`
+	TaskId string `json:"task_id"`
 }
 
 // ImageFetchRequest defines model for ImageFetchRequest.

@@ -35,8 +35,8 @@ func TestNewPlanBuildsDedicatedRootlessRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPlan() error = %v", err)
 	}
-	if plan.Paths.SlotRoot != "/var/lib/groundplane/runner-slots/slot-03" ||
-		plan.Paths.DataRoot != "/var/lib/groundplane/runner-slots/slot-03/docker" ||
+	if plan.Paths.SlotRoot != "/var/lib/groundplane-runners/slot-03" ||
+		plan.Paths.DataRoot != "/var/lib/groundplane-runners/slot-03/docker" ||
 		plan.Paths.RawSocket != "/run/groundplane-runners/"+runnerID+"/xdg/docker.sock" {
 		t.Fatalf("paths = %#v", plan.Paths)
 	}

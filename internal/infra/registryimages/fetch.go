@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
+	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/containerd/errdefs"
 	"github.com/moby/moby/client"
@@ -13,7 +14,8 @@ import (
 )
 
 // Fetch uses only pinned manifest content. It neither changes a Service nor
-// moves a local mutable tag, so callers can safely Deploy the returned reference.
+// moves a local mutable tag. It returns the verified OCI configuration digest,
+// independent of the host Docker store's local identifier representation.
 func (registryClient *Client) Fetch(ctx context.Context, plan imagefetch.Plan) (string, error) {
 	if err := plan.Validate(); err != nil {
 		return "", err
@@ -55,9 +57,13 @@ func (registryClient *Client) Fetch(ctx context.Context, plan imagefetch.Plan) (
 }
 
 func verifyImage(observed client.ImageInspectResult, plan imagefetch.Plan) (string, error) {
-	if observed.ID != plan.ConfigDigest || observed.Os != "linux" || observed.Architecture != plan.Architecture ||
+	if err := managedimage.Verify(observed.ID, observed.Descriptor, plan.ManifestDigest, plan.ConfigDigest,
+		ocispec.Platform{OS: "linux", Architecture: plan.Architecture, Variant: plan.Variant}); err != nil {
+		return "", err
+	}
+	if observed.Os != "linux" || observed.Architecture != plan.Architecture ||
 		observed.Variant != plan.Variant || !slices.Contains(observed.RepoDigests, plan.Reference()) {
 		return "", errs.New(errs.KindStateConflict, "host image differs from the pinned registry content")
 	}
-	return observed.ID, nil
+	return plan.ConfigDigest, nil
 }

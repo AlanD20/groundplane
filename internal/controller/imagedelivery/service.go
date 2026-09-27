@@ -105,7 +105,7 @@ func (service *Service) FetchImage(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	raw, err := json.Marshal(
-		apiTypes.ImageFetchAccepted{TaskID: task.ID, Image: plan.Reference(), ImageID: plan.ConfigDigest},
+		apiTypes.ImageFetchAccepted{TaskID: task.ID, Image: plan.Reference(), ConfigDigest: plan.ConfigDigest},
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
@@ -184,11 +184,11 @@ func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error
 	if err != nil {
 		return err
 	}
-	imageID, err := service.registry.Fetch(ctx, plan)
+	configDigest, err := service.registry.Fetch(ctx, plan)
 	if err != nil {
 		return err
 	}
-	if imageID != plan.ConfigDigest {
+	if configDigest != plan.ConfigDigest {
 		return errs.New(errs.KindStateConflict, "fetched image differs from the accepted content")
 	}
 	return nil

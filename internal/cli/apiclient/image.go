@@ -31,8 +31,13 @@ func (c *Client) FetchImage(ctx context.Context, image, key string) (apiTypes.Im
 		return apiTypes.ImageFetchAccepted{}, err
 	}
 	parsed := response.JSON202
-	if parsed == nil || ids.Validate(ids.KindTask, parsed.TaskId) != nil || parsed.Image == "" || parsed.ImageId == "" {
+	if parsed == nil || ids.Validate(ids.KindTask, parsed.TaskId) != nil || parsed.Image == "" ||
+		parsed.ConfigDigest == "" {
 		return apiTypes.ImageFetchAccepted{}, errs.New(errs.KindInternal, "image fetch response is incomplete")
 	}
-	return apiTypes.ImageFetchAccepted{TaskID: parsed.TaskId, Image: parsed.Image, ImageID: parsed.ImageId}, nil
+	return apiTypes.ImageFetchAccepted{
+		TaskID:       parsed.TaskId,
+		Image:        parsed.Image,
+		ConfigDigest: parsed.ConfigDigest,
+	}, nil
 }

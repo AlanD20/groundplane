@@ -81,6 +81,8 @@ The working implementation exposes **Host → Fetch image** in the Console and
 `groundplane image fetch <reference>` in the CLI. Use an explicit tag or digest
 under `registry.groundplane.internal:5000`. Acceptance returns a Task and its
 selected immutable reference; it does not mean the image is available yet.
+The response's `config_digest` identifies the pinned OCI configuration; it is
+not Docker's store-specific local image ID.
 Wait for the Task to complete, then use that reference in ordinary Deploy.
 Task Retry keeps the original selection, even if the tag has moved. A new Fetch
 is a new selection. The CLI's `--idempotency-key` lets automation resolve uncertain

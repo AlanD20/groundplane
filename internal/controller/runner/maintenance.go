@@ -16,9 +16,8 @@ const ObservationLifetime = time.Minute
 
 type maintenanceRepository interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
-	ListRunners(
+	ListRuntimeRunners(
 		context.Context,
-		runnerrecord.RunnerFilter,
 		etcdstore.PageRequest,
 	) (etcdstore.Page[runnerrecord.RunnerRecord], error)
 	GetRunnerDeletionTombstone(
@@ -103,7 +102,7 @@ func (maintenance *Maintenance) Run(ctx context.Context) {
 func (maintenance *Maintenance) refresh(ctx context.Context) error {
 	page := etcdstore.PageRequest{Limit: 100}
 	for {
-		runners, err := maintenance.repository.ListRunners(ctx, runnerrecord.RunnerFilter{}, page)
+		runners, err := maintenance.repository.ListRuntimeRunners(ctx, page)
 		if err != nil {
 			return err
 		}

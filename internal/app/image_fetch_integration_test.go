@@ -58,7 +58,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err := json.Unmarshal(response.Body, &accepted); err != nil {
 		t.Fatal(err)
 	}
-	if accepted.Image != original.Reference() || accepted.ImageID != original.ConfigDigest ||
+	if accepted.Image != original.Reference() || accepted.ConfigDigest != original.ConfigDigest ||
 		len(registry.fetched) != 0 {
 		t.Fatalf("acceptance changed identity or fetched before execution: %#v", accepted)
 	}

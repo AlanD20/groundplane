@@ -46,9 +46,13 @@ func (operations *localOperations) StartDaemon(ctx context.Context, plan corerun
 		"--state-dir=" + filepath.Join(controlRoot, "rootlesskit"),
 		"--net=slirp4netns", "--mtu=65520", "--disable-host-loopback",
 		"--copy-up=/etc", "--copy-up=/run", "--propagation=rslave",
-		// RootlessKit mounts its own resolver file inside the copied-up /etc.
-		// Set daemon resolution there, not on the host and not only in jobs.
-		"/bin/sh", "-eu", "-c", `printf 'nameserver %s\n' "$1" > /etc/resolv.conf; shift; exec "$@"`,
+		// RootlessKit's copied-up /run initially links back to host directories.
+		// Docker needs private writable paths there, including its plugin path.
+		// Only unlink namespace-local symlinks; never remove host directories.
+		"/bin/sh", "-eu", "-c", `for p in /run/docker /run/containerd /run/xtables.lock; do
+if test -L "$p"; then rm -- "$p"; fi
+done
+printf 'nameserver %s\n' "$1" > /etc/resolv.conf; shift; exec "$@"`,
 		"groundplane-rootless-docker", plan.Egress.ControllerEndpoint.Addr().String(),
 		"/usr/bin/dockerd", "--rootless", "--host=unix://" + plan.Paths.RawSocket,
 		"--dns=" + plan.Egress.ControllerEndpoint.Addr().String(),

@@ -25,17 +25,17 @@ func newImageCmd() *cobra.Command {
 			if app.Out.Format == clicommon.FormatTable {
 				_, err := fmt.Fprintf(
 					cmd.OutOrStdout(),
-					"task %s dispatched\nimage %s\nexpected image ID %s\nWait for `groundplane task show %s` to report completed before Deploy.\n",
+					"task %s dispatched\nimage %s\nconfiguration digest %s\nWait for `groundplane task show %s` to report completed before Deploy.\n",
 					accepted.TaskID,
 					accepted.Image,
-					accepted.ImageID,
+					accepted.ConfigDigest,
 					accepted.TaskID,
 				)
 				return err
 			}
 			return app.Out.RenderOne(
-				[]string{"task_id", "image", "image_id"},
-				[]string{accepted.TaskID, accepted.Image, accepted.ImageID},
+				[]string{"task_id", "image", "config_digest"},
+				[]string{accepted.TaskID, accepted.Image, accepted.ConfigDigest},
 				accepted,
 			)
 		},

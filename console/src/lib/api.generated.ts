@@ -2274,10 +2274,10 @@ export interface components {
              * @example /api/v1/ImageFetchAccepted.json
              */
             readonly $schema?: string;
+            /** @description Pinned OCI configuration digest, verified before Task completion */
+            config_digest: string;
             /** @description Immutable registry reference selected for this operation */
             image: string;
-            /** @description Expected host image ID, verified before Task completion */
-            image_id: string;
             task_id: string;
         };
         ImageFetchRequest: {
