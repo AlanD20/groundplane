@@ -21,7 +21,10 @@ import (
 type observerRuntimeStub struct{ evidence runtimeEvidence }
 
 func (runtime observerRuntimeStub) Inspect(context.Context, Request) (runtimeEvidence, error) {
-	return runtime.evidence, nil
+	evidence := runtime.evidence
+	evidence.artifact = append([]byte(nil), evidence.artifact...)
+	evidence.logs = append([]byte(nil), evidence.logs...)
+	return evidence, nil
 }
 func (observerRuntimeStub) Close() error { return nil }
 
@@ -189,7 +192,9 @@ func TestObserveRejectsInvalidEffectiveConfigurationEvidence(t *testing.T) {
 				runtime: observerRuntimeStub{evidence: runtimeEvidence{artifact: artifact, logs: test.logs}},
 				metrics: &observerMetricsStub{values: [][]byte{test.metrics}}, dns: &observerDNSStub{}, now: time.Now,
 			}
-			if _, err := executor.Observe(context.Background(), request); err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+			defer cancel()
+			if _, err := executor.Observe(ctx, request); err == nil {
 				t.Fatal("Observe() accepted invalid effective configuration evidence")
 			}
 		})

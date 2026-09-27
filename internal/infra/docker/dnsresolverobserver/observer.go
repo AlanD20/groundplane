@@ -107,53 +107,21 @@ func (executor *Executor) Observe(
 	}
 	proofCtx, cancel := context.WithTimeout(ctx, probeDeadline)
 	defer cancel()
-	runtime, err := executor.runtime.Inspect(proofCtx, request)
+	configuration, err := executor.awaitConfiguration(proofCtx, request)
 	if err != nil {
 		return nil, err
 	}
-	defer clear(runtime.artifact)
-	defer clear(runtime.logs)
-	artifactDigest := sha256.Sum256(runtime.artifact)
-	if artifactDigest != request.ArtifactSHA256 {
-		return nil, errs.New(errs.KindStateConflict, "DNS resolver mounted artifact digest changed")
-	}
-	parsed, err := parseArtifact(runtime.artifact)
-	if err != nil {
-		return nil, err
-	}
-	effectiveDigest, err := effectiveConfigSHA512(request.ArtifactTarget, runtime.artifact)
-	if err != nil {
-		return nil, err
-	}
-	reportedDigest, err := latestReportedConfigSHA512(runtime.logs)
-	if err != nil || reportedDigest != effectiveDigest {
-		return nil, errs.New(
-			errs.KindStateConflict,
-			"DNS resolver reported configuration does not match the mounted artifact",
-		)
-	}
-	metrics, err := executor.metrics.Read(proofCtx, request.MetricsURL)
-	if err != nil {
-		return nil, err
-	}
-	defer clear(metrics)
-	metricDigest, metricPresent, err := reloadMetricSHA512(metrics, request.ReloadMetric)
-	if err != nil {
-		return nil, err
-	}
-	if metricPresent && metricDigest != effectiveDigest {
-		return nil, errs.New(errs.KindStateConflict, "DNS resolver reload metric does not match the mounted artifact")
-	}
+	parsed := configuration.parsed
 	evidence := &agentpb.DNSResolverObservationEvidence{
 		ComponentId: request.ComponentID, ServiceId: request.ServiceID, ArtifactId: request.ArtifactID,
-		ArtifactSha256: append([]byte(nil), artifactDigest[:]...), RenderGeneration: request.RenderGeneration,
+		ArtifactSha256: append([]byte(nil), request.ArtifactSHA256[:]...), RenderGeneration: request.RenderGeneration,
 		ImageReference:      request.ImageReference,
-		VerifiedImageDigest: append([]byte(nil), runtime.verifiedImageDigest[:]...),
-		ListenEndpoint:      request.ListenEndpoint, ReloadSha512: append([]byte(nil), effectiveDigest[:]...),
+		VerifiedImageDigest: append([]byte(nil), configuration.imageDigest[:]...),
+		ListenEndpoint:      request.ListenEndpoint, ReloadSha512: append([]byte(nil), configuration.effectiveDigest[:]...),
 		ObservedAt: timestamppb.New(executor.now().UTC()), ImageRepository: request.ImageRepository,
 		ImageIndexDigest: append([]byte(nil), request.ImageIndexDigest[:]...), ImageOs: request.ImageOS,
 		ImageArchitecture: request.ImageArchitecture, ImageVariant: request.ImageVariant,
-		ImageConfigDigest: append([]byte(nil), runtime.imageConfigAuthority[:]...),
+		ImageConfigDigest: append([]byte(nil), configuration.imageConfigAuthority[:]...),
 	}
 	if parsed.staticName != "" {
 		evidence.StaticQuery, err = executor.observeStatic(proofCtx, request, parsed)

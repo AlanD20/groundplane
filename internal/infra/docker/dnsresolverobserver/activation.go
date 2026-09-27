@@ -1,0 +1,78 @@
+package dnsresolverobserver
+
+import (
+	"context"
+	"crypto/sha256"
+	"crypto/sha512"
+	"time"
+
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+type observedConfiguration struct {
+	parsed               parsedArtifact
+	effectiveDigest      [sha512.Size]byte
+	imageDigest          [sha256.Size]byte
+	imageConfigAuthority [sha256.Size]byte
+}
+
+// CoreDNS notices atomically replaced files on its reload interval. Only valid
+// but stale serving evidence is pending; ownership, bytes and malformed evidence
+// still fail immediately. The caller's proof deadline bounds the whole wait.
+func (executor *Executor) awaitConfiguration(ctx context.Context, request Request) (observedConfiguration, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return observedConfiguration{}, errs.Wrap(errs.KindStateConflict, err)
+		}
+		configuration, ready, err := executor.inspectConfiguration(ctx, request)
+		if err != nil || ready {
+			return configuration, err
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return observedConfiguration{}, errs.Wrap(errs.KindStateConflict, ctx.Err())
+		case <-timer.C:
+		}
+	}
+}
+
+func (executor *Executor) inspectConfiguration(
+	ctx context.Context, request Request,
+) (observedConfiguration, bool, error) {
+	var result observedConfiguration
+	runtime, err := executor.runtime.Inspect(ctx, request)
+	if err != nil {
+		return result, false, err
+	}
+	defer clear(runtime.artifact)
+	defer clear(runtime.logs)
+	if sha256.Sum256(runtime.artifact) != request.ArtifactSHA256 {
+		return result, false, errs.New(errs.KindStateConflict, "DNS resolver mounted artifact digest changed")
+	}
+	result.parsed, err = parseArtifact(runtime.artifact)
+	if err != nil {
+		return result, false, err
+	}
+	result.effectiveDigest, err = effectiveConfigSHA512(request.ArtifactTarget, runtime.artifact)
+	if err != nil {
+		return result, false, err
+	}
+	reported, err := latestReportedConfigSHA512(runtime.logs)
+	if err != nil {
+		return result, false, err
+	}
+	metrics, err := executor.metrics.Read(ctx, request.MetricsURL)
+	if err != nil {
+		return result, false, err
+	}
+	defer clear(metrics)
+	metric, present, err := reloadMetricSHA512(metrics, request.ReloadMetric)
+	if err != nil {
+		return result, false, err
+	}
+	result.imageDigest = runtime.verifiedImageDigest
+	result.imageConfigAuthority = runtime.imageConfigAuthority
+	return result, reported == result.effectiveDigest && (!present || metric == result.effectiveDigest), nil
+}
