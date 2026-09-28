@@ -40,7 +40,7 @@ export function ServiceStateBadges({
         </Badge>
       )}
       <Badge
-        variant={service.runtimeIntent === 'running' ? 'success' : service.runtimeIntent === 'stopped' ? 'warning' : 'muted'}
+        variant={service.runtimeIntent === 'stopped' ? 'warning' : 'muted'}
         className={compact ? 'px-1 py-0 font-mono text-[10px]' : 'font-mono'}
       >
         intent {service.runtimeIntent}
@@ -58,7 +58,9 @@ export function ServiceObservationDetails({ service, now = Date.now() }: { servi
           Current serving workload
         </h3>
         <p className="mt-2 text-sm text-muted-foreground">
-          Runtime evidence is unavailable or expired. Desired state and previous Tasks do not imply health.
+          {service.releaseLedger?.length === 0
+            ? 'Not deployed. This Service has configuration but no Release yet. Make its image available on the Agent host, then use Deploy to start it.'
+            : 'Runtime evidence is unavailable or expired. Desired state and previous Tasks do not imply health.'}
         </p>
       </section>
     )

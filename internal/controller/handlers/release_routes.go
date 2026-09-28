@@ -128,6 +128,7 @@ func (s *Server) deployService(
 		ctx,
 		input.ID,
 		domain.ServiceDeployInput{
+			Image:     input.Body.Image,
 			Tag:       input.Body.Tag,
 			Strategy:  domain.Strategy(input.Body.Strategy),
 			OnFailure: domain.OnFailure(input.Body.OnFailure),

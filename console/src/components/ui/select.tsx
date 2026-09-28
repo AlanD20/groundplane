@@ -16,7 +16,7 @@ function Select({
   disabled,
   'aria-label': ariaLabel,
 }: {
-  value?: string
+  value?: string | null
   onValueChange?: (v: string) => void
   options: SelectOption[]
   placeholder?: string

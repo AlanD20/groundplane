@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useDraftField } from '@/lib/use-draft-field'
 import { Save, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,18 +12,11 @@ import { useStore } from '@/lib/store'
 
 export function AgentConfigCard({ agentId }: { agentId: string }) {
   const { agentConfig, agentConfigLoading, agentConfigError, setAgentConfig } = useStore()
-  const [maxConcurrent, setMaxConcurrent] = useState('')
-  const [pullInterval, setPullInterval] = useState('')
-  const [labels, setLabels] = useState('')
+  const [maxConcurrent, setMaxConcurrent] = useDraftField(agentConfig ? String(agentConfig.max_concurrent_tasks) : '', agentId)
+  const [pullInterval, setPullInterval] = useDraftField(agentConfig ? String(agentConfig.pull_interval_seconds) : '', agentId)
+  const [labels, setLabels] = useDraftField(agentConfig ? formatLabels(agentConfig.labels) : '', agentId)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!agentConfig) return
-    setMaxConcurrent(String(agentConfig.max_concurrent_tasks))
-    setPullInterval(String(agentConfig.pull_interval_seconds))
-    setLabels(formatLabels(agentConfig.labels))
-  }, [agentConfig])
 
   async function save() {
     setSaving(true)

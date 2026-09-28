@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	agentregistration "github.com/AlanD20/groundplane/internal/infra/etcd/agentregistration"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -106,11 +107,13 @@ func (service *Service) DeployService(
 	request domain.ServiceDeployInput,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	ctx = imagefence.WithScope(ctx)
 	current, err := service.services.GetService(ctx, serviceID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	body := requestidempotency.JSONBody(requestidempotency.Object(
+		requestidempotency.Field{Name: "image", Value: requestidempotency.String(request.Image)},
 		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
 		requestidempotency.Field{Name: "strategy", Value: requestidempotency.String(string(request.Strategy))},
 		requestidempotency.Field{Name: "on_failure", Value: requestidempotency.String(string(request.OnFailure))},
@@ -142,6 +145,7 @@ func (service *Service) DeployService(
 		request.Tag,
 		string(request.Strategy),
 		request.OnFailure,
+		request.Image,
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -156,6 +160,7 @@ func (service *Service) RollbackService(
 	request domain.ServiceRollbackInput,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	ctx = imagefence.WithScope(ctx)
 	current, err := service.services.GetService(ctx, serviceID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -195,6 +200,7 @@ func (service *Service) DeployReleaseGroup(
 	request domain.GroupDeployInput,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
+	ctx = imagefence.WithScope(ctx)
 	current, err := service.groups.Get(ctx, groupID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -245,6 +251,7 @@ func (service *Service) DeployReleaseGroup(
 			tag,
 			"",
 			domain.OnFailure(group.Group.OnFailure),
+			"",
 		)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
@@ -256,6 +263,7 @@ func (service *Service) DeployReleaseGroup(
 
 func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string,
 	request domain.GroupRollbackInput, idempotencyKey string) (idempotencyrecord.IdempotencyResponse, error) {
+	ctx = imagefence.WithScope(ctx)
 	current, err := service.groups.Get(ctx, groupID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -441,6 +449,7 @@ func (service *Service) deployCandidate(
 	requestedTag string,
 	requestedStrategy string,
 	requestedFailure domain.OnFailure,
+	requestedImage string,
 ) (releaseCandidateInput, error) {
 	serving, hasServing, err := service.ledger.GetPlanningServingIntent(ctx, scope, planning)
 	if err != nil {
@@ -457,8 +466,18 @@ func (service *Service) deployCandidate(
 	if hasServing {
 		currentTag = serving.Tag
 	}
+	selectedImage := planning.Service.Record.Desired.Image
+	if requestedImage != "" {
+		if requestedTag != "" || strings.TrimSpace(requestedImage) != requestedImage {
+			return releaseCandidateInput{}, errs.New(
+				errs.KindValidationFailed,
+				"select either an image reference or a tag, without surrounding whitespace",
+			)
+		}
+		selectedImage, currentTag = requestedImage, ""
+	}
 	image, tag, _, err := releaseImageWithTag(
-		planning.Service.Record.Desired.Image,
+		selectedImage,
 		tag,
 		currentTag,
 	)

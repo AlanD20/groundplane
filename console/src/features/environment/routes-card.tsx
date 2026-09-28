@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRequiredParams } from "@/lib/router";
 import {
   ChevronRight,
@@ -34,6 +34,7 @@ export function RoutesCard({ env }: { env: Environment }) {
   const [detailTarget, setDetailTarget] = useState<Route | null>(null);
   const [detailRoute, setDetailRoute] = useState<Route>();
   const [detailError, setDetailError] = useState<string>();
+  const detailRequest = useRef(0);
   const [editing, setEditing] = useState<Route | null>(null);
   const [removing, setRemoving] = useState<Route | null>(null);
   const [exposure, setExposure] = useState<Route["exposure"]>("internal");
@@ -93,13 +94,17 @@ export function RoutesCard({ env }: { env: Environment }) {
                 aria-label={`Show Route ${r.host || "internal"}${r.path}`}
                 title="Show route details"
                 onClick={() => {
+                  const request = ++detailRequest.current;
                   setDetailTarget(r);
                   setDetailRoute(undefined);
                   setDetailError(undefined);
                   void store
                     .getRoute(r.id)
-                    .then(setDetailRoute)
+                    .then(route => {
+                      if (request === detailRequest.current) setDetailRoute(route);
+                    })
                     .catch((error: unknown) => {
+                      if (request !== detailRequest.current) return;
                       setDetailError(
                         error instanceof Error
                           ? error.message
@@ -144,7 +149,12 @@ export function RoutesCard({ env }: { env: Environment }) {
       <RouteFormDialog env={env} open={open} onOpenChange={setOpen} />
       <Drawer
         open={detailTarget !== null}
-        onOpenChange={(next) => !next && setDetailTarget(null)}
+        onOpenChange={(next) => {
+          if (!next) {
+            detailRequest.current++;
+            setDetailTarget(null);
+          }
+        }}
       >
         <DrawerContent>
           <DialogHeader>
@@ -358,6 +368,10 @@ export function RouteFormDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  return open ? <RouteForm key={env.id} env={env} open onOpenChange={onOpenChange} /> : null;
+}
+
+function RouteForm({ env, open, onOpenChange }: { env: Environment; open: boolean; onOpenChange: (v: boolean) => void }) {
   const store = useStore();
   const [host, setHost] = useState("");
   const [path, setPath] = useState("/");
@@ -504,7 +518,7 @@ export function RouteFormDialog({
             disabled={
               hostValidationError !== null ||
               pathValidationError !== null ||
-              !target ||
+              !env.services.some(service => service.id === target) ||
               !validTargetPort ||
               submitting
             }

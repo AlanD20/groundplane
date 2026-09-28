@@ -19,11 +19,11 @@ export function ServiceFormDialog({ env }: { env: Environment }) {
         <Plus className="size-3.5" /> Service
       </Button>
       <Drawer open={open} onOpenChange={setOpen}>
-        <ServiceFormBody
+        {open && <ServiceFormBody
           env={env}
           workspace={params.tenant}
           onClose={() => setOpen(false)}
-        />
+        />}
       </Drawer>
     </>
   );

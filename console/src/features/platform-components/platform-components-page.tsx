@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useStore } from '@/lib/store'
+import { TaskPagination } from '@/features/task/task-pagination'
 import { PageHeader } from '@/components/common/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge, StatusDot } from '@/components/common/status-badge'
@@ -130,8 +131,8 @@ export default function PlatformInfraPage() {
           <div className="flex items-center gap-2">
             <Badge variant={platformTasks.some((t) => t.status === 'running' || t.status === 'pending') ? 'success' : 'muted'}>
               {platformTasks.filter((t) => t.status === 'running' || t.status === 'pending').length > 0
-                ? 'in-flight'
-                : 'idle'}
+                ? 'In-flight tasks on this page'
+                : 'No in-flight tasks on this page'}
             </Badge>
             <Button variant="outline" size="sm" disabled={platformJournal.loading || platformJournal.loadingMore} onClick={() => void store.loadTaskJournal('tasks', platformTaskScope).catch(() => undefined)}>
               <RefreshCw className="size-4" /> Refresh
@@ -139,10 +140,9 @@ export default function PlatformInfraPage() {
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
-              The complete Platform workspace journal. It is the same ordered page and cursor used by Platform Activity;
-              target, component, and operation never filter membership.
+              Platform task history. Status filters apply to this page.
             </p>
             <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
               {filters.map((f) => (
@@ -171,7 +171,7 @@ export default function PlatformInfraPage() {
             </div>
           )}
           {!platformJournal.loading && visible.length === 0 ? (
-            <div className="text-xs text-muted-foreground">no tasks match this filter</div>
+            <div className="text-xs text-muted-foreground">No tasks on this page match this filter.</div>
           ) : (
             <div className="flex flex-col gap-1.5">
               {visible.map((t) => (
@@ -196,11 +196,7 @@ export default function PlatformInfraPage() {
               ))}
             </div>
           )}
-          {platformJournal.nextCursor && !platformJournal.loadError && (
-            <Button variant="outline" disabled={platformJournal.loading || platformJournal.loadingMore} onClick={() => void store.loadTaskJournal('tasks', platformTaskScope, platformJournal.nextCursor!).catch(() => undefined)}>
-              {platformJournal.loadingMore ? 'Loading…' : 'Load more'}
-            </Button>
-          )}
+          <TaskPagination scope={platformTaskScope} surface="tasks" />
         </CardContent>
         {open && (
           <AuthoritativeTaskDrawer

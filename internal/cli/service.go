@@ -203,7 +203,7 @@ func newServiceCmd() *cobra.Command {
 		},
 	})
 
-	var deployTag, deployStrategy, deployOnFailure string
+	var deployTag, deployImage, deployStrategy, deployOnFailure string
 	deploy := &cobra.Command{
 		Use:   "deploy <name>",
 		Short: "Deploy a service (tag defaults to the current tag — the redeploy case)",
@@ -214,7 +214,7 @@ func newServiceCmd() *cobra.Command {
 				return err
 			}
 			accepted, err := fromContext(cmd).Client.DeployService(cmd.Context(), serviceID, apiTypes.DeployRequest{
-				Tag: deployTag, Strategy: deployStrategy, OnFailure: apiTypes.OnFailure(deployOnFailure),
+				Tag: deployTag, Image: deployImage, Strategy: deployStrategy, OnFailure: apiTypes.OnFailure(deployOnFailure),
 			})
 			if err != nil {
 				return err
@@ -223,6 +223,9 @@ func newServiceCmd() *cobra.Command {
 		},
 	}
 	deploy.Flags().StringVar(&deployTag, "tag", "", "immutable image tag (defaults to the current tag)")
+	deploy.Flags().
+		StringVar(&deployImage, "image", "", "host-local image reference for this Release only (does not edit Service configuration)")
+	deploy.MarkFlagsMutuallyExclusive("tag", "image")
 	deploy.Flags().
 		StringVar(&deployStrategy, "strategy", "", "blue-green | recreate | rolling (rolling is declared-deferred)")
 	deploy.Flags().

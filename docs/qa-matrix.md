@@ -436,6 +436,14 @@ and any external GitHub effects require appropriate authority.
 | RUN-13 | Build and push to the private local registry, fetch through GP and Deploy through a workflow; fail build/push/fetch, move a tag and replay requests. | Source commit, registry content, host image and Release match; accepted retries retain content. No host Docker socket access; failed delivery preserves the serving Release/data and replay creates no duplicate deployment. | PARTIAL H75: real delivery matches source/digests/layers/Release and preserves data; injected build, push and Fetch failures retain exact serving runtime. Moved-tag/replay has local proof only. |
 | RUN-14 | Resolve the private registry from the rootless daemon and host, restart it, and remove one Runner while another Service uses a delivered image. | Existing CoreDNS supplies the same reachable private registry name; no public DNS/API/registry exposure. Registry storage and serving workloads survive restart and unrelated Runner cleanup. | PARTIAL H75: private DNS/TLS registry delivery and Runner removal preserve exact registry bytes and serving container/data; registry restart unrun. |
 
+## Host images
+
+| Case | Setup and action | Pass condition | Record |
+| --- | --- | --- | --- |
+| IMG-01 | Fetch a public or GP registry tag; move the tag and replay; challenge anonymous access or redirect a blob download. | Accepted content stays pinned; public authentication never receives GP credentials; unsupported private authentication fails without deployment. | PARTIAL: local registry protocol and moved-tag replay checks; live Docker Hub/GHCR manifest resolution. Public host pull remains unrun. |
+| IMG-02 | List images used by running/stopped containers or retained Releases; attempt removal with no current container but retained rollback inputs. | Inventory shows protection; retained content cannot be removed merely because container count is zero. | PARTIAL: retained Release behavior check and local Console interactions; real Docker removal remains unrun. |
+| IMG-03 | Race image selection/publication with removal; interrupt removal and retry after Controller recreation. | Atomic publication rejects the stale selection; uncertain removal retains its durable fence; the original operation settles before new selections resume. | PARTIAL: Controller/storage race and interrupted-operation checks; live process interruption remains unrun. |
+
 ## Scripts and hooks
 
 | Case | Setup and action | Pass condition | Record |

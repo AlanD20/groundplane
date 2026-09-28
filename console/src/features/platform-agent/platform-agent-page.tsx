@@ -97,6 +97,7 @@ export default function PlatformAgentPage() {
       </div>
 
       <AgentConfigCard agentId={agent.id} />
+      <Link to="/platform/host/images" className="text-sm text-primary hover:underline">Manage images on this Agent host</Link>
     </div>
   )
 }

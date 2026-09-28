@@ -94,6 +94,32 @@ the workflow requests ordinary GP Deploy. Failed build, push or fetch leaves
 the serving Release and application data untouched. This keeps one deployment
 pipeline and makes local image delivery usable independently of Runner ownership.
 
+## Host image ownership
+
+Image management uses the same local Docker daemon as the MVP Agent. The
+Controller's explicit Fetch pins a platform manifest before publishing its Task.
+Public-registry challenges use anonymous pull tokens; GP registry credentials
+never cross into public registry or CDN requests. The resolver follows the
+[Distribution token protocol](https://distribution.github.io/distribution/spec/auth/token/).
+
+Removal uses a durable image-selection fence, not just a container-count check.
+Release, Blueprint and Script producers capture its revision before resolving
+images. Their storage transactions compare that revision, so even a delayed or
+uncertain publication cannot commit after removal has started. A successful
+removal leaves a new revision rather than deleting the fence key and admitting
+an old zero-revision selection.
+
+Retained Release inputs and Environment artifacts supply historical image
+authority. Unresolved host Tasks are a conservative deletion barrier rather than
+an attempt to reconstruct every possible recovery plan. Docker's non-forced
+delete remains the last protection against container creation outside GP.
+An uncertain deletion retains its operation-owned fence for Task Retry.
+
+The owners are [image delivery](../../internal/controller/imagedelivery/),
+[registry and Docker access](../../internal/infra/registryimages/), and the
+[publication fence](../../internal/common/imagefence/). Operator limits belong
+to [Host images](../features/platform.md#images).
+
 ## Implementation and qualification
 
 The current code contains allocation, Controller Tasks, a runtime-plan journal,

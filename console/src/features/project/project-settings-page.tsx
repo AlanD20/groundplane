@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useDraftField } from '@/lib/use-draft-field'
 import { useNavigate } from 'react-router-dom'
 import { Boxes, Fingerprint, Pencil, Save, Settings, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/common/empty-state'
@@ -25,8 +26,8 @@ export default function ProjectSettingsPage() {
   const store = useStore()
   const tenant = store.getTenant(params.tenant)
   const project = store.getProject(params.tenant, params.project)
-  const [name, setName] = useState(project?.name ?? '')
-  const [slug, setSlug] = useState(project?.slug ?? '')
+  const [name, setName] = useDraftField(project?.name ?? '', project?.id)
+  const [slug, setSlug] = useDraftField(project?.slug ?? '', project?.id)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [mutating, setMutating] = useState(false)

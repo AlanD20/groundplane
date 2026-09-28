@@ -99,6 +99,7 @@ export default function PlatformControllerPage() {
                   language="yaml"
                   value={content}
                   onValueChange={setContent}
+                  disabled={saving || controllerConfigLoading}
                   aria-describedby="controller-config-help"
                 />
                 <p id="controller-config-help" className="text-xs text-muted-foreground">
@@ -120,7 +121,12 @@ export default function PlatformControllerPage() {
                   size="sm"
                   variant="outline"
                   disabled={controllerConfigLoading || saving}
-                  onClick={() => void refreshControllerConfig().catch(() => undefined)}
+                  onClick={() => {
+                    setSaveError(null)
+                    void refreshControllerConfig().then(config => setContent(config.content)).catch((cause: unknown) => {
+                      setSaveError(cause instanceof Error ? cause.message : 'Unable to reload Controller configuration')
+                    })
+                  }}
                 >
                   <RefreshCw className="size-4" /> Reload file
                 </Button>

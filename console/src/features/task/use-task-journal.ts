@@ -4,6 +4,7 @@ import type {
   TaskJournalScope,
   TaskJournalState,
   TaskJournalSurface,
+  TaskPageSize,
 } from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
 import { requestTask } from "./api";
@@ -24,6 +25,7 @@ export type TaskJournalActions = {
     surface: TaskJournalSurface,
     scope: TaskJournalScope,
     cursor?: string,
+    pageSize?: TaskPageSize,
   ) => Promise<void>;
   getTaskJournalDetail: (
     taskId: string,
@@ -35,13 +37,24 @@ export function useTaskJournal(
   update: (change: (draft: TaskJournalStoreState) => void) => void,
 ): TaskJournalActions {
   const taskJournalEpochs = useRef(new Map<string, number>());
+  const pageSizes = useRef(new Map<string, TaskPageSize>());
   const loadTaskJournal = useCallback<TaskJournalActions["loadTaskJournal"]>(
-    async (surface, scope, cursor) => {
+    async (surface, scope, cursor, requestedPageSize) => {
       const key = taskJournalKey(scope);
+      const pageSize = requestedPageSize ?? pageSizes.current.get(key) ?? 25;
+      if (pageSize !== (pageSizes.current.get(key) ?? 25)) cursor = undefined;
+      pageSizes.current.set(key, pageSize);
       const epoch = (taskJournalEpochs.current.get(key) ?? 0) + 1;
       taskJournalEpochs.current.set(key, epoch);
       update((draft) => {
         const journal = draft.taskJournals[key] ?? emptyTaskJournal();
+        if (journal.pageSize !== pageSize) {
+          journal.entries = [];
+          journal.nextCursor = null;
+          journal.pageIndex = 0;
+          journal.pageCursors = [undefined];
+        }
+        journal.pageSize = pageSize;
         journal.loadError = null;
         journal.failedCursor = null;
         journal.loading = !cursor;
@@ -50,14 +63,18 @@ export function useTaskJournal(
       });
       try {
         const page = await controllerRequest<TaskPageResponse>(
-          `/${surface}?${taskJournalQuery(scope, cursor)}`,
+          `/${surface}?${taskJournalQuery(scope, cursor, pageSize)}`,
           200,
         );
         const entries = (page.items ?? []).map(taskFromAPI);
         if (taskJournalEpochs.current.get(key) !== epoch) return;
         update((draft) => {
           const journal = draft.taskJournals[key] ?? emptyTaskJournal();
-          journal.entries = cursor ? [...journal.entries, ...entries] : entries;
+          const knownPage = cursor ? journal.pageCursors.indexOf(cursor) : 0;
+          const pageIndex = knownPage < 0 ? journal.pageIndex + 1 : knownPage;
+          journal.entries = entries;
+          journal.pageIndex = pageIndex;
+          journal.pageCursors = [...journal.pageCursors.slice(0, pageIndex), cursor];
           journal.nextCursor = page.next_cursor ?? null;
           journal.loaded = true;
           journal.loading = false;

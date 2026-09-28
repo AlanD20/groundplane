@@ -79,9 +79,10 @@ the Runner's rootless daemon and host Docker. An explicit GP image-fetch operati
 then loads the selected image into host Docker before ordinary Service Deploy.
 No external registry or public DNS configuration is required.
 
-The working implementation exposes **Host → Fetch image** in the Console and
+The working implementation exposes **Host → Images → Fetch image** in the Console and
 `groundplane image fetch <reference>` in the CLI. Use an explicit tag or digest
-under `registry.groundplane.internal:5000`. Acceptance returns a Task and its
+under `registry.groundplane.internal:5000` for Runner builds. Public images also
+use the [host image workflow](platform.md#images). Acceptance returns a Task and its
 selected immutable reference; it does not mean the image is available yet.
 The response's `config_digest` identifies the pinned OCI configuration; it is
 not Docker's store-specific local image ID.

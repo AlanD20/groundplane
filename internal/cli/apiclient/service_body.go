@@ -49,7 +49,8 @@ func serviceEditBody(input apiTypes.ServiceEdit) (generated.ServiceEditJSONReque
 
 func serviceDeployBody(input apiTypes.DeployRequest) generated.ServiceDeployJSONRequestBody {
 	return generated.ServiceDeployJSONRequestBody{
-		Tag: optionalServiceString(input.Tag), Strategy: optionalServiceString(input.Strategy),
+		Image: optionalServiceString(input.Image),
+		Tag:   optionalServiceString(input.Tag), Strategy: optionalServiceString(input.Strategy),
 		OnFailure: optionalServiceString(string(input.OnFailure)),
 	}
 }

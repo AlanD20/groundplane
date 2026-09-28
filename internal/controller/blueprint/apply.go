@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
@@ -129,6 +130,7 @@ func (service *Service) applyBlueprint(
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Environment id is invalid")
 	}
+	ctx = imagefence.WithScope(ctx)
 	if err := bundle.Validate(); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,

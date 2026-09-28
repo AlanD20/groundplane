@@ -45,7 +45,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		Architecture: "amd64",
 	}
 	registry := &imageFetchRegistry{selected: original, returnedID: "sha256:" + strings.Repeat("c", 64)}
-	service, err := imagedelivery.New(registry, tasks, idempotency, coordinator)
+	service, err := imagedelivery.New(registry, store, tasks, idempotency, coordinator)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,6 +134,11 @@ type imageFetchRegistry struct {
 	returnedID  string
 	resolutions int
 	fetched     []imagefetch.Plan
+}
+
+func (*imageFetchRegistry) List(context.Context) ([]imagefetch.LocalImage, error) { return nil, nil }
+func (*imageFetchRegistry) Remove(context.Context, string) error {
+	return errs.New(errs.KindInternal, "unexpected image removal")
 }
 
 func (registry *imageFetchRegistry) Resolve(context.Context, string) (imagefetch.Plan, error) {

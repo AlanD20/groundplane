@@ -126,6 +126,7 @@ type ReleaseGroupTaskAccepted struct {
 // --- Ops action request bodies (every action returns a TaskAccepted) ---
 
 type DeployRequest struct {
+	Image     string    `json:"image,omitempty" maxLength:"512" doc:"Host-local registry reference for this Release only; mutually exclusive with tag"`
 	Tag       string    `json:"tag,omitempty"`        // omitted => the service's current tag
 	Strategy  string    `json:"strategy,omitempty"`   // omitted => the service's declared default
 	OnFailure OnFailure `json:"on_failure,omitempty"` // omitted => "switch_back"

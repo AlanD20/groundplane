@@ -2,11 +2,12 @@
 package imagefetch
 
 import (
+	"net/netip"
+
 	"github.com/AlanD20/groundplane/internal/common/imageref"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/distribution/reference"
-	"net/netip"
 )
 
 const RegistryHostname = "registry.groundplane.internal"
@@ -37,8 +38,8 @@ type Plan struct {
 
 func ParseRequested(value string) (reference.Named, error) {
 	named, err := reference.ParseNormalizedNamed(value)
-	if err != nil || len(value) > 512 || named.String() != value || reference.Domain(named) != RegistryAuthority {
-		return nil, errs.New(errs.KindValidationFailed, "image must reference the managed private registry")
+	if err != nil || len(value) > 512 {
+		return nil, errs.New(errs.KindValidationFailed, "image must be a registry reference")
 	}
 	_, tagged := named.(reference.NamedTagged)
 	_, digested := named.(reference.Digested)

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useDraftField } from "@/lib/use-draft-field";
 import { useRequiredParams } from "@/lib/router";
 import { ArrowUpCircle, History } from "lucide-react";
 import { useStore } from "@/lib/store";
@@ -8,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { ImagePicker } from "@/features/image-delivery/image-picker";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Environment, Service, TaskStep } from "@/lib/types";
 
 // Deploy / Rollback live in their own component so opening a dialog only
@@ -26,22 +30,32 @@ export function DeployControls({
     <>
       <Button
         variant="outline"
-        disabled={disabled}
+        disabled={disabled || env.services.length === 0}
         onClick={() => setRollbackOpen(true)}
       >
         <History className="size-4" /> Rollback
       </Button>
-      <Button disabled={disabled} onClick={() => setDeployOpen(true)}>
+      <Button disabled={disabled || env.services.length === 0} onClick={() => setDeployOpen(true)}>
         <ArrowUpCircle className="size-4" /> Deploy
       </Button>
-      <DeployDialog env={env} open={deployOpen} onOpenChange={setDeployOpen} />
-      <RollbackDialog
+      {deployOpen && <DeployDialog env={env} open onOpenChange={setDeployOpen} />}
+      {rollbackOpen && <RollbackDialog
         env={env}
-        open={rollbackOpen}
+        open
         onOpenChange={setRollbackOpen}
-      />
+      />}
     </>
   );
+}
+
+function MissingServiceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  return <Drawer open={open} onOpenChange={onOpenChange}>
+    <DrawerContent>
+      <DialogHeader><DialogTitle>Service no longer available</DialogTitle></DialogHeader>
+      <p role="alert">The selected Service was removed. Close and reopen this action to select a current Service.</p>
+      <Button onClick={() => onOpenChange(false)}>Close</Button>
+    </DrawerContent>
+  </Drawer>
 }
 
 // ---- Deploy: per-service, tag + strategy chosen at deploy time ----
@@ -59,26 +73,14 @@ export function DeployDialog({
   const params = useRequiredParams("tenant");
   const defaultSvc =
     env.services.find((s) => s.strategy === "blue-green") ?? env.services[0];
-  const [service, setService] = useState(defaultSvc?.name ?? "");
-  const svc = env.services.find((s) => s.name === service);
-  // Default = the service's CURRENT TAG only (never the image name): redeploy
-  // is the common case (spec / env / secret edits need re-application without
-  // a new image). Re-sync on open so a freshly edited image is always the
-  // default.
-  const [tag, setTag] = useState(imageTag(defaultSvc?.image ?? ""));
-  const [strategy, setStrategy] = useState<Service["strategy"]>(
-    defaultSvc?.strategy ?? "recreate",
+  const [service, setService] = useState(defaultSvc?.id ?? "");
+  const svc = env.services.find((s) => s.id === service);
+  const [image, setImage] = useDraftField(svc?.image ?? "", service);
+  const [strategy, setStrategy] = useDraftField<Service["strategy"]>(
+    svc?.strategy ?? "recreate", service,
   );
 
-  useEffect(() => {
-    if (open && svc) {
-      setTag(imageTag(svc.image));
-      setStrategy(svc.strategy);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  if (!svc) return null;
+  if (!svc) return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
   const steps = deploySteps(env, svc.name, strategy);
 
   return (
@@ -87,44 +89,25 @@ export function DeployDialog({
       onOpenChange={onOpenChange}
       variant="drawer"
       title={`Deploy ${svc.name} · ${env.name}`}
-      description="A deployment targets ONE service: pick the immutable image tag and the deploy strategy for this release. The tag defaults to the service's current tag — redeploy re-applies spec, env, and secret changes without a new image. The Controller sequences it; the Agent applies each step and only switches traffic after the healthcheck passes."
+      description="Choose an available image and strategy for this Release. Deploy does not pull images or edit the Service's configured image."
       type="deploy"
       target={env.id}
       workspace={params.tenant}
       startLabel="Deploy"
       review={
         <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <Label htmlFor="dep-service">Service</Label>
               <Select
                 id="dep-service"
                 value={service}
-                onValueChange={(v) => {
-                  const next = env.services.find((s) => s.name === v);
-                  setService(v);
-                  if (next) setTag(imageTag(next.image)); // current tag of the newly selected service
-                  setStrategy(next?.strategy ?? "recreate");
-                }}
+                onValueChange={setService}
                 options={env.services.map((s) => ({
-                  value: s.name,
+                  value: s.id,
                   label: s.name,
                 }))}
               />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="dep-tag">Image tag</Label>
-              <Input
-                id="dep-tag"
-                value={tag}
-                onChange={(e) => setTag(e.target.value)}
-                placeholder="sha-…"
-              />
-              <p className="text-xs text-muted-foreground">
-                tag only — the image name ({imageName(svc.image)}) is taken from
-                the service. Defaults to the current tag; redeploy applies spec
-                / env / secret changes without a new image.
-              </p>
             </div>
             <div className="flex flex-col gap-1">
               <Label htmlFor="dep-strategy">Strategy</Label>
@@ -140,6 +123,10 @@ export function DeployDialog({
               />
             </div>
           </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="dep-image">Image for this Release</Label>
+            <ImagePicker id="dep-image" value={image} onChange={setImage} />
+          </div>
           <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs">
             <span className="w-24 text-muted-foreground">Image</span>
             <span className="flex-1 truncate text-right text-muted-foreground">
@@ -147,7 +134,7 @@ export function DeployDialog({
             </span>
             <span className="mx-2 text-muted-foreground">→</span>
             <span className="flex-1 truncate text-foreground">
-              {imageName(svc.image)}:{tag}
+              {image}
             </span>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs">
@@ -161,15 +148,14 @@ export function DeployDialog({
               {strategy === "rolling" ? " (declared-deferred)" : ""}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            A public Route is served only after the required ingress components
-            are enabled through the future live Component surface. Creating a
-            Route never enables them.
-          </p>
         </div>
       }
       steps={steps}
-      onDispatch={() => store.commitDeploy(env.id, svc.name, tag, strategy)}
+      startDisabled={!image.trim()}
+      onDispatch={() => store.commitDeploy(env.id, svc.name, image.trim(), strategy)}
+      onSettled={async () => {
+        await Promise.all([store.refreshEnvironmentReleases(env.id), store.refreshEnvironmentServices(env.id)]);
+      }}
     />
   );
 }
@@ -187,10 +173,10 @@ export function RollbackDialog({
 }) {
   const store = useStore();
   const params = useRequiredParams("tenant");
-  const lastService = env.deploys[0]?.service ?? env.services[0]?.name ?? "";
-  const [service, setService] = useState(lastService);
-  const svc = env.services.find((s) => s.name === service);
-  const history = env.deploys.filter((d) => d.service === service);
+  const lastService = env.services.find((s) => s.name === env.deploys[0]?.service) ?? env.services[0];
+  const [service, setService] = useState(lastService?.id ?? "");
+  const svc = env.services.find((s) => s.id === service);
+  const history = env.deploys.filter((d) => d.service === svc?.name);
   // Rollback target = the most recent SUCCESSFUL deploy whose tag differs
   // from the current one (failed/timed-out records are never selectable,
   // and redeploying the current tag never advances the rollback point).
@@ -198,9 +184,9 @@ export function RollbackDialog({
   const previousTag =
     history.find((d) => d.status === "superseded" && d.tag !== currentTag)
       ?.tag ?? "";
-  const [tag, setTag] = useState(previousTag);
+  const [tag, setTag] = useDraftField(previousTag, service);
 
-  if (!svc) return null;
+  if (!svc) return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
 
   return (
     <TaskRunnerDialog
@@ -222,17 +208,9 @@ export function RollbackDialog({
               <Label>Service</Label>
               <Select
                 value={service}
-                onValueChange={(v) => {
-                  setService(v);
-                  const h = env.deploys.filter((d) => d.service === v);
-                  const cur = h.find((d) => d.status === "active")?.tag;
-                  setTag(
-                    h.find((d) => d.status === "superseded" && d.tag !== cur)
-                      ?.tag ?? "",
-                  );
-                }}
+                onValueChange={setService}
                 options={env.services.map((s) => ({
-                  value: s.name,
+                  value: s.id,
                   label: s.name,
                 }))}
               />
@@ -250,7 +228,7 @@ export function RollbackDialog({
           <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
             <span>
               history for{" "}
-              <span className="font-mono text-foreground">{service}</span>:{" "}
+              <span className="font-mono text-foreground">{svc.name}</span>:{" "}
               {history.length === 0 ? (
                 <span className="text-muted-foreground">
                   no prior deploys — nothing to roll back to
@@ -284,6 +262,9 @@ export function RollbackDialog({
         { label: "Run post-rollback hooks", state: "pending" },
       ]}
       onDispatch={() => store.commitRollback(env.id, svc.name, tag)}
+      onSettled={async () => {
+        await Promise.all([store.refreshEnvironmentReleases(env.id), store.refreshEnvironmentServices(env.id)]);
+      }}
     />
   );
 }

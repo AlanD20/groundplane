@@ -157,7 +157,7 @@ export function ServiceDetailsDrawer({
         </DrawerContent>
       </Drawer>
       <Drawer open={open && editing} onOpenChange={(v) => onOpenChange(v)}>
-        <ServiceFormBody env={env} workspace={params.tenant} initial={service} onClose={() => onOpenChange(false)} />
+        {open && editing && <ServiceFormBody key={service.id} env={env} workspace={params.tenant} initial={service} onClose={() => onOpenChange(false)} />}
       </Drawer>
       <ServiceOperationDialog
         env={env}

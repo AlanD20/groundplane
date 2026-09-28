@@ -20,14 +20,13 @@ func (registryClient *Client) Resolve(ctx context.Context, requested string) (im
 	} else if pinned, ok := named.(reference.Digested); ok {
 		selector = pinned.Digest().String()
 	}
-	repository := reference.Path(named)
-	value, manifestDigest, err := registryClient.document(ctx, repository, "manifests", selector)
+	value, manifestDigest, err := registryClient.document(ctx, named, "manifests", selector)
 	if err != nil {
 		return imagefetch.Plan{}, err
 	}
 	index, err := decodeDocument[ocispec.Index](value)
 	if err != nil || index.SchemaVersion != 2 {
-		return imagefetch.Plan{}, errs.New(errs.KindStateConflict, "private registry image schema is unsupported")
+		return imagefetch.Plan{}, errs.New(errs.KindStateConflict, "registry image schema is unsupported")
 	}
 	if index.MediaType == ocispec.MediaTypeImageIndex ||
 		index.MediaType == "application/vnd.docker.distribution.manifest.list.v2+json" {
@@ -41,7 +40,7 @@ func (registryClient *Client) Resolve(ctx context.Context, requested string) (im
 			if selected != nil {
 				return imagefetch.Plan{}, errs.New(
 					errs.KindStateConflict,
-					"private registry image has ambiguous host platforms",
+					"registry image has ambiguous host platforms",
 				)
 			}
 			copy := descriptor
@@ -51,17 +50,17 @@ func (registryClient *Client) Resolve(ctx context.Context, requested string) (im
 			selected.Size <= 0 || selected.Size > maximumDocumentBytes {
 			return imagefetch.Plan{}, errs.New(
 				errs.KindStateConflict,
-				"private registry image lacks a supported host platform",
+				"registry image lacks a supported host platform",
 			)
 		}
-		value, manifestDigest, err = registryClient.document(ctx, repository, "manifests", selected.Digest.String())
+		value, manifestDigest, err = registryClient.document(ctx, named, "manifests", selected.Digest.String())
 		if err != nil {
 			return imagefetch.Plan{}, err
 		}
 		if int64(len(value)) != selected.Size {
 			return imagefetch.Plan{}, errs.New(
 				errs.KindStateConflict,
-				"private registry manifest size differs from its index",
+				"registry manifest size differs from its index",
 			)
 		}
 	}
@@ -70,9 +69,9 @@ func (registryClient *Client) Resolve(ctx context.Context, requested string) (im
 		(manifest.MediaType != ocispec.MediaTypeImageManifest && manifest.MediaType != "application/vnd.docker.distribution.manifest.v2+json") ||
 		manifest.Config.Digest.Validate() != nil || manifest.Config.Digest.Algorithm().String() != "sha256" ||
 		manifest.Config.Size <= 0 || manifest.Config.Size > maximumDocumentBytes {
-		return imagefetch.Plan{}, errs.New(errs.KindStateConflict, "private registry image manifest is invalid")
+		return imagefetch.Plan{}, errs.New(errs.KindStateConflict, "registry image manifest is invalid")
 	}
-	configBytes, configDigest, err := registryClient.document(ctx, repository, "blobs", manifest.Config.Digest.String())
+	configBytes, configDigest, err := registryClient.document(ctx, named, "blobs", manifest.Config.Digest.String())
 	if err != nil {
 		return imagefetch.Plan{}, err
 	}
@@ -81,7 +80,7 @@ func (registryClient *Client) Resolve(ctx context.Context, requested string) (im
 		configuration.Architecture != registryClient.architecture {
 		return imagefetch.Plan{}, errs.New(
 			errs.KindStateConflict,
-			"private registry image does not match the host platform",
+			"registry image does not match the host platform",
 		)
 	}
 	plan := imagefetch.Plan{

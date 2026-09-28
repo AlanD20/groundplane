@@ -3,6 +3,7 @@ import type {
   ActivityEntry,
   TaskJournalScope,
   TaskJournalState,
+  TaskPageSize,
   TaskStatus,
   TaskStep,
   TaskType,
@@ -26,6 +27,9 @@ const taskStatuses = new Set<TaskStatus>([
 export function emptyTaskJournal(): TaskJournalState {
   return {
     entries: [],
+    pageSize: 25,
+    pageIndex: 0,
+    pageCursors: [undefined],
     nextCursor: null,
     loaded: false,
     loading: false,
@@ -49,8 +53,9 @@ export function taskJournalKey(scope: TaskJournalScope): string {
 export function taskJournalQuery(
   scope: TaskJournalScope,
   cursor?: string,
+  pageSize: TaskPageSize = 25,
 ): string {
-  const query = new URLSearchParams({ limit: "50" });
+  const query = new URLSearchParams({ limit: String(pageSize) });
   if (cursor) query.set("cursor", cursor);
   if (scope.kind === "workspace") query.set("workspace", scope.workspace);
   if (scope.kind === "project") query.set("project", scope.projectId);

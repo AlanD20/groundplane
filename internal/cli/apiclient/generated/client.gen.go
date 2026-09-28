@@ -1439,7 +1439,10 @@ type DeployRequest struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/DeployRequest.json
-	Schema    *string `json:"$schema,omitempty"`
+	Schema *string `json:"$schema,omitempty"`
+
+	// Image Host-local registry reference for this Release only; mutually exclusive with tag
+	Image     *string `json:"image,omitempty"`
 	OnFailure *string `json:"on_failure,omitempty"`
 	Strategy  *string `json:"strategy,omitempty"`
 	Tag       *string `json:"tag,omitempty"`
@@ -1702,6 +1705,19 @@ type HostEtcd struct {
 	Status string `json:"status"`
 }
 
+// HostImage defines model for HostImage.
+type HostImage struct {
+	Containers int64    `json:"containers"`
+	CreatedAt  string   `json:"created_at"`
+	Digests    []string `json:"digests"`
+	Id         string   `json:"id"`
+
+	// RemovalBlocked Empty when current observation permits removal; admission and execution recheck protection
+	RemovalBlocked string   `json:"removal_blocked"`
+	SizeBytes      int64    `json:"size_bytes"`
+	Tags           []string `json:"tags"`
+}
+
 // HostResource defines model for HostResource.
 type HostResource struct {
 	Total   string `json:"total"`
@@ -1731,8 +1747,18 @@ type ImageFetchRequest struct {
 	// Examples: /api/v1/ImageFetchRequest.json
 	Schema *string `json:"$schema,omitempty"`
 
-	// Image Explicit tag or SHA-256 digest in the managed private registry
+	// Image Explicit tag or SHA-256 digest in a public registry or GP's managed private registry
 	Image string `json:"image"`
+}
+
+// ImageList defines model for ImageList.
+type ImageList struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/ImageList.json
+	Schema     *string     `json:"$schema,omitempty"`
+	Images     []HostImage `json:"images"`
+	ObservedAt string      `json:"observed_at"`
 }
 
 // LogEvent defines model for LogEvent.
@@ -3167,6 +3193,11 @@ type BackupKeyRotateParams struct {
 
 // ImageFetchParams defines parameters for ImageFetch.
 type ImageFetchParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// ImageRemoveParams defines parameters for ImageRemove.
+type ImageRemoveParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -5155,19 +5186,29 @@ type ClientInterface interface {
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ImageFetchWithBody Fetch selected private-registry content into host Docker without deploying
+	// ImageList List images in the local Agent host Docker daemon
+	//
+	// Corresponds with GET /images (the `ImageList` operationId).
+	ImageList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImageFetchWithBody Fetch selected public or GP private-registry content into host Docker without deploying
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /images/fetch (the `ImageFetch` operationId).
 	ImageFetchWithBody(ctx context.Context, params *ImageFetchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ImageFetch Fetch selected private-registry content into host Docker without deploying
+	// ImageFetch Fetch selected public or GP private-registry content into host Docker without deploying
 	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /images/fetch (the `ImageFetch` operationId).
 	ImageFetch(ctx context.Context, params *ImageFetchParams, body ImageFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ImageRemove Remove an unreferenced host image without force or pruning
+	//
+	// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
+	ImageRemove(ctx context.Context, id string, params *ImageRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ProjectList List projects
 	//
@@ -6949,7 +6990,22 @@ func (c *Client) HostShow(ctx context.Context, reqEditors ...RequestEditorFn) (*
 	return c.Client.Do(req)
 }
 
-// ImageFetchWithBody Fetch selected private-registry content into host Docker without deploying
+// ImageList List images in the local Agent host Docker daemon
+//
+// Corresponds with GET /images (the `ImageList` operationId).
+func (c *Client) ImageList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImageListRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImageFetchWithBody Fetch selected public or GP private-registry content into host Docker without deploying
 //
 // Takes any type of body and a specified content type.
 //
@@ -6966,13 +7022,28 @@ func (c *Client) ImageFetchWithBody(ctx context.Context, params *ImageFetchParam
 	return c.Client.Do(req)
 }
 
-// ImageFetch Fetch selected private-registry content into host Docker without deploying
+// ImageFetch Fetch selected public or GP private-registry content into host Docker without deploying
 //
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /images/fetch (the `ImageFetch` operationId).
 func (c *Client) ImageFetch(ctx context.Context, params *ImageFetchParams, body ImageFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewImageFetchRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ImageRemove Remove an unreferenced host image without force or pruning
+//
+// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
+func (c *Client) ImageRemove(ctx context.Context, id string, params *ImageRemoveParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewImageRemoveRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11553,6 +11624,33 @@ func NewHostShowRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewImageListRequest constructs an http.Request for the ImageList method
+func NewImageListRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/images")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewImageFetchRequest calls the generic ImageFetch builder with application/json body
 func NewImageFetchRequest(server string, params *ImageFetchParams, body ImageFetchJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -11589,6 +11687,53 @@ func NewImageFetchRequestWithBody(server string, params *ImageFetchParams, conte
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewImageRemoveRequest constructs an http.Request for the ImageRemove method
+func NewImageRemoveRequest(server string, id string, params *ImageRemoveParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/images/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if params != nil {
 
@@ -16127,19 +16272,33 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /host (the `HostShow` operationId).
 	HostShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HostShowResponse, error)
 
-	// ImageFetchWithBodyWithResponse Fetch selected private-registry content into host Docker without deploying
+	// ImageListWithResponse List images in the local Agent host Docker daemon
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /images (the `ImageList` operationId).
+	ImageListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ImageListResponse, error)
+
+	// ImageFetchWithBodyWithResponse Fetch selected public or GP private-registry content into host Docker without deploying
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /images/fetch (the `ImageFetch` operationId).
 	ImageFetchWithBodyWithResponse(ctx context.Context, params *ImageFetchParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ImageFetchResponse, error)
 
-	// ImageFetchWithResponse Fetch selected private-registry content into host Docker without deploying
+	// ImageFetchWithResponse Fetch selected public or GP private-registry content into host Docker without deploying
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /images/fetch (the `ImageFetch` operationId).
 	ImageFetchWithResponse(ctx context.Context, params *ImageFetchParams, body ImageFetchJSONRequestBody, reqEditors ...RequestEditorFn) (*ImageFetchResponse, error)
+
+	// ImageRemoveWithResponse Remove an unreferenced host image without force or pruning
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
+	ImageRemoveWithResponse(ctx context.Context, id string, params *ImageRemoveParams, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error)
 
 	// ProjectListWithResponse List projects
 	//
@@ -19798,6 +19957,54 @@ func (r HostShowResponse) ContentType() string {
 	return ""
 }
 
+type ImageListResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ImageList
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ImageListResponse) GetJSON200() *ImageList {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ImageListResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ImageListResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ImageListResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ImageListResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ImageListResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // ImageFetchResponse202Headers the declared response headers of an HTTP 202 response for ImageFetch
 type ImageFetchResponse202Headers struct {
 	ContentType *string
@@ -19847,6 +20054,61 @@ func (r ImageFetchResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ImageFetchResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// ImageRemoveResponse202Headers the declared response headers of an HTTP 202 response for ImageRemove
+type ImageRemoveResponse202Headers struct {
+	ContentType *string
+}
+
+type ImageRemoveResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *ImageRemoveResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r ImageRemoveResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ImageRemoveResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ImageRemoveResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ImageRemoveResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ImageRemoveResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ImageRemoveResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -24511,7 +24773,20 @@ func (c *ClientWithResponses) HostShowWithResponse(ctx context.Context, reqEdito
 	return ParseHostShowResponse(rsp)
 }
 
-// ImageFetchWithBodyWithResponse Fetch selected private-registry content into host Docker without deploying
+// ImageListWithResponse List images in the local Agent host Docker daemon
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /images (the `ImageList` operationId).
+func (c *ClientWithResponses) ImageListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ImageListResponse, error) {
+	rsp, err := c.ImageList(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImageListResponse(rsp)
+}
+
+// ImageFetchWithBodyWithResponse Fetch selected public or GP private-registry content into host Docker without deploying
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24524,7 +24799,7 @@ func (c *ClientWithResponses) ImageFetchWithBodyWithResponse(ctx context.Context
 	return ParseImageFetchResponse(rsp)
 }
 
-// ImageFetchWithResponse Fetch selected private-registry content into host Docker without deploying
+// ImageFetchWithResponse Fetch selected public or GP private-registry content into host Docker without deploying
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24535,6 +24810,19 @@ func (c *ClientWithResponses) ImageFetchWithResponse(ctx context.Context, params
 		return nil, err
 	}
 	return ParseImageFetchResponse(rsp)
+}
+
+// ImageRemoveWithResponse Remove an unreferenced host image without force or pruning
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /images/{id} (the `ImageRemove` operationId).
+func (c *ClientWithResponses) ImageRemoveWithResponse(ctx context.Context, id string, params *ImageRemoveParams, reqEditors ...RequestEditorFn) (*ImageRemoveResponse, error) {
+	rsp, err := c.ImageRemove(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImageRemoveResponse(rsp)
 }
 
 // ProjectListWithResponse List projects
@@ -28091,6 +28379,39 @@ func ParseHostShowResponse(rsp *http.Response) (*HostShowResponse, error) {
 	return response, nil
 }
 
+// ParseImageListResponse parses an HTTP response from a ImageListWithResponse call
+func ParseImageListResponse(rsp *http.Response) (*ImageListResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ImageListResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ImageList
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseImageFetchResponse parses an HTTP response from a ImageFetchWithResponse call
 func ParseImageFetchResponse(rsp *http.Response) (*ImageFetchResponse, error) {
 	defer func() { _ = rsp.Body.Close() }()
@@ -28124,6 +28445,52 @@ func ParseImageFetchResponse(rsp *http.Response) (*ImageFetchResponse, error) {
 	switch {
 	case rsp.StatusCode == 202:
 		var headers ImageFetchResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseImageRemoveResponse parses an HTTP response from a ImageRemoveWithResponse call
+func ParseImageRemoveResponse(rsp *http.Response) (*ImageRemoveResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ImageRemoveResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers ImageRemoveResponse202Headers
 		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
 			var value string
 			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {

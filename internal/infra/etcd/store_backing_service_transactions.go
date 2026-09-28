@@ -17,7 +17,7 @@ func (s *store) TransactBackingService(
 	if len(mutations) == 0 {
 		return empty, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
 	}
-	if err := validateBackingServicePublicationOperationCounts(len(conditions), len(mutations), 0); err != nil {
+	if err := validateBackingServicePublicationOperationCounts(len(etcdstore.ImageSelectionConditions(ctx, conditions)), len(mutations), 0); err != nil {
 		return empty, err
 	}
 	for _, condition := range conditions {

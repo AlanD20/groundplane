@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppFrame } from '@/components/shell/app-frame'
 
 const PlatformOverview = lazy(() => import('@/routes/platform/overview/page'))
@@ -8,6 +8,7 @@ const BackingService = lazy(() => import('@/routes/platform/backing-services/[id
 const PlatformActivity = lazy(() => import('@/routes/platform/activity/page'))
 const PlatformSecrets = lazy(() => import('@/routes/platform/secrets/page'))
 const PlatformHost = lazy(() => import('@/routes/platform/host/page'))
+const PlatformImages = lazy(() => import('@/features/image-delivery/images-page'))
 const PlatformComponents = lazy(() => import('@/routes/platform/components/page'))
 const PlatformComponent = lazy(() => import('@/routes/platform/components/[component]/page'))
 const PlatformController = lazy(() => import('@/routes/platform/host/controller/page'))
@@ -25,10 +26,11 @@ const ReleaseDetail = lazy(() => import('@/routes/t/[tenant]/[project]/[env]/rel
 const ReleaseGroup = lazy(() => import('@/routes/t/[tenant]/[project]/[env]/release-groups/[id]/page'))
 
 export default function App() {
+  const { pathname } = useLocation()
   return (
     <AppFrame>
       <Suspense fallback={<div role="status" className="p-6 text-sm text-muted-foreground">Loading view…</div>}>
-        <Routes>
+        <Routes key={pathname}>
           <Route path="/" element={<Navigate to="/platform/overview" replace />} />
           <Route path="/platform" element={<Navigate to="/platform/overview" replace />} />
           <Route path="/platform/overview" element={<PlatformOverview />} />
@@ -37,6 +39,7 @@ export default function App() {
           <Route path="/platform/activity" element={<PlatformActivity />} />
           <Route path="/platform/secrets" element={<PlatformSecrets />} />
           <Route path="/platform/host" element={<PlatformHost />} />
+          <Route path="/platform/host/images" element={<PlatformImages />} />
           <Route path="/platform/components" element={<PlatformComponents />} />
           <Route path="/platform/components/:component" element={<PlatformComponent />} />
           <Route path="/platform/host/controller" element={<PlatformController />} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDraftField } from "@/lib/use-draft-field";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,11 +36,11 @@ export function DeployReleaseGroupDialog({
 }: OperationDialogProps) {
   const store = useStore();
   const params = useRequiredParams("tenant");
-  const [tag, setTag] = useState(group.tag ?? "");
+  const [tag, setTag] = useDraftField(group.tag ?? "", group.id);
 
   useEffect(() => {
     if (open) setTag(group.tag ?? "");
-  }, [group.tag, open]);
+  }, [group.id, open]);
 
   const steps = useMemo<TaskStep[]>(
     () => [
@@ -92,8 +93,8 @@ export function DeployReleaseGroupDialog({
       }
       steps={steps}
       onDispatch={() => store.deployReleaseGroup(env.id, group.id, tag.trim())}
-      onCommit={() => {
-        void store.refreshEnvironmentReleases(env.id).catch(() => undefined);
+      onSettled={async () => {
+        await store.refreshEnvironmentReleases(env.id);
       }}
     />
   );
@@ -327,8 +328,8 @@ export function RollbackReleaseGroupDialog({
           throw error;
         }
       }}
-      onCommit={() => {
-        void store.refreshEnvironmentReleases(env.id).catch(() => undefined);
+      onSettled={async () => {
+        await store.refreshEnvironmentReleases(env.id);
       }}
     />
   );

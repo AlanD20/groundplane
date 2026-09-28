@@ -302,7 +302,7 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		ctx,
 		scope,
 		planning,
-		"first", string(domain.StrategyBlueGreen), domain.OnFailureSwitchBack,
+		"first", string(domain.StrategyBlueGreen), domain.OnFailureSwitchBack, "",
 	)
 	if err != nil {
 		t.Fatalf("actual first blue-green candidate: %v", err)

@@ -54,11 +54,6 @@ export function SettingsCard({ env }: { env: Environment }) {
   const keyExportController = useRef<AbortController | null>(null);
   const deletionFailure = store.getEnvironmentDeletionFailure(env.id);
 
-  useEffect(() => {
-    setNewName(env.name);
-    setNetworkPool(env.networkPool);
-  }, [env.name, env.networkPool]);
-
   useEffect(
     () => () => {
       keyExportController.current?.abort();
@@ -89,7 +84,11 @@ export function SettingsCard({ env }: { env: Environment }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setRenameOpen(true)}
+              onClick={() => {
+                setNewName(env.name);
+                setRenameError(null);
+                setRenameOpen(true);
+              }}
             >
               <FileCode2 className="size-3.5" /> Rename
             </Button>

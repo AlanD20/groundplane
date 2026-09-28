@@ -1,4 +1,4 @@
-// Package imagedelivery publishes and executes explicit private-registry fetches.
+// Package imagedelivery owns host image inventory and explicit registry fetches.
 // It has no Service mutation or deployment dependency.
 package imagedelivery
 
@@ -20,10 +20,13 @@ import (
 )
 
 const FetchRoute = "/images/fetch"
+const RemoveRoute = "/images/{id}"
 
 type Registry interface {
 	Resolve(context.Context, string) (imagefetch.Plan, error)
 	Fetch(context.Context, imagefetch.Plan) (string, error)
+	List(context.Context) ([]imagefetch.LocalImage, error)
+	Remove(context.Context, string) error
 }
 
 type TaskStore interface {
@@ -39,18 +42,20 @@ type Service struct {
 	tasks    TaskStore
 	evidence requestidempotency.EvidenceRepository
 	intents  *requestidempotency.Coordinator
+	store    ImageStore
 }
 
 func New(
 	registry Registry,
+	store ImageStore,
 	tasks TaskStore,
 	evidence requestidempotency.EvidenceRepository,
 	intents *requestidempotency.Coordinator,
 ) (*Service, error) {
-	if registry == nil || tasks == nil || evidence == nil || intents == nil {
+	if registry == nil || store == nil || tasks == nil || evidence == nil || intents == nil {
 		return nil, errs.New(errs.KindInternal, "image delivery dependencies are incomplete")
 	}
-	return &Service{registry: registry, tasks: tasks, evidence: evidence, intents: intents}, nil
+	return &Service{registry: registry, store: store, tasks: tasks, evidence: evidence, intents: intents}, nil
 }
 
 func (service *Service) FetchImage(
@@ -60,12 +65,38 @@ func (service *Service) FetchImage(
 	if _, err := imagefetch.ParseRequested(requested); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
-		Method: http.MethodPost, Route: FetchRoute, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
+	return service.accept(ctx, requested, key, false)
+}
+
+func (service *Service) RemoveImage(
+	ctx context.Context,
+	imageID, key string,
+) (idempotencyrecord.IdempotencyResponse, error) {
+	if _, err := imagefetch.RemovalHash(imageID); err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	return service.accept(ctx, imageID, key, true)
+}
+
+func (service *Service) accept(
+	ctx context.Context,
+	requested, key string,
+	remove bool,
+) (idempotencyrecord.IdempotencyResponse, error) {
+	method, route := http.MethodPost, FetchRoute
+	intentInput := requestidempotency.CanonicalIntentV1{
+		Method: method, Route: route, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
 		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "image", Value: requestidempotency.String(requested)},
 		)),
-	})
+	}
+	if remove {
+		method, route = http.MethodDelete, RemoveRoute
+		intentInput.Method, intentInput.Route = method, route
+		intentInput.Path = []requestidempotency.PathBinding{{Name: "id", Value: requested}}
+		intentInput.Body = requestidempotency.NoBody()
+	}
+	version, digest, err := requestidempotency.Canonicalize(ctx, intentInput)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -76,7 +107,7 @@ func (service *Service) FetchImage(
 	}
 	defer evidence.Destroy()
 	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
-		Method: http.MethodPost, Route: FetchRoute, Key: key}
+		Method: method, Route: route, Key: key}
 	if err := idempotencyrecord.ValidateIdempotencyLocator(locator); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -89,26 +120,10 @@ func (service *Service) FetchImage(
 	}
 	// Resolution precedes publication but follows replay lookup. The atomic
 	// marker selects one winning plan when requests race; no pull happens here.
-	plan, err := service.registry.Resolve(ctx, requested)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	if plan.Requested != requested {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(
-			errs.KindInternal,
-			"registry resolved another image request",
-		)
-	}
 	now := time.Now().UTC()
-	task, err := newTask(plan, key, now)
+	task, raw, err := service.prepare(ctx, requested, key, now, remove)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
-	}
-	raw, err := json.Marshal(
-		apiTypes.ImageFetchAccepted{TaskID: task.ID, Image: plan.Reference(), ConfigDigest: plan.ConfigDigest},
-	)
-	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(raw)
 	response := idempotencyrecord.IdempotencyResponse{
@@ -176,9 +191,12 @@ func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error
 	if err := etcd.ValidateTaskRecord(task); err != nil {
 		return err
 	}
-	if task.Type != taskjournal.TaskFetch || task.Executor != taskjournal.TaskExecutorController ||
+	if task.Executor != taskjournal.TaskExecutorController ||
 		task.Status != taskjournal.TaskStatusRunning {
 		return errs.New(errs.KindValidationFailed, "image fetch requires a running Controller Task")
+	}
+	if task.Type == taskjournal.TaskRemove {
+		return service.executeRemoval(ctx, task)
 	}
 	plan, err := imagefetch.Decode(task.Params[taskjournal.TaskImageFetchInputParam], task.PlanHash)
 	if err != nil {
@@ -192,4 +210,30 @@ func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error
 		return errs.New(errs.KindStateConflict, "fetched image differs from the accepted content")
 	}
 	return nil
+}
+
+func (service *Service) prepare(
+	ctx context.Context,
+	requested, key string,
+	now time.Time,
+	remove bool,
+) (etcd.TaskRecord, []byte, error) {
+	if remove {
+		return service.prepareRemoval(ctx, requested, key, now)
+	}
+	plan, err := service.registry.Resolve(ctx, requested)
+	if err != nil {
+		return etcd.TaskRecord{}, nil, err
+	}
+	if plan.Requested != requested {
+		return etcd.TaskRecord{}, nil, errs.New(errs.KindInternal, "registry resolved another image request")
+	}
+	task, err := newTask(plan, key, now)
+	if err != nil {
+		return task, nil, err
+	}
+	raw, err := json.Marshal(
+		apiTypes.ImageFetchAccepted{TaskID: task.ID, Image: plan.Reference(), ConfigDigest: plan.ConfigDigest},
+	)
+	return task, raw, err
 }

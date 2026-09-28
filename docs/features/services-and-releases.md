@@ -20,9 +20,12 @@ is reported separately from both.
 ## Selecting an image
 
 The image must already exist on the host. GP does not pull or build an application
-image during Deploy. The operator chooses a tag, not a different image repository.
-The default is the Service's current tag. GP resolves that reference once and
-pins the local image identity for the accepted operation.
+image during Deploy. Use [Host Images](platform.md#images) to fetch missing
+content first. Deploy accepts either a complete image reference (`--image` in
+the CLI) or a tag within the configured repository (`--tag`), never both.
+Without an override, it uses the Service image and current tag. Selecting an
+image for one Deploy does not edit the Service's saved configuration. GP resolves
+the reference once and pins the local image identity for the accepted operation.
 
 Redeploying the same tag can apply configuration changes. If that local tag has
 been moved to different bytes, a new Deploy can select those bytes; an existing

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,16 @@ type GroupDraft = {
 
 const emptyDraft = (): GroupDraft => ({ name: '', services: [], order: [], onFailure: 'switch_back' })
 
-export function ReleaseGroupFormDrawer({
+export function ReleaseGroupFormDrawer(props: {
+  env: Environment
+  group?: ReleaseGroup
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return props.open ? <ReleaseGroupForm key={`${props.env.id}:${props.group?.id ?? 'new'}`} {...props} /> : null
+}
+
+function ReleaseGroupForm({
   env,
   group,
   open,
@@ -33,22 +42,18 @@ export function ReleaseGroupFormDrawer({
   onOpenChange: (open: boolean) => void
 }) {
   const store = useStore()
-  const [draft, setDraft] = useState<GroupDraft>(emptyDraft)
+  const [draft, setDraft] = useState<GroupDraft>(() => group
+    ? { name: group.name, services: [...group.services], order: [...group.order], onFailure: group.onFailure }
+    : emptyDraft())
 	const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      setDraft(group
-        ? { name: group.name, services: [...group.services], order: [...group.order], onFailure: group.onFailure }
-        : emptyDraft())
-    }
-  }, [group, open])
+  const [error, setError] = useState<string>()
 
   const duplicateName = env.releaseGroups.some(
     (candidate) => candidate.id !== group?.id && candidate.name === draft.name.trim(),
   )
+  const missingServices = draft.services.filter(name => !env.services.some(service => service.name === name))
 	const valid = draft.name === draft.name.trim() && draft.name.length > 0 && !duplicateName && draft.services.length >= 2 && draft.services.length <= 32 &&
-    draft.order.length === draft.services.length
+    draft.order.length === draft.services.length && missingServices.length === 0
 
   function toggleService(service: string) {
     setDraft((current) => current.services.includes(service)
@@ -74,6 +79,7 @@ export function ReleaseGroupFormDrawer({
 	async function save() {
     if (!valid) return
 		setSaving(true)
+		setError(undefined)
 		try {
     if (group) {
 		await store.updateReleaseGroup(env.id, group.id, {
@@ -92,6 +98,8 @@ export function ReleaseGroupFormDrawer({
       })
     }
     onOpenChange(false)
+		} catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to save release group')
 		} finally {
 			setSaving(false)
 		}
@@ -113,6 +121,9 @@ export function ReleaseGroupFormDrawer({
           </div>
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-xs font-medium text-muted-foreground">Member services</legend>
+            {missingServices.map(name => <p key={name} role="alert" className="text-xs text-destructive">
+              Service {name} is no longer available. <Button variant="outline" size="sm" onClick={() => toggleService(name)}>Remove {name} from group</Button>
+            </p>)}
             <div className="grid gap-2 sm:grid-cols-2">
               {env.services.map((service) => {
                 const selected = draft.services.includes(service.name)
@@ -145,6 +156,7 @@ export function ReleaseGroupFormDrawer({
             <p className="text-xs text-muted-foreground">Default: switch back every member already advanced by this task.</p>
           </div>
         </div>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 		<DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={() => void save()} disabled={!valid || saving}>{saving ? 'Dispatching…' : group ? 'Save changes' : 'Add group'}</Button></DialogFooter>
       </DrawerContent>
     </Drawer>

@@ -20,7 +20,7 @@ func (s *store) Transact(
 			"etcd transaction requires a mutation",
 		)
 	}
-	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
+	if len(etcdstore.ImageSelectionConditions(ctx, conditions))+len(mutations) > etcdstore.MaximumOperations {
 		return etcdstore.TransactionResult{}, errs.Newf(
 			errs.KindValidationFailed,
 			"etcd transaction exceeds the %d compare-and-mutation limit",
@@ -44,6 +44,7 @@ func (s *store) transactWithFailureReads(
 	mutations []etcdstore.Mutation,
 	deferred bool,
 ) (etcdstore.TransactionResult, error) {
+	conditions = etcdstore.ImageSelectionConditions(ctx, conditions)
 
 	prepared, err := s.prepareTransaction(conditions, mutations)
 	if err != nil {
@@ -80,7 +81,7 @@ func (s *store) transactWithFailureReads(
 				return etcdstore.TransactionResult{}, err
 			}
 			result.FailureReads = read.Values
-			return result, nil
+			return etcdstore.ImageSelectionResult(ctx, result)
 		}
 		reads, err := transactionFailureReads(response, conditions, prepared.physicalConditions, s.root)
 		if err != nil {
@@ -88,7 +89,7 @@ func (s *store) transactWithFailureReads(
 		}
 		result.FailureReads = reads
 	}
-	return result, nil
+	return etcdstore.ImageSelectionResult(ctx, result)
 }
 
 func transactionRequest(

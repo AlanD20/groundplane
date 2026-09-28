@@ -8,11 +8,11 @@
   "frozen_totals": [
     {
       "path": "internal/app",
-      "lines": 3684
+      "lines": 3686
     },
     {
       "path": "internal/infra/etcd",
-      "lines": 67651
+      "lines": 67664
     }
   ],
   "legacy_findings": []

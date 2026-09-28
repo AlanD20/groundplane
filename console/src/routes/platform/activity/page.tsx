@@ -5,6 +5,7 @@ import { Activity, RefreshCw } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { PageHeader } from '@/components/common/page-header'
 import { TaskJournalItem } from '@/components/common/task-journal-item'
+import { TaskPagination } from '@/features/task/task-pagination'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import type { TaskJournalScope } from '@/lib/types'
@@ -62,8 +63,8 @@ export default function PlatformActivityPage() {
               <Select aria-label="Activity owner" value={filter} onValueChange={setFilter} options={options} />
             </label>
             <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-              Status of loaded tasks
-              <Select aria-label="Status of loaded tasks" value={status} onValueChange={setStatus} className="min-w-48"
+              Status on this page
+              <Select aria-label="Status on this page" value={status} onValueChange={setStatus} className="min-w-48"
                 options={['all', 'pending', 'running', 'completed', 'failed', 'timed_out', 'aborted'].map(value => ({value, label: value === 'all' ? 'All statuses' : value.replaceAll('_', ' ')}))} />
             </label>
             <Button variant="outline" size="sm" disabled={journal.loading || journal.loadingMore} onClick={() => void store.loadTaskJournal('activity', scope).catch(() => undefined)}>
@@ -71,7 +72,7 @@ export default function PlatformActivityPage() {
             </Button>
       </div>
       <div className="flex flex-col gap-2.5">
-        {journal.loaded && <p className="text-xs text-muted-foreground" role="status">{entries.length} matching · {journal.entries.length} loaded{journal.nextCursor ? ' · more available' : ''}</p>}
+        {journal.loaded && <p className="text-xs text-muted-foreground" role="status">{entries.length} matching of {journal.entries.length} tasks on this page</p>}
         {journal.loading && <div role="status" className="py-10 text-center text-sm text-muted-foreground">loading activity…</div>}
         {journal.loadError && (
           <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
@@ -82,12 +83,8 @@ export default function PlatformActivityPage() {
         {entries.map((a) => (
           <TaskJournalItem key={a.id} entry={a} scope={scope} />
         ))}
-        {journal.loaded && !journal.loadError && entries.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">No loaded tasks match these filters.{journal.nextCursor ? ' Load more to search the next page.' : ''}</div>}
-        {journal.nextCursor && !journal.loadError && (
-          <Button variant="outline" disabled={journal.loading || journal.loadingMore} onClick={() => void store.loadTaskJournal('activity', scope, journal.nextCursor!).catch(() => undefined)}>
-            {journal.loadingMore ? 'Loading…' : 'Load more'}
-          </Button>
-        )}
+        {journal.loaded && !journal.loadError && entries.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">No tasks on this page match these filters.</div>}
+        <TaskPagination scope={scope} surface="activity" />
       </div>
     </div>
   )

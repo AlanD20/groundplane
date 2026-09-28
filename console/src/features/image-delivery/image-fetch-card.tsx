@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Download } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -13,9 +13,10 @@ import { newULID } from '@/lib/utils'
 
 type Accepted = operations['image.fetch']['responses'][202]['content']['application/json']
 
-export function ImageFetchCard() {
+export function ImageFetchCard({ onSettled }: { onSettled?: () => Promise<void> }) {
+  const [search] = useSearchParams()
   const [open, setOpen] = useState(false)
-  const [image, setImage] = useState('')
+  const [image, setImage] = useState(search.get('fetch') ?? '')
   const [accepted, setAccepted] = useState<Accepted | null>(null)
   const [completed, setCompleted] = useState(false)
   const intent = useRef<{ image: string; key: string; accepted: Accepted | null } | null>(null)
@@ -50,7 +51,7 @@ export function ImageFetchCard() {
         <CardHeader><CardTitle><h2 className="flex items-center gap-2"><Download className="size-4" /> Host images</h2></CardTitle></CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-3">
           <p className="text-sm text-muted-foreground">
-            Fetch an image pushed to the private registry into host Docker. This does not edit a Service or deploy a Release.
+            Fetch from Docker Hub, public GHCR or another public registry, or GP's private registry. External private-registry credentials are not supported. This does not edit a Service or deploy a Release.
           </p>
           <Button className="self-start" variant="outline" onClick={openFetch}><Download className="size-4" /> Fetch image</Button>
           {accepted ? (
@@ -68,15 +69,16 @@ export function ImageFetchCard() {
       </Card>
       <TaskRunnerDialog
         open={open} onOpenChange={setOpen} variant="drawer" title="Fetch image" type="fetch"
-        target={image.trim() || 'Private registry'} workspace="platform" startLabel="Fetch image"
+        target={image.trim() || 'Registry image'} workspace="platform" startLabel="Fetch image"
         startDisabled={!image.trim()} onDispatch={dispatch} onCommit={() => setCompleted(true)}
+        onSettled={onSettled}
         description="Select an explicit tag or digest. GP pins its content before acceptance; retries keep that selection."
         executionCopy="The Controller fetches and verifies the selected content; your running Services are unchanged."
         steps={[]}
         review={<div className="space-y-2">
           <Label htmlFor="fetch-image">Registry image</Label>
           <Input id="fetch-image" value={image} onChange={event => setImage(event.target.value)}
-            placeholder="registry.groundplane.internal:5000/project/api:release" />
+            placeholder="nginx:latest, ghcr.io/org/app:tag or registry.groundplane.internal:5000/project/api:release" />
           <p className="text-xs text-muted-foreground">After an uncertain request, keep the same image and retry to resolve its original acceptance.</p>
         </div>}
       />

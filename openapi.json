@@ -1861,6 +1861,11 @@
             "readOnly": true,
             "type": "string"
           },
+          "image": {
+            "description": "Host-local registry reference for this Release only; mutually exclusive with tag",
+            "maxLength": 512,
+            "type": "string"
+          },
           "on_failure": {
             "type": "string"
           },
@@ -2653,6 +2658,51 @@
         ],
         "type": "object"
       },
+      "HostImage": {
+        "additionalProperties": false,
+        "properties": {
+          "containers": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "digests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "removal_blocked": {
+            "description": "Empty when current observation permits removal; admission and execution recheck protection",
+            "type": "string"
+          },
+          "size_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "tags",
+          "digests",
+          "size_bytes",
+          "created_at",
+          "containers",
+          "removal_blocked"
+        ],
+        "type": "object"
+      },
       "HostResource": {
         "additionalProperties": false,
         "properties": {
@@ -2718,7 +2768,7 @@
             "type": "string"
           },
           "image": {
-            "description": "Explicit tag or SHA-256 digest in the managed private registry",
+            "description": "Explicit tag or SHA-256 digest in a public registry or GP's managed private registry",
             "maxLength": 512,
             "minLength": 1,
             "type": "string"
@@ -2726,6 +2776,34 @@
         },
         "required": [
           "image"
+        ],
+        "type": "object"
+      },
+      "ImageList": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/ImageList.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/HostImage"
+            },
+            "type": "array"
+          },
+          "observed_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "images",
+          "observed_at"
         ],
         "type": "object"
       },
@@ -9736,6 +9814,37 @@
         ]
       }
     },
+    "/images": {
+      "get": {
+        "operationId": "image.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageList"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "List images in the local Agent host Docker daemon",
+        "tags": [
+          "Images"
+        ]
+      }
+    },
     "/images/fetch": {
       "post": {
         "operationId": "image.fetch",
@@ -9791,7 +9900,67 @@
             "description": "Error"
           }
         },
-        "summary": "Fetch selected private-registry content into host Docker without deploying",
+        "summary": "Fetch selected public or GP private-registry content into host Docker without deploying",
+        "tags": [
+          "Images"
+        ]
+      }
+    },
+    "/images/{id}": {
+      "delete": {
+        "operationId": "image.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^sha256:[a-f0-9]{64}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Remove an unreferenced host image without force or pruning",
         "tags": [
           "Images"
         ]

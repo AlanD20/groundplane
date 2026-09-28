@@ -6,7 +6,7 @@ import { Activity, RefreshCw } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { PageHeader } from '@/components/common/page-header'
 import { TaskJournalItem } from '@/components/common/task-journal-item'
-import { MetaPill } from '@/components/common/meta-pill'
+import { TaskPagination } from '@/features/task/task-pagination'
 import { EmptyState } from '@/components/common/empty-state'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -70,7 +70,6 @@ export default function TenantActivityPage() {
         icon={<Activity />}
         meta={
           <div className="flex items-center gap-2">
-            <MetaPill icon={<Activity />}>{entries.length} tasks</MetaPill>
             <Select value={effectiveFilter} onValueChange={setFilter} options={options} className="min-w-64" />
             <Button variant="outline" size="sm" disabled={journal.loading || journal.loadingMore} onClick={() => void store.loadTaskJournal('activity', scope).catch(() => undefined)}>
               <RefreshCw className="size-4" /> Refresh
@@ -90,11 +89,7 @@ export default function TenantActivityPage() {
           <TaskJournalItem key={a.id} entry={a} scope={scope} />
         ))}
         {journal.loaded && !journal.loadError && entries.length === 0 && <div className="py-10 text-center text-sm text-muted-foreground">no activity yet</div>}
-        {journal.nextCursor && !journal.loadError && (
-          <Button variant="outline" disabled={journal.loading || journal.loadingMore} onClick={() => void store.loadTaskJournal('activity', scope, journal.nextCursor!).catch(() => undefined)}>
-            {journal.loadingMore ? 'Loading…' : 'Load more'}
-          </Button>
-        )}
+        <TaskPagination scope={scope} surface="activity" />
       </div>
     </div>
   )

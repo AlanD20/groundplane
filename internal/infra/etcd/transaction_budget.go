@@ -28,6 +28,7 @@ func (s *store) MeasureTransaction(
 	if err := ctx.Err(); err != nil {
 		return etcdstore.TransactionBudget{}, err
 	}
+	conditions = etcdstore.ImageSelectionConditions(ctx, conditions)
 	prepared, err := s.prepareTransactionWithoutLimit(conditions, mutations)
 	if err != nil {
 		return etcdstore.TransactionBudget{}, err

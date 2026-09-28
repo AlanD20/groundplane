@@ -7,6 +7,7 @@ const (
 	TaskResourceController               = "controller"
 	TaskResourceImage                    = "image"
 	TaskImageFetchInputParam             = "image_fetch_input"
+	TaskImageRemoveInputParam            = "image_remove_input"
 	TaskResourceEntry                    = "entry"
 	TaskResourceRoute                    = "route"
 	TaskResourceScript                   = "script"

@@ -13,7 +13,7 @@ export type ReleaseActions = {
   commitDeploy: (
     envId: string,
     service: string,
-    tag: string,
+    image: string,
     strategy: Service["strategy"],
   ) => Promise<string>;
   commitRollback: (
@@ -27,7 +27,7 @@ export function createReleaseActions(
   assertEnvironmentMutable: (environmentId: string, operation: string) => void,
 ): ReleaseActions {
   return {
-    commitDeploy: async (envId, service, tag, strategy) => {
+    commitDeploy: async (envId, service, image, strategy) => {
       assertEnvironmentMutable(envId, "deployment");
       const target = findEnvironment(state, envId)?.services.find(
         (candidate) => candidate.name === service,
@@ -35,7 +35,7 @@ export function createReleaseActions(
       if (!target) throw new Error(`Service ${service} no longer exists`);
       const body: operations["service.deploy"]["requestBody"]["content"]["application/json"] =
         {
-          tag,
+          image,
           strategy,
           on_failure: "switch_back",
         };
@@ -87,6 +87,7 @@ export function useReleaseRefresh(
           listAllReleases(environmentId, environment.services, signal),
           listAllReleaseGroups(environmentId, environment.services, signal),
         ]);
+        if (signal?.aborted) return;
         update((draft) => {
           const current = findEnvironment(draft, environmentId);
           if (!current) return;
@@ -96,6 +97,7 @@ export function useReleaseRefresh(
           refreshReleaseGroupTags(current);
         });
       } catch (error) {
+        if (signal?.aborted) return;
         update((draft) => {
           draft.projectError =
             error instanceof Error

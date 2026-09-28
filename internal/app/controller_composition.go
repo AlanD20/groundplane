@@ -87,6 +87,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		dataServices.scriptCheckpoints,
 		execution.backingHookCheckpoints,
 	)
+	imageSelections := imagedelivery.SelectionResolver{Images: agentRuntime.Registry, Store: store}
 	blueprintReleases, err := blueprintrelease.NewService(
 		authority.releaseLedger,
 		dataServices.scriptRecords,
@@ -94,7 +95,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		execution.scriptArtifacts,
 		execution.scriptSourceReferences,
 		authority.agents,
-		agentRuntime.Registry,
+		imageSelections,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -145,7 +146,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		execution.scriptArtifacts,
 		releaseExecutionTimeout,
 		authority.agents,
-		agentRuntime.Registry,
+		imageSelections,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -227,7 +228,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		dataServices.scriptMutationRepository,
 		execution.scriptArtifacts,
 		authority.agents,
-		agentRuntime.Registry,
+		imageSelections,
 		authority.intentCoordinator,
 		authority.idempotency,
 	)
@@ -523,6 +524,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	imageDelivery, err := imagedelivery.New(
 		registryimages.Local{},
+		store,
 		authority.tasks,
 		authority.idempotency,
 		authority.intentCoordinator,

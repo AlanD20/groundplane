@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedimage"
@@ -30,9 +31,12 @@ func (registryClient *Client) Fetch(ctx context.Context, plan imagefetch.Plan) (
 	if !errdefs.IsNotFound(err) {
 		return "", errs.Wrap(errs.KindInternal, err)
 	}
-	authentication, err := registryClient.dockerAuthentication()
-	if err != nil {
-		return "", errs.Wrap(errs.KindInternal, err)
+	authentication := ""
+	if strings.HasPrefix(plan.Repository, imagefetch.RegistryAuthority+"/") {
+		authentication, err = registryClient.dockerAuthentication()
+		if err != nil {
+			return "", errs.Wrap(errs.KindInternal, err)
+		}
 	}
 	pull, err := registryClient.engine.ImagePull(ctx, plan.Reference(), client.ImagePullOptions{
 		RegistryAuth: authentication,

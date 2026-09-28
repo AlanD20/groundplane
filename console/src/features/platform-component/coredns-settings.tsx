@@ -2,6 +2,7 @@
 
 import { Copy, Plus, Save } from "lucide-react";
 import { useState } from "react";
+import { useDraftField } from "@/lib/use-draft-field";
 import { useStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -50,9 +51,9 @@ export function CoreDnsSettings({
     corefileTemplate: string,
   ) => Promise<void>;
 }) {
-  const [u, setU] = useState(upstream);
-  const [auto, setAuto] = useState(upstreamAuto);
-  const [template, setTemplate] = useState(corefileTemplate);
+  const [u, setU] = useDraftField(upstream);
+  const [auto, setAuto] = useDraftField(upstreamAuto);
+  const [template, setTemplate] = useDraftField(corefileTemplate);
   const [fwdDomain, setFwdDomain] = useState("");
   const [fwdUpstream, setFwdUpstream] = useState("");
   const [saving, setSaving] = useState(false);

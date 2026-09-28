@@ -3,6 +3,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useRequiredParams } from '@/lib/router'
 import { useState } from 'react'
+import { useDraftField } from '@/lib/use-draft-field'
 import { Boxes, Building2, Fingerprint, Pencil, Save, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,9 +21,9 @@ export default function TenantSettingsPage() {
   const navigate = useNavigate()
   const store = useStore()
   const tenant = store.getTenant(params.tenant)
-  const [name, setName] = useState(tenant?.name ?? '')
-  const [description, setDescription] = useState(tenant?.description ?? '')
-  const [slug, setSlug] = useState(tenant?.slug ?? '')
+  const [name, setName] = useDraftField(tenant?.name ?? '', tenant?.id)
+  const [description, setDescription] = useDraftField(tenant?.description ?? '', tenant?.id)
+  const [slug, setSlug] = useDraftField(tenant?.slug ?? '', tenant?.id)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [mutationError, setMutationError] = useState<string | null>(null)
   const [mutating, setMutating] = useState(false)

@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select'
 import { useStore } from '@/lib/store'
 import type { Environment, Service } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ImagePicker } from '@/features/image-delivery/image-picker'
 
 // The full service form, shared between:
 //  - tenant environments ("Add service" / "Edit service") — one container
@@ -164,7 +165,7 @@ export function ServiceFormBody({
         <p className="text-xs text-muted-foreground">
           {isBacking
             ? `A backing service is a service plus the adapter that knows how to provision, connect, and back it up. The adapter resolves its immutable managed workload release; operators do not select an image. It follows the same hierarchy: backing project → one environment ("main") → this service. It owns its own network: the zone "${backingZone}" is created with it, and consumers join it as external when they attach. It stays running even with zero consumers; only an explicit Destroy removes it.`
-            : 'Define the container workload, its network and runtime settings. Saving changes desired configuration; deploy the service to apply it.'}
+            : 'Saving only stores configuration; it does not start a container. Make the image available on the Agent host, then use Deploy. Deploy does not pull or build images.'}
         </p>
         <FormSection title="Service" description="Name the service and choose its container image."><div className="flex flex-col gap-4 sm:col-span-2">
         {isBacking && (
@@ -207,7 +208,7 @@ export function ServiceFormBody({
         </div>
         {!isBacking && <div className="flex flex-col gap-1.5">
           <Label htmlFor="sv-image">Image</Label>
-          <Input id="sv-image" value={image} onChange={(e) => setImage(e.target.value)} />
+          <ImagePicker id="sv-image" value={image} onChange={setImage} />
         </div>}
         {isBacking && <div className="flex flex-col gap-1.5">
           <Label htmlFor="sv-role">Note</Label>

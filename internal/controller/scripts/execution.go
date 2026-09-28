@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -35,6 +36,7 @@ func (service *scriptMutationService) RunScript(
 	if ids.Validate(ids.KindScript, scriptID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Script id is invalid")
 	}
+	ctx = imagefence.WithScope(ctx)
 	sources, err := service.repository.LoadExecutionSources(ctx, scriptID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

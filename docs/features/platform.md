@@ -46,6 +46,43 @@ Removing an Agent stops new assignments, cancels active work, revokes its identi
 and removes its owned runtime. Updating an Agent requires an explicit immutable
 image and idle-work admission; it must not silently abort application work.
 
+## Images
+
+**Host → Images**, also linked from the Agent detail, lists the local Agent's
+Docker images, tags, digests, size and container count. This is a live daemon
+observation, not the registry catalog. Counts include stopped containers; zero
+does not mean an image can safely be removed. The MVP has one local Agent host.
+
+Fetch accepts an explicit tag or SHA-256 digest from a public registry or GP's
+managed private registry. For example, `groundplane image fetch nginx:latest`.
+Public registries use anonymous access over HTTPS. Only GP's registry receives
+its installer-managed credentials; external private-registry logins are not
+supported.
+
+Fetch returns an immutable reference and a Task. Wait for completion, then select
+that reference when creating a Service or deploying it. Fetch does not move local
+tags, change a Service or start containers. Retry retains the accepted content;
+a new Fetch can select newer tag content. Deploy's optional `--image` chooses a
+reference for that Release without editing the Service; it cannot accompany
+`--tag`. Service forms and Deploy offer the images currently on the host.
+
+Use `groundplane image ls` to inspect the same inventory. Removal uses
+`groundplane image remove sha256:...` and creates a Task for that exact local
+image ID, never a mutable name. The API exposes `GET /images`, `POST /images/fetch`
+and `DELETE /images/{id}` under its ordinary version prefix.
+
+Removal rechecks containers and retained Release/runtime material, including
+child images inside an OCI index. Unfinished or retryable host Tasks conservatively
+block removal until they complete or their retained records expire. Docker may
+also refuse images with dependent images or multiple references. There is no
+force removal, bulk prune or registry garbage collection. Registry content and
+application data are untouched.
+
+During removal, new image selections are rejected and pre-removal selections
+cannot publish stale work. If Docker's deletion result is uncertain, GP keeps
+the durable fence. Retry that removal Task to settle the operation; do not reset
+history or delete its fence manually.
+
 ## Restart and update boundaries
 
 Normal Controller restart may restart the Agent but must leave etcd running.

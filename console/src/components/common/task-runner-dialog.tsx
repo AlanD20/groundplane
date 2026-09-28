@@ -39,6 +39,7 @@ export function TaskRunnerDialog({
   confirmText,
   destructive,
   onCommit,
+  onSettled,
   onDispatch,
   variant = 'dialog',
 }: {
@@ -57,6 +58,7 @@ export function TaskRunnerDialog({
   confirmText?: string
   destructive?: boolean
   onCommit?: () => void
+  onSettled?: () => Promise<void>
   onDispatch: () => Promise<string | null>
   // "drawer" for anything that takes inputs (deploy, rollback), "dialog"
   // for plain confirmations (restore, run, start/stop/destroy).
@@ -74,10 +76,17 @@ export function TaskRunnerDialog({
   const [abortRequested, setAbortRequested] = useState(false)
 	const committedTaskId = useRef('')
 	const onCommitRef = useRef(onCommit)
+  const onSettledRef = useRef(onSettled)
+  const settledTaskId = useRef('')
+  const session = useRef({ open, target, type, generation: 0 })
+  if (session.current.open !== open || session.current.target !== target || session.current.type !== type) {
+    session.current = { open, target, type, generation: session.current.generation + 1 }
+  }
 
 	useEffect(() => {
 		onCommitRef.current = onCommit
-	}, [onCommit])
+    onSettledRef.current = onSettled
+	}, [onCommit, onSettled])
 
   // reset when reopened
   useEffect(() => {
@@ -92,9 +101,10 @@ export function TaskRunnerDialog({
 		setAborting(false)
       setAbortRequested(false)
 		committedTaskId.current = ''
+      settledTaskId.current = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, target, type])
 
   useEffect(() => {
     if (!open || !taskId) return
@@ -118,6 +128,12 @@ export function TaskRunnerDialog({
 		}
 		if (['completed', 'failed', 'timed_out', 'aborted'].includes(task.status)) {
           stopEvents()
+          if (settledTaskId.current !== task.id) {
+            settledTaskId.current = task.id
+            void onSettledRef.current?.().catch((cause: unknown) => {
+              if (!controller.signal.aborted) setStatusFailure(cause instanceof Error ? cause.message : 'Unable to refresh resource state')
+            })
+          }
           return
         }
       } catch (cause: unknown) {
@@ -139,13 +155,15 @@ export function TaskRunnerDialog({
       stopEvents()
       if (timer) clearTimeout(timer)
     }
-  }, [getTask, onDispatch, open, steps, taskId, watchTaskEvents])
+  }, [getTask, open, target, type, taskId, watchTaskEvents])
 
   function start() {
+    const generation = session.current.generation
     setPhase('running')
     setFailure('')
     void onDispatch().then(
       (id) => {
+        if (session.current.generation !== generation) return
         if (!id) {
           setTaskStatus('not_required')
           setPhase('dispatched')
@@ -156,6 +174,7 @@ export function TaskRunnerDialog({
         setPhase('dispatched')
       },
       (cause: unknown) => {
+        if (session.current.generation !== generation) return
         setFailure(cause instanceof Error ? cause.message : 'The Controller rejected the request')
         setPhase('failed')
       },
@@ -164,16 +183,18 @@ export function TaskRunnerDialog({
 
   function abort() {
     if (!taskId || aborting || abortRequested) return
+    const generation = session.current.generation
     setAborting(true)
     setStatusFailure('')
     void abortTask(taskId)
       .then(
-        () => setAbortRequested(true),
+        () => { if (session.current.generation === generation) setAbortRequested(true) },
         (cause: unknown) => {
+          if (session.current.generation !== generation) return
           setStatusFailure(cause instanceof Error ? cause.message : 'The Controller rejected the abort')
         },
       )
-      .finally(() => setAborting(false))
+      .finally(() => { if (session.current.generation === generation) setAborting(false) })
   }
 
   const canStart = confirmText ? typed === confirmText : true
@@ -255,7 +276,7 @@ export function TaskRunnerDialog({
             {failure && <p className="mt-1 text-xs text-destructive">{failure}</p>}
             {abortRequested && taskInFlight && <p className="mt-1 text-xs text-muted-foreground">Abort requested; waiting for the Controller to confirm the outcome.</p>}
             {statusFailure && (
-              <p className="mt-1 text-xs text-warning">Task dispatched; status unavailable: {statusFailure}</p>
+              <p className="mt-1 text-xs text-warning">Unable to refresh Task or resource state: {statusFailure}</p>
             )}
           </div>
         </div>

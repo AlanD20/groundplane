@@ -8,9 +8,10 @@ import { StatusDot } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TaskDetailDrawer as AuthoritativeTaskDrawer } from "@/components/common/task-detail-drawer";
+import { TaskPagination } from "./task-pagination";
 import type { ActivityEntry, Environment, TaskJournalScope } from "@/lib/types";
 
-// ---- Tasks: the environment's live task queue ----
+// Paginated Environment task history.
 // Compact list — click a task to open the detail drawer with the full
 // procedure and controls (abort, retry).
 export function TasksCard({ env }: { env: Environment }) {
@@ -69,7 +70,7 @@ export function TasksCard({ env }: { env: Environment }) {
         </CardTitle>
         <div className="flex items-center gap-2">
           <Badge variant={running > 0 ? "success" : "muted"}>
-            {running > 0 ? <>{running} in-flight</> : "idle"}
+            {running > 0 ? <>{running} in-flight on this page</> : "No in-flight tasks on this page"}
           </Badge>
           <Button
             variant="outline"
@@ -84,10 +85,10 @@ export function TasksCard({ env }: { env: Environment }) {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            The live task queue — the same stream the Agent pulls from. Click a
-            task to open its details and controls.
+            Task history for this Environment. Filters apply to this page.
+            Click a task to open its details and controls.
           </p>
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
             {filters.map((f) => (
@@ -139,7 +140,7 @@ export function TasksCard({ env }: { env: Environment }) {
         )}
         {!journal.loading && visible.length === 0 ? (
           <div className="text-xs text-muted-foreground">
-            no tasks match this filter
+            No tasks on this page match this filter.
           </div>
         ) : (
           <div className="flex flex-col gap-1.5">
@@ -166,19 +167,7 @@ export function TasksCard({ env }: { env: Environment }) {
             ))}
           </div>
         )}
-        {journal.nextCursor && !journal.loadError && (
-          <Button
-            variant="outline"
-            disabled={journal.loading || journal.loadingMore}
-            onClick={() =>
-              void store
-                .loadTaskJournal("tasks", scope, journal.nextCursor!)
-                .catch(() => undefined)
-            }
-          >
-            {journal.loadingMore ? "Loading…" : "Load more"}
-          </Button>
-        )}
+        <TaskPagination scope={scope} surface="tasks" />
       </CardContent>
       {open && (
         <AuthoritativeTaskDrawer

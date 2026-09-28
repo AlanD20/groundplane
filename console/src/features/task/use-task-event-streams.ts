@@ -15,9 +15,7 @@ export function useTaskEventStreams(): TaskEventActions & {
     for (const source of taskEventSources.current) source.close();
     taskEventSources.current.clear();
   }, []);
-  return {
-    closeTaskStreams,
-    watchTaskEvents: (taskId, onEvent, onMalformed) => {
+  const watchTaskEvents = useCallback<TaskEventActions['watchTaskEvents']>((taskId, onEvent, onMalformed) => {
       const source = new EventSource(
         `/api/v1/tasks/${encodeURIComponent(taskId)}/events`,
       );
@@ -35,6 +33,6 @@ export function useTaskEventStreams(): TaskEventActions & {
         }
       };
       return close;
-    },
-  };
+    }, []);
+  return { closeTaskStreams, watchTaskEvents };
 }

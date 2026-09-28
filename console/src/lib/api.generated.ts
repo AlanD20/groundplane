@@ -718,6 +718,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List images in the local Agent host Docker daemon */
+        get: operations["image.list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/images/fetch": {
         parameters: {
             query?: never;
@@ -727,9 +744,26 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Fetch selected private-registry content into host Docker without deploying */
+        /** Fetch selected public or GP private-registry content into host Docker without deploying */
         post: operations["image.fetch"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/images/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an unreferenced host image without force or pruning */
+        delete: operations["image.remove"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2008,6 +2042,8 @@ export interface components {
              * @example /api/v1/DeployRequest.json
              */
             readonly $schema?: string;
+            /** @description Host-local registry reference for this Release only; mutually exclusive with tag */
+            image?: string;
             on_failure?: string;
             strategy?: string;
             tag?: string;
@@ -2261,6 +2297,18 @@ export interface components {
             node: string;
             status: string;
         };
+        HostImage: {
+            /** Format: int64 */
+            containers: number;
+            created_at: string;
+            digests: string[];
+            id: string;
+            /** @description Empty when current observation permits removal; admission and execution recheck protection */
+            removal_blocked: string;
+            /** Format: int64 */
+            size_bytes: number;
+            tags: string[];
+        };
         HostResource: {
             total: string;
             used: string;
@@ -2287,8 +2335,18 @@ export interface components {
              * @example /api/v1/ImageFetchRequest.json
              */
             readonly $schema?: string;
-            /** @description Explicit tag or SHA-256 digest in the managed private registry */
+            /** @description Explicit tag or SHA-256 digest in a public registry or GP's managed private registry */
             image: string;
+        };
+        ImageList: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/ImageList.json
+             */
+            readonly $schema?: string;
+            images: components["schemas"]["HostImage"][];
+            observed_at: string;
         };
         LogEvent: {
             container_id: string;
@@ -5437,6 +5495,35 @@ export interface operations {
             };
         };
     };
+    "image.list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageList"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "image.fetch": {
         parameters: {
             query?: never;
@@ -5460,6 +5547,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageFetchAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "image.remove": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
                 };
             };
             /** @description Error */

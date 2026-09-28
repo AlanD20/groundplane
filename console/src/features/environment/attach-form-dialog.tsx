@@ -11,13 +11,18 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 
 export function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open: boolean; onOpenChange: (v: boolean) => void }) {
+  return open ? <AttachForm key={env.id} env={env} open onOpenChange={onOpenChange} /> : null
+}
+
+function AttachForm({ env, open, onOpenChange }: { env: Environment; open: boolean; onOpenChange: (v: boolean) => void }) {
   const store = useStore()
   const available = store.backingProjects.filter((g) => {
     const service = g.environments?.[0]?.services[0]
     return service?.runtimeIntent === 'running'
   })
   const [gid, setGid] = useState(available[0]?.id ?? '')
-  const [service, setService] = useState(env.services[0]?.name ?? '')
+  const [service, setService] = useState(env.services[0]?.id ?? '')
+  const consumer = env.services.find(candidate => candidate.id === service)
   const [credentialMode, setCredentialMode] = useState<'new' | 'existing'>('new')
   const [credentialAttachId, setCredentialAttachId] = useState('')
   const [grants, setGrants] = useState<string[]>([])
@@ -90,7 +95,7 @@ export function AttachFormDialog({ env, open, onOpenChange }: { env: Environment
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={service ? `${service}-db` : 'api-db'}
+              placeholder={consumer ? `${consumer.name}-db` : 'api-db'}
               className="font-mono"
             />
             {attachName && !custom && needsDatabase && (
@@ -143,7 +148,7 @@ export function AttachFormDialog({ env, open, onOpenChange }: { env: Environment
               value={service}
               onValueChange={setService}
               options={env.services.length > 0
-                ? env.services.map((candidate) => ({ value: candidate.name, label: candidate.name }))
+                ? env.services.map((candidate) => ({ value: candidate.id, label: candidate.name }))
                 : [{ value: '', label: '— no services yet —' }]}
             />
           </div>
@@ -255,14 +260,14 @@ export function AttachFormDialog({ env, open, onOpenChange }: { env: Environment
           </Button>
           {saveError ? <p className="text-xs text-destructive">{saveError}</p> : null}
           <Button
-            disabled={saving || authenticationUnavailable || !gid || !attachName || !svc?.id || !service || (credentialMode === 'existing' && !credentialAttachId)}
+            disabled={saving || authenticationUnavailable || !available.some(candidate => candidate.id === gid) || !attachName || !svc?.id || !consumer || (credentialMode === 'existing' && !credentialOwners.some(owner => owner.id === credentialAttachId))}
             onClick={() => {
-              if (!svc?.id) return
+              if (!svc?.id || !consumer) return
               setSaving(true)
               setSaveError(undefined)
               void store
                 .addAttach(env.id, {
-                  serviceId: env.services.find((candidate) => candidate.name === service)?.id ?? service,
+                  serviceId: consumer.id,
                   backingServiceId: svc.id,
                   name: attachName,
                   credential: credentialMode === 'new'
@@ -272,7 +277,7 @@ export function AttachFormDialog({ env, open, onOpenChange }: { env: Environment
                 })
                 .then(() => {
                   onOpenChange(false)
-                  setService(env.services[0]?.name ?? '')
+                  setService(env.services[0]?.id ?? '')
                   setCredentialMode('new')
                   setCredentialAttachId('')
                   setGrants([])

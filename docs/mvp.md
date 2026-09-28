@@ -120,9 +120,12 @@ Workload Deploy resolves an image already present in the host Docker daemon.
 GP neither pulls nor builds workload images during Deploy. Historical operations
 use the captured local image id, not a mutable tag resolved again. Managed GP
 images are installation/release assets with their own immutable selection.
-An explicit image-fetch capability is accepted for local-registry delivery before
-Deploy; it is not an implicit Deploy side effect. See [Runners](features/runners.md)
-for its current implementation limits.
+Explicit image Fetch accepts public registries and GP's managed private registry
+before Deploy; it is not an implicit Deploy side effect. Host image inventory and
+protected removal are available through the Console, CLI and API. Removal must
+not invalidate container use, retained runtime, rollback or recovery authority,
+including a concurrent operation selecting that image. External private-registry
+credentials are out of scope. See [host images](features/platform.md#images).
 
 Services publish no host ports. Communication uses explicit Zone memberships,
 backing Attaches and declared Routes. Application DNS/provider policy and

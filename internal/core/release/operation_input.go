@@ -7,6 +7,7 @@ import (
 )
 
 type ServiceDeployInput struct {
+	Image     string
 	Tag       string
 	Strategy  Strategy
 	OnFailure OnFailure

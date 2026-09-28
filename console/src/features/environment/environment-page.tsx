@@ -94,7 +94,12 @@ export default function EnvironmentPage() {
         environment.services.map((service) => service.observation),
       ),
     ],
-    refreshEnvironment: store.refreshEnvironmentServices,
+    refreshEnvironment: async (environmentId, signal) => {
+      await store.refreshEnvironmentServices(environmentId, signal);
+      if (environmentId === env?.id) {
+        await store.refreshEnvironmentReleases(environmentId, signal);
+      }
+    },
   });
   if (!env || !project) {
     if (store.tenantsLoading || store.projectsLoading) {

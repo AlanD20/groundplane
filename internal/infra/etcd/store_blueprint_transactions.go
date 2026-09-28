@@ -11,7 +11,7 @@ func (s *store) TransactEnvironmentBlueprint(
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) (etcdstore.TransactionResult, error) {
-	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
+	if err := validateEnvironmentBlueprintTransactionBudget(etcdstore.ImageSelectionConditions(ctx, conditions), mutations); err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	return s.transact(ctx, conditions, mutations)
