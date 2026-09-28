@@ -44,8 +44,16 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 		for _, id := range contentIDs {
 			containers += uses[id]
 		}
+		tags, digests := []string{}, slices.Clone(image.RepoDigests)
+		for _, ref := range image.RepoTags {
+			if strings.Contains(ref, "@") {
+				digests = append(digests, ref)
+			} else {
+				tags = append(tags, ref)
+			}
+		}
 		result = append(result, imagefetch.LocalImage{
-			ID: image.ID, Tags: imageReferences(image.RepoTags), Digests: imageReferences(image.RepoDigests),
+			ID: image.ID, Tags: imageReferences(tags), Digests: imageReferences(digests),
 			SizeBytes: image.Size, Created: image.Created, Containers: containers, ContentIDs: contentIDs, RemovalBlocked: blocked,
 		})
 	}
