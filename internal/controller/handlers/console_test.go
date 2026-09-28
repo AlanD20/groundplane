@@ -124,6 +124,40 @@ func TestConsoleDispatcherRejectsNonCanonicalPathsBeforeRouting(t *testing.T) {
 	}
 }
 
+// IMG-02: the Console percent-encodes the image digest's colon. Dispatch must
+// reach the removal handler with the exact ID, without allowing path smuggling.
+func TestConsoleDispatcherAcceptsEncodedAPIImageID(t *testing.T) {
+	server := consoleTestServer(consoleTestFS())
+	id := "sha256:" + strings.Repeat("a", 64)
+	called := 0
+	server.Mux.HandleFunc("DELETE /api/v1/images/{id}", func(w http.ResponseWriter, r *http.Request) {
+		called++
+		if r.PathValue("id") != id {
+			t.Fatalf("changed image ID: %q", r.PathValue("id"))
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
+	for _, spelling := range []string{id, strings.Replace(id, ":", "%3A", 1), strings.Replace(id, ":", "%3a", 1)} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodDelete, "/api/v1/images/"+spelling, nil)
+		request.Header.Set("Idempotency-Key", "encoded-image-removal")
+		server.requestHandler().ServeHTTP(response, request)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("%s: %d %s", spelling, response.Code, response.Body.String())
+		}
+	}
+	for _, suffix := range []string{"sha256%253A" + strings.Repeat("a", 64), "a%2fb", "a%5cb", "%2e%2e", "a%00b"} {
+		response := httptest.NewRecorder()
+		server.requestHandler().ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/images/"+suffix, nil))
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("unsafe path %q: %d", suffix, response.Code)
+		}
+	}
+	if called != 3 {
+		t.Fatalf("unexpected removal dispatch count: %d", called)
+	}
+}
+
 // Rationale: exact files and HEAD must use only embedded byte metadata, the
 // closed MIME map, and the cache policy justified by Vite's locked hash form.
 func TestConsoleServesExactFilesWithDeterministicHeaders(t *testing.T) {

@@ -218,9 +218,9 @@ export function TaskRunnerDialog({
         {description && <DialogDescription>{description}</DialogDescription>}
       </DialogHeader>
 
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
-        <span className="text-muted-foreground">Target</span>
-        <code className="font-mono text-foreground">{target}</code>
+      <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs">
+        <span className="shrink-0 text-muted-foreground">Target</span>
+        <code className="min-w-0 break-all font-mono text-foreground">{target}</code>
       </div>
 
       {phase === 'review' && (
@@ -245,7 +245,7 @@ export function TaskRunnerDialog({
                 <Label htmlFor="task-confirm">Type the required value to confirm</Label>
                 <CopyButton value={confirmText} label="copy required value" />
               </div>
-              <code className="select-all rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-xs text-foreground">
+              <code className="min-w-0 select-all break-all rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-xs text-foreground">
                 {confirmText}
               </code>
               <Input id="task-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus placeholder={confirmText} />

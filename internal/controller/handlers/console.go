@@ -101,7 +101,11 @@ func canonicalConsolePath(r *http.Request) (string, bool) {
 	}
 	decoded := r.URL.Path
 	escaped := r.URL.EscapedPath()
-	if escaped == "" || escaped != (&url.URL{Path: decoded}).EscapedPath() {
+	validEscaping := escaped == (&url.URL{Path: decoded}).EscapedPath()
+	if controllerOwnsPath(decoded) {
+		validEscaping = validAPIPathEscaping(escaped)
+	}
+	if escaped == "" || !validEscaping {
 		return "", false
 	}
 	lowerDecoded := strings.ToLower(decoded)
@@ -123,6 +127,19 @@ func canonicalConsolePath(r *http.Request) (string, bool) {
 		}
 	}
 	return assetPath, true
+}
+
+// API path parameters use segment encoding (for example sha256%3A...), not
+// static-file spelling. Accept it without permitting encoded path separators,
+// double decoding, or bypassing the decoded-path checks above.
+func validAPIPathEscaping(escaped string) bool {
+	for _, segment := range strings.Split(escaped, "/") {
+		value, err := url.PathUnescape(segment)
+		if err != nil || strings.ContainsAny(value, "/\\\x00%") {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Server) serveConsole(w http.ResponseWriter, r *http.Request, assetPath string) {
