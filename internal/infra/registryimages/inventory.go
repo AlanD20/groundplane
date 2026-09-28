@@ -7,9 +7,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
-	"github.com/AlanD20/groundplane/internal/common/workloadimage"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/containerd/errdefs"
 	"github.com/moby/moby/client"
 )
 
@@ -33,9 +31,6 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 	for _, image := range images.Items {
 		contentIDs := []string{image.ID}
 		blocked := ""
-		if len(imageReferences(image.RepoTags)) > 1 || len(imageReferences(image.RepoDigests)) > 1 {
-			blocked = "Docker refuses non-force removal of this image because it has multiple tags or repository references"
-		}
 		if image.Descriptor != nil && strings.Contains(image.Descriptor.MediaType, "index") &&
 			len(image.Manifests) == 0 {
 			blocked = "Docker did not report this index's child image identities"
@@ -43,6 +38,8 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 		for _, manifest := range image.Manifests {
 			contentIDs = append(contentIDs, manifest.ID)
 		}
+		slices.Sort(contentIDs)
+		contentIDs = slices.Compact(contentIDs)
 		containers := 0
 		for _, id := range contentIDs {
 			containers += uses[id]
@@ -54,32 +51,6 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 	}
 	slices.SortFunc(result, func(a, b imagefetch.LocalImage) int { return strings.Compare(a.ID, b.ID) })
 	return result, nil
-}
-
-func (Local) Remove(ctx context.Context, id string) error {
-	if !workloadimage.LocalIDValid(id) {
-		return errs.New(errs.KindValidationFailed, "image removal requires a full local image ID")
-	}
-	engine, err := client.New(client.WithHost("unix:///var/run/docker.sock"))
-	if err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	// Never force, untag by mutable name, or prune unrelated children.
-	_, removeErr := engine.ImageRemove(ctx, id, client.ImageRemoveOptions{Force: false, PruneChildren: false})
-	closeErr := engine.Close()
-	if errdefs.IsNotFound(removeErr) {
-		removeErr = nil
-	}
-	if errdefs.IsConflict(removeErr) && closeErr == nil {
-		return errs.New(
-			errs.KindResourceInUse,
-			"Docker protects this image because it has containers, dependent images or multiple references",
-		)
-	}
-	if err := errors.Join(removeErr, closeErr); err != nil {
-		return errs.Wrap(errs.KindInternal, err)
-	}
-	return nil
 }
 
 func imageReferences(values []string) []string {

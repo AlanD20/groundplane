@@ -53,6 +53,10 @@ Docker images, tags, digests, size and container count. This is a live daemon
 observation, not the registry catalog. Counts include stopped containers; zero
 does not mean an image can safely be removed. The MVP has one local Agent host.
 
+Each row represents one image ID. Names, compact tags, size and usage are shown
+in the list; open the image for full references, Fetch history and protection
+details. Several tags or repository names can point to that same image.
+
 Fetch accepts an explicit tag or SHA-256 digest from a public registry or GP's
 managed private registry. For example, `groundplane image fetch nginx:latest`.
 Public registries use anonymous access over HTTPS. Only GP's registry receives
@@ -84,12 +88,18 @@ Terminal Runner creation retains its Runner's exact image; retry requires a fres
 registration token. Active work, or a Task whose complete image dependencies
 cannot be determined, still blocks removal. Missing or corrupt retained inputs
 never authorize deletion.
-The Remove button remains visible when protected, with the reason beside it.
-Images with multiple tags or repository digests show that restriction before
-removal is offered. Docker may also refuse images with dependent images or
-references added after the inventory was read. There is no
-force removal, bulk prune or registry garbage collection. Registry content and
-application data are untouched.
+The Remove action deletes the selected image and its local tags together.
+Multiple tags alone do not block removal. GP resolves each repository through
+Docker's exact content descriptor, removes those references without force, and
+requires final exact-ID deletion to succeed. It never removes by mutable tag.
+An interrupted operation may remove some references before failing; Retry
+continues against the same image ID, not whatever a tag points to later.
+
+Protected images keep a disabled Remove action; open their details for the reason.
+Docker still rejects container/dependency conflicts. If Docker does not expose
+the content descriptor needed to remove aliases safely, only its ordinary
+exact-ID deletion is available. There is no force removal, bulk prune or registry
+garbage collection. Registry content and application data are untouched.
 
 During removal, new image selections are rejected and pre-removal selections
 cannot publish stale work. If Docker's deletion result is uncertain, GP keeps

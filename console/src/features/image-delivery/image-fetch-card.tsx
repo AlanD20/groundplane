@@ -3,7 +3,7 @@ import { Download } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { TaskLink } from '@/components/common/task-link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CopyButton } from '@/components/common/copy-button'
@@ -49,20 +49,18 @@ export function ImageFetchCard({ onSettled }: { onSettled?: () => Promise<void> 
   return (
     <>
       <Card id="images">
-        <CardHeader><CardTitle><h2 className="flex items-center gap-2"><Download className="size-4" /> Host images</h2></CardTitle></CardHeader>
-        <CardContent className="flex min-w-0 flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Fetch from Docker Hub, public GHCR or another public registry, or GP's private registry. External private-registry credentials are not supported. This does not edit a Service or deploy a Release.
-          </p>
-          <Button className="self-start" variant="outline" onClick={openFetch}><Download className="size-4" /> Fetch image</Button>
+        <CardContent className="flex min-w-0 flex-col gap-3 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-1"><h2 className="text-sm font-medium">Add an image</h2><p className="text-xs text-muted-foreground">Fetch from a public registry or GP's private registry. This does not deploy it.</p></div>
+            <Button variant="outline" onClick={openFetch}><Download className="size-4" /> Fetch image</Button>
+          </div>
           {accepted ? (
             <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border p-3 text-xs">
-              <p role="status">{completed ? 'Fetch completed. Use this immutable reference in Deploy.' : 'Fetch accepted. Wait for the Task to complete before deploying.'}</p>
+              <p role="status">{completed ? 'Fetch completed.' : 'Fetch requested. Open its Task for the current outcome.'}</p>
               <div className="flex min-w-0 items-start gap-2">
-                <code className="min-w-0 flex-1 break-all">{accepted.image}</code>
+                <span className="min-w-0 flex-1 truncate">{accepted.image.split('@')[0]}</span>
                 <CopyButton value={accepted.image} label="Copy image" />
               </div>
-              <code className="break-all">Task: {accepted.task_id}</code>
               <TaskLink taskId={accepted.task_id} />
             </div>
           ) : null}
