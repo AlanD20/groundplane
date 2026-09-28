@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { CopyButton } from '@/components/common/copy-button'
+import { TaskLink } from '@/components/common/task-link'
 import { useStore } from '@/lib/store'
 import type { TaskStep, TaskType } from '@/lib/types'
 import type { TaskResponse } from '@/features/task/api'
@@ -273,6 +274,7 @@ export function TaskRunnerDialog({
               {phase === 'done' && 'Task completed'}
             </p>
             {taskId && <code className="mt-1 block break-all text-xs text-muted-foreground">{taskId}</code>}
+            {taskId && <TaskLink taskId={taskId} onClick={() => onOpenChange(false)} />}
             {failure && <p className="mt-1 text-xs text-destructive">{failure}</p>}
             {abortRequested && taskInFlight && <p className="mt-1 text-xs text-muted-foreground">Abort requested; waiting for the Controller to confirm the outcome.</p>}
             {statusFailure && (

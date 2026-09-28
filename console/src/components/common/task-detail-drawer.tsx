@@ -10,19 +10,21 @@ import { Button } from '@/components/ui/button'
 import { DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { taskDetailActions } from '@/lib/task-detail-actions'
+import { requestTask } from '@/features/task/api'
+import { taskFromAPI } from '@/features/task/journal-model'
 import type { ActivityEntry, TaskJournalScope, TaskJournalSurface } from '@/lib/types'
 
 export function TaskDetailDrawer({
   entry,
+  taskId,
   scope,
   surface,
   onOpenChange,
 }: {
-  entry: ActivityEntry
   scope: TaskJournalScope
   surface: TaskJournalSurface
   onOpenChange: (open: boolean) => void
-}) {
+} & ({ entry: ActivityEntry; taskId?: never } | { taskId: string; entry?: never })) {
   const store = useStore()
   const [detail, setDetail] = useState<ActivityEntry | null>(null)
   const [detailLoading, setDetailLoading] = useState(true)
@@ -30,6 +32,7 @@ export function TaskDetailDrawer({
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionPending, setActionPending] = useState(false)
   const [reload, setReload] = useState(0)
+  const id = taskId ?? entry!.id
   const task = detail ?? entry
 
   useEffect(() => {
@@ -38,20 +41,27 @@ export function TaskDetailDrawer({
     setActionPending(false)
     setDetailLoading(true)
     setDetailError(null)
-    void store.getTaskJournalDetail(entry.id, controller.signal).then(
-      (loaded) => {
-        setDetail(loaded)
-        setDetailLoading(false)
-      },
-      (error: unknown) => {
+    setDetail(null)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      let terminal = false
+      try {
+        const loaded = taskFromAPI(await requestTask(id, controller.signal))
         if (controller.signal.aborted) return
-        setDetail(null)
-        setDetailLoading(false)
+        setDetail(loaded)
+        setDetailError(null)
+        terminal = ['completed', 'failed', 'timed_out', 'aborted'].includes(loaded.status)
+      } catch (error) {
+        if (controller.signal.aborted) return
         setDetailError(error instanceof Error ? error.message : 'Unable to load Task details')
-      },
-    )
-    return () => controller.abort()
-  }, [entry.id, reload])
+      } finally {
+        if (!controller.signal.aborted) setDetailLoading(false)
+      }
+      if (!terminal && !controller.signal.aborted) timer = setTimeout(() => void poll(), 1000)
+    }
+    void poll()
+    return () => { controller.abort(); if (timer) clearTimeout(timer) }
+  }, [id, reload])
 
   const actions = taskDetailActions(detail)
 
@@ -59,9 +69,9 @@ export function TaskDetailDrawer({
     setActionError(null)
     setActionPending(true)
     try {
-      if (action === 'abort') await store.abortTask(task.id)
-      else await store.retryTask(task.id)
-      onOpenChange(false)
+      if (action === 'abort') { await store.abortTask(id); setReload(value => value + 1) }
+      else { await store.retryTask(id); onOpenChange(false) }
+      setActionPending(false)
       void store.loadTaskJournal(surface, scope).catch(() => undefined)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : `Unable to ${action} Task`)
@@ -73,9 +83,9 @@ export function TaskDetailDrawer({
     <Drawer open onOpenChange={onOpenChange}>
       <DrawerContent>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ActivityIcon type={task.type} status={task.status} />
-            {task.title}
+          <DialogTitle className="flex min-w-0 items-start gap-2 break-all">
+            {task && <ActivityIcon type={task.type} status={task.status} />}
+            {task?.title ?? `Task ${id}`}
           </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
@@ -90,7 +100,7 @@ export function TaskDetailDrawer({
               <Button variant="outline" size="sm" onClick={() => setReload((value) => value + 1)}>Retry</Button>
             </div>
           )}
-          {detail && (
+          {detail && task && (
             <>
               <div className="flex flex-wrap gap-1.5">
                 <span className="rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[11px] text-muted-foreground">

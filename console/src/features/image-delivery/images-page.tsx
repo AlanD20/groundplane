@@ -13,6 +13,7 @@ import { ImageFetchCard } from './image-fetch-card'
 import { imageReferences, imageSize, type HostImage } from './api'
 import { useImageInventory } from './use-image-inventory'
 import { RemoveImageDialog } from './remove-image-dialog'
+import { TaskLink } from '@/components/common/task-link'
 
 export default function ImagesPage() {
   const { inventory, loading, error, refresh } = useImageInventory()
@@ -47,7 +48,7 @@ export default function ImagesPage() {
           <TableBody>{images.map(image => <TableRow key={image.id}>
             <TableCell className="max-w-lg"><div className="flex flex-col gap-2">{imageReferences(image).map(reference => <div key={reference} className="flex min-w-0 items-center gap-2"><code className="min-w-0 break-all text-xs">{reference}</code><CopyButton value={reference} label="Copy image reference" /></div>)}{imageReferences(image).length === 0 && <span className="text-muted-foreground">Untagged</span>}
               {image.fetches.length > 0 && <details className="text-xs"><summary className="cursor-pointer text-muted-foreground">Requested as {Array.from(new Set(image.fetches.map(fetch => fetch.requested))).join(', ')}</summary>
-                <div className="mt-2 flex flex-col gap-3">{image.fetches.map(fetch => <div key={fetch.task_id} className="flex flex-col gap-1"><code className="break-all">{fetch.requested} → {fetch.image}</code><div className="flex flex-wrap items-center gap-2"><StatusBadge status={fetch.status} label={fetch.status.replaceAll('_', ' ')} /><span className="text-muted-foreground">Requested {new Date(fetch.requested_at).toLocaleString()}</span></div><CopyButton value={`${fetch.requested} -> ${fetch.image}`} label="Copy requested tag and digest" /></div>)}<p className="text-muted-foreground">Retained Fetch attempts, not current Docker tags. Only completed Tasks confirm successful Fetch.</p></div>
+                <div className="mt-2 flex flex-col gap-3">{image.fetches.map(fetch => <div key={fetch.task_id} className="flex flex-col gap-1"><code className="break-all">{fetch.requested} → {fetch.image}</code><div className="flex flex-wrap items-center gap-2"><StatusBadge status={fetch.status} label={fetch.status.replaceAll('_', ' ')} /><span className="text-muted-foreground">Requested {new Date(fetch.requested_at).toLocaleString()}</span><TaskLink taskId={fetch.task_id} /></div><CopyButton value={`${fetch.requested} -> ${fetch.image}`} label="Copy requested tag and digest" /></div>)}<p className="text-muted-foreground">Retained Fetch attempts, not current Docker tags. Only completed Tasks confirm successful Fetch.</p></div>
               </details>}
             </div></TableCell>
             <TableCell><div className="flex items-center gap-1"><code title={image.id} className="text-xs">{image.id.replace('sha256:', '').slice(0, 12)}</code><CopyButton value={image.id} label="Copy image ID" /></div></TableCell>

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AppFrame } from '@/components/shell/app-frame'
+import { LinkedTask } from '@/features/task/task-access'
 
 const PlatformOverview = lazy(() => import('@/routes/platform/overview/page'))
 const BackingServices = lazy(() => import('@/routes/platform/backing-services/page'))
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/platform/overview" replace />} />
         </Routes>
       </Suspense>
+      <LinkedTask />
     </AppFrame>
   )
 }

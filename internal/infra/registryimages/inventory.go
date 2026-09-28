@@ -33,6 +33,9 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 	for _, image := range images.Items {
 		contentIDs := []string{image.ID}
 		blocked := ""
+		if len(imageReferences(image.RepoTags)) > 1 || len(imageReferences(image.RepoDigests)) > 1 {
+			blocked = "Docker refuses non-force removal of this image because it has multiple tags or repository references"
+		}
 		if image.Descriptor != nil && strings.Contains(image.Descriptor.MediaType, "index") &&
 			len(image.Manifests) == 0 {
 			blocked = "Docker did not report this index's child image identities"

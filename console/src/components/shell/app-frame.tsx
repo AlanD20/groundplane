@@ -2,6 +2,7 @@
 
 import { Brand } from './brand'
 import { ThemeToggle } from '@/components/common/theme-toggle'
+import { AcceptedTasks } from '@/features/task/task-access'
 
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -111,7 +112,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               <Topbar pathname={pathname} />
             </div>
           </div>
-          <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-7 sm:px-6 lg:px-9 console-content"><div className="console-page" key={pathname}>{children}</div></main>
+          <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-7 sm:px-6 lg:px-9 console-content"><AcceptedTasks /><div className="console-page" key={pathname}>{children}</div></main>
         </div>
       </div>
 

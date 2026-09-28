@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Download } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
+import { TaskLink } from '@/components/common/task-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -62,7 +63,7 @@ export function ImageFetchCard({ onSettled }: { onSettled?: () => Promise<void> 
                 <CopyButton value={accepted.image} label="Copy image" />
               </div>
               <code className="break-all">Task: {accepted.task_id}</code>
-              <Link to="/platform/activity" className="text-primary hover:underline">Open Activity to inspect, retry or abort the Task</Link>
+              <TaskLink taskId={accepted.task_id} />
             </div>
           ) : null}
         </CardContent>

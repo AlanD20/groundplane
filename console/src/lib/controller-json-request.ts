@@ -3,6 +3,7 @@ import {
   controllerResponseError,
 } from "./controller-request-errors";
 import { newULID } from "./utils";
+import { reportAcceptedTasks } from "@/features/task/accepted-tasks";
 
 export async function controllerRequest<Response>(
   path: string,
@@ -39,7 +40,9 @@ export async function controllerRequest<Response>(
   if (response.status !== expectedStatus) {
     throw await controllerResponseError(response, method, path);
   }
-  return (await response.json()) as Response;
+  const body: unknown = await response.json();
+  if (method !== "GET") reportAcceptedTasks(body);
+  return body as Response;
 }
 
 export function waitForRequest<T>(

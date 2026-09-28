@@ -1,4 +1,5 @@
 import type { operations } from "@/lib/api.generated";
+import { reportAcceptedTasks } from '@/features/task/accepted-tasks';
 import { controllerRequest } from "@/lib/controller-json-request";
 import {
   ControllerRequestError,
@@ -79,7 +80,9 @@ async function sendBlueprintApply(
   }
   if (response.status !== 202)
     throw await controllerResponseError(response, "PUT", path);
-  return (await response.json()) as BlueprintTaskAccepted;
+  const accepted = (await response.json()) as BlueprintTaskAccepted;
+  reportAcceptedTasks(accepted);
+  return accepted;
 }
 
 export async function resolvePendingBlueprintApply() {

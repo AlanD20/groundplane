@@ -1,6 +1,7 @@
 'use client'
 
 import { Select } from '@/components/ui/select'
+import { TaskLink } from '@/components/common/task-link'
 
 import { useEffect, useMemo, useState } from 'react'
 import { Cpu, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
@@ -87,7 +88,7 @@ export default function TenantRunnersPage() {
 
       {acceptedTaskId && (
         <div className="rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm">
-          Controller Task accepted: <span className="font-mono">{acceptedTaskId}</span>
+          Controller Task accepted: <TaskLink taskId={acceptedTaskId}>{acceptedTaskId}</TaskLink>
         </div>
       )}
 

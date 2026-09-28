@@ -85,7 +85,9 @@ registration token. Active work, or a Task whose complete image dependencies
 cannot be determined, still blocks removal. Missing or corrupt retained inputs
 never authorize deletion.
 The Remove button remains visible when protected, with the reason beside it.
-Docker may also refuse images with dependent images or multiple references. There is no
+Images with multiple tags or repository digests show that restriction before
+removal is offered. Docker may also refuse images with dependent images or
+references added after the inventory was read. There is no
 force removal, bulk prune or registry garbage collection. Registry content and
 application data are untouched.
 

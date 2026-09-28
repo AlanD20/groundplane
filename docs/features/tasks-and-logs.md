@@ -11,6 +11,13 @@ captured inputs, progress and an eventual completed, failed, timed-out or aborte
 outcome. Rename or deletion does not move its history to a different owner.
 Step completion is not Task completion.
 
+Every Console action that publishes a Task provides an **Open task** link as
+soon as its ID is known. Recent accepted Tasks remain linked above the current
+page when the action dialog closes or you navigate elsewhere in the Console.
+The link opens that exact Task, not a filtered history list; it can be copied or
+opened in another tab. The inspector refreshes pending/running status until the
+Task finishes. A rejected request without a Task ID has no Task to open.
+
 Task events resume by sequence. The latest 1,000 events are retained; each is
 bounded to 32 KiB. Sequence numbers never reset when older events are trimmed.
 An expired resume cursor needs a fresh snapshot. Trimming progress does not

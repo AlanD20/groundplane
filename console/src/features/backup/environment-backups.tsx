@@ -26,6 +26,7 @@ import {
   adapterSteps,
 } from "@/features/backup/environment-backup-projection";
 import { BackupPolicyDialog } from "@/features/backup/backup-policy-dialog";
+import { TaskLink } from '@/components/common/task-link';
 
 // ---- Backups ----
 
@@ -123,7 +124,7 @@ export function BackupsCard({ env }: { env: Environment }) {
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {runTaskId && (
                 <span className="text-muted-foreground">
-                  Task published: <code>{runTaskId}</code>
+                  Task published: <TaskLink taskId={runTaskId}>{runTaskId}</TaskLink>
                 </span>
               )}
               {runError && <span className="text-destructive">{runError}</span>}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
+import { TaskLink } from '@/components/common/task-link';
 
 import {
   useCallback,
@@ -247,7 +248,7 @@ export function BlueprintWorkspace({
           {pendingApply && (
             <div role="status" className="space-y-2 rounded-lg border border-warning/40 p-3 text-sm">
               <p>A Blueprint Apply is unresolved for Environment <code>{pendingApply.environmentId}</code>. Do not submit another Apply until the original Task settles.</p>
-              {pendingApply.taskId ? <code className="block break-all text-xs">Task {pendingApply.taskId}</code> : (
+              {pendingApply.taskId ? <TaskLink taskId={pendingApply.taskId}>{pendingApply.taskId}</TaskLink> : (
                 <Button size="sm" variant="outline" disabled={resolving} onClick={() => void resolveApply()}>
                   {resolving ? "Resolving…" : "Resolve original Apply"}
                 </Button>
