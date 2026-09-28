@@ -59,6 +59,13 @@ func newImageCmd() *cobra.Command {
 			}
 			rows := make([][]string, 0, len(inventory.Images))
 			for _, image := range inventory.Images {
+				fetches := make([]string, 0, len(image.Fetches))
+				for _, fetch := range image.Fetches {
+					fetches = append(
+						fetches,
+						fetch.Requested+" -> "+fetch.Image+" ("+string(fetch.Status)+", "+fetch.RequestedAt+")",
+					)
+				}
 				rows = append(
 					rows,
 					[]string{
@@ -68,11 +75,12 @@ func newImageCmd() *cobra.Command {
 						strconv.FormatInt(image.SizeBytes, 10),
 						strconv.Itoa(image.Containers),
 						image.RemovalBlocked,
+						strings.Join(fetches, ", "),
 					},
 				)
 			}
 			return app.Out.Render(
-				[]string{"ID", "TAGS", "DIGESTS", "BYTES", "CONTAINERS", "REMOVAL BLOCKED"},
+				[]string{"ID", "TAGS", "DIGESTS", "BYTES", "CONTAINERS", "REMOVAL BLOCKED", "FETCH HISTORY"},
 				rows,
 				inventory,
 			)

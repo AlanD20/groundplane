@@ -36,7 +36,7 @@ func ListVisibleIndex[T any](
 	lastVisibleKey := ""
 	for {
 		indexed, rangeErr := store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: prefix, StartExclusive: start, Limit: int64(etcdstore.MaximumPageLimit), Revision: revision,
+			Prefix: prefix, StartExclusive: start, Limit: int64(etcdstore.MaximumPageLimit), Revision: revision, Descending: request.Descending,
 		})
 		if rangeErr != nil {
 			return etcdstore.Page[T]{}, rangeErr

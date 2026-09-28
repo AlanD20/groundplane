@@ -7,13 +7,22 @@ type ImageFetchRequest struct {
 // HostImage is a live local-daemon observation. Containers includes stopped
 // containers; it is not a claim that the image is safe to delete.
 type HostImage struct {
-	ID             string   `json:"id"`
-	Tags           []string `json:"tags" nullable:"false"`
-	Digests        []string `json:"digests" nullable:"false"`
-	SizeBytes      int64    `json:"size_bytes"`
-	CreatedAt      string   `json:"created_at"`
-	Containers     int      `json:"containers"`
-	RemovalBlocked string   `json:"removal_blocked" doc:"Empty when current observation permits removal; admission and execution recheck protection"`
+	ID             string             `json:"id"`
+	Tags           []string           `json:"tags" nullable:"false"`
+	Digests        []string           `json:"digests" nullable:"false"`
+	SizeBytes      int64              `json:"size_bytes"`
+	CreatedAt      string             `json:"created_at"`
+	Containers     int                `json:"containers"`
+	RemovalBlocked string             `json:"removal_blocked" doc:"Empty when current observation permits removal; admission and execution recheck protection"`
+	Fetches        []ImageFetchRecord `json:"fetches" nullable:"false" doc:"Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags"`
+}
+
+type ImageFetchRecord struct {
+	Requested   string     `json:"requested"`
+	Image       string     `json:"image" doc:"Immutable manifest reference selected for this Fetch"`
+	TaskID      string     `json:"task_id"`
+	RequestedAt string     `json:"requested_at"`
+	Status      TaskStatus `json:"status" enum:"pending,running,completed,failed,aborted,timed_out"`
 }
 
 type ImageList struct {

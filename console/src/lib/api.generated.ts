@@ -2302,6 +2302,8 @@ export interface components {
             containers: number;
             created_at: string;
             digests: string[];
+            /** @description Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags */
+            fetches: components["schemas"]["ImageFetchRecord"][];
             id: string;
             /** @description Empty when current observation permits removal; admission and execution recheck protection */
             removal_blocked: string;
@@ -2326,6 +2328,15 @@ export interface components {
             config_digest: string;
             /** @description Immutable registry reference selected for this operation */
             image: string;
+            task_id: string;
+        };
+        ImageFetchRecord: {
+            /** @description Immutable manifest reference selected for this Fetch */
+            image: string;
+            requested: string;
+            requested_at: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "aborted" | "timed_out";
             task_id: string;
         };
         ImageFetchRequest: {

@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -20,6 +22,7 @@ import (
 type imageRetention struct {
 	references map[string]string
 	busy       string
+	fetches    []retainedFetch
 }
 
 // Read all authority at one MVCC revision. Pending/failed host work is a
@@ -64,8 +67,34 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 			return err
 		}
 		if task.OperationID != operationID && task.Status != taskjournal.TaskStatusCompleted && task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceImage {
-			result.busy = fmt.Sprintf("Task %s may still execute or recover; finish it or let its retention expire", task.ID)
+			// Terminal Runner creation requires a fresh token to retry. Protect
+			// its exact image through the retained Runner below, not every image
+			// through the old attempt. Containers remain independently protected.
+			terminalRunnerCreate := task.Executor == taskjournal.TaskExecutorController &&
+				task.Type == taskjournal.TaskCreate && task.Params[taskjournal.TaskResourceKindParam] == runners.TaskResourceRunner &&
+				taskjournal.IsTerminalTaskStatus(task.Status)
+			if !terminalRunnerCreate {
+				result.busy = fmt.Sprintf("Task %s may still execute or recover; finish it or let its retention expire", task.ID)
+			}
 		}
+		if task.Type == taskjournal.TaskFetch &&
+			task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceImage {
+			plan, err := imagefetch.Decode(task.Params[taskjournal.TaskImageFetchInputParam], task.PlanHash)
+			if err != nil {
+				return err
+			}
+			result.fetches = append(result.fetches, retainedFetch{plan: plan, taskID: task.ID, requestedAt: task.CreatedAt, status: task.Status})
+		}
+		return nil
+	}); err != nil {
+		return result, err
+	}
+	if err := read(runners.RunnerKey(""), func(value keyvalue.KeyValue) error {
+		runner, err := runners.DecodeRunnerDesiredRecord(value.Value)
+		if err != nil {
+			return err
+		}
+		result.retain(runner.ImageRef, "Retained Runner "+runner.ID)
 		return nil
 	}); err != nil {
 		return result, err
@@ -80,9 +109,9 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 			return err
 		}
 		reason := "Retained Release " + input.ReleaseID
-		result.references[input.CandidateWorkload.LocalImageID] = reason
+		result.retain(input.CandidateWorkload.LocalImageID, reason)
 		if input.PriorWorkload != nil {
-			result.references[input.PriorWorkload.LocalImageID] = reason
+			result.retain(input.PriorWorkload.LocalImageID, reason)
 		}
 		if err := result.artifact(input.Projection.ComposeArtifact, reason); err != nil {
 			return err
@@ -100,7 +129,7 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 			if err := proto.Unmarshal(hook.RunnerSnapshot, &snapshot); err != nil {
 				return errs.Wrap(errs.KindInternal, err)
 			}
-			result.references[snapshot.GetLocalImageId()] = reason
+			result.retain(snapshot.GetLocalImageId(), reason)
 		}
 		return nil
 	}); err != nil {
@@ -128,7 +157,7 @@ func (retention imageRetention) artifact(value []byte, reason string) error {
 	}
 	for _, service := range artifact.GetServices() {
 		if reference := service.GetImageReference(); strings.TrimSpace(reference) != "" {
-			retention.references[reference] = reason
+			retention.retain(reference, reason)
 		}
 	}
 	return nil

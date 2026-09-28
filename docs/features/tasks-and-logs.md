@@ -17,7 +17,8 @@ An expired resume cursor needs a fresh snapshot. Trimming progress does not
 discard the Task's failure or recovery evidence. Terminal history has a 90-day
 retention boundary.
 
-Activity and Task lists use the same ordering, scope filters and cursor semantics.
+Activity and Task lists show newest-created Tasks first (descending Task ID),
+with the same scope filters and fixed-revision cursor semantics on every page.
 There is no general Component or execution-target Task filter.
 
 ## Retry

@@ -346,6 +346,36 @@ func (e EnvironmentBlueprintChangeAction) Valid() bool {
 	}
 }
 
+// Defines values for ImageFetchRecordStatus.
+const (
+	ImageFetchRecordStatusAborted   ImageFetchRecordStatus = "aborted"
+	ImageFetchRecordStatusCompleted ImageFetchRecordStatus = "completed"
+	ImageFetchRecordStatusFailed    ImageFetchRecordStatus = "failed"
+	ImageFetchRecordStatusPending   ImageFetchRecordStatus = "pending"
+	ImageFetchRecordStatusRunning   ImageFetchRecordStatus = "running"
+	ImageFetchRecordStatusTimedOut  ImageFetchRecordStatus = "timed_out"
+)
+
+// Valid indicates whether the value is a known member of the ImageFetchRecordStatus enum.
+func (e ImageFetchRecordStatus) Valid() bool {
+	switch e {
+	case ImageFetchRecordStatusAborted:
+		return true
+	case ImageFetchRecordStatusCompleted:
+		return true
+	case ImageFetchRecordStatusFailed:
+		return true
+	case ImageFetchRecordStatusPending:
+		return true
+	case ImageFetchRecordStatusRunning:
+		return true
+	case ImageFetchRecordStatusTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for LogEventSlot.
 const (
 	Blue      LogEventSlot = "blue"
@@ -1710,7 +1740,10 @@ type HostImage struct {
 	Containers int64    `json:"containers"`
 	CreatedAt  string   `json:"created_at"`
 	Digests    []string `json:"digests"`
-	Id         string   `json:"id"`
+
+	// Fetches Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags
+	Fetches []ImageFetchRecord `json:"fetches"`
+	Id      string             `json:"id"`
 
 	// RemovalBlocked Empty when current observation permits removal; admission and execution recheck protection
 	RemovalBlocked string   `json:"removal_blocked"`
@@ -1739,6 +1772,19 @@ type ImageFetchAccepted struct {
 	Image  string `json:"image"`
 	TaskId string `json:"task_id"`
 }
+
+// ImageFetchRecord defines model for ImageFetchRecord.
+type ImageFetchRecord struct {
+	// Image Immutable manifest reference selected for this Fetch
+	Image       string                 `json:"image"`
+	Requested   string                 `json:"requested"`
+	RequestedAt string                 `json:"requested_at"`
+	Status      ImageFetchRecordStatus `json:"status"`
+	TaskId      string                 `json:"task_id"`
+}
+
+// ImageFetchRecordStatus defines model for ImageFetchRecord.Status.
+type ImageFetchRecordStatus string
 
 // ImageFetchRequest defines model for ImageFetchRequest.
 type ImageFetchRequest struct {

@@ -36,6 +36,7 @@ func (service *Service) ListImages(ctx context.Context) (apiTypes.ImageList, err
 			ID: image.ID, Tags: image.Tags, Digests: image.Digests, SizeBytes: image.SizeBytes,
 			CreatedAt: time.Unix(image.Created, 0).UTC().Format(time.RFC3339), Containers: image.Containers,
 			RemovalBlocked: removalReason(image, retention),
+			Fetches:        retention.history(image),
 		})
 	}
 	return result, nil
@@ -49,7 +50,7 @@ func removalReason(image imagefetch.LocalImage, retention imageRetention) string
 		return image.RemovalBlocked
 	}
 	for _, value := range append(append([]string{image.ID}, image.ContentIDs...), image.Digests...) {
-		if reason := retention.references[value]; reason != "" {
+		if reason := retention.references[canonicalImageReference(value)]; reason != "" {
 			return reason
 		}
 	}

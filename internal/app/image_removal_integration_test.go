@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/imagefence"
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -18,6 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -41,6 +43,107 @@ func (engine *removalEngine) Remove(context.Context, string) error {
 	}
 	engine.images = nil
 	return nil
+}
+
+// IMG-02: a terminal Runner create must not block unrelated image deletion.
+// Its retained Runner image, in-flight work and leftover containers must remain
+// protected, including the Runner's fresh-token retry path.
+func TestImageRemovalDistinguishesTerminalRunnerCreationFromLiveWork(t *testing.T) {
+	for _, status := range []taskjournal.TaskStatus{
+		taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning,
+		taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			store := newMemoryHierarchyStore()
+			store.revision = 1
+			tasks, err := etcd.NewTaskRepository(store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now().UTC()
+			task := etcd.TaskRecord{
+				ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation), PlanID: ids.New(ids.KindPlan),
+				PlanHash: strings.Repeat("a", 64), RenderGeneration: 1, IdempotencyKey: "runner-create",
+				Owner: taskjournal.TaskOwner{
+					WorkspaceType: taskjournal.TaskWorkspaceTenant,
+					TenantID:      ids.New(ids.KindTenant),
+				},
+				Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorController,
+				Type: taskjournal.TaskCreate, Target: ids.New(ids.KindRunner),
+				Params: map[string]string{
+					taskjournal.TaskResourceKindParam:           runners.TaskResourceRunner,
+					runners.RunnerRegistrationTokenPresentParam: "true",
+				},
+				Steps:  []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}},
+				Status: taskjournal.TaskStatusPending, TimeoutSeconds: 300, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
+			}
+			if status != taskjournal.TaskStatusPending {
+				task, err = etcd.TransitionTaskStatus(
+					task,
+					taskjournal.TaskStatusPending,
+					taskjournal.TaskStatusRunning,
+					now.Add(time.Second),
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if status != taskjournal.TaskStatusRunning {
+					task, err = etcd.TransitionTaskStatus(
+						task,
+						taskjournal.TaskStatusRunning,
+						status,
+						now.Add(2*time.Second),
+					)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			encoded, err := etcd.EncodeTaskRecord(task)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.Transact(t.Context(), nil, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: encoded}}); err != nil {
+				t.Fatal(err)
+			}
+			engine := &removalEngine{images: []imagefetch.LocalImage{
+				{ID: "sha256:" + strings.Repeat("b", 64)},
+				{ID: "sha256:" + strings.Repeat("c", 64), Containers: 1},
+				{
+					ID:      "sha256:" + strings.Repeat("d", 64),
+					Digests: []string{"runner@sha256:" + strings.Repeat("d", 64)},
+				},
+			}}
+			desired := runners.RunnerDesiredRecord{
+				ID: task.Target, Slug: "image-guard", OwnerKind: runners.RunnerOwnerTenant,
+				OwnerID: task.Owner.TenantID, TenantID: task.Owner.TenantID,
+				GitHubURL: "https://github.com/example", ImageRef: "docker.io/library/runner@sha256:" + strings.Repeat("d", 64),
+			}
+			runnerValue, err := runners.EncodeRunnerDesiredRecord(desired)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.Transact(t.Context(), nil, []keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: runners.RunnerKey(desired.ID), Value: runnerValue}}); err != nil {
+				t.Fatal(err)
+			}
+			service := removalServiceFactory(t, store, tasks, engine)()
+			inventory, err := service.ListImages(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			terminal := taskjournal.IsTerminalTaskStatus(status)
+			if (inventory.Images[0].RemovalBlocked == "") != terminal || inventory.Images[1].RemovalBlocked == "" {
+				t.Fatalf("incorrect protection: %#v", inventory.Images)
+			}
+			if inventory.Images[2].RemovalBlocked != "Retained Runner "+desired.ID {
+				t.Fatalf("retained Runner image lost protection: %#v", inventory.Images[2])
+			}
+			_, err = service.RemoveImage(t.Context(), engine.images[0].ID, "remove-after-runner")
+			if (err == nil) != terminal {
+				t.Fatalf("removal admission: %v", err)
+			}
+		})
+	}
 }
 
 type unusedImageResolver struct{ calls int }

@@ -46,17 +46,17 @@ func TestTaskRepositoryListsImmutableOwnerScopesAtFixedRevision(t *testing.T) {
 		t,
 		repository,
 		TaskListScope{Kind: TaskListScopeGlobal},
-		platform.ID,
-		tenant.ID,
 		environment.ID,
+		tenant.ID,
+		platform.ID,
 	)
 	assertScopedTaskIDs(t, repository, TaskListScope{Kind: TaskListScopePlatformWorkspace}, platform.ID)
 	assertScopedTaskIDs(
 		t,
 		repository,
 		TaskListScope{Kind: TaskListScopeTenantWorkspace, ID: tenantID},
-		tenant.ID,
 		environment.ID,
+		tenant.ID,
 	)
 	assertScopedTaskIDs(
 		t,
@@ -75,7 +75,7 @@ func TestTaskRepositoryListsImmutableOwnerScopesAtFixedRevision(t *testing.T) {
 		ctx,
 		TaskListScope{Kind: TaskListScopeTenantWorkspace, ID: tenantID}, testkeyvalue.PageRequest{Limit: 1},
 	)
-	if err != nil || len(first.Items) != 1 || first.Items[0].Record.ID != tenant.ID || first.NextCursor == "" {
+	if err != nil || len(first.Items) != 1 || first.Items[0].Record.ID != environment.ID || first.NextCursor == "" {
 		t.Fatalf("tenant first page = %#v, %v", first, err)
 	}
 	late := scopedTaskRecord(at.Add(3*time.Second), 54, testtaskjournal.TaskOwner{
@@ -91,7 +91,7 @@ func TestTaskRepositoryListsImmutableOwnerScopesAtFixedRevision(t *testing.T) {
 		},
 		testkeyvalue.PageRequest{Limit: 1, Cursor: first.NextCursor},
 	)
-	if err != nil || len(second.Items) != 1 || second.Items[0].Record.ID != environment.ID ||
+	if err != nil || len(second.Items) != 1 || second.Items[0].Record.ID != tenant.ID ||
 		second.Revision != first.Revision || second.NextCursor != "" {
 		t.Fatalf("tenant second page = %#v, %v", second, err)
 	}
@@ -242,7 +242,7 @@ func TestTaskRepositoryScopedListsBatchDefaultAndMaximumPages(t *testing.T) {
 			t.Fatalf("maximum page for %#v = %d items, %v", scope, len(page.Items), err)
 		}
 		for index := 1; index < len(page.Items); index++ {
-			if page.Items[index-1].Record.ID >= page.Items[index].Record.ID {
+			if page.Items[index-1].Record.ID <= page.Items[index].Record.ID {
 				t.Fatalf("maximum page for %#v is not in Task-id order", scope)
 			}
 		}

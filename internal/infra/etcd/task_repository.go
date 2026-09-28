@@ -299,7 +299,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		}
 		page, err := recordquery.ListFilteredPrimary(
 			ctx, repository.store, "tasks", "global", "-", taskjournal.TaskPrefix, ids.KindTask,
-			request, DecodeTaskRecord, identity, visibleOperatorTask,
+			request.NewestFirst(), DecodeTaskRecord, identity, visibleOperatorTask,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopePlatformWorkspace:
@@ -311,7 +311,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		}
 		page, err := recordquery.ListVisibleIndex(
 			ctx, repository.store, "tasks", "workspace", "platform", taskjournal.TaskWorkspacePlatformPrefix,
-			taskjournal.TaskStorageKey, ids.KindTask, request, DecodeTaskRecord, identity,
+			taskjournal.TaskStorageKey, ids.KindTask, request.NewestFirst(), DecodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform },
 			visibleOperatorTask,
 		)
@@ -325,8 +325,8 @@ func (repository *TaskRepository) ListTasksByScope(
 		}
 		page, err := recordquery.ListVisibleIndex(
 			ctx, repository.store, "tasks", "workspace", scope.ID,
-			taskjournal.TaskWorkspaceTenantPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
-			DecodeTaskRecord, identity,
+			taskjournal.TaskWorkspaceTenantPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask,
+			request.NewestFirst(), DecodeTaskRecord, identity,
 			func(record TaskRecord) bool {
 				return record.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant &&
 					record.Owner.TenantID == scope.ID
@@ -346,7 +346,7 @@ func (repository *TaskRepository) ListTasksByScope(
 			scope.ID,
 			taskjournal.TaskPrefix,
 			ids.KindTask,
-			request,
+			request.NewestFirst(),
 			DecodeTaskRecord,
 			identity,
 			func(record TaskRecord) bool { return visibleOperatorTask(record) && record.Owner.ProjectID == scope.ID },
@@ -361,8 +361,8 @@ func (repository *TaskRepository) ListTasksByScope(
 		}
 		page, err := recordquery.ListVisibleIndex(
 			ctx, repository.store, "tasks", "environment", scope.ID,
-			taskjournal.TaskEnvironmentIndexPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
-			DecodeTaskRecord, identity,
+			taskjournal.TaskEnvironmentIndexPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask,
+			request.NewestFirst(), DecodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.EnvironmentID == scope.ID },
 			visibleOperatorTask,
 		)

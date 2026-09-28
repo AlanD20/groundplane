@@ -13,7 +13,7 @@ export function removeImage(id: string, key: string) {
 }
 
 export function imageReferences(image: HostImage): string[] {
-  return [...image.digests, ...image.tags]
+  return [...new Set([...image.digests, ...image.tags])]
 }
 
 export function imageSize(bytes: number): string {

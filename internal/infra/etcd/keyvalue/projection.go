@@ -12,9 +12,16 @@ type Versioned[T any] struct {
 }
 
 type PageRequest struct {
-	Limit    int
-	Cursor   string
-	Revision int64
+	Limit      int
+	Cursor     string
+	Revision   int64
+	Descending bool
+}
+
+// NewestFirst orders time-encoded resource IDs descending.
+func (request PageRequest) NewestFirst() PageRequest {
+	request.Descending = true
+	return request
 }
 
 type Page[T any] struct {

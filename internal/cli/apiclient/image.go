@@ -63,6 +63,18 @@ func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
 		Images:     make([]apiTypes.HostImage, 0, len(response.JSON200.Images)),
 	}
 	for _, image := range response.JSON200.Images {
+		fetches := make([]apiTypes.ImageFetchRecord, 0, len(image.Fetches))
+		for _, fetch := range image.Fetches {
+			fetches = append(
+				fetches,
+				apiTypes.ImageFetchRecord{
+					Requested:   fetch.Requested,
+					Image:       fetch.Image,
+					TaskID:      fetch.TaskId,
+					RequestedAt: fetch.RequestedAt, Status: apiTypes.TaskStatus(fetch.Status),
+				},
+			)
+		}
 		result.Images = append(
 			result.Images,
 			apiTypes.HostImage{
@@ -73,6 +85,7 @@ func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
 				CreatedAt:      image.CreatedAt,
 				Containers:     int(image.Containers),
 				RemovalBlocked: image.RemovalBlocked,
+				Fetches:        fetches,
 			},
 		)
 	}

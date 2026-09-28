@@ -2674,6 +2674,13 @@
             },
             "type": "array"
           },
+          "fetches": {
+            "description": "Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags",
+            "items": {
+              "$ref": "#/components/schemas/ImageFetchRecord"
+            },
+            "type": "array"
+          },
           "id": {
             "type": "string"
           },
@@ -2699,7 +2706,8 @@
           "size_bytes",
           "created_at",
           "containers",
-          "removal_blocked"
+          "removal_blocked",
+          "fetches"
         ],
         "type": "object"
       },
@@ -2752,6 +2760,43 @@
           "task_id",
           "image",
           "config_digest"
+        ],
+        "type": "object"
+      },
+      "ImageFetchRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "image": {
+            "description": "Immutable manifest reference selected for this Fetch",
+            "type": "string"
+          },
+          "requested": {
+            "type": "string"
+          },
+          "requested_at": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed",
+              "aborted",
+              "timed_out"
+            ],
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested",
+          "image",
+          "task_id",
+          "requested_at",
+          "status"
         ],
         "type": "object"
       },

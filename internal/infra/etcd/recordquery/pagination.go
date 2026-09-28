@@ -34,6 +34,9 @@ func NormalizePageRequest(
 			"page revision must not be negative",
 		)
 	}
+	if request.Descending {
+		collection += ":descending"
+	}
 	query, err := recordcodec.CursorQueryDigest(collection, ownerKind, ownerID, limit)
 	if err != nil {
 		return 0, 0, "", "", err
@@ -91,7 +94,7 @@ func ListPrimary[T any](
 		return etcdstore.Page[T]{}, err
 	}
 	rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision,
+		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision, Descending: request.Descending,
 	})
 	if err != nil {
 		return etcdstore.Page[T]{}, err
@@ -151,7 +154,7 @@ func ListFilteredPrimary[T any](
 	readRevision := revision
 	for {
 		rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: prefix, StartExclusive: start, Limit: int64(etcdstore.MaximumPageLimit), Revision: readRevision,
+			Prefix: prefix, StartExclusive: start, Limit: int64(etcdstore.MaximumPageLimit), Revision: readRevision, Descending: request.Descending,
 		})
 		if err != nil {
 			return etcdstore.Page[T]{}, err
@@ -255,7 +258,7 @@ func ListIndexAtRevision[T any](
 		return etcdstore.Page[T]{}, errs.New(errs.KindStateConflict, "list cursor Script-set generation changed")
 	}
 	rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision,
+		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision, Descending: request.Descending,
 	})
 	if err != nil {
 		return etcdstore.Page[T]{}, err

@@ -425,7 +425,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTasks(first page) error = %v", err)
 	}
-	if len(page.Items) != 1 || page.NextCursor == "" {
+	if len(page.Items) != 1 || page.Items[0].Record.ID != second.ID || page.NextCursor == "" {
 		t.Fatalf("ListTasks(first page) = %#v", page)
 	}
 	third := validTaskRecord(taskJournalTime())
@@ -440,7 +440,7 @@ func TestTaskRepositoryListsAtFixedRevisions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTasks(second page) error = %v", err)
 	}
-	if len(secondPage.Items) != 1 || secondPage.Items[0].Record.ID != second.ID ||
+	if len(secondPage.Items) != 1 || secondPage.Items[0].Record.ID != first.ID ||
 		secondPage.Revision != page.Revision {
 		t.Fatalf("ListTasks(second page) = %#v, want fixed-revision second Task", secondPage)
 	}
@@ -499,13 +499,13 @@ func TestTaskRepositoryPaginatesPastBlueprintChildren(t *testing.T) {
 		{Kind: TaskListScopePlatformWorkspace},
 	} {
 		page, err := repository.ListTasksByScope(ctx, scope, testkeyvalue.PageRequest{Limit: 1})
-		if err != nil || len(page.Items) != 1 || page.Items[0].Record.ID != first.ID || page.NextCursor == "" {
+		if err != nil || len(page.Items) != 1 || page.Items[0].Record.ID != last.ID || page.NextCursor == "" {
 			t.Fatalf("first %v page = %#v, %v", scope, page, err)
 		}
 		next, err := repository.ListTasksByScope(ctx, scope, testkeyvalue.PageRequest{
 			Limit: 1, Cursor: page.NextCursor,
 		})
-		if err != nil || len(next.Items) != 1 || next.Items[0].Record.ID != last.ID ||
+		if err != nil || len(next.Items) != 1 || next.Items[0].Record.ID != first.ID ||
 			next.NextCursor != "" || next.Revision != page.Revision {
 			t.Fatalf("second %v page = %#v, %v", scope, next, err)
 		}

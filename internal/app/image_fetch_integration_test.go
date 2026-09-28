@@ -40,7 +40,7 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := imagefetch.Plan{
-		Requested: imagefetch.RegistryAuthority + "/app:release", Repository: imagefetch.RegistryAuthority + "/app",
+		Requested: "nginx:latest", Repository: "docker.io/library/nginx",
 		ManifestDigest: "sha256:" + strings.Repeat("a", 64), ConfigDigest: "sha256:" + strings.Repeat("b", 64),
 		Architecture: "amd64",
 	}
@@ -127,6 +127,46 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		registry.resolutions != 2 {
 		t.Fatal("a fresh request did not select the new tag content")
 	}
+	// IMG-01: inventory must join attempts and their status to immutable manifests,
+	// including Docker's familiar repository spelling, not today's mutable tag.
+	registry.images = []imagefetch.LocalImage{
+		{ID: original.ConfigDigest, Digests: []string{"nginx@" + original.ManifestDigest}},
+		{ID: registry.selected.ConfigDigest, Digests: []string{registry.selected.Reference()}},
+		{ID: original.ConfigDigest, Digests: []string{"nginx@sha256:" + strings.Repeat("f", 64)}},
+	}
+	inventory, err := service.ListImages(ctx)
+	if err != nil || len(inventory.Images) != 3 {
+		t.Fatalf("inventory: %#v %v", inventory, err)
+	}
+	if history := inventory.Images[0].Fetches; len(history) != 2 || history[0].TaskID != retry.TaskID ||
+		history[0].Requested != "nginx:latest" || history[0].Image != original.Reference() ||
+		history[0].Status != "completed" || history[1].Status != "failed" || history[1].TaskID != accepted.TaskID {
+		t.Fatalf("original fetch history lost or reassigned: %#v", history)
+	}
+	if len(inventory.Images[1].Fetches) != 1 || inventory.Images[1].Fetches[0].Status != "pending" ||
+		len(inventory.Images[2].Fetches) != 0 {
+		t.Fatal("pending attempt lost its status or another manifest gained the wrong history")
+	}
+	claim, found, err = tasks.ClaimNextControllerTask(ctx, time.Now().UTC())
+	if err != nil || !found || claim.Task.Record.ID != newSelection.TaskID {
+		t.Fatalf("claim new selection: %t %v", found, err)
+	}
+	registry.returnedID = registry.selected.ConfigDigest
+	if err := service.Execute(ctx, claim.Task.Record); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tasks.AcknowledgeControllerTask(ctx, newSelection.TaskID, taskjournal.TaskStatusCompleted, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	inventory, err = service.ListImages(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inventory.Images[0].Fetches) != 2 || inventory.Images[0].Fetches[0].Image != original.Reference() ||
+		len(inventory.Images[1].Fetches) != 1 || inventory.Images[1].Fetches[0].Image != newSelection.Image ||
+		inventory.Images[1].Fetches[0].Requested != "nginx:latest" || inventory.Images[1].Fetches[0].Status != "completed" {
+		t.Fatalf("moved tag history: %#v", inventory.Images)
+	}
 }
 
 type imageFetchRegistry struct {
@@ -134,9 +174,12 @@ type imageFetchRegistry struct {
 	returnedID  string
 	resolutions int
 	fetched     []imagefetch.Plan
+	images      []imagefetch.LocalImage
 }
 
-func (*imageFetchRegistry) List(context.Context) ([]imagefetch.LocalImage, error) { return nil, nil }
+func (registry *imageFetchRegistry) List(context.Context) ([]imagefetch.LocalImage, error) {
+	return registry.images, nil
+}
 func (*imageFetchRegistry) Remove(context.Context, string) error {
 	return errs.New(errs.KindInternal, "unexpected image removal")
 }

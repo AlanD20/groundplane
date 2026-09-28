@@ -250,7 +250,7 @@ operation inventory and local-tooling exemptions, not an alternative test plan.
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
-| TASK-01 | Observe pending/running/terminal Tasks and Activity in Platform and Tenant scopes. | Same records, ordering and cursor boundaries; correct immutable owner, actor and Controller times, including after parent rename/deletion. | U |
+| TASK-01 | Observe pending/running/terminal Tasks and Activity in Platform and Tenant scopes; page while new Tasks arrive. | Same records, newest-created first across pages at one fixed revision; correct immutable owner, actor and Controller times, including after parent rename/deletion. | PARTIAL: local fixed-revision global/scoped pagination; full live journey remains unrun. |
 | TASK-02 | Replay concurrent equal requests and changed intent under the same key. | One resource/Task/effect for equal intent; changed intent rejected durably, including after Controller restart. | PARTIAL H6 |
 | TASK-03 | Abort pending, Agent-running and Controller-running work; repeat Abort. | Exact target terminates according to its effect contract; no extra Task; already-aborted replay returns the same result. | PARTIAL H6 |
 | TASK-04 | Race Abort with natural completion; Abort terminal work or an offline/stale Agent assignment. | Correct conflict or safe delivery failure; no false undone effect or released ownership; eventual timeout remains bounded. | PARTIAL H6 |
@@ -440,8 +440,8 @@ and any external GitHub effects require appropriate authority.
 
 | Case | Setup and action | Pass condition | Record |
 | --- | --- | --- | --- |
-| IMG-01 | Fetch a public or GP registry tag; move the tag and replay; challenge anonymous access or redirect a blob download. | Accepted content stays pinned; public authentication never receives GP credentials; unsupported private authentication fails without deployment. | PARTIAL: local registry protocol and moved-tag replay checks; live Docker Hub/GHCR manifest resolution. Public host pull remains unrun. |
-| IMG-02 | List images used by running/stopped containers or retained Releases; attempt removal with no current container but retained rollback inputs. | Inventory shows protection; retained content cannot be removed merely because container count is zero. | PARTIAL: retained Release behavior check and local Console interactions; real Docker removal remains unrun. |
+| IMG-01 | Fetch a public or GP registry tag; move the tag and replay; challenge anonymous access or redirect a blob download. | Accepted content stays pinned; retained Fetch attempts map the requested tag to the exact manifest and status, without claiming failed/pending work succeeded or confusing manifests sharing a config; public authentication never receives GP credentials; unsupported private authentication fails without deployment. | PARTIAL: local registry protocol, moved-tag replay/history checks and Console display; live Docker Hub/GHCR manifest resolution. Public host pull remains unqualified. |
+| IMG-02 | List images used by running/stopped containers or retained Releases; attempt removal with no current container but retained rollback inputs; retain failed Runner-creation history. | Remove stays visible with its protection reason; non-retryable terminal Runner creation does not block unrelated images, while in-flight work, containers and retained rollback remain protected. | PARTIAL: retained Release and Runner-history admission checks, local Console interactions; real Docker removal remains unrun. |
 | IMG-03 | Race image selection/publication with removal; interrupt removal and retry after Controller recreation. | Atomic publication rejects the stale selection; uncertain removal retains its durable fence; the original operation settles before new selections resume. | PARTIAL: Controller/storage race and interrupted-operation checks; live process interruption remains unrun. |
 
 ## Scripts and hooks

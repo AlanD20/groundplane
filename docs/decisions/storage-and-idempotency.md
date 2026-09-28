@@ -42,8 +42,9 @@ records.
 
 Creates, edits, renames, deletes, indexes, and subordinate ciphertext are
 committed with revision comparisons. Readers use fixed-revision ranges and
-same-revision primary reads. Lists are stable-id ascending; cursors bind one
-query and one etcd revision, and a compacted revision expires instead of
+same-revision primary reads. Lists are stable-id ascending except Task journals,
+which use descending time-ordered IDs to put recent work first. Cursors bind the
+ordering, query and one etcd revision, and a compacted revision expires instead of
 silently restarting. Watches begin after a captured snapshot revision and
 re-snapshot on compaction or an uncertain gap.
 

@@ -66,6 +66,12 @@ a new Fetch can select newer tag content. Deploy's optional `--image` chooses a
 reference for that Release without editing the Service; it cannot accompany
 `--tag`. Service forms and Deploy offer the images currently on the host.
 
+The inventory also shows Fetch history: the requested tag, exact manifest digest,
+request time and Task status. Only completed Tasks confirm a successful Fetch;
+a failed attempt can leave downloaded content on the host. `nginx:latest` stays associated
+with the digest that Fetch selected even if the registry later moves the tag.
+This history lasts as long as its Task record; it is not a local Docker tag.
+
 Use `groundplane image ls` to inspect the same inventory. Removal uses
 `groundplane image remove sha256:...` and creates a Task for that exact local
 image ID, never a mutable name. The API exposes `GET /images`, `POST /images/fetch`
@@ -73,8 +79,11 @@ and `DELETE /images/{id}` under its ordinary version prefix.
 
 Removal rechecks containers and retained Release/runtime material, including
 child images inside an OCI index. Unfinished or retryable host Tasks conservatively
-block removal until they complete or their retained records expire. Docker may
-also refuse images with dependent images or multiple references. There is no
+block removal until they complete or their retained records expire.
+Terminal Runner-creation Tasks do not block unrelated images: their retained
+Runner protects its exact image, and retry requires a fresh registration token.
+The Remove button remains visible when protected, with the reason beside it.
+Docker may also refuse images with dependent images or multiple references. There is no
 force removal, bulk prune or registry garbage collection. Registry content and
 application data are untouched.
 
