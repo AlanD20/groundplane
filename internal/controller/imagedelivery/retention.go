@@ -25,8 +25,8 @@ type imageRetention struct {
 	fetches    []retainedFetch
 }
 
-// Read all authority at one MVCC revision. Pending/failed host work is a
-// conservative removal barrier: retry/recovery may still use its sealed input.
+// Read all authority at one MVCC revision. Active work remains a removal barrier;
+// terminal attempts retain their captured images when those inputs are known.
 // Completed Tasks do not imply that their Release rollback material expired.
 func (service *Service) retainedImages(ctx context.Context, operationID string) (imageRetention, error) {
 	result := imageRetention{references: make(map[string]string)}
@@ -67,13 +67,11 @@ func (service *Service) retainedImages(ctx context.Context, operationID string) 
 			return err
 		}
 		if task.OperationID != operationID && task.Status != taskjournal.TaskStatusCompleted && task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceImage {
-			// Terminal Runner creation requires a fresh token to retry. Protect
-			// its exact image through the retained Runner below, not every image
-			// through the old attempt. Containers remain independently protected.
-			terminalRunnerCreate := task.Executor == taskjournal.TaskExecutorController &&
-				task.Type == taskjournal.TaskCreate && task.Params[taskjournal.TaskResourceKindParam] == runners.TaskResourceRunner &&
-				taskjournal.IsTerminalTaskStatus(task.Status)
-			if !terminalRunnerCreate {
+			covered, err := service.retainTaskImages(ctx, &result, task, revision)
+			if err != nil {
+				return err
+			}
+			if !covered {
 				result.busy = fmt.Sprintf("Task %s may still execute or recover; finish it or let its retention expire", task.ID)
 			}
 		}
@@ -155,10 +153,17 @@ func (retention imageRetention) artifact(value []byte, reason string) error {
 	if err := proto.Unmarshal(value, &artifact); err != nil {
 		return errs.Wrap(errs.KindInternal, err)
 	}
+	retention.composeArtifact(&artifact, reason)
+	return nil
+}
+
+func (retention imageRetention) composeArtifact(artifact *agentpb.ComposeArtifact, reason string) {
 	for _, service := range artifact.GetServices() {
 		if reference := service.GetImageReference(); strings.TrimSpace(reference) != "" {
 			retention.retain(reference, reason)
 		}
+		if digest := service.GetImageConfigDigest(); len(digest) != 0 {
+			retention.retain(fmt.Sprintf("sha256:%x", digest), reason)
+		}
 	}
-	return nil
 }

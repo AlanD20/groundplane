@@ -78,10 +78,12 @@ image ID, never a mutable name. The API exposes `GET /images`, `POST /images/fet
 and `DELETE /images/{id}` under its ordinary version prefix.
 
 Removal rechecks containers and retained Release/runtime material, including
-child images inside an OCI index. Unfinished or retryable host Tasks conservatively
-block removal until they complete or their retained records expire.
-Terminal Runner-creation Tasks do not block unrelated images: their retained
-Runner protects its exact image, and retry requires a fresh registration token.
+child images inside an OCI index. Terminal Component and Blueprint attempts
+protect their captured candidate and predecessor images, not unrelated images.
+Terminal Runner creation retains its Runner's exact image; retry requires a fresh
+registration token. Active work, or a Task whose complete image dependencies
+cannot be determined, still blocks removal. Missing or corrupt retained inputs
+never authorize deletion.
 The Remove button remains visible when protected, with the reason beside it.
 Docker may also refuse images with dependent images or multiple references. There is no
 force removal, bulk prune or registry garbage collection. Registry content and
