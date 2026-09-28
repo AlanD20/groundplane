@@ -157,6 +157,34 @@ automatic recovery into a pass. Preserve failures instead of overwriting them.
 | H73 | PKG-07 and BP-05 selected variants PASS; BP-02 diff remains inaccurate on 2026-09-23. | Public `install.sh --ref main` resolved pushed signed `739e4dd6f` and completed a guarded update on the same disposable Ubuntu 24.04 amd64 host. Controller and Agent selected that commit; etcd stayed healthy. No application ran during the update, so upgrade traffic continuity was not tested. In a separate HTTP-serving Environment, exact Blueprint reapply completed without changing Service id, serving Release, single Release-ledger item, healthy container id/start time or 150 successful host HTTP responses. Validate still called unchanged Compose, Service and Zone `update`. The test Environment, container, owned root and image were removed; the earlier smoke Environment remained. Hooks, proxy, WebSockets, real application traffic and failure/recovery were not tested. |
 | H74 | PKG-02 successful-update and PKG-07 traffic-continuity variants PASS on 2026-09-23. | On freshly reset disposable Ubuntu 24.04 amd64 VM `.3`, the public installer installed pinned `739e4dd6f`, then upgraded under traffic to pushed signed `2e9a0319799`. The protected Controller Task completed and installed CLI, Controller and Agent all reported the new ref. The canary and etcd kept exact container IDs/start times, zero restarts and the same application data marker; background ticks advanced. A 5/s HTTP and held-stream probe recorded 2,807 successful requests, 563 stream updates, zero errors/disconnections and 3.9 ms p95; Console returned HTTP 200. The isolated fixture remains on disposable QA for inspection. Raw evidence is ignored locally under `.tmp/qa-installer-upgrade-repeat-20260923-882861/`. Failed/uncertain update branches, other platforms, public ingress/WebSockets and a sustained 30-minute run were not qualified. |
 
+## Runner delivery
+
+**H75 — selected RUN-01/04/09/10/12/13/14 variants PASS, 2026-09-28.**
+On Ubuntu 24.04.4 amd64, Controller `0.0.1-qa-4f4c61ab6-r6` ran the repair source
+committed as `8ca14df59`. Its complete local `make ci` passed. The Runner image
+was pinned to `sha256:7f34cb2400f29be2eed3c6bd15e9327d806f1f9efc9f4e4c71a71299edc99b90`.
+A disposable Project-owned GitHub Runner built an HTTP counter application with
+rootless Docker, pushed through the private authenticated TLS registry, fetched
+through GP and deployed through the ordinary CLI. Independent HTTP source output,
+registry manifest/configuration digests, host image layers and serving Release
+matched the workflow receipt. The persistent counter advanced across deployment.
+
+Deliberate build exit 42, unauthorized push and missing-image Fetch each failed
+before another Release or container change; the original source and advancing
+counter remained served. After an idle listener stop, GP restarted the same
+registered container within its maintenance interval. GitHub briefly reported a
+session conflict, then reconnected; the next workflow ran without another token.
+Normal GP removal deleted the Runner container, daemon unit, account/subordinate
+ranges, network and owned directories. The registry retained the exact delivered
+manifest; registry and application container identities/start times stayed intact.
+The delivered canary remains for inspection; GitHub deregistration stays manual.
+
+Earlier failed startup/TLS attempts are retained as failures, not overwritten.
+Full token-failure, private-network denial, quota/concurrency, other ownership
+scopes, host reboot, registry restart and arm64 variants were not run. Moved-tag
+and replay behavior has local regression proof only. No new load, installation,
+upgrade or general production-readiness claim follows from this run.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

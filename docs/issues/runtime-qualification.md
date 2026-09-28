@@ -89,8 +89,11 @@ Environment state without orphaning data or unrelated resources.
   Hook execution and Secret retention still need live qualification.
 - Backup/Restore remains incomplete and deferred; Valkey's safe source and restore
   format are undecided. Metadata CRUD is not recovery evidence.
-- Runner isolation, token handoff and host lifecycle remain incomplete against the
-  accepted contract. Earlier local cleanup checks do not prove ready-state jobs.
+- A Project-owned trusted Runner completed real build/push/Fetch/Deploy, preserved
+  its serving application on delivery failures, resumed after a same-boot listener
+  stop and cleaned up its owned runtime ([H75](../acceptance.md#runner-delivery)).
+  Full isolation, token-failure, quota/concurrency, reboot, registry-restart and
+  arm64 variants remain unqualified; the selected journey does not close them.
 
 See the owning [feature guides](../README.md#operators) and
 [QA matrix](../qa-matrix.md) for required outcomes. Do not implement these gaps as

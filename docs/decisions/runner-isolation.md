@@ -1,6 +1,7 @@
 # Runner runtime and local image delivery
 
-Status: accepted design; runtime integration and live qualification are incomplete.
+Status: implemented; selected live delivery qualified in
+[H75](../acceptance.md#runner-delivery). Full isolation/lifecycle qualification remains open.
 
 ## Trusted workflows, separate Docker engines
 
@@ -96,9 +97,9 @@ pipeline and makes local image delivery usable independently of Runner ownership
 ## Implementation and qualification
 
 The current code contains allocation, Controller Tasks, a runtime-plan journal,
-a transient token broker and local Docker/host adapters. The direct-rootless
-migration does not by itself prove registry delivery, reboot recovery or real
-GitHub jobs. Current limitations belong in [capabilities](../capabilities.md);
+a transient token broker and local Docker/host adapters. H75 records the selected
+real GitHub delivery journey; it does not establish full isolation or reboot
+recovery. Current limitations belong in [capabilities](../capabilities.md);
 behavioral acceptance cases live in [the QA matrix](../qa-matrix.md#isolated-runners).
 
 Code owners are [Controller lifecycle](../../internal/controller/runner),

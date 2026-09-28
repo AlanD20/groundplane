@@ -1,8 +1,10 @@
 # Runners
 
-**The complete isolated Runner lifecycle is not qualified or fully integrated.**
-This guide records the accepted capability and operator constraints; it is not a
-claim that current GP can safely host production CI jobs.
+Trusted workflow delivery is implemented. A Project-owned Runner's build, push,
+Fetch, Deploy, failure preservation, same-boot restart and removal passed the
+selected Ubuntu amd64 journey in [H75](../acceptance.md#runner-delivery). The full
+isolation and lifecycle matrix remains unqualified; this is not a blanket
+production-CI or hostile-workflow safety claim.
 
 A Runner is a persistent GitHub Actions self-hosted runner owned by a Tenant,
 Project or Environment. It is not a Project or an ordinary Agent workload. The native Controller
@@ -53,7 +55,7 @@ ownership does not permit communication with another Runner.
 
 ## GP command access and image delivery
 
-**Accepted, not yet integrated:** a Runner executes ordinary GitHub Actions
+A Runner executes ordinary GitHub Actions
 workflows. Jobs may use the existing GP CLI or private API with full operator
 authority. Tenant, Project and Environment ownership organizes Runners and their
 lifecycle; it does not limit their GP commands or accessible resources.
@@ -71,7 +73,7 @@ listener first. No public listener or API relay is created automatically.
 
 The API remains private; Runner access does not require public exposure.
 
-**Accepted, not yet integrated:** jobs build and push with ordinary Docker commands
+Jobs build and push with ordinary Docker commands
 to a private registry on the same host. CoreDNS supplies its internal name to both
 the Runner's rootless daemon and host Docker. An explicit GP image-fetch operation
 then loads the selected image into host Docker before ordinary Service Deploy.
@@ -86,7 +88,8 @@ not Docker's store-specific local image ID.
 Wait for the Task to complete, then use that reference in ordinary Deploy.
 Task Retry keeps the original selection, even if the tag has moved. A new Fetch
 is a new selection. The CLI's `--idempotency-key` lets automation resolve uncertain
-acceptance without creating another operation. This path is not live-qualified.
+acceptance without creating another operation. H75 covers the selected live
+delivery path; moved-tag and replay behavior has local, not live, proof.
 
 The two Docker daemons have separate image stores: a successful build or push
 alone does not make an image available for GP Deploy. Fetch must complete first.
