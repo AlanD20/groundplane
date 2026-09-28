@@ -5,14 +5,6 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
-- Independent Agent and Controller release tags and installer/build scope flags.
-  Combined releases also publish the matching component releases from the same
-  artifacts. Agent updates pin their own image without replacing Controller.
-
-- Install a branch, tag or commit with `install.sh --ref`, without a published
-  Groundplane release. Build toolchains run in disposable Docker containers;
-  installation retains the existing guarded upgrade and recovery checks.
-
 ## 0.0.1 — pending publication
 
 Initial single-host release.
@@ -27,9 +19,16 @@ Initial single-host release.
   deployments through Release Groups.
 - Configure Zones, Routes, Caddy routing and Environment DNS through managed
   Components.
+- Expose application Routes through Cloudflare Tunnel. Operators supply the
+  Tunnel token and configure Cloudflare hostnames, DNS and origin policy.
 - Provision PostgreSQL and Valkey backing services and attach application
   consumers. Valkey requires an explicit choice of username/password,
   password-only or no authentication.
+- Share PostgreSQL through separate consumer databases and credentials, with
+  explicit access grants and default cross-database access restrictions for
+  newly provisioned databases.
+- Run Custom backing services from an operator-selected image, with optional
+  provisioning and lifecycle hooks that receive inputs and return declared facts.
 - Manage persistent Volumes, configuration Entries and Secrets. Materialize
   configuration for workloads and run Scripts and ordered deployment hooks.
 
@@ -41,6 +40,21 @@ Initial single-host release.
 - Perform guarded Controller and Agent updates with recorded update Tasks and
   recovery checks.
 
+### Runner CI/CD
+
+- Manage persistent GitHub Actions Runners owned by a Tenant, Project or
+  Environment. Each uses a dedicated rootless Docker daemon, not the host
+  Docker socket. Trusted jobs can use the normal GP CLI/API with full operator
+  authority; Runner ownership is not an API permission boundary.
+- Build and push images to a private authenticated TLS registry on the host.
+  CoreDNS resolves its internal name for the Runner and host Docker.
+- Fetch a selected registry image explicitly through the Console, CLI or API,
+  then use ordinary Service Deploy. Fetch retains the selected image identity
+  for retries; it does not edit or deploy a Service itself.
+- Preserve the serving Release and data when build, push or Fetch fails.
+  Registered Runners resume without a new registration token; local Runner
+  removal preserves shared registry content and application images.
+
 ### Installation and distribution
 
 - Prebuilt Linux amd64 and arm64 bundles contain the Controller with embedded
@@ -49,6 +63,13 @@ Initial single-host release.
   Ubuntu 24.04/26.04 and Debian 13. Rerunning an already healthy, matching
   installation does not start another update. With no version specified, it
   resolves the latest stable release once; `--version` pins a chosen release.
+- Install a branch, tag or commit with `install.sh --ref`, without a published
+  release. Toolchains run in disposable Docker containers; temporary build
+  files are cleaned up, and installation uses the same guarded upgrade path.
+- Release Agent and Controller independently with `agent/vX.Y.Z` and
+  `controller/vX.Y.Z`, using `--agent-only` or `--controller-only` where needed.
+  A combined `vX.Y.Z` release also publishes both matching component releases
+  from the same artifacts. Agent-only updates leave the Controller unchanged.
 - Agent and Runner container images are distributed through GHCR. Release
   bundles pin image digests and include file checksums.
 - Tagged GitHub releases publish both platform bundles, checksums and installer.
@@ -59,13 +80,18 @@ Initial single-host release.
 
 - Backup/Restore is not a complete, qualified feature in this release.
   Privileged Backup staging acceptance is separate from default CI and deferred.
-- GitHub Runner management and its image are included, but complete token-handoff,
-  runtime and real-job qualification remain incomplete.
+- A Project-owned Runner's real build/push/Fetch/Deploy, delivery-failure
+  preservation, same-boot listener restart and local cleanup passed on Ubuntu
+  amd64. Full isolation, token-failure, concurrency, reboot and other platform
+  variants remain unqualified. Runners are for trusted workflows, not hostile
+  jobs; GitHub-side deregistration remains manual.
+- General Blueprint omission/removal, resource-level latest-wins and same-Apply
+  Custom hook facts remain deferred. Use separate supported removal actions;
+  complete a Custom Attach before applying configuration that consumes its facts.
 - Packaging checks do not establish fresh-install qualification on every supported
   OS/architecture or guarantee uninterrupted upgrades for every workload.
 - This is a single-host release, not a multi-host or high-availability platform.
-- Existing structural architecture debt is explicitly deferred for 0.0.1;
-  new findings remain blocking.
+  Host reboots and recreate deployments interrupt application service.
 
 See the [capability status](docs/capabilities.md),
 [QA matrix](docs/qa-matrix.md) and [deployment guide](docs/deployment.md)
