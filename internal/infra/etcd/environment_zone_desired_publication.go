@@ -263,9 +263,9 @@ func validateDirectZoneProjection(
 		return errs.New(errs.KindValidationFailed, "direct Zone candidate does not add exactly one Zone")
 	}
 
-	stripped := projectionrecord.CloneEnvironmentComposeProjection(input.Projection)
+	stripped := input.Projection
 	zoneFound := false
-	stripped.DesiredZones = stripped.DesiredZones[:0]
+	stripped.DesiredZones = previous.DesiredZones[:0:0]
 	for _, projected := range input.Projection.DesiredZones {
 		if projected.EnvironmentID == input.Zone.EnvironmentID && projected.Desired == input.Zone.Desired {
 			if zoneFound {
@@ -285,8 +285,8 @@ func validateDirectZoneProjection(
 
 	stripped.RevisionID = previous.RevisionID
 	stripped.RenderGeneration = previous.RenderGeneration
-	stripped.ComposeArtifact = append([]byte(nil), previous.ComposeArtifact...)
-	stripped.NormalizedCompose = append([]byte(nil), previous.NormalizedCompose...)
+	stripped.ComposeArtifact = previous.ComposeArtifact
+	stripped.NormalizedCompose = previous.NormalizedCompose
 	if !sameDirectZoneFinalProjection(stripped, previous) {
 		return errs.New(errs.KindValidationFailed, "direct Zone candidate changed unrelated desired state")
 	}

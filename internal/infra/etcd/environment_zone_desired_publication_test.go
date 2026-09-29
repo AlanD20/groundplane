@@ -27,6 +27,12 @@ import (
 // desired head while reserving its subnet and exact replay evidence.
 func TestEnvironmentZoneDesiredPublicationCommitsHeadPoolAndReplay(t *testing.T) {
 	t.Parallel()
+	t.Run("existing Zone", func(t *testing.T) { testEnvironmentZoneDesiredPublication(t, false) })
+	t.Run("first Zone with existing Service", func(t *testing.T) { testEnvironmentZoneDesiredPublication(t, true) })
+}
+
+func testEnvironmentZoneDesiredPublication(t *testing.T, firstZone bool) {
+	t.Helper()
 	ctx := context.Background()
 	store := newMemoryHierarchyStore()
 	repository, err := newHierarchyRepository(store)
@@ -38,6 +44,14 @@ func TestEnvironmentZoneDesiredPublicationCommitsHeadPoolAndReplay(t *testing.T)
 	baseTask := environmentBlueprintTestTask(t, project.Record, environment.Record, 14000)
 	baseRevision := environmentBlueprintTestRevision(environment.Record.ID, baseTask, "services: {}\n")
 	baseProjection := environmentBlueprintTestProjection(environment.Record.ID, baseTask, 1)
+	if firstZone {
+		baseProjection.DesiredZones = nil
+		baseProjection.DesiredServices[0].Desired.Zones = nil
+	}
+	var baseZoneChanges []testblueprints.EnvironmentBlueprintZoneChange
+	if !firstZone {
+		baseZoneChanges = environmentBlueprintTestZoneChanges(t, repository, baseProjection)
+	}
 	baseMarker := environmentBlueprintTestMarker(baseTask, environment.Record.ID)
 	baseClaim := stageEnvironmentBlueprintForPublicationTest(t, repository, 0, baseRevision, baseProjection, baseMarker)
 	baseResult, err := publishEnvironmentBlueprintClaimTest(
@@ -52,7 +66,7 @@ func TestEnvironmentZoneDesiredPublicationCommitsHeadPoolAndReplay(t *testing.T)
 			RevisionID:    baseTask.ID,
 		},
 		baseProjection,
-		environmentBlueprintTestZoneChanges(t, repository, baseProjection),
+		baseZoneChanges,
 		environmentBlueprintTestServiceChanges(t, repository, baseProjection),
 		environmentBlueprintTestRouteChanges(
 			t,
@@ -122,6 +136,12 @@ func TestEnvironmentZoneDesiredPublicationCommitsHeadPoolAndReplay(t *testing.T)
 			RevisionID:    revisionID,
 		},
 		Projection: candidate, Zone: zone, Marker: marker,
+	}
+	changed := input
+	changed.Projection = testenvironmentprojection.CloneEnvironmentComposeProjection(candidate)
+	changed.Projection.DesiredServices[0].Desired.Image = "example/api:changed"
+	if err := validateDirectZoneProjection(current.Record, true, changed); err == nil {
+		t.Fatal("Zone creation accepted an unrelated Service image change")
 	}
 	result, err := repository.PublishEnvironmentZoneDesiredRevisionDirect(ctx, input)
 	if err != nil {
