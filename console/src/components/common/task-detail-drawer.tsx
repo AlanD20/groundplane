@@ -1,14 +1,8 @@
 "use client";
 
-import { ActivityIcon } from "@/components/common/activity-icon";
+import { Inspector } from "@/components/common/inspector";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { ImageFetchTaskDetails } from "@/features/image-delivery/image-fetch-task-details";
 import { requestTask } from "@/features/task/api";
 import { taskFromAPI } from "@/features/task/journal-model";
@@ -119,108 +113,109 @@ export function TaskDetailDrawer({
   }
 
   return (
-    <Drawer open onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DialogHeader>
-          <DialogTitle className="flex min-w-0 items-start gap-2 break-words">
-            {task && <ActivityIcon type={task.type} status={task.status} />}
-            {task
-              ? task.imageFetch
-                ? task.title
-                : taskPresentation(task, store).title
-              : "Task details"}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          {detailLoading && (
-            <p
-              role="status"
-              className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground"
+    <Inspector
+      open
+      onOpenChange={onOpenChange}
+      context={task ? `Task / ${taskPresentation(task, store).scope}` : "Task"}
+      title={
+        task
+          ? task.imageFetch
+            ? task.title
+            : taskPresentation(task, store).title
+          : "Task details"
+      }
+      status={task && <StatusBadge status={task.status} />}
+      footer={
+        <>
+          {actions.abort && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={actionPending}
+              onClick={() => void runAction("abort")}
             >
-              Loading Task details…
-            </p>
+              <X className="size-4" /> Abort
+            </Button>
           )}
-          {detailError && (
-            <div
-              role="alert"
-              className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+          {actions.cancel && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={actionPending}
+              onClick={() => void runAction("abort")}
             >
-              <span>{detailError}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setReload((value) => value + 1)}
-              >
-                Retry
-              </Button>
-            </div>
+              <X className="size-4" /> Cancel
+            </Button>
           )}
-          {detail && task && (
-            <>
-              {task.imageFetch ? (
-                <>
-                  <StatusBadge status={task.status} />
-                  <ImageFetchTaskDetails task={task} />
-                </>
-              ) : (
-                <TaskOverview task={task} onClose={() => onOpenChange(false)} />
-              )}
-            </>
-          )}
-          {actionError && (
-            <p
-              role="alert"
-              className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+          {actions.retry && (
+            <Button
+              size="sm"
+              disabled={actionPending}
+              onClick={() => void runAction("retry")}
             >
-              {actionError}
-            </p>
+              <RefreshCw className="size-4" /> Retry
+            </Button>
           )}
-          {actionPending && (
-            <p role="status" className="text-xs text-muted-foreground">
-              Submitting Task action…
-            </p>
-          )}
-          <DialogFooter>
-            {actions.abort && (
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={actionPending}
-                onClick={() => void runAction("abort")}
-              >
-                <X className="size-4" /> Abort
-              </Button>
-            )}
-            {actions.cancel && (
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={actionPending}
-                onClick={() => void runAction("abort")}
-              >
-                <X className="size-4" /> Cancel
-              </Button>
-            )}
-            {actions.retry && (
-              <Button
-                size="sm"
-                disabled={actionPending}
-                onClick={() => void runAction("retry")}
-              >
-                <RefreshCw className="size-4" /> Retry
-              </Button>
-            )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={actionPending}
+            onClick={() => onOpenChange(false)}
+          >
+            Close
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {detailLoading && (
+          <p
+            role="status"
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground"
+          >
+            Loading Task details…
+          </p>
+        )}
+        {detailError && (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+          >
+            <span>{detailError}</span>
             <Button
               variant="outline"
               size="sm"
-              disabled={actionPending}
-              onClick={() => onOpenChange(false)}
+              onClick={() => setReload((value) => value + 1)}
             >
-              Close
+              Retry
             </Button>
-          </DialogFooter>
-        </div>
-      </DrawerContent>
-    </Drawer>
+          </div>
+        )}
+        {detail && task && (
+          <>
+            {task.imageFetch ? (
+              <>
+                <ImageFetchTaskDetails task={task} />
+              </>
+            ) : (
+              <TaskOverview task={task} onClose={() => onOpenChange(false)} />
+            )}
+          </>
+        )}
+        {actionError && (
+          <p
+            role="alert"
+            className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+          >
+            {actionError}
+          </p>
+        )}
+        {actionPending && (
+          <p role="status" className="text-xs text-muted-foreground">
+            Submitting Task action…
+          </p>
+        )}
+      </div>
+    </Inspector>
   );
 }

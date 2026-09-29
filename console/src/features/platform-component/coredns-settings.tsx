@@ -1,16 +1,20 @@
 "use client";
 
-import { Copy, Plus, Save } from "lucide-react";
-import { useState } from "react";
-import { useDraftField } from "@/lib/use-draft-field";
-import { useStore } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/common/status-badge";
+import {
+  AdvancedDetails,
+  HelpHint,
+  ResourcePanel,
+  SettingsRow,
+} from "@/components/common/resource-panel";
 import { Button } from "@/components/ui/button";
+import { CodeEditor } from "@/components/ui/code-editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { CodeEditor } from "@/components/ui/code-editor";
+import { useStore } from "@/lib/store";
+import { useDraftField } from "@/lib/use-draft-field";
+import { Copy, Plus, Save } from "lucide-react";
+import { useState } from "react";
 
 export function CoreDnsSettings({
   upstream,
@@ -91,231 +95,206 @@ export function CoreDnsSettings({
     }
   }
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between text-sm">
-          <span>Settings</span>
-          <StatusBadge status={enabled ? "healthy" : "stopped"} />
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {!configured ? (
-          <p
-            className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
-            role="status"
+    <ResourcePanel title="Resolver configuration">
+      {!configured ? (
+        <p
+          className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+          role="status"
+        >
+          Save a complete resolver configuration before enabling CoreDNS.
+        </p>
+      ) : null}
+      <SettingsRow
+        title="Local resolver"
+        help="Enable CoreDNS on this host using the saved configuration."
+      >
+        <Switch
+          aria-label="Local resolver"
+          checked={enabled}
+          disabled={saving || !configured}
+          onCheckedChange={(value) => void mutate(() => onEnabled(value))}
+        />
+      </SettingsRow>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="dns-upstream">Catch-all upstream</Label>
+          <Input
+            id="dns-upstream"
+            value={u}
+            onChange={(e) => setU(e.target.value)}
+            className="font-mono"
+            disabled={auto}
+            placeholder="1.1.1.1 8.8.8.8"
+          />
+        </div>
+      </div>
+      <SettingsRow
+        title="Use host upstream resolvers"
+        help="Read resolvers from the host at render time. Turn off to use the catch-all addresses you enter."
+      >
+        <Switch
+          aria-label="Use host upstream resolvers"
+          checked={auto}
+          disabled={saving}
+          onCheckedChange={setAuto}
+        />
+      </SettingsRow>
+      <SettingsRow
+        title="Tailnet delegation"
+        help="Forward ts.net queries to Tailscale MagicDNS at 100.100.100.100 when Tailscale runs on this host."
+      >
+        <Switch
+          aria-label="Tailnet delegation"
+          checked={tailnetDelegation}
+          disabled={saving}
+          onCheckedChange={(value) => void mutate(() => onTailnet(value))}
+        />
+      </SettingsRow>
+      <AdvancedDetails title="Corefile template">
+        <CodeEditor
+          id="corefile-template"
+          label="Corefile template"
+          value={template}
+          onValueChange={setTemplate}
+        />
+        <span className="text-xs text-muted-foreground">
+          Include exactly one{" "}
+          <span className="font-mono">{"{groundplane}"}</span> marker. The
+          Controller replaces it with the managed DNS directives.
+        </span>
+      </AdvancedDetails>
+      <AdvancedDetails title="Rendered Corefile">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <Label htmlFor="rendered-corefile">
+              Controller-rendered Corefile
+            </Label>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!managedCorefile || managedConfigLoading}
+            onClick={() => void copyRenderedCorefile()}
           >
-            Save a complete resolver configuration before enabling CoreDNS.
+            <Copy className="size-4" /> {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+        {managedConfigLoading ? (
+          <p className="text-xs text-muted-foreground" role="status">
+            Loading rendered Corefile…
           </p>
         ) : null}
-        <div className="flex items-center justify-between border-b border-border pb-3">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">Local resolver</span>
-            <span className="text-xs text-muted-foreground">
-              deployed by the Agent in groundplane-infra; the Controller renders
-              the Corefile — reloads are graceful, zero-downtime, and a bad edit
-              is rejected while the old instance keeps serving.
-            </span>
-          </div>
-          <Switch
-            checked={enabled}
-            disabled={saving || !configured}
-            onCheckedChange={(value) => void mutate(() => onEnabled(value))}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="dns-upstream">Catch-all upstream</Label>
-            <Input
-              id="dns-upstream"
-              value={u}
-              onChange={(e) => setU(e.target.value)}
-              className="font-mono"
-              disabled={auto}
-              placeholder="1.1.1.1 8.8.8.8"
-            />
-          </div>
-        </div>
-        <div className="flex items-center justify-between border-b border-border pb-3">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">Auto upstream</span>
-            <span className="text-xs text-muted-foreground">
-              read the resolvers from the host&apos;s /etc/resolv.conf at render
-              time — the input above is just a fallback preview. Off = pinned to
-              the values you type.
-            </span>
-          </div>
-          <Switch checked={auto} disabled={saving} onCheckedChange={setAuto} />
-        </div>
-        <div className="flex items-center justify-between border-b border-border py-3">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">Tailnet delegation</span>
-            <span className="text-xs text-muted-foreground">
-              forwards the tailnet domain (ts.net) to 100.100.100.100 so
-              MagicDNS names resolve through the local resolver when Tailscale
-              runs on the host
-            </span>
-          </div>
-          <Switch
-            checked={tailnetDelegation}
-            disabled={saving}
-            onCheckedChange={(value) => void mutate(() => onTailnet(value))}
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="corefile-template">Template</Label>
-          <CodeEditor
-            id="corefile-template"
-            label="Corefile template"
-            value={template}
-            onValueChange={setTemplate}
-          />
-          <span className="text-xs text-muted-foreground">
-            Include exactly one{" "}
-            <span className="font-mono">{"{groundplane}"}</span> marker. The
-            Controller replaces it with bind, hosts, forwarders, catch-all, and
-            reload directives.
-          </span>
-        </div>
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <Label htmlFor="rendered-corefile">
-                Controller-rendered Corefile
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Derived live from durable config, the host resolver baseline,
-                and current host resolution.
-              </p>
-            </div>
+        {managedConfigError ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 px-3 py-2">
+            <p className="text-xs text-destructive" role="alert">
+              {managedConfigError}
+            </p>
             <Button
               variant="outline"
               size="sm"
-              disabled={!managedCorefile || managedConfigLoading}
-              onClick={() => void copyRenderedCorefile()}
+              onClick={() => void onRefreshManagedConfig()}
             >
-              <Copy className="size-4" /> {copied ? "Copied" : "Copy"}
+              Retry
             </Button>
           </div>
-          {managedConfigLoading ? (
-            <p className="text-xs text-muted-foreground" role="status">
-              Loading rendered Corefile…
-            </p>
-          ) : null}
-          {managedConfigError ? (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 px-3 py-2">
-              <p className="text-xs text-destructive" role="alert">
-                {managedConfigError}
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void onRefreshManagedConfig()}
-              >
-                Retry
-              </Button>
-            </div>
-          ) : null}
-          {!managedConfigLoading && !managedConfigError && managedCorefile ? (
-            <CodeEditor
-              id="rendered-corefile"
-              label="Controller-rendered Corefile"
-              value={managedCorefile.rendered}
-              readOnly
-            />
-          ) : null}
-          {!managedConfigLoading && !managedConfigError && !managedCorefile ? (
-            <p className="text-xs text-muted-foreground">
-              No managed file preview is available.
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">Domain forwarders</span>
-          <span className="text-xs text-muted-foreground">
-            per-zone routing: each domain is answered by its own resolvers
-            (rendered as{" "}
-            <span className="font-mono">
-              forward &lt;domain&gt; &lt;resolvers&gt;
-            </span>{" "}
-            in the Corefile) before the catch-all. The tailnet delegation above
-            is one of these, managed automatically.
-          </span>
-          <div className="flex flex-col gap-1.5">
-            {forwarders.map((f, index) => (
-              <div
-                key={f.domain}
-                className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2"
-              >
-                <div className="flex items-center gap-2 font-mono text-xs">
-                  <span className="text-primary">{f.domain}</span>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="text-muted-foreground">{f.upstream}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={saving}
-                  onClick={() => void mutate(() => onRemoveForwarder(index))}
-                >
-                  Remove
-                </Button>
-              </div>
-            ))}
-            {forwarders.length === 0 && (
-              <div className="text-xs text-muted-foreground">
-                no domain forwarders — everything goes to the catch-all
-              </div>
-            )}
-          </div>
-          <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="fwd-domain">Domain</Label>
-              <Input
-                id="fwd-domain"
-                value={fwdDomain}
-                onChange={(e) => setFwdDomain(e.target.value)}
-                className="font-mono"
-                placeholder="home.arpa"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="fwd-upstream">Resolvers</Label>
-              <Input
-                id="fwd-upstream"
-                value={fwdUpstream}
-                onChange={(e) => setFwdUpstream(e.target.value)}
-                className="font-mono"
-                placeholder="192.168.1.1 10.0.0.53"
-              />
-            </div>
-            <Button
-              size="sm"
-              disabled={saving || !fwdDomain.trim() || !fwdUpstream.trim()}
-              onClick={() =>
-                void mutate(async () => {
-                  await onAddForwarder(fwdDomain.trim(), fwdUpstream.trim());
-                  setFwdDomain("");
-                  setFwdUpstream("");
-                })
-              }
-            >
-              <Plus className="size-4" /> Add
-            </Button>
-          </div>
-        </div>
-        {error ? (
-          <p className="text-xs text-destructive" role="alert">
-            {error}
+        ) : null}
+        {!managedConfigLoading && !managedConfigError && managedCorefile ? (
+          <CodeEditor
+            id="rendered-corefile"
+            label="Controller-rendered Corefile"
+            value={managedCorefile.rendered}
+            readOnly
+          />
+        ) : null}
+        {!managedConfigLoading && !managedConfigError && !managedCorefile ? (
+          <p className="text-xs text-muted-foreground">
+            No managed file preview is available.
           </p>
         ) : null}
-        <Button
-          size="sm"
-          disabled={saving}
-          onClick={() => void mutate(() => onSave(u, auto, template))}
-        >
-          <Save className="size-4" /> Save
-        </Button>
-      </CardContent>
-    </Card>
+      </AdvancedDetails>
+      <div className="flex flex-col gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          Domain forwarders{" "}
+          <HelpHint label="About Domain forwarders">
+            Send queries for each domain to its selected resolvers before the
+            catch-all.
+          </HelpHint>
+        </h3>
+        <div className="flex flex-col gap-1.5">
+          {forwarders.map((f, index) => (
+            <div
+              key={f.domain}
+              className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2"
+            >
+              <div className="flex items-center gap-2 font-mono text-xs">
+                <span className="text-primary">{f.domain}</span>
+                <span className="text-muted-foreground">→</span>
+                <span className="text-muted-foreground">{f.upstream}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={saving}
+                onClick={() => void mutate(() => onRemoveForwarder(index))}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+          {forwarders.length === 0 && (
+            <div className="text-xs text-muted-foreground">
+              no domain forwarders — everything goes to the catch-all
+            </div>
+          )}
+        </div>
+        <div className="grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto]">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="fwd-domain">Domain</Label>
+            <Input
+              id="fwd-domain"
+              value={fwdDomain}
+              onChange={(e) => setFwdDomain(e.target.value)}
+              className="font-mono"
+              placeholder="home.arpa"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="fwd-upstream">Resolvers</Label>
+            <Input
+              id="fwd-upstream"
+              value={fwdUpstream}
+              onChange={(e) => setFwdUpstream(e.target.value)}
+              className="font-mono"
+              placeholder="192.168.1.1 10.0.0.53"
+            />
+          </div>
+          <Button
+            size="sm"
+            disabled={saving || !fwdDomain.trim() || !fwdUpstream.trim()}
+            onClick={() =>
+              void mutate(async () => {
+                await onAddForwarder(fwdDomain.trim(), fwdUpstream.trim());
+                setFwdDomain("");
+                setFwdUpstream("");
+              })
+            }
+          >
+            <Plus className="size-4" /> Add
+          </Button>
+        </div>
+      </div>
+      {error ? (
+        <p className="text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <Button
+        size="sm"
+        disabled={saving}
+        onClick={() => void mutate(() => onSave(u, auto, template))}
+      >
+        <Save className="size-4" /> Save
+      </Button>
+    </ResourcePanel>
   );
 }

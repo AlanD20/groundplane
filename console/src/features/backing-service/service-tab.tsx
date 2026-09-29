@@ -1,21 +1,18 @@
 import { CopyButton } from "@/components/common/copy-button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ServiceObservationDetails } from "@/features/service/service-runtime-actions";
+import { DetailRow } from "@/components/common/detail-row";
+import { ResourcePanel } from "@/components/common/resource-panel";
 import { useStore } from "@/lib/store";
 import type { Project } from "@/lib/types";
 import { valkeyAuthenticationDetails } from "@/lib/valkey-authentication";
-import { Boxes, Server } from "lucide-react";
 
 // ---- Service (the full spec, like any service) ----
 
 export function ServiceTab({
   env,
   svc,
-  now,
 }: {
   env: NonNullable<Project["environments"]>[number];
   svc: NonNullable<Project["environments"]>[number]["services"][number];
-  now: number;
 }) {
   const store = useStore();
   const adapter = store.adapters.find((a) => a.key === svc.adapter);
@@ -29,15 +26,8 @@ export function ServiceTab({
   const authenticationDetails = valkeyAuthenticationDetails(svc.authentication);
   return (
     <>
-      <ServiceObservationDetails service={svc} now={now} />
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Server className="size-4 text-muted-foreground" /> Desired
-            configuration · {svc.name}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-x-8 gap-y-1.5 text-sm sm:grid-cols-2">
+      <ResourcePanel title="Service configuration">
+        <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
           <Row label="Image" value={svc.image} mono />
           <Row
             label="Adapter"
@@ -141,17 +131,11 @@ export function ServiceTab({
             value={`${svc.serviceName ?? svc.name}${port ? `:${port}` : ""}`}
             mono
           />
-        </CardContent>
-      </Card>
+        </div>
+      </ResourcePanel>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Boxes className="size-4 text-muted-foreground" /> Environment ·{" "}
-            {env.name}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-x-8 gap-y-1.5 text-sm sm:grid-cols-2">
+      <ResourcePanel title="Environment configuration">
+        <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
           <Row
             label="Volume"
             value={
@@ -167,8 +151,8 @@ export function ServiceTab({
             }
             mono
           />
-        </CardContent>
-      </Card>
+        </div>
+      </ResourcePanel>
     </>
   );
 }
@@ -185,16 +169,15 @@ export function Row({
   masked?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border pb-1.5 text-sm last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span
-        className={
-          mono ? "max-w-[60%] truncate text-right font-mono text-xs" : "text-xs"
-        }
-      >
-        {value}
-      </span>
-      {masked && <CopyButton value={value} />}
-    </div>
+    <DetailRow
+      label={label}
+      mono={mono}
+      value={
+        <span className="inline-flex min-w-0 items-start gap-2">
+          <span className="min-w-0 break-all">{value}</span>
+          {masked && <CopyButton value={value} />}
+        </span>
+      }
+    />
   );
 }

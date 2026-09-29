@@ -121,7 +121,7 @@ export default function PlatformBackingServicesPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Backing services"
-        description="Shared services run once and connected to individual consumer services. Built-in adapters provide database provisioning; custom containers can use optional hooks."
+        description="Shared databases and services for your projects."
         icon={<Database />}
         actions={
           <Button onClick={openCreate}>

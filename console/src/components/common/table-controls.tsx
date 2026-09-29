@@ -9,7 +9,12 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useEffect, useState, type ComponentProps } from "react";
+import {
+  useEffect,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 
 export const tablePageSizes = [5, 10, 25, 50] as const;
 export type TablePageSize = (typeof tablePageSizes)[number];
@@ -19,6 +24,32 @@ type SortState = {
   direction: Direction;
   sortBy: (field: string) => void;
 };
+
+export function CollectionToolbar({
+  query,
+  onQueryChange,
+  label,
+  children,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  label: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Input
+        type="search"
+        aria-label={`Search ${label}`}
+        placeholder={`Search ${label}…`}
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        className="min-w-40 flex-1"
+      />
+      {children}
+    </div>
+  );
+}
 
 export function ListToolbar({
   query,
@@ -34,15 +65,11 @@ export function ListToolbar({
   label: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Input
-        type="search"
-        aria-label={`Search ${label}`}
-        placeholder={`Search ${label}…`}
-        value={query}
-        onChange={(event) => onQueryChange(event.target.value)}
-        className="min-w-40 flex-1"
-      />
+    <CollectionToolbar
+      query={query}
+      onQueryChange={onQueryChange}
+      label={label}
+    >
       <Select
         aria-label={`Sort ${label} by`}
         className="w-36"
@@ -62,7 +89,7 @@ export function ListToolbar({
           <ArrowDown className="size-4" />
         )}
       </Button>
-    </div>
+    </CollectionToolbar>
   );
 }
 

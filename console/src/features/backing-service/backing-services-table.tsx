@@ -1,10 +1,11 @@
+import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import { StatusBadge } from "@/components/common/status-badge";
 import {
+  CollectionToolbar,
   TablePagination,
   TableSortHead,
   useTableView,
 } from "@/components/common/table-controls";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -41,15 +42,12 @@ export function BackingServicesTable({ now }: { now: number }) {
   );
   return (
     <section className="space-y-4" aria-label="Backing services">
-      <Input
-        type="search"
-        aria-label="Search backing services"
-        placeholder="Search by name or adapter…"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        className="max-w-sm"
+      <CollectionToolbar
+        query={query}
+        onQueryChange={setQuery}
+        label="Backing services"
       />
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <ResourceTable>
         <Table>
           <TableHeader>
             <TableRow>
@@ -98,7 +96,10 @@ export function BackingServicesTable({ now }: { now: number }) {
                 0,
               );
               return (
-                <TableRow key={project.id}>
+                <ResourceRow
+                  key={project.id}
+                  href={`/platform/backing-services/${project.id}`}
+                >
                   <TableCell className="min-w-44">
                     <Link
                       to={`/platform/backing-services/${project.id}`}
@@ -123,7 +124,7 @@ export function BackingServicesTable({ now }: { now: number }) {
                           : "unavailable"
                       }
                     />
-                    {service && (
+                    {service?.resources.mem && (
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         {service.resources.mem} memory limit
                       </p>
@@ -150,7 +151,7 @@ export function BackingServicesTable({ now }: { now: number }) {
                       {backups} backup sources
                     </p>
                   </TableCell>
-                </TableRow>
+                </ResourceRow>
               );
             })}
           </TableBody>
@@ -160,7 +161,7 @@ export function BackingServicesTable({ now }: { now: number }) {
             No backing services match your search.
           </p>
         )}
-      </div>
+      </ResourceTable>
       <TablePagination table={table} label="Backing services" />
     </section>
   );

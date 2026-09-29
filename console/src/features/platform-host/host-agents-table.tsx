@@ -1,123 +1,160 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
-import { useStore } from '@/lib/store'
-import { formatAgentLabels, formatLastReportAt } from '@/lib/agent-read-model'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
-import { Button } from '@/components/ui/button'
-import { StatusDot } from '@/components/common/status-badge'
-import { TaskRunnerDialog } from '@/components/common/task-runner-dialog'
-import { PlatformAgentActions } from '@/features/platform-agent/platform-agent-actions'
+import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
+import { StatusDot } from "@/components/common/status-badge";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { Button } from "@/components/ui/button";
+import { ResourcePanel } from "@/components/common/resource-panel";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { PlatformAgentActions } from "@/features/platform-agent/platform-agent-actions";
+import { formatAgentLabels, formatLastReportAt } from "@/lib/agent-read-model";
+import { useStore } from "@/lib/store";
+import { Plus } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 
 export function HostAgentsTable() {
-  const { platform, host, agentsLoading, agentError, refreshAgents, joinAgent } = useStore()
-  const [joinOpen, setJoinOpen] = useState(false)
-  return <>
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle>Agents</CardTitle>
+  const {
+    platform,
+    host,
+    agentsLoading,
+    agentError,
+    refreshAgents,
+    joinAgent,
+  } = useStore();
+  const [joinOpen, setJoinOpen] = useState(false);
+  return (
+    <>
+      <ResourcePanel
+        title="Agents"
+        actions={
           <Button
             size="sm"
-            disabled={agentsLoading || agentError !== null || platform.agents.length > 0}
+            disabled={
+              agentsLoading || agentError !== null || platform.agents.length > 0
+            }
             title={
               agentsLoading
-                ? 'Loading the local Agent'
+                ? "Loading the local Agent"
                 : agentError
-                  ? 'Agent state is unavailable'
+                  ? "Agent state is unavailable"
                   : platform.agents.length > 0
-                    ? 'The MVP supports one local Agent'
-                    : 'Join the local Agent'
+                    ? "The MVP supports one local Agent"
+                    : "Join the local Agent"
             }
             onClick={() => setJoinOpen(true)}
           >
-            <Plus className="size-3.5" /> {platform.agents.length > 0 ? 'Agent joined' : 'Join Agent'}
+            <Plus className="size-3.5" />{" "}
+            {platform.agents.length > 0 ? "Agent joined" : "Join Agent"}
           </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table className="w-full text-sm">
-              <TableHeader>
-                <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                  <TableHead className="py-2 pr-4">Host</TableHead>
-                  <TableHead className="py-2 pr-4">Version</TableHead>
-                  <TableHead className="py-2 pr-4">Labels</TableHead>
-                  <TableHead className="py-2 pr-4">In-flight tasks</TableHead>
-                  <TableHead className="py-2 pr-4">Last report</TableHead>
-                  <TableHead className="py-2 pr-4">Status</TableHead>
-                  <TableHead className="py-2 text-right">Actions</TableHead>
+        }
+      >
+        <ResourceTable>
+          <Table className="w-full text-sm">
+            <TableHeader>
+              <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
+                <TableHead>Host</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Labels</TableHead>
+                <TableHead>In-flight tasks</TableHead>
+                <TableHead>Last report</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {platform.agents.map((a) => (
+                <ResourceRow key={a.id} href={`/platform/host/agents/${a.id}`}>
+                  <TableCell>
+                    <Link
+                      to={`/platform/host/agents/${a.id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      {a.host}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{a.version ?? "—"}</TableCell>
+                  <TableCell>
+                    {formatAgentLabels(a.labels).join(", ")}
+                  </TableCell>
+                  <TableCell>{a.inFlight}</TableCell>
+                  <TableCell>{formatLastReportAt(a.lastReportAt)}</TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <StatusDot status={a.status} /> {a.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-2 text-right">
+                    <PlatformAgentActions agent={a} compact allowRemove />
+                  </TableCell>
+                </ResourceRow>
+              ))}
+              {agentsLoading && (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-6 text-center text-xs text-muted-foreground"
+                  >
+                    Loading the local Agent…
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {platform.agents.map((a) => (
-                  <TableRow key={a.id} className="border-b border-border last:border-0">
-                    <TableCell className="py-2 pr-4 font-mono text-xs">
-                      <Link to={`/platform/host/agents/${a.id}`} className="font-medium text-primary hover:underline">
-                        {a.host}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="py-2 pr-4 font-mono text-xs">{a.version ?? '—'}</TableCell>
-                    <TableCell className="py-2 pr-4 font-mono text-xs">{formatAgentLabels(a.labels).join(', ')}</TableCell>
-                    <TableCell className="py-2 pr-4 text-xs">{a.inFlight}</TableCell>
-                    <TableCell className="py-2 pr-4 text-xs text-muted-foreground">{formatLastReportAt(a.lastReportAt)}</TableCell>
-                    <TableCell className="py-2 pr-4">
-                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <StatusDot status={a.status} /> {a.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="py-2 text-right">
-                      <PlatformAgentActions agent={a} compact allowRemove />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {agentsLoading && (
+              )}
+              {!agentsLoading && agentError && (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-6 text-center text-xs text-destructive"
+                  >
+                    {agentError}
+                  </TableCell>
+                </TableRow>
+              )}
+              {!agentsLoading &&
+                !agentError &&
+                platform.agents.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
-                      Loading the local Agent…
+                    <TableCell
+                      colSpan={7}
+                      className="py-6 text-center text-xs text-muted-foreground"
+                    >
+                      No local Agent is joined. Join it to let the Controller
+                      create and manage the Agent container.
                     </TableCell>
                   </TableRow>
                 )}
-                {!agentsLoading && agentError && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-6 text-center text-xs text-destructive">
-                      {agentError}
-                    </TableCell>
-                  </TableRow>
-                )}
-                {!agentsLoading && !agentError && platform.agents.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
-                      No local Agent is joined. Join it to let the Controller create and manage the Agent container.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+            </TableBody>
+          </Table>
+        </ResourceTable>
+      </ResourcePanel>
 
       <TaskRunnerDialog
         open={joinOpen}
         onOpenChange={(next) => {
-          setJoinOpen(next)
-          if (!next) void refreshAgents()
+          setJoinOpen(next);
+          if (!next) void refreshAgents();
         }}
         title="Join local Agent"
         description="Creates the single local Agent record and starts its Controller-managed container. No credentials are exposed through this action."
         type="create"
-        target={host?.hostname ?? 'unavailable'}
+        target={host?.hostname ?? "unavailable"}
         workspace="platform"
         startLabel="Join Agent"
         executionCopy="The Controller will create and start the local Agent:"
         steps={[
-          { label: 'Create local Agent record', state: 'pending' },
-          { label: 'Start Controller-managed Agent container', state: 'pending' },
-          { label: 'Wait for the first healthy report', state: 'pending' },
+          { label: "Create local Agent record", state: "pending" },
+          {
+            label: "Start Controller-managed Agent container",
+            state: "pending",
+          },
+          { label: "Wait for the first healthy report", state: "pending" },
         ]}
         onDispatch={async () => (await joinAgent()).task_id}
       />
-
-  </>
+    </>
+  );
 }
-

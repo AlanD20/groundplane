@@ -1,13 +1,15 @@
 import { EmptyState } from "@/components/common/empty-state";
 import { ImageReference } from "@/components/common/image-reference";
+import { HelpHint } from "@/components/common/resource-panel";
+import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import {
+  CollectionToolbar,
   TablePagination,
   TableSortHead,
   useTableView,
 } from "@/components/common/table-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
   Table,
@@ -71,15 +73,11 @@ export function ServicesList({
   );
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3">
-        <Input
-          type="search"
-          aria-label="Filter Services"
-          placeholder="Search Services, images or Zones…"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          className="min-w-48 flex-1"
-        />
+      <CollectionToolbar
+        query={query}
+        onQueryChange={setQuery}
+        label="Services"
+      >
         <Select
           aria-label="Runtime status"
           className="w-auto min-w-44"
@@ -100,8 +98,8 @@ export function ServicesList({
             label: value === "all" ? "All runtime states" : value,
           }))}
         />
-      </div>
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      </CollectionToolbar>
+      <ResourceTable>
         <Table aria-label="Environment Services">
           <TableHeader>
             <TableRow>
@@ -125,16 +123,9 @@ export function ServicesList({
                 (attach) => attach.service === service.name,
               );
               return (
-                <TableRow
+                <ResourceRow
                   key={service.id}
-                  className="cursor-pointer"
-                  onClick={(event) => {
-                    if (!(
-                      event.target instanceof Element &&
-                      event.target.closest("button, a")
-                    ))
-                      inspect(service.id);
-                  }}
+                  onOpen={() => inspect(service.id)}
                 >
                   <TableCell className="min-w-40">
                     <Button
@@ -189,7 +180,7 @@ export function ServicesList({
                       {service.resources.mem}, {service.resources.cpus} CPU
                     </p>
                   </TableCell>
-                </TableRow>
+                </ResourceRow>
               );
             })}
           </TableBody>
@@ -199,7 +190,7 @@ export function ServicesList({
             No Services match these filters.
           </p>
         )}
-      </div>
+      </ResourceTable>
       <TablePagination table={table} label="Services" />
       {selected && (
         <ServiceDetailsDrawer
@@ -254,9 +245,7 @@ export function ServiceCard({
             )}
           </span>
           <ServiceStateBadges service={service} compact />
-          <span className="break-all font-mono text-[11px] text-muted-foreground">
-            {service.image}
-          </span>
+          <ImageReference value={service.image} />
           {service.role && (
             <span className="text-xs text-muted-foreground">
               {service.role}
@@ -327,10 +316,10 @@ export function ServicesPanel({
           >
             <Boxes className="size-4 text-muted-foreground" /> Services
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Inspect desired configuration separately from current
-            serving-workload evidence.
-          </p>
+          <HelpHint label="About Service configuration">
+            Saving configuration does not deploy it. The runtime report shows
+            what the Agent currently observes.
+          </HelpHint>
         </div>
         <div className="flex items-center gap-2">
           <Button

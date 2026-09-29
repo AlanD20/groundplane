@@ -1,5 +1,9 @@
 import { CopyButton } from "@/components/common/copy-button";
-import { StatusBadge } from "@/components/common/status-badge";
+import {
+  AdvancedDetails,
+  SummaryItem,
+  SummaryStrip,
+} from "@/components/common/resource-panel";
 import { TaskJournalMetadata } from "@/components/common/task-journal-metadata";
 import { TaskLink } from "@/components/common/task-link";
 import { useStore } from "@/lib/store";
@@ -7,7 +11,7 @@ import {
   resolveTaskOperationSurface,
   type TaskNavigationContext,
 } from "@/lib/task-navigation";
-import type { ActivityEntry, TaskType } from "@/lib/types";
+import type { ActivityEntry } from "@/lib/types";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -16,27 +20,6 @@ import {
   XCircle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-
-const purposes: Record<TaskType, string> = {
-  deploy: "Apply a Service release to its containers.",
-  rollback: "Restore the selected previous Service release.",
-  backup: "Create a backup of the selected sources.",
-  backup_prune: "Remove backups selected by the retention policy.",
-  restore: "Restore the selected backup.",
-  attach: "Connect a consumer to a backing service.",
-  detach: "Remove a backing-service connection.",
-  run: "Execute the requested operation.",
-  script: "Run the selected script.",
-  provision: "Prepare the requested resource.",
-  create: "Create the requested resource.",
-  start: "Start the selected runtime.",
-  stop: "Stop the selected runtime.",
-  destroy: "Destroy the selected runtime.",
-  remove: "Remove the selected resource after its safety checks.",
-  update: "Apply the requested update.",
-  rotate: "Rotate the selected credentials.",
-  fetch: "Download and verify an image on the host.",
-};
 
 export function taskPresentation(
   task: ActivityEntry,
@@ -111,16 +94,6 @@ export function TaskOverview({
   const steps = task.steps ?? [];
   const done = steps.filter((step) => step.state === "done").length;
   const failed = steps.filter((step) => step.state === "failed");
-  const statusText = {
-    pending: "Queued. Execution has not started yet.",
-    running: "In progress. This view updates automatically.",
-    completed: "This Task completed successfully.",
-    failed: "This Task failed. It did not complete successfully.",
-    aborted:
-      "This Task was aborted. Check the resource before starting another operation.",
-    timed_out:
-      "This Task exceeded its time limit. Check the resource before retrying.",
-  }[task.status];
   const duration = task.startedAt
     ? Math.max(
         0,
@@ -133,20 +106,24 @@ export function TaskOverview({
     : null;
   return (
     <>
-      <section
-        className="space-y-3 rounded-lg border border-border bg-surface p-4"
-        aria-live="polite"
-      >
-        <StatusBadge status={task.status} />
-        <p className="text-sm font-medium">{statusText}</p>
-        <p className="text-sm text-muted-foreground">{purposes[task.type]}</p>
-        {steps.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {done} of {steps.length} recorded steps completed
-            {failed.length ? `; ${failed.length} failed` : ""}.
-          </p>
-        )}
-      </section>
+      <SummaryStrip>
+        <SummaryItem label="Recorded steps">
+          {steps.length ? `${done} / ${steps.length} steps` : "Not recorded"}
+        </SummaryItem>
+        <SummaryItem label="Failed steps">{failed.length}</SummaryItem>
+        <SummaryItem label={task.finishedAt ? "Execution time" : "Elapsed"}>
+          {duration === null
+            ? "Not started"
+            : duration < 60
+              ? duration === 0
+                ? "<1s"
+                : `${duration}s`
+              : `${Math.floor(duration / 60)}m ${duration % 60}s`}
+        </SummaryItem>
+        <SummaryItem label="Requested by">
+          {task.actor === "system" ? "Groundplane" : "Operator"}
+        </SummaryItem>
+      </SummaryStrip>
       <section className="space-y-2">
         <h3 className="text-sm font-medium">Affected resource</h3>
         <p className="break-words text-sm">{view.resource}</p>
@@ -165,22 +142,6 @@ export function TaskOverview({
         )}
       </section>
       <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-        <Info
-          label="Requested by"
-          value={
-            task.actor === "system" ? "Groundplane (automatic)" : "Operator"
-          }
-        />
-        <Info
-          label={task.finishedAt ? "Execution time" : "Elapsed execution"}
-          value={
-            duration === null
-              ? "Not started"
-              : duration < 60
-                ? `${duration}s`
-                : `${Math.floor(duration / 60)}m ${duration % 60}s`
-          }
-        />
         <Info label="Requested" value={timestamp(task.createdAt)} />
         <Info
           label="Started"
@@ -196,6 +157,15 @@ export function TaskOverview({
           {task.note}
         </p>
       )}
+      {(task.status === "aborted" || task.status === "timed_out") && (
+        <p
+          role="status"
+          className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-warning"
+        >
+          {task.status === "aborted" ? "Task aborted." : "Task timed out."}{" "}
+          Check the affected resource before starting another operation.
+        </p>
+      )}
       {task.status === "failed" && !task.note && (
         <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm">
           {failed.length
@@ -207,6 +177,13 @@ export function TaskOverview({
       )}
       <section className="space-y-2">
         <h3 className="text-sm font-medium">Execution steps</h3>
+        {task.status === "completed" &&
+          steps.some((step) => step.state === "pending") && (
+            <p className="text-xs text-muted-foreground">
+              The Task completed. Some plan steps have no completion record; the
+              list below shows the recorded history.
+            </p>
+          )}
         {steps.length ? (
           <ol className="space-y-2">
             {steps.map((step, index) => {
@@ -229,8 +206,18 @@ export function TaskOverview({
                   />
                   <div className="min-w-0 flex-1">
                     <p className="break-words">
-                      {step.label.replaceAll("_", " ")}
+                      {/^[a-z]+_[A-Z0-9]{20,}$/.test(step.label)
+                        ? `Step ${index + 1}`
+                        : step.label.replaceAll("_", " ")}
                     </p>
+                    {/^[a-z]+_[A-Z0-9]{20,}$/.test(step.label) && (
+                      <details className="mt-1 text-xs text-muted-foreground">
+                        <summary className="cursor-pointer">
+                          Step reference
+                        </summary>
+                        <code className="break-all">{step.label}</code>
+                      </details>
+                    )}
                     {step.detail && (
                       <p className="mt-1 break-words text-xs text-muted-foreground">
                         {step.detail}
@@ -238,7 +225,11 @@ export function TaskOverview({
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {step.state === "done" ? "Completed" : step.state}
+                    {step.state === "done"
+                      ? "Completed"
+                      : step.state === "pending" && task.status === "completed"
+                        ? "Not recorded"
+                        : step.state}
                   </span>
                 </li>
               );
@@ -251,10 +242,7 @@ export function TaskOverview({
           </p>
         )}
       </section>
-      <details className="rounded-lg border border-border p-3">
-        <summary className="cursor-pointer text-sm font-medium">
-          Technical details
-        </summary>
+      <AdvancedDetails>
         <dl className="mt-3 space-y-3 text-xs">
           {[
             ["Task ID", task.id],
@@ -290,7 +278,7 @@ export function TaskOverview({
             </p>
           )}
         </div>
-      </details>
+      </AdvancedDetails>
     </>
   );
 }

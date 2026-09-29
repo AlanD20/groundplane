@@ -1,10 +1,11 @@
 import { ResourceActionMenu } from "@/components/common/resource-action-menu";
+import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import {
+  CollectionToolbar,
   TablePagination,
   TableSortHead,
   useTableView,
 } from "@/components/common/table-controls";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -52,15 +53,12 @@ export function ProjectsTable({
   );
   return (
     <section className="space-y-4" aria-label="Projects">
-      <Input
-        type="search"
-        aria-label="Search Projects"
-        placeholder="Search Projects…"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        className="max-w-sm"
+      <CollectionToolbar
+        query={query}
+        onQueryChange={setQuery}
+        label="Projects"
       />
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <ResourceTable>
         <Table>
           <TableHeader>
             <TableRow>
@@ -83,7 +81,7 @@ export function ProjectsTable({
             {table.rows.map((project) => {
               const path = `/t/${tenant.slug}/${project.slug}`;
               return (
-                <TableRow key={project.id}>
+                <ResourceRow key={project.id} href={path}>
                   <TableCell className="min-w-44">
                     <Link
                       to={path}
@@ -153,7 +151,7 @@ export function ProjectsTable({
                       ]}
                     />
                   </TableCell>
-                </TableRow>
+                </ResourceRow>
               );
             })}
           </TableBody>
@@ -163,7 +161,7 @@ export function ProjectsTable({
             No Projects match your search.
           </p>
         )}
-      </div>
+      </ResourceTable>
       <TablePagination table={table} label="Projects" />
     </section>
   );

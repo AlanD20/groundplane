@@ -1,12 +1,13 @@
 import { ImageReference } from "@/components/common/image-reference";
 import { ResourceActionMenu } from "@/components/common/resource-action-menu";
+import { ResourceRow, ResourceTable } from "@/components/common/resource-table";
 import { StatusBadge } from "@/components/common/status-badge";
 import {
+  CollectionToolbar,
   TablePagination,
   TableSortHead,
   useTableView,
 } from "@/components/common/table-controls";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -60,20 +61,17 @@ export function EnvironmentsTable({
   );
   return (
     <section className="space-y-4" aria-label="Environments">
-      <Input
-        type="search"
-        aria-label="Search Environments"
-        placeholder="Search Environments…"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        className="max-w-sm"
+      <CollectionToolbar
+        query={query}
+        onQueryChange={setQuery}
+        label="Environments"
       />
       {observation.refreshError && (
         <p role="alert" className="text-xs text-destructive">
           Runtime refresh failed: {observation.refreshError}
         </p>
       )}
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <ResourceTable>
         <Table>
           <TableHeader>
             <TableRow>
@@ -96,7 +94,7 @@ export function EnvironmentsTable({
             {table.rows.map((env) => {
               const path = `/t/${tenant.slug}/${project.slug}/${encodeURIComponent(env.name)}`;
               return (
-                <TableRow key={env.id}>
+                <ResourceRow key={env.id} href={path}>
                   <TableCell>
                     <Link
                       to={path}
@@ -153,7 +151,7 @@ export function EnvironmentsTable({
                       ]}
                     />
                   </TableCell>
-                </TableRow>
+                </ResourceRow>
               );
             })}
           </TableBody>
@@ -163,7 +161,7 @@ export function EnvironmentsTable({
             No Environments match your search.
           </p>
         )}
-      </div>
+      </ResourceTable>
       <TablePagination table={table} label="Environments" />
     </section>
   );

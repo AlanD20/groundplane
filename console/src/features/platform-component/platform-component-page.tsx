@@ -1,16 +1,20 @@
 "use client";
 
+import { DetailRow } from "@/components/common/detail-row";
+import { PageHeader } from "@/components/common/page-header";
+import {
+  AdvancedDetails,
+  SummaryItem,
+  SummaryStrip,
+} from "@/components/common/resource-panel";
+import { StatusBadge } from "@/components/common/status-badge";
+import { Button } from "@/components/ui/button";
+import { environmentPlatformIngress } from "@/features/environment/platform-ingress";
 import { useRequiredParams } from "@/lib/router";
-import { Link } from "react-router-dom";
+import { useStore } from "@/lib/store";
 import { ArrowLeft, Network, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
-import { useStore } from "@/lib/store";
-import { environmentPlatformIngress } from "@/features/environment/platform-ingress";
-import { PageHeader } from "@/components/common/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/common/status-badge";
-import { MetaPill } from "@/components/common/meta-pill";
-import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import { CoreDnsSettings } from "./coredns-settings";
 const kindIcon: Record<string, React.ReactNode> = {
   coredns: <Network className="size-4 text-muted-foreground" />,
@@ -117,59 +121,23 @@ export default function PlatformComponentPage() {
       </div>
       <PageHeader
         title={component.name}
-        description={component.runtime}
         icon={kindIcon[component.kind]}
-        meta={
-          <>
-            <MetaPill icon={kindIcon[component.kind]}>
-              {component.name}
-            </MetaPill>
-            <StatusBadge status={component.status} />
-          </>
-        }
+        meta={<StatusBadge status={component.status} />}
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2">
-                {kindIcon[component.kind]}
-                {component.name}
-              </span>
-              <StatusBadge status={component.status} />
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-1.5 text-sm">
-            <Row label="Runtime" value={component.runtime} />
-            {component.hostNetwork ? (
-              <Row label="Network" value="host network" mono />
-            ) : null}
-            {component.mounts.length > 0 && (
-              <div className="mt-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  Mounts
-                </span>
-                {component.mounts.map((m) => (
-                  <div
-                    key={m}
-                    className="font-mono text-xs text-muted-foreground"
-                  >
-                    {m}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-1 flex flex-col gap-0.5">
-              {component.notes.map((n) => (
-                <span key={n} className="text-xs text-muted-foreground">
-                  · {n}
-                </span>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
+      <SummaryStrip>
+        <SummaryItem label="Runtime">{component.runtime}</SummaryItem>
+        <SummaryItem label="Network">
+          {component.hostNetwork ? "Host network" : "Container network"}
+        </SummaryItem>
+        <SummaryItem label="Resolver">
+          {platform.dns.enabled ? "Enabled" : "Disabled"}
+        </SummaryItem>
+        <SummaryItem label="Forwarders">
+          {editableDNSConfig.forwarders.length}
+        </SummaryItem>
+      </SummaryStrip>
+      <div>
         <CoreDnsSettings
           upstream={editableDNSConfig.upstream}
           upstreamAuto={editableDNSConfig.upstreamAuto}
@@ -238,6 +206,20 @@ export default function PlatformComponentPage() {
         />
       </div>
 
+      <AdvancedDetails>
+        <DetailRow label="Component ID" value={component.id} mono />
+        <DetailRow
+          label="Mounts"
+          value={component.mounts.join(", ") || "None"}
+          mono
+        />
+        {component.notes.map((note) => (
+          <p key={note} className="text-muted-foreground">
+            {note}
+          </p>
+        ))}
+      </AdvancedDetails>
+
       {environmentsWithoutComponentProjection > 0 && (
         <p
           className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
@@ -297,21 +279,4 @@ async function replaceCoreDNSConfig(
   });
   await refreshPlatformComponents();
   await refreshComponentConfig(componentId);
-}
-
-function Row({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={mono ? "font-mono text-xs" : "text-xs"}>{value}</span>
-    </div>
-  );
 }

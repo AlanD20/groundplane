@@ -1,16 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRequiredParams } from "@/lib/router";
-import { Activity, RefreshCw } from "lucide-react";
-import { useStore } from "@/lib/store";
-import { PageHeader } from "@/components/common/page-header";
-import { TaskJournalItem } from "@/components/common/task-journal-item";
-import { TaskPagination } from "@/features/task/task-pagination";
 import { EmptyState } from "@/components/common/empty-state";
-import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/common/page-header";
 import { Select } from "@/components/ui/select";
+import { TaskList } from "@/features/task/task-list";
+import { useRequiredParams } from "@/lib/router";
+import { useStore } from "@/lib/store";
 import type { TaskJournalScope } from "@/lib/types";
+import { Activity } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export default function TenantActivityPage() {
   const params = useRequiredParams("tenant");
@@ -56,12 +54,6 @@ export default function TenantActivityPage() {
       return { kind: "environment", environmentId: id };
     return { kind: "workspace", workspace: tenant.id };
   }, [effectiveFilter, tenant?.id]);
-  const journal = scope ? store.getTaskJournal(scope) : null;
-
-  useEffect(() => {
-    if (scope)
-      void store.loadTaskJournal("activity", scope).catch(() => undefined);
-  }, [scope, store.loadTaskJournal]);
 
   if (store.tenantsLoading) {
     return (
@@ -85,87 +77,25 @@ export default function TenantActivityPage() {
   }
   if (!tenant)
     return <EmptyState icon={<Activity />} title="Tenant not found" />;
-  if (!journal || !scope) return null;
-
-  const entries = journal.entries;
+  if (!scope) return null;
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Activity"
-        description="Task history for this Tenant and its descendants. Project and Environment filters only narrow this journal."
-        icon={<Activity />}
-        meta={
-          <div className="flex items-center gap-2">
-            <Select
-              value={effectiveFilter}
-              onValueChange={setFilter}
-              options={options}
-              className="min-w-64"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={journal.loading || journal.loadingMore}
-              onClick={() =>
-                void store
-                  .loadTaskJournal("activity", scope)
-                  .catch(() => undefined)
-              }
-            >
-              <RefreshCw className="size-4" /> Refresh
-            </Button>
-          </div>
+      <PageHeader title="Activity" icon={<Activity />} />
+      <TaskList
+        scope={scope}
+        surface="activity"
+        title="Tenant Tasks"
+        filters={
+          <Select
+            aria-label="Activity owner"
+            className="w-64 max-w-full"
+            value={effectiveFilter}
+            onValueChange={setFilter}
+            options={options}
+          />
         }
       />
-      <div className="flex flex-col gap-2.5">
-        {journal.loading && (
-          <div
-            role="status"
-            className="py-10 text-center text-sm text-muted-foreground"
-          >
-            loading tenant tasks…
-          </div>
-        )}
-        {journal.loadError && (
-          <div
-            role="alert"
-            className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-          >
-            <span>{journal.loadError}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={journal.loading || journal.loadingMore}
-              onClick={() =>
-                void store
-                  .loadTaskJournal(
-                    "activity",
-                    scope,
-                    journal.failedCursor ?? undefined,
-                  )
-                  .catch(() => undefined)
-              }
-            >
-              Retry
-            </Button>
-          </div>
-        )}
-        {entries.map((a) => (
-          <TaskJournalItem
-            key={a.id}
-            entry={a}
-            scope={scope}
-            surface="activity"
-          />
-        ))}
-        {journal.loaded && !journal.loadError && entries.length === 0 && (
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            no activity yet
-          </div>
-        )}
-        <TaskPagination scope={scope} surface="activity" />
-      </div>
     </div>
   );
 }

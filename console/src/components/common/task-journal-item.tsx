@@ -13,7 +13,7 @@ import type {
   TaskJournalScope,
   TaskJournalSurface,
 } from "@/lib/types";
-import { ArrowUpRight, Search } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -41,7 +41,9 @@ export function TaskJournalItem({
           <span className="break-words text-xs font-medium">{view.title}</span>
         </div>
         {entry.note && (
-          <p className="text-xs text-muted-foreground">{entry.note}</p>
+          <p className="line-clamp-2 break-all text-xs text-muted-foreground">
+            {entry.note}
+          </p>
         )}
         <p className="truncate text-[11px] text-muted-foreground">
           {view.scope} ·{" "}
@@ -56,7 +58,7 @@ export function TaskJournalItem({
 
   return (
     <>
-      <div className="flex w-full items-stretch rounded-lg border border-border bg-card transition-colors hover:bg-surface/40">
+      <div className="flex w-full items-stretch rounded-md transition-colors hover:bg-primary/5 focus-within:bg-primary/5">
         <Button
           variant="ghost"
           size="content"
@@ -67,7 +69,6 @@ export function TaskJournalItem({
           aria-haspopup="dialog"
         >
           {body}
-          <Search className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
         </Button>
         {destination && (
           <Button
@@ -80,9 +81,6 @@ export function TaskJournalItem({
             title={destination.label}
           >
             <ArrowUpRight className="size-3.5" />
-            <span className="hidden sm:inline">
-              {destination.fallback ? "Open journal" : "Open page"}
-            </span>
           </Button>
         )}
       </div>

@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Activity, RefreshCw } from "lucide-react";
-import { useStore } from "@/lib/store";
 import { PageHeader } from "@/components/common/page-header";
-import { TaskJournalItem } from "@/components/common/task-journal-item";
-import { TaskPagination } from "@/features/task/task-pagination";
-import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { TaskList } from "@/features/task/task-list";
+import { useStore } from "@/lib/store";
 import type { TaskJournalScope } from "@/lib/types";
+import { Activity } from "lucide-react";
+import { useMemo, useState } from "react";
 
 function activityScope(filter: string): TaskJournalScope {
   const separator = filter.indexOf(":");
@@ -24,12 +22,7 @@ function activityScope(filter: string): TaskJournalScope {
 export default function PlatformActivityPage() {
   const store = useStore();
   const [filter, setFilter] = useState("all");
-  const [status, setStatus] = useState("all");
   const scope = useMemo(() => activityScope(filter), [filter]);
-  const journal = store.getTaskJournal(scope);
-  const entries = journal.entries.filter(
-    (entry) => status === "all" || entry.status === status,
-  );
   const options = useMemo(() => {
     const result = [{ value: "all", label: "All activity" }];
     for (const tenant of store.tenants) {
@@ -57,116 +50,23 @@ export default function PlatformActivityPage() {
     return result;
   }, [store.backingProjects, store.tenantProjects, store.tenants]);
 
-  useEffect(() => {
-    void store.loadTaskJournal("activity", scope).catch(() => undefined);
-  }, [scope, store.loadTaskJournal]);
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Activity"
-        description="All platform and tenant task history. Tenant, Project, and Environment filters only narrow this journal."
-        icon={<Activity />}
-      />
-      <div
-        className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-4"
-        aria-label="Activity filters"
-      >
-        <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-xs text-muted-foreground">
-          Owner
+      <PageHeader title="Activity" icon={<Activity />} />
+      <TaskList
+        scope={scope}
+        surface="activity"
+        title="All Tasks"
+        filters={
           <Select
             aria-label="Activity owner"
+            className="w-64 max-w-full"
             value={filter}
             onValueChange={setFilter}
             options={options}
           />
-        </label>
-        <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-          Status on this page
-          <Select
-            aria-label="Status on this page"
-            value={status}
-            onValueChange={setStatus}
-            className="min-w-48"
-            options={[
-              "all",
-              "pending",
-              "running",
-              "completed",
-              "failed",
-              "timed_out",
-              "aborted",
-            ].map((value) => ({
-              value,
-              label:
-                value === "all" ? "All statuses" : value.replaceAll("_", " "),
-            }))}
-          />
-        </label>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={journal.loading || journal.loadingMore}
-          onClick={() =>
-            void store.loadTaskJournal("activity", scope).catch(() => undefined)
-          }
-        >
-          <RefreshCw className="size-4" /> Refresh
-        </Button>
-      </div>
-      <div className="flex flex-col gap-2.5">
-        {journal.loaded && (
-          <p className="text-xs text-muted-foreground" role="status">
-            {entries.length} matching of {journal.entries.length} tasks on this
-            page
-          </p>
-        )}
-        {journal.loading && (
-          <div
-            role="status"
-            className="py-10 text-center text-sm text-muted-foreground"
-          >
-            loading activity…
-          </div>
-        )}
-        {journal.loadError && (
-          <div
-            role="alert"
-            className="flex items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive"
-          >
-            <span>{journal.loadError}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={journal.loading || journal.loadingMore}
-              onClick={() =>
-                void store
-                  .loadTaskJournal(
-                    "activity",
-                    scope,
-                    journal.failedCursor ?? undefined,
-                  )
-                  .catch(() => undefined)
-              }
-            >
-              Retry
-            </Button>
-          </div>
-        )}
-        {entries.map((a) => (
-          <TaskJournalItem
-            key={a.id}
-            entry={a}
-            scope={scope}
-            surface="activity"
-          />
-        ))}
-        {journal.loaded && !journal.loadError && entries.length === 0 && (
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            No tasks on this page match these filters.
-          </div>
-        )}
-        <TaskPagination scope={scope} surface="activity" />
-      </div>
+        }
+      />
     </div>
   );
 }
