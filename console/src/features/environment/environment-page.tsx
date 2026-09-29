@@ -121,6 +121,7 @@ export default function EnvironmentPage() {
     );
   }
   const provisioningFailed = env.provisioningState === "failed";
+  const releaseLabel = env.release.replace(/^(sha-|sha256:)([a-f0-9]{12})[a-f0-9]{52}$/, "$1$2");
   const serviceCount = provisioningFailed ? "—" : env.services.length;
   const runtimeState = environmentRuntimeState(
     env.services,
@@ -155,7 +156,7 @@ export default function EnvironmentPage() {
         icon={<Layers />}
         meta={
           <>
-            <MetaPill icon={<Tag />}>release {env.release}</MetaPill>
+            <MetaPill icon={<Tag />} className="min-w-0 max-w-full [&>span]:truncate"><span title={env.release}>release {releaseLabel}</span></MetaPill>
             <MetaPill icon={<Clock />}>
               deployed {formatTimestamp(env.lastDeployAt, "never")}
             </MetaPill>
@@ -226,7 +227,8 @@ export default function EnvironmentPage() {
         <StatCard
           icon={<History />}
           label="Last deploy"
-          value={env.release}
+          value={<span className="text-lg">{releaseLabel}</span>}
+          valueTitle={env.release}
           hint={formatTimestamp(env.lastDeployAt, "never")}
         />
       </div>
