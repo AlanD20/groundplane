@@ -41,7 +41,7 @@ export function useTaskJournal(
   const loadTaskJournal = useCallback<TaskJournalActions["loadTaskJournal"]>(
     async (surface, scope, cursor, requestedPageSize) => {
       const key = taskJournalKey(scope);
-      const pageSize = requestedPageSize ?? pageSizes.current.get(key) ?? 25;
+      const pageSize = requestedPageSize ?? pageSizes.current.get(key) ?? 5;
       if (pageSize !== (pageSizes.current.get(key) ?? 25)) cursor = undefined;
       pageSizes.current.set(key, pageSize);
       const epoch = (taskJournalEpochs.current.get(key) ?? 0) + 1;

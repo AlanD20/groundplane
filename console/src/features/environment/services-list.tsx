@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Boxes, ChevronRight, Plug, RefreshCw } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import type { Environment, Service } from '@/lib/types'
@@ -17,29 +17,36 @@ import { cn } from '@/lib/utils'
 import { LogViewer } from '@/features/logs/log-viewer'
 import type { ZoneSelection } from './zone-map'
 import { ServiceDetailsDrawer } from './service-details-drawer'
+import { TablePagination, useTableView } from '@/components/common/table-controls'
 
 export function ServicesList({ env, now = Date.now() }: { env: Environment; now?: number }) {
   const store = useStore()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedId = searchParams.get('service')
+  const setSelectedId = (id: string | null) => setSearchParams(current => {
+    const next = new URLSearchParams(current)
+    if (id) next.set('service', id); else next.delete('service')
+    return next
+  })
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
-  const [ascending, setAscending] = useState(true)
   const selected = env.services.find((service) => service.id === selectedId)
   const visible = env.services.filter(service =>
     `${service.name} ${service.image} ${service.zones.join(' ')}`.toLowerCase().includes(query.trim().toLowerCase()) &&
     (status === 'all' || serviceObservationState(service.observation, now) === status),
-  ).sort((a, b) => (ascending ? 1 : -1) * a.name.localeCompare(b.name))
+  )
+  const table = useTableView(visible, { name: service => service.name }, 'name', 'asc', `${env.id}/${query}/${status}`)
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-3">
         <Input type="search" aria-label="Filter services" placeholder="Filter by name, image or zone…" value={query} onChange={event => setQuery(event.target.value)} className="min-w-48 flex-1" />
         <Select aria-label="Runtime status" className="w-auto min-w-44" value={status} onValueChange={setStatus} options={['all', 'healthy', 'running', 'degraded', 'starting', 'stopped', 'failed', 'absent', 'unavailable'].map(value => ({ value, label: value === 'all' ? 'All runtime states' : value }))} />
-        <Button variant="outline" onClick={() => setAscending(!ascending)} aria-label={`Name sorted ${ascending ? 'ascending' : 'descending'}, reverse sort`}>Name {ascending ? '↑' : '↓'}</Button>
+        <Button variant="outline" onClick={() => table.sortBy('name')} aria-label={`Name sorted ${table.direction === 'asc' ? 'ascending' : 'descending'}, reverse sort`}>Name {table.direction === 'asc' ? '↑' : '↓'}</Button>
         <span className="text-xs text-muted-foreground" role="status">{visible.length} of {env.services.length}</span>
       </div>
       <ul aria-label="Environment services" className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
-        {visible.map((service) => {
+        {table.rows.map((service) => {
           const attached = env.attaches.filter((attach) => attach.service === service.name)
           return (
             <li key={service.id} className="min-w-0">
@@ -98,6 +105,7 @@ export function ServicesList({ env, now = Date.now() }: { env: Environment; now?
           )
         })}
       </ul>
+      <TablePagination table={table} label="Services" />
       {visible.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No services match these filters.</p>}
       {selected && (
         <ServiceDetailsDrawer

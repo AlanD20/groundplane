@@ -1,4 +1,5 @@
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
+import { TablePagination, TableSortHead, useTableView } from '@/components/common/table-controls'
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -453,6 +454,7 @@ function BackupsTab({ g, env, svc }: { g: Project; env: NonNullable<Project['env
     }),
   )
   const enabledCount = consumerBackups.filter((c) => c.enabled).length
+  const table = useTableView(consumerBackups, { consumer: c => `${c.project}/${c.environment}`, database: c => c.database, kind: c => c.kind, policy: c => Number(c.enabled), last: c => Date.parse(c.lastRun) || 0, next: c => Date.parse(c.nextRun) || 0 }, 'consumer', 'asc', g.id)
   const disabledCount = consumerBackups.length - enabledCount
   const noPolicy = (g.consumers?.length ?? 0) - consumerBackups.length
 
@@ -504,17 +506,17 @@ function BackupsTab({ g, env, svc }: { g: Project; env: NonNullable<Project['env
             <Table className="w-full text-sm">
               <TableHeader>
                 <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                  <TableHead className="py-2 pr-4">Consumer</TableHead>
-                  <TableHead className="py-2 pr-4">Database</TableHead>
-                  <TableHead className="py-2 pr-4">Kind</TableHead>
-                  <TableHead className="py-2 pr-4">Policy</TableHead>
+                  <TableSortHead sort={table} field="consumer" className="py-2 pr-4">Consumer</TableSortHead>
+                  <TableSortHead sort={table} field="database" className="py-2 pr-4">Database</TableSortHead>
+                  <TableSortHead sort={table} field="kind" className="py-2 pr-4">Kind</TableSortHead>
+                  <TableSortHead sort={table} field="policy" className="py-2 pr-4">Policy</TableSortHead>
                   <TableHead className="py-2 pr-4">Records</TableHead>
-                  <TableHead className="py-2 pr-4">Last run</TableHead>
-                  <TableHead className="py-2">Next run</TableHead>
+                  <TableSortHead sort={table} field="last" className="py-2 pr-4">Last run</TableSortHead>
+                  <TableSortHead sort={table} field="next" className="py-2">Next run</TableSortHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {consumerBackups.map((c) => (
+                {table.rows.map((c) => (
                   <TableRow key={`${c.project}-${c.environment}-${c.database}`} className="border-b border-border last:border-0">
                     <TableCell className="py-2 pr-4">
                       <span className="font-mono text-xs">
@@ -539,6 +541,7 @@ function BackupsTab({ g, env, svc }: { g: Project; env: NonNullable<Project['env
                 ))}
               </TableBody>
             </Table>
+            <div className="mt-3"><TablePagination table={table} label="Consumers" /></div>
           </div>
         )}
       </CardContent>

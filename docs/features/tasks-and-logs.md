@@ -17,6 +17,10 @@ page when the action dialog closes or you navigate elsewhere in the Console.
 The link opens that exact Task, not a filtered history list; it can be copied or
 opened in another tab. The inspector refreshes pending/running status until the
 Task finishes. A rejected request without a Task ID has no Task to open.
+The inspector leads with the action, affected resource, status and execution
+timing. Recorded steps show their outcomes; unavailable failure details are
+identified explicitly, not inferred from a failed status. Exact IDs and plan
+hashes remain available under Technical details.
 
 Task events resume by sequence. The latest 1,000 events are retained; each is
 bounded to 32 KiB. Sequence numbers never reset when older events are trimmed.
@@ -27,6 +31,7 @@ retention boundary.
 Activity and Task lists show newest-created Tasks first (descending Task ID),
 with the same scope filters and fixed-revision cursor semantics on every page.
 There is no general Component or execution-target Task filter.
+Console pages default to five Tasks, with 5/10/25/50 choices.
 
 ## Retry
 

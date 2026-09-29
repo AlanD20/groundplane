@@ -27,7 +27,7 @@ export function resolveTaskOperationSurface(
   const target = task.target
 
   if (task.workspaceType === 'platform' && task.type === 'fetch') {
-    return exact('/platform/host#images', 'Open host images')
+    return exact('/platform/host/images', 'Open host images')
   }
 
   if (task.workspaceType === 'platform' && task.type === 'update' && target === 'controller') {
@@ -148,7 +148,7 @@ function workspaceFallback(
   tenant: Tenant | undefined,
 ): TaskNavigationResolution | null {
   if (task.workspaceType === 'platform') {
-    return fallback('/platform/components', 'Open owning Platform workspace journal')
+    return fallback('/platform/activity', 'Open owning Platform workspace journal')
   }
   return tenant
     ? fallback(`/t/${segment(tenant.slug)}/activity`, 'Open owning Tenant workspace journal')

@@ -27,7 +27,7 @@ const taskStatuses = new Set<TaskStatus>([
 export function emptyTaskJournal(): TaskJournalState {
   return {
     entries: [],
-    pageSize: 25,
+    pageSize: 5,
     pageIndex: 0,
     pageCursors: [undefined],
     nextCursor: null,
@@ -53,7 +53,7 @@ export function taskJournalKey(scope: TaskJournalScope): string {
 export function taskJournalQuery(
   scope: TaskJournalScope,
   cursor?: string,
-  pageSize: TaskPageSize = 25,
+  pageSize: TaskPageSize = 5,
 ): string {
   const query = new URLSearchParams({ limit: String(pageSize) });
   if (cursor) query.set("cursor", cursor);

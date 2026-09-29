@@ -56,6 +56,13 @@ does not mean an image can safely be removed. The MVP has one local Agent host.
 Each row represents one image ID. Names, compact tags, size and usage are shown
 in the list; open the image for full references, Fetch history and protection
 details. Several tags or repository names can point to that same image.
+Click the usage badge to see container names and states, including stopped
+containers. Matched Services and Environments link to their current Console
+pages; containers outside GP are identified separately. Missing GP resource
+records do not hide a container or imply that removal is safe. Other removal
+protection, such as retained rollback inputs, appears separately from container use.
+Sort images by name, creation date or size; the date is the image's creation time,
+not when it was fetched. Pages default to five rows, with 5/10/25/50 choices.
 
 Fetch accepts an explicit tag or SHA-256 digest from a public registry or GP's
 managed private registry. For example, `groundplane image fetch nginx:latest`.

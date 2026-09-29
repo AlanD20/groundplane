@@ -2661,6 +2661,12 @@
       "HostImage": {
         "additionalProperties": false,
         "properties": {
+          "container_uses": {
+            "items": {
+              "$ref": "#/components/schemas/ImageContainer"
+            },
+            "type": "array"
+          },
           "containers": {
             "format": "int64",
             "type": "integer"
@@ -2682,6 +2688,10 @@
             "type": "array"
           },
           "id": {
+            "type": "string"
+          },
+          "protection_reason": {
+            "description": "Additional non-container removal protection; empty when none is reported",
             "type": "string"
           },
           "removal_blocked": {
@@ -2706,6 +2716,8 @@
           "size_bytes",
           "created_at",
           "containers",
+          "container_uses",
+          "protection_reason",
           "removal_blocked",
           "fetches"
         ],
@@ -2729,6 +2741,74 @@
           "total",
           "used",
           "used_pct"
+        ],
+        "type": "object"
+      },
+      "ImageContainer": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "managed": {
+            "description": "Container carries Groundplane management labels; not an authorization claim",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/ImageContainerOwner"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "managed"
+        ],
+        "type": "object"
+      },
+      "ImageContainerOwner": {
+        "additionalProperties": false,
+        "properties": {
+          "backing": {
+            "type": "boolean"
+          },
+          "environment_id": {
+            "type": "string"
+          },
+          "environment_name": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "project_slug": {
+            "type": "string"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "service_name": {
+            "type": "string"
+          },
+          "tenant_slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_id",
+          "service_name",
+          "environment_id",
+          "environment_name",
+          "project_id",
+          "project_slug",
+          "tenant_slug",
+          "backing"
         ],
         "type": "object"
       },

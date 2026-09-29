@@ -5,7 +5,6 @@ import { RefreshCw, X } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { ActivityIcon } from '@/components/common/activity-icon'
 import { StatusBadge } from '@/components/common/status-badge'
-import { TaskJournalMetadata } from '@/components/common/task-journal-metadata'
 import { Button } from '@/components/ui/button'
 import { DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Drawer, DrawerContent } from '@/components/ui/drawer'
@@ -13,6 +12,7 @@ import { taskDetailActions } from '@/lib/task-detail-actions'
 import { requestTask } from '@/features/task/api'
 import { taskFromAPI } from '@/features/task/journal-model'
 import { ImageFetchTaskDetails } from '@/features/image-delivery/image-fetch-task-details'
+import { TaskOverview, taskPresentation } from '@/features/task/task-overview'
 import type { ActivityEntry, TaskJournalScope, TaskJournalSurface } from '@/lib/types'
 
 export function TaskDetailDrawer({
@@ -84,15 +84,15 @@ export function TaskDetailDrawer({
     <Drawer open onOpenChange={onOpenChange}>
       <DrawerContent>
         <DialogHeader>
-          <DialogTitle className="flex min-w-0 items-start gap-2 break-all">
+          <DialogTitle className="flex min-w-0 items-start gap-2 break-words">
             {task && <ActivityIcon type={task.type} status={task.status} />}
-            {task?.title ?? `Task ${id}`}
+            {task ? task.imageFetch ? task.title : taskPresentation(task, store).title : 'Task details'}
           </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-4">
           {detailLoading && (
             <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
-              Loading authoritative Task details…
+              Loading Task details…
             </p>
           )}
           {detailError && (
@@ -103,53 +103,7 @@ export function TaskDetailDrawer({
           )}
           {detail && task && (
             <>
-              {task.imageFetch ? <><StatusBadge status={task.status} /><ImageFetchTaskDetails task={task} /></> : <>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
-                  {task.id}
-                </span>
-                <span className="rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
-                  {task.type}
-                </span>
-                <StatusBadge status={task.status} />
-              </div>
-              <div className="flex flex-col gap-1.5 text-sm">
-                <TaskDetailRow label="Target" value={task.target} />
-                {task.operationId && <TaskDetailRow label="Operation" value={task.operationId} />}
-                {task.retryOf && <TaskDetailRow label="Retry of" value={task.retryOf} />}
-              </div>
-              <TaskJournalMetadata entry={task} />
-              {task.note && (
-                <p className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
-                  {task.note}
-                </p>
-              )}
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  Procedure · {task.steps?.length ?? 0} steps
-                </span>
-                {task.steps && task.steps.length > 0 ? (
-                  <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
-                    {task.steps.map((step, index) => (
-                      <div key={`${step.label}:${index}`} className="flex items-center gap-2 text-[11px]">
-                        <span className={
-                          step.state === 'done'
-                            ? 'size-1.5 shrink-0 rounded-full bg-success'
-                            : step.state === 'running'
-                              ? 'size-1.5 shrink-0 animate-pulse rounded-full bg-primary'
-                              : step.state === 'failed'
-                                ? 'size-1.5 shrink-0 rounded-full bg-destructive'
-                                : 'size-1.5 shrink-0 rounded-full bg-muted-foreground/30'
-                        } />
-                        <span className="font-mono text-muted-foreground">{step.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">no steps recorded</p>
-                )}
-              </div>
-              </>}
+              {task.imageFetch ? <><StatusBadge status={task.status} /><ImageFetchTaskDetails task={task} /></> : <TaskOverview task={task} onClose={() => onOpenChange(false)} />}
             </>
           )}
           {actionError && (
@@ -179,14 +133,5 @@ export function TaskDetailDrawer({
         </div>
       </DrawerContent>
     </Drawer>
-  )
-}
-
-function TaskDetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 truncate font-mono text-xs" title={value}>{value}</span>
-    </div>
   )
 }

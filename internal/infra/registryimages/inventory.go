@@ -23,9 +23,18 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 	if err := errors.Join(listErr, containerErr, engine.Close()); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	uses := make(map[string]int)
+	uses := make(map[string][]imagefetch.ContainerUse)
 	for _, container := range containers.Items {
-		uses[container.ImageID]++
+		name := container.ID
+		if len(container.Names) > 0 {
+			name = strings.TrimPrefix(container.Names[0], "/")
+		}
+		uses[container.ImageID] = append(uses[container.ImageID], imagefetch.ContainerUse{
+			ID: container.ID, Name: name, State: string(container.State),
+			Managed:       container.Labels["com.groundplane.managed"] == "true",
+			EnvironmentID: container.Labels["com.groundplane.environment-id"],
+			ServiceID:     container.Labels["com.groundplane.service-id"],
+		})
 	}
 	result := make([]imagefetch.LocalImage, 0, len(images.Items))
 	for _, image := range images.Items {
@@ -40,10 +49,14 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 		}
 		slices.Sort(contentIDs)
 		contentIDs = slices.Compact(contentIDs)
-		containers := 0
+		containerUses := make([]imagefetch.ContainerUse, 0)
 		for _, id := range contentIDs {
-			containers += uses[id]
+			containerUses = append(containerUses, uses[id]...)
 		}
+		slices.SortFunc(
+			containerUses,
+			func(a, b imagefetch.ContainerUse) int { return strings.Compare(a.Name, b.Name) },
+		)
 		tags, digests := []string{}, slices.Clone(image.RepoDigests)
 		for _, ref := range image.RepoTags {
 			if strings.Contains(ref, "@") {
@@ -54,7 +67,8 @@ func (Local) List(ctx context.Context) ([]imagefetch.LocalImage, error) {
 		}
 		result = append(result, imagefetch.LocalImage{
 			ID: image.ID, Tags: imageReferences(tags), Digests: imageReferences(digests),
-			SizeBytes: image.Size, Created: image.Created, Containers: containers, ContentIDs: contentIDs, RemovalBlocked: blocked,
+			SizeBytes: image.Size, Created: image.Created, Containers: len(containerUses), ContainerUses: containerUses,
+			ContentIDs: contentIDs, RemovalBlocked: blocked,
 		})
 	}
 	slices.SortFunc(result, func(a, b imagefetch.LocalImage) int { return strings.Compare(a.ID, b.ID) })

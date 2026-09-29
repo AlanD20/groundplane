@@ -59,6 +59,20 @@ func newImageCmd() *cobra.Command {
 			}
 			rows := make([][]string, 0, len(inventory.Images))
 			for _, image := range inventory.Images {
+				uses := make([]string, 0, len(image.ContainerUses))
+				for _, use := range image.ContainerUses {
+					owner := "not managed by GP"
+					if use.Managed {
+						owner = "GP-managed container"
+					}
+					if use.Owner != nil {
+						owner = use.Owner.ProjectSlug + "/" + use.Owner.EnvironmentName
+						if use.Owner.ServiceName != "" {
+							owner += "/" + use.Owner.ServiceName
+						}
+					}
+					uses = append(uses, use.Name+" ("+use.State+", "+owner+")")
+				}
 				fetches := make([]string, 0, len(image.Fetches))
 				for _, fetch := range image.Fetches {
 					fetches = append(
@@ -74,13 +88,24 @@ func newImageCmd() *cobra.Command {
 						strings.Join(image.Digests, ", "),
 						strconv.FormatInt(image.SizeBytes, 10),
 						strconv.Itoa(image.Containers),
+						strings.Join(uses, ", "), image.ProtectionReason,
 						image.RemovalBlocked,
 						strings.Join(fetches, ", "),
 					},
 				)
 			}
 			return app.Out.Render(
-				[]string{"ID", "TAGS", "DIGESTS", "BYTES", "CONTAINERS", "REMOVAL BLOCKED", "FETCH HISTORY"},
+				[]string{
+					"ID",
+					"TAGS",
+					"DIGESTS",
+					"BYTES",
+					"CONTAINERS",
+					"CONTAINER USAGE",
+					"OTHER PROTECTION",
+					"REMOVAL BLOCKED",
+					"FETCH HISTORY",
+				},
 				rows,
 				inventory,
 			)

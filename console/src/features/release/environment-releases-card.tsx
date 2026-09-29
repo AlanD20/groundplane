@@ -13,9 +13,11 @@ import { useRequiredParams } from "@/lib/router";
 import { History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Environment, Service } from "@/lib/types";
+import { TablePagination, TableSortHead, useTableView } from '@/components/common/table-controls';
 
 export function ReleasesCard({ env }: { env: Environment }) {
   const params = useRequiredParams("tenant", "project", "env");
+  const table = useTableView(env.deploys, { service: d => d.service, tag: d => d.tag, strategy: d => d.strategy, when: d => Date.parse(d.when) || 0, status: d => d.status }, 'when', 'desc', env.id);
   return (
     <Card>
       <CardHeader>
@@ -34,16 +36,16 @@ export function ReleasesCard({ env }: { env: Environment }) {
           <Table className="w-full text-sm">
             <TableHeader>
               <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                <TableHead className="px-3 py-2">Service</TableHead>
-                <TableHead className="px-3 py-2">Tag</TableHead>
+                <TableSortHead sort={table} field="service" className="px-3 py-2">Service</TableSortHead>
+                <TableSortHead sort={table} field="tag" className="px-3 py-2">Tag</TableSortHead>
                 <TableHead className="px-3 py-2">Digest</TableHead>
-                <TableHead className="px-3 py-2">Strategy</TableHead>
-                <TableHead className="px-3 py-2">When</TableHead>
-                <TableHead className="px-3 py-2">Status</TableHead>
+                <TableSortHead sort={table} field="strategy" className="px-3 py-2">Strategy</TableSortHead>
+                <TableSortHead sort={table} field="when" className="px-3 py-2">When</TableSortHead>
+                <TableSortHead sort={table} field="status" className="px-3 py-2">Status</TableSortHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {env.deploys.map((d, i) => (
+              {table.rows.map((d) => (
                 <TableRow
                   key={d.id}
                   className="border-b border-border last:border-0"
@@ -96,6 +98,7 @@ export function ReleasesCard({ env }: { env: Environment }) {
             </TableBody>
           </Table>
         </div>
+        <div className="mt-3"><TablePagination table={table} label="Releases" /></div>
       </CardContent>
     </Card>
   );

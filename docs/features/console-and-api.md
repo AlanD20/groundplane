@@ -6,6 +6,12 @@ missing Controller capability.
 
 ## Using the Console
 
+Growing Console tables use five rows per page by default, with 5/10/25/50
+choices and visible sort direction on sortable columns. Filters and sorting
+apply before pagination. Recovery-point sorting covers loaded records only;
+the page indicates when older records remain to be loaded. Small fixed summaries,
+including the MVP's single Agent, do not need pagination.
+
 Navigation follows Platform or Tenant → Project → Environment. Host owns
 Controller and Agent management; Components owns integration settings.
 Activity and Task views show the same durable operations, with scope and status

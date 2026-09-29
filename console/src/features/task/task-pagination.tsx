@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { useStore } from '@/lib/store'
 import type { TaskJournalScope, TaskJournalSurface, TaskPageSize } from '@/lib/types'
+import { tablePageSizes } from '@/components/common/table-controls'
 
-const pageSizes: TaskPageSize[] = [10, 25, 50, 100]
+const pageSizes: readonly TaskPageSize[] = tablePageSizes
 
 export function TaskPagination({ scope, surface }: {
   scope: TaskJournalScope

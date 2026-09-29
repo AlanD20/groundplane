@@ -27,6 +27,7 @@ import {
 } from "@/features/backup/environment-backup-projection";
 import { BackupPolicyDialog } from "@/features/backup/backup-policy-dialog";
 import { TaskLink } from '@/components/common/task-link';
+import { TablePagination, TableSortHead, useTableView } from '@/components/common/table-controls';
 
 // ---- Backups ----
 
@@ -35,6 +36,7 @@ export function BackupsCard({ env }: { env: Environment }) {
   const policyState = store.getBackupPolicyState(env.id);
   const backup = policyState.policy;
   const points = policyState.recoveryPoints;
+  const table = useTableView(points.items, { id: point => point.id, source: point => `${point.sourceKind}/${point.sourceId}`, target: point => point.targetId, created: point => Date.parse(point.createdAt), size: point => point.sizeBytes, status: point => point.status }, 'created', 'desc', env.id);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [runTaskId, setRunTaskId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
@@ -317,12 +319,8 @@ export function BackupsCard({ env }: { env: Environment }) {
                     <TableHead className="px-3 py-2 font-medium">
                       Target
                     </TableHead>
-                    <TableHead className="px-3 py-2 font-medium">
-                      Created
-                    </TableHead>
-                    <TableHead className="px-3 py-2 font-medium">
-                      Size
-                    </TableHead>
+                    <TableSortHead sort={table} field="created" className="px-3 py-2 font-medium">Created</TableSortHead>
+                    <TableSortHead sort={table} field="size" className="px-3 py-2 font-medium">Size</TableSortHead>
                     <TableHead className="px-3 py-2 font-medium">
                       Encryption
                     </TableHead>
@@ -332,7 +330,7 @@ export function BackupsCard({ env }: { env: Environment }) {
                   </TableRow>
                 </TableHeader>
                 <TableBody className="divide-y divide-border">
-                  {points.items.map((point) => (
+                  {table.rows.map((point) => (
                     <TableRow key={point.id}>
                       <TableCell className="px-3 py-2 font-mono text-primary">
                         {point.id}
@@ -361,6 +359,8 @@ export function BackupsCard({ env }: { env: Environment }) {
               </Table>
             </div>
           )}
+          {points.items.length > 0 && <div className="mt-3"><TablePagination table={table} label="Recovery points" /></div>}
+          {points.nextCursor && <p className="mt-2 text-xs text-muted-foreground">Sorting and pagination cover the loaded recovery points. Load more to include older records.</p>}
           {points.nextCursor && (
             <div className="mt-3 flex justify-center">
               <Button

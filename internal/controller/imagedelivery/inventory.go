@@ -31,12 +31,18 @@ func (service *Service) ListImages(ctx context.Context) (apiTypes.ImageList, err
 		Images:     make([]apiTypes.HostImage, 0, len(images)),
 		ObservedAt: time.Now().UTC().Format(time.RFC3339),
 	}
+	owners := make(map[string]*apiTypes.ImageContainerOwner)
 	for _, image := range images {
+		uses, err := service.containerUses(ctx, image.ContainerUses, owners)
+		if err != nil {
+			return apiTypes.ImageList{}, err
+		}
 		result.Images = append(result.Images, apiTypes.HostImage{
 			ID: image.ID, Tags: image.Tags, Digests: image.Digests, SizeBytes: image.SizeBytes,
 			CreatedAt: time.Unix(image.Created, 0).UTC().Format(time.RFC3339), Containers: image.Containers,
 			RemovalBlocked: removalReason(image, retention),
-			Fetches:        retention.history(image),
+			ContainerUses:  uses, ProtectionReason: otherRemovalReason(image, retention),
+			Fetches: retention.history(image),
 		})
 	}
 	return result, nil
@@ -46,6 +52,10 @@ func removalReason(image imagefetch.LocalImage, retention imageRetention) string
 	if image.Containers > 0 {
 		return fmt.Sprintf("Used by %d containers, including stopped containers", image.Containers)
 	}
+	return otherRemovalReason(image, retention)
+}
+
+func otherRemovalReason(image imagefetch.LocalImage, retention imageRetention) string {
 	if image.RemovalBlocked != "" {
 		return image.RemovalBlocked
 	}

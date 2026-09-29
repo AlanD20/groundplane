@@ -8,6 +8,7 @@ import { TaskLink } from '@/components/common/task-link'
 import { StatusBadge } from '@/components/common/status-badge'
 import { imageSize, type HostImage } from './api'
 import { imageName, shortImageId } from './image-presentation'
+import { ImageUsage } from './image-usage'
 
 export function ImageDetails({ image, unavailable, onClose, onRemove }: {
   image: HostImage
@@ -15,7 +16,7 @@ export function ImageDetails({ image, unavailable, onClose, onRemove }: {
   onClose: () => void
   onRemove: () => void
 }) {
-  return <Drawer open onOpenChange={open => { if (!open) onClose() }}><DrawerContent>
+  return <Drawer open onOpenChange={open => { if (!open) onClose() }}><DrawerContent className="max-w-3xl">
     <DialogHeader>
       <DialogTitle className="break-words">{imageName(image)}</DialogTitle>
       <DialogDescription>One local image, with all names that point to it.</DialogDescription>
@@ -25,6 +26,8 @@ export function ImageDetails({ image, unavailable, onClose, onRemove }: {
       <Badge variant={image.containers ? 'primary' : 'muted'}>{image.containers} containers</Badge>
       <Badge variant="outline">{image.tags.length} tags</Badge>
     </div>
+    {unavailable && <p role="status" className="text-xs text-muted-foreground">Refreshing or unable to refresh. Usage may be out of date.</p>}
+    <ImageUsage image={image} onClose={onClose} />
     <section className="space-y-2"><h3 className="text-sm font-medium">Image ID</h3><Reference value={image.id} /></section>
     <section className="space-y-2"><h3 className="text-sm font-medium">Local tags</h3>
       {image.tags.length ? image.tags.map(tag => <Reference key={tag} value={tag} />) : <p className="text-sm text-muted-foreground">No local tags. This image is available by digest.</p>}
@@ -42,7 +45,6 @@ export function ImageDetails({ image, unavailable, onClose, onRemove }: {
       </div>)}
       <p className="text-xs text-muted-foreground">Requested tags are historical. Only completed Tasks confirm a successful Fetch.</p>
     </section>}
-    {image.removal_blocked && <p role="status" className="rounded-lg border border-border bg-surface p-3 text-sm text-muted-foreground">{image.removal_blocked}</p>}
     <div className="flex justify-end gap-2 border-t border-border pt-4">
       <Button variant="outline" onClick={onClose}>Close</Button>
       <Button variant="destructive" disabled={unavailable || !!image.removal_blocked} onClick={onRemove}><Trash2 className="size-4" /> Remove image</Button>

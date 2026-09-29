@@ -2298,6 +2298,7 @@ export interface components {
             status: string;
         };
         HostImage: {
+            container_uses: components["schemas"]["ImageContainer"][];
             /** Format: int64 */
             containers: number;
             created_at: string;
@@ -2305,6 +2306,8 @@ export interface components {
             /** @description Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags */
             fetches: components["schemas"]["ImageFetchRecord"][];
             id: string;
+            /** @description Additional non-container removal protection; empty when none is reported */
+            protection_reason: string;
             /** @description Empty when current observation permits removal; admission and execution recheck protection */
             removal_blocked: string;
             /** Format: int64 */
@@ -2316,6 +2319,24 @@ export interface components {
             used: string;
             /** Format: int64 */
             used_pct: number;
+        };
+        ImageContainer: {
+            id: string;
+            /** @description Container carries Groundplane management labels; not an authorization claim */
+            managed: boolean;
+            name: string;
+            owner?: components["schemas"]["ImageContainerOwner"];
+            state: string;
+        };
+        ImageContainerOwner: {
+            backing: boolean;
+            environment_id: string;
+            environment_name: string;
+            project_id: string;
+            project_slug: string;
+            service_id: string;
+            service_name: string;
+            tenant_slug: string;
         };
         ImageFetchAccepted: {
             /**

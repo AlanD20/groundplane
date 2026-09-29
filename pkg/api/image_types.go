@@ -7,14 +7,35 @@ type ImageFetchRequest struct {
 // HostImage is a live local-daemon observation. Containers includes stopped
 // containers; it is not a claim that the image is safe to delete.
 type HostImage struct {
-	ID             string             `json:"id"`
-	Tags           []string           `json:"tags" nullable:"false"`
-	Digests        []string           `json:"digests" nullable:"false"`
-	SizeBytes      int64              `json:"size_bytes"`
-	CreatedAt      string             `json:"created_at"`
-	Containers     int                `json:"containers"`
-	RemovalBlocked string             `json:"removal_blocked" doc:"Empty when current observation permits removal; admission and execution recheck protection"`
-	Fetches        []ImageFetchRecord `json:"fetches" nullable:"false" doc:"Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags"`
+	ID               string             `json:"id"`
+	Tags             []string           `json:"tags" nullable:"false"`
+	Digests          []string           `json:"digests" nullable:"false"`
+	SizeBytes        int64              `json:"size_bytes"`
+	CreatedAt        string             `json:"created_at"`
+	Containers       int                `json:"containers"`
+	ContainerUses    []ImageContainer   `json:"container_uses" nullable:"false"`
+	ProtectionReason string             `json:"protection_reason" doc:"Additional non-container removal protection; empty when none is reported"`
+	RemovalBlocked   string             `json:"removal_blocked" doc:"Empty when current observation permits removal; admission and execution recheck protection"`
+	Fetches          []ImageFetchRecord `json:"fetches" nullable:"false" doc:"Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags"`
+}
+
+type ImageContainer struct {
+	ID      string               `json:"id"`
+	Name    string               `json:"name"`
+	State   string               `json:"state"`
+	Managed bool                 `json:"managed" doc:"Container carries Groundplane management labels; not an authorization claim"`
+	Owner   *ImageContainerOwner `json:"owner,omitempty"`
+}
+
+type ImageContainerOwner struct {
+	ServiceID       string `json:"service_id"`
+	ServiceName     string `json:"service_name"`
+	EnvironmentID   string `json:"environment_id"`
+	EnvironmentName string `json:"environment_name"`
+	ProjectID       string `json:"project_id"`
+	ProjectSlug     string `json:"project_slug"`
+	TenantSlug      string `json:"tenant_slug"`
+	Backing         bool   `json:"backing"`
 }
 
 type ImageFetchRecord struct {

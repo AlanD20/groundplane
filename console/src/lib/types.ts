@@ -423,7 +423,7 @@ export type TaskJournalScope =
   | { kind: "environment"; environmentId: string };
 
 export type TaskJournalSurface = "tasks" | "activity";
-export type TaskPageSize = 10 | 25 | 50 | 100;
+export type TaskPageSize = 5 | 10 | 25 | 50;
 
 export type TaskJournalState = {
   entries: ActivityEntry[];

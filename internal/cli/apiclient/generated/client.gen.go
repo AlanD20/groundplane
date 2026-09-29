@@ -1737,13 +1737,17 @@ type HostEtcd struct {
 
 // HostImage defines model for HostImage.
 type HostImage struct {
-	Containers int64    `json:"containers"`
-	CreatedAt  string   `json:"created_at"`
-	Digests    []string `json:"digests"`
+	ContainerUses []ImageContainer `json:"container_uses"`
+	Containers    int64            `json:"containers"`
+	CreatedAt     string           `json:"created_at"`
+	Digests       []string         `json:"digests"`
 
 	// Fetches Fetch requests still retained in the Task journal, with each attempt's status; not current Docker tags
 	Fetches []ImageFetchRecord `json:"fetches"`
 	Id      string             `json:"id"`
+
+	// ProtectionReason Additional non-container removal protection; empty when none is reported
+	ProtectionReason string `json:"protection_reason"`
 
 	// RemovalBlocked Empty when current observation permits removal; admission and execution recheck protection
 	RemovalBlocked string   `json:"removal_blocked"`
@@ -1756,6 +1760,29 @@ type HostResource struct {
 	Total   string `json:"total"`
 	Used    string `json:"used"`
 	UsedPct int64  `json:"used_pct"`
+}
+
+// ImageContainer defines model for ImageContainer.
+type ImageContainer struct {
+	Id string `json:"id"`
+
+	// Managed Container carries Groundplane management labels; not an authorization claim
+	Managed bool                 `json:"managed"`
+	Name    string               `json:"name"`
+	Owner   *ImageContainerOwner `json:"owner,omitempty"`
+	State   string               `json:"state"`
+}
+
+// ImageContainerOwner defines model for ImageContainerOwner.
+type ImageContainerOwner struct {
+	Backing         bool   `json:"backing"`
+	EnvironmentId   string `json:"environment_id"`
+	EnvironmentName string `json:"environment_name"`
+	ProjectId       string `json:"project_id"`
+	ProjectSlug     string `json:"project_slug"`
+	ServiceId       string `json:"service_id"`
+	ServiceName     string `json:"service_name"`
+	TenantSlug      string `json:"tenant_slug"`
 }
 
 // ImageFetchAccepted defines model for ImageFetchAccepted.

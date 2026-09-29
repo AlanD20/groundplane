@@ -63,6 +63,19 @@ func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
 		Images:     make([]apiTypes.HostImage, 0, len(response.JSON200.Images)),
 	}
 	for _, image := range response.JSON200.Images {
+		uses := make([]apiTypes.ImageContainer, 0, len(image.ContainerUses))
+		for _, use := range image.ContainerUses {
+			item := apiTypes.ImageContainer{ID: use.Id, Name: use.Name, State: use.State, Managed: use.Managed}
+			if owner := use.Owner; owner != nil {
+				item.Owner = &apiTypes.ImageContainerOwner{
+					ServiceID: owner.ServiceId, ServiceName: owner.ServiceName,
+					EnvironmentID: owner.EnvironmentId, EnvironmentName: owner.EnvironmentName,
+					ProjectID: owner.ProjectId, ProjectSlug: owner.ProjectSlug,
+					TenantSlug: owner.TenantSlug, Backing: owner.Backing,
+				}
+			}
+			uses = append(uses, item)
+		}
 		fetches := make([]apiTypes.ImageFetchRecord, 0, len(image.Fetches))
 		for _, fetch := range image.Fetches {
 			fetches = append(
@@ -78,12 +91,13 @@ func (c *Client) ListImages(ctx context.Context) (apiTypes.ImageList, error) {
 		result.Images = append(
 			result.Images,
 			apiTypes.HostImage{
-				ID:             image.Id,
-				Tags:           image.Tags,
-				Digests:        image.Digests,
-				SizeBytes:      image.SizeBytes,
-				CreatedAt:      image.CreatedAt,
-				Containers:     int(image.Containers),
+				ID:            image.Id,
+				Tags:          image.Tags,
+				Digests:       image.Digests,
+				SizeBytes:     image.SizeBytes,
+				CreatedAt:     image.CreatedAt,
+				Containers:    int(image.Containers),
+				ContainerUses: uses, ProtectionReason: image.ProtectionReason,
 				RemovalBlocked: image.RemovalBlocked,
 				Fetches:        fetches,
 			},
