@@ -1,15 +1,13 @@
 "use client";
 
-import { AttachFormDialog } from "@/features/environment/attach-form-dialog";
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { useRequiredParams } from "@/lib/router";
-import { Pencil, Plug, Plus, Trash2 } from "lucide-react";
-import { useStore } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ListToolbar,
+  TablePagination,
+  useTableView,
+} from "@/components/common/table-controls";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -18,14 +16,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { AttachFormDialog } from "@/features/environment/attach-form-dialog";
+import { useRequiredParams } from "@/lib/router";
+import { useStore } from "@/lib/store";
 import type { Attach, Environment } from "@/lib/types";
+import { Pencil, Plug, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 
 // ---- Attaches ----
 
 export function AttachesCard({ env }: { env: Environment }) {
   const store = useStore();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const table = useTableView(
+    env.attaches.filter((attach) =>
+      `${attach.name} ${attach.service} ${attach.database} ${store.getBackingProject(attach.projectId)?.name}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    ),
+    {
+      name: (attach) => attach.name,
+      service: (attach) => attach.service,
+      backing: (attach) =>
+        store.getBackingProject(attach.projectId)?.name ?? "",
+    },
+    "name",
+    "asc",
+    `${env.id}/${query}`,
+  );
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
@@ -38,7 +60,18 @@ export function AttachesCard({ env }: { env: Environment }) {
         </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-1.5">
-        {env.attaches.map((a) => (
+        <ListToolbar
+          label="Connections"
+          query={query}
+          onQueryChange={setQuery}
+          sort={table}
+          fields={[
+            { value: "name", label: "Name" },
+            { value: "service", label: "Service" },
+            { value: "backing", label: "Backing Service" },
+          ]}
+        />
+        {table.rows.map((a) => (
           <div
             key={a.id}
             className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2"
@@ -66,6 +99,12 @@ export function AttachesCard({ env }: { env: Environment }) {
             service; provisioning depends on its adapter
           </div>
         )}
+        {env.attaches.length > 0 && !table.total && (
+          <p className="p-6 text-center text-xs text-muted-foreground">
+            No connections match your search.
+          </p>
+        )}
+        <TablePagination table={table} label="Connections" />
       </CardContent>
       <AttachFormDialog env={env} open={open} onOpenChange={setOpen} />
     </Card>

@@ -1,23 +1,29 @@
-'use client'
+"use client";
 
-import { Eye, Globe, Settings as SettingsIcon, Sun } from 'lucide-react'
-import { PageHeader } from '@/components/common/page-header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ThemeToggle } from './theme-toggle'
-import { Switch } from '@/components/ui/switch'
-import { useStore } from '@/lib/store'
+import { PageHeader } from "@/components/common/page-header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { useStore } from "@/lib/store";
+import { Eye, Globe, Settings as SettingsIcon, Sun } from "lucide-react";
+import { ThemeToggle } from "./theme-toggle";
 
 // Settings stays small, on purpose: everything else lives in desired state.
 // Platform component settings (DNS resolver, Agent config) live on the
 // Components page, per component.
-export function SettingsContent({ workspace }: { workspace: 'platform' | string }) {
-  const { requireRevealConfirm, setRequireRevealConfirm } = useStore()
+export function SettingsContent({
+  workspace,
+}: {
+  workspace: "platform" | string;
+}) {
+  const { requireRevealConfirm, setRequireRevealConfirm } = useStore();
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow={workspace === 'platform' ? 'Platform' : `Tenant · ${workspace}`}
+        eyebrow={
+          workspace === "platform" ? "Platform" : `Tenant · ${workspace}`
+        }
         title="Settings"
-        description="Small, on purpose. Everything else lives in desired state."
+        description="Console appearance and sensitive-value display preferences."
         icon={<SettingsIcon />}
       />
       <Card>
@@ -30,7 +36,9 @@ export function SettingsContent({ workspace }: { workspace: 'platform' | string 
               <Sun className="size-4 text-muted-foreground" />
               <div className="flex flex-col">
                 <span className="text-sm font-medium">Theme</span>
-                <span className="text-xs text-muted-foreground">dark is the primary experience</span>
+                <span className="text-xs text-muted-foreground">
+                  Choose the light or dark workspace.
+                </span>
               </div>
             </div>
             <ThemeToggle />
@@ -39,13 +47,19 @@ export function SettingsContent({ workspace }: { workspace: 'platform' | string 
             <div className="flex items-center gap-2.5">
               <Eye className="size-4 text-muted-foreground" />
               <div className="flex flex-col">
-                <span className="text-sm font-medium">Require typed confirmation to reveal secrets</span>
+                <span className="text-sm font-medium">
+                  Require typed confirmation to reveal secrets
+                </span>
                 <span className="text-xs text-muted-foreground">
-                  off = one click reveals (never cached, never logged). On = type a word to reveal sensitive values.
+                  Ask for confirmation before showing a sensitive value.
+                  Revealed values are never cached or logged.
                 </span>
               </div>
             </div>
-            <Switch checked={requireRevealConfirm} onCheckedChange={setRequireRevealConfirm} />
+            <Switch
+              checked={requireRevealConfirm}
+              onCheckedChange={setRequireRevealConfirm}
+            />
           </div>
           <div className="flex items-center justify-between border-t border-border py-3">
             <div className="flex items-center gap-2.5">
@@ -53,15 +67,18 @@ export function SettingsContent({ workspace }: { workspace: 'platform' | string 
               <div className="flex flex-col">
                 <span className="text-sm font-medium">Routing</span>
                 <span className="text-xs text-muted-foreground">
-                  ingress is opt-in per environment — public routes never auto-deploy the router; enable the Caddy /
-                  Cloudflare Tunnel components on the environment&apos;s Router tab
+                  Enable Caddy or Cloudflare Tunnel in an Environment&apos;s
+                  Network → Router view. Creating a Route does not enable a
+                  Router automatically.
                 </span>
               </div>
             </div>
-            <span className="font-mono text-xs text-muted-foreground">opt-in</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              opt-in
+            </span>
           </div>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

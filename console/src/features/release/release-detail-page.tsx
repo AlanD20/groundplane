@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ArrowLeft, History } from "lucide-react";
-import { Link } from "react-router-dom";
 import { EmptyState } from "@/components/common/empty-state";
+import { ImageReference } from "@/components/common/image-reference";
 import { MetaPill } from "@/components/common/meta-pill";
 import { PageHeader } from "@/components/common/page-header";
+import { TaskLink } from "@/components/common/task-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRequiredParams } from "@/lib/router";
 import { useStore } from "@/lib/store";
+import { ArrowLeft, History } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchReleaseDetail, type ReleaseDetailResponse } from "./api";
 
 export default function ReleaseDetailPage() {
@@ -23,7 +25,7 @@ export default function ReleaseDetailPage() {
   );
   const [release, setRelease] = useState<ReleaseDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const listPath = `/t/${params.tenant}/${params.project}/${params.env}?tab=releases`;
+  const listPath = `/t/${params.tenant}/${params.project}/${params.env}?view=operations&panel=releases`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,11 +99,14 @@ export default function ReleaseDetailPage() {
             <ArrowLeft className="size-3" /> {environment.name} releases
           </Link>
         }
-        title={`${service} · ${release.tag}`}
-        description={release.id}
+        title={service}
+        description="Service Release · image and execution details"
         icon={<History />}
         meta={
           <>
+            <MetaPill>
+              <ImageReference value={release.tag} />
+            </MetaPill>
             <MetaPill>{release.state}</MetaPill>
             <MetaPill>{release.strategy}</MetaPill>
             <MetaPill>{release.operation_kind}</MetaPill>
@@ -117,19 +122,21 @@ export default function ReleaseDetailPage() {
             <p>
               <span className="text-muted-foreground">Image</span>
               <br />
-              <span className="font-mono text-xs">{release.image}</span>
+              <span className="break-all font-mono text-xs">
+                {release.image}
+              </span>
             </p>
             <p>
               <span className="text-muted-foreground">Digest</span>
               <br />
-              <span className="font-mono text-xs">
+              <span className="break-all font-mono text-xs">
                 {release.digest || "tag resolved without registry digest"}
               </span>
             </p>
             <p>
               <span className="text-muted-foreground">Render input</span>
               <br />
-              <span className="font-mono text-xs">
+              <span className="break-all font-mono text-xs">
                 {release.render_input_digest}
               </span>
             </p>
@@ -153,14 +160,16 @@ export default function ReleaseDetailPage() {
             <p>
               <span className="text-muted-foreground">Operation</span>
               <br />
-              <span className="font-mono text-xs">{release.operation_id}</span>
+              <span className="break-all font-mono text-xs">
+                {release.operation_id}
+              </span>
             </p>
             <p>
               <span className="text-muted-foreground">Originating task</span>
               <br />
-              <span className="font-mono text-xs">
-                {release.originating_task_id}
-              </span>
+              <TaskLink taskId={release.originating_task_id}>
+                Inspect Task
+              </TaskLink>
             </p>
             <p>
               <span className="text-muted-foreground">Attempts</span>
@@ -170,6 +179,10 @@ export default function ReleaseDetailPage() {
           </CardContent>
         </Card>
       </div>
+      <details className="rounded-lg border border-border p-4 text-xs text-muted-foreground">
+        <summary>Release identity</summary>
+        <p className="mt-2 break-all font-mono">{release.id}</p>
+      </details>
     </div>
   );
 }

@@ -1,26 +1,30 @@
 "use client";
 
-import { useState } from "react";
-import { useRequiredParams } from "@/lib/router";
-import { Plus, ShieldCheck } from "lucide-react";
-import { useStore } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ListToolbar,
+  TablePagination,
+  useTableView,
+} from "@/components/common/table-controls";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { useRequiredParams } from "@/lib/router";
+import { useStore } from "@/lib/store";
 import type { Environment, EnvironmentEntry } from "@/lib/types";
-import { EntryRow } from "./entry-row";
+import { Plus, ShieldCheck } from "lucide-react";
+import { useState } from "react";
 import { BulkEntryDrawer } from "./bulk-entry-drawer";
+import { EntryRow } from "./entry-row";
 // ---- Variables (env vars + env files) ----
 
 export function EnvVarsCard({ env }: { env: Environment }) {
@@ -48,8 +52,20 @@ export function EnvVarsCard({ env }: { env: Environment }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const serviceScoped = env.services.filter((service) =>
-    entries.some((entry) => entry.exposure.includes(service.name)),
+  const [query, setQuery] = useState("");
+  const table = useTableView(
+    entries.filter((entry) =>
+      `${entry.key ?? entry.path ?? ""} ${entry.exposure.join(" ")} ${entry.source.kind}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    ),
+    {
+      name: (entry) => entry.key ?? entry.path ?? "",
+      type: (entry) => entry.type,
+    },
+    "name",
+    "asc",
+    `${env.id}/${query}`,
   );
 
   function startEdit(entry: EnvironmentEntry) {
@@ -208,33 +224,41 @@ export function EnvVarsCard({ env }: { env: Environment }) {
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              All services
-            </span>
-            <span className="font-mono text-xs text-muted-foreground">
-              inherited by every service
-            </span>
-          </div>
-          {entries
-            .filter((entry) => entry.exposure.includes("all"))
-            .map(renderEntry)}
-          {entries.length === 0 && (
-            <div className="text-xs text-muted-foreground">no Entries yet</div>
-          )}
-          {serviceScoped.map((service) => (
-            <div key={service.id} className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Service-scoped · {service.name}
-                </span>
-                <Badge variant="primary">{service.name}</Badge>
-              </div>
-              {entries
-                .filter((entry) => entry.exposure.includes(service.name))
-                .map(renderEntry)}
+          <ListToolbar
+            label="Entries"
+            query={query}
+            onQueryChange={setQuery}
+            sort={table}
+            fields={[
+              { value: "name", label: "Key / path" },
+              { value: "type", label: "Type" },
+            ]}
+          />
+          {table.rows.map((entry) => (
+            <div key={entry.id} className="min-w-0">
+              {renderEntry(entry)}
+              <p className="px-3 pb-3 pt-1 text-[11px] text-muted-foreground">
+                Exposed to{" "}
+                {entry.exposure.includes("all")
+                  ? "all Services"
+                  : entry.exposure.join(", ") || "no Services"}{" "}
+                ·{" "}
+                {entry.source.kind === "literal"
+                  ? "Literal value"
+                  : entry.source.kind === "fact"
+                    ? "Attach fact"
+                    : "Secret reference"}
+              </p>
             </div>
           ))}
+          {!table.total && (
+            <p className="p-6 text-center text-xs text-muted-foreground">
+              {entries.length
+                ? "No Entries match your search."
+                : "No Entries yet."}
+            </p>
+          )}
+          <TablePagination table={table} label="Entries" />
           <p className="mt-2 text-xs text-muted-foreground">
             Entries are one resource model for environment variables and files.
             Secret values remain encrypted and load only through the explicit

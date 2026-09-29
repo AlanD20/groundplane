@@ -1,13 +1,18 @@
-import { useState } from "react";
-import { Pencil, Plus, Terminal, Trash2 } from "lucide-react";
-import { useStore } from "@/lib/store";
-import { useRequiredParams } from "@/lib/router";
-import type { Environment, Script } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import {
+  ListToolbar,
+  TablePagination,
+  useTableView,
+} from "@/components/common/table-controls";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { useRequiredParams } from "@/lib/router";
+import { useStore } from "@/lib/store";
+import type { Environment, Script } from "@/lib/types";
+import { Pencil, Plus, Terminal, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { ScriptEditor } from "./script-editor";
 
 export function ScriptsCard({ env }: { env: Environment }) {
@@ -16,6 +21,24 @@ export function ScriptsCard({ env }: { env: Environment }) {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Script | null>(null);
   const [removing, setRemoving] = useState<Script | null>(null);
+  const [query, setQuery] = useState("");
+  const [runError, setRunError] = useState<string>();
+  const [runningRequest, setRunningRequest] = useState<string>();
+  const table = useTableView(
+    env.scripts.filter((script) =>
+      `${script.slug} ${script.service} ${script.when}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    ),
+    {
+      name: (script) => script.slug,
+      order: (script) => script.order,
+      service: (script) => script.service,
+    },
+    "order",
+    "asc",
+    `${env.id}/${query}`,
+  );
   function closeEditor() {
     setAddOpen(false);
     setEditing(null);
@@ -36,11 +59,27 @@ export function ScriptsCard({ env }: { env: Environment }) {
               setAddOpen(true);
             }}
           >
-            <Plus className="size-3.5" /> Script
+            <Plus className="size-3.5" /> Add Script
           </Button>
         </CardHeader>
         <CardContent className="flex flex-col gap-1.5">
-          {env.scripts.map((script) => (
+          <ListToolbar
+            label="Scripts"
+            query={query}
+            onQueryChange={setQuery}
+            sort={table}
+            fields={[
+              { value: "name", label: "Name" },
+              { value: "order", label: "Order" },
+              { value: "service", label: "Service" },
+            ]}
+          />
+          {runError && (
+            <p role="alert" className="text-xs text-destructive">
+              {runError}
+            </p>
+          )}
+          {table.rows.map((script) => (
             <div
               key={script.id}
               className="flex flex-col gap-2 rounded-lg border border-border bg-surface px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
@@ -73,9 +112,25 @@ export function ScriptsCard({ env }: { env: Environment }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => void store.runScript(script.id)}
+                  disabled={!!runningRequest}
+                  onClick={async () => {
+                    setRunError(undefined);
+                    setRunningRequest(script.id);
+                    try {
+                      await store.runScript(script.id);
+                    } catch (error) {
+                      setRunError(
+                        error instanceof Error
+                          ? error.message
+                          : "Unable to run Script",
+                      );
+                    } finally {
+                      setRunningRequest(undefined);
+                    }
+                  }}
                 >
-                  <Terminal className="size-3.5" /> Run
+                  <Terminal className="size-3.5" />{" "}
+                  {runningRequest === script.id ? "Submitting…" : "Run"}
                 </Button>
                 <Button
                   variant="ghost"
@@ -107,6 +162,12 @@ export function ScriptsCard({ env }: { env: Environment }) {
               No scripts — hooks run automatically on deploy/rollback.
             </p>
           )}
+          {env.scripts.length > 0 && !table.total && (
+            <p className="p-6 text-center text-xs text-muted-foreground">
+              No Scripts match your search.
+            </p>
+          )}
+          <TablePagination table={table} label="Scripts" />
         </CardContent>
       </Card>
       <Drawer

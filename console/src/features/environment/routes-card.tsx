@@ -1,7 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { DetailRow } from "@/components/common/detail-row";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { useRequiredParams } from "@/lib/router";
+import { useStore } from "@/lib/store";
+import type { Environment, Route } from "@/lib/types";
 import {
   ChevronRight,
   Pencil,
@@ -9,21 +23,7 @@ import {
   Router as RouterIcon,
   Trash2,
 } from "lucide-react";
-import { useStore } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import {
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
-import { DetailRow } from "@/features/environment/service-details-drawer";
-import type { Environment, Route } from "@/lib/types";
+import { useRef, useState } from "react";
 
 // ---- Routes ----
 
@@ -100,8 +100,9 @@ export function RoutesCard({ env }: { env: Environment }) {
                   setDetailError(undefined);
                   void store
                     .getRoute(r.id)
-                    .then(route => {
-                      if (request === detailRequest.current) setDetailRoute(route);
+                    .then((route) => {
+                      if (request === detailRequest.current)
+                        setDetailRoute(route);
                     })
                     .catch((error: unknown) => {
                       if (request !== detailRequest.current) return;
@@ -368,10 +369,20 @@ export function RouteFormDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  return open ? <RouteForm key={env.id} env={env} open onOpenChange={onOpenChange} /> : null;
+  return open ? (
+    <RouteForm key={env.id} env={env} open onOpenChange={onOpenChange} />
+  ) : null;
 }
 
-function RouteForm({ env, open, onOpenChange }: { env: Environment; open: boolean; onOpenChange: (v: boolean) => void }) {
+function RouteForm({
+  env,
+  open,
+  onOpenChange,
+}: {
+  env: Environment;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const store = useStore();
   const [host, setHost] = useState("");
   const [path, setPath] = useState("/");
@@ -518,7 +529,7 @@ function RouteForm({ env, open, onOpenChange }: { env: Environment; open: boolea
             disabled={
               hostValidationError !== null ||
               pathValidationError !== null ||
-              !env.services.some(service => service.id === target) ||
+              !env.services.some((service) => service.id === target) ||
               !validTargetPort ||
               submitting
             }

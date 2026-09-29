@@ -13,11 +13,29 @@ import { useRequiredParams } from "@/lib/router";
 import { History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Environment, Service } from "@/lib/types";
-import { TablePagination, TableSortHead, useTableView } from '@/components/common/table-controls';
+import {
+  TablePagination,
+  TableSortHead,
+  useTableView,
+} from "@/components/common/table-controls";
+import { ImageReference } from "@/components/common/image-reference";
+import { formatTimestamp } from "@/lib/format-timestamp";
 
 export function ReleasesCard({ env }: { env: Environment }) {
   const params = useRequiredParams("tenant", "project", "env");
-  const table = useTableView(env.deploys, { service: d => d.service, tag: d => d.tag, strategy: d => d.strategy, when: d => Date.parse(d.when) || 0, status: d => d.status }, 'when', 'desc', env.id);
+  const table = useTableView(
+    env.deploys,
+    {
+      service: (d) => d.service,
+      tag: (d) => d.tag,
+      strategy: (d) => d.strategy,
+      when: (d) => Date.parse(d.when) || 0,
+      status: (d) => d.status,
+    },
+    "when",
+    "desc",
+    env.id,
+  );
   return (
     <Card>
       <CardHeader>
@@ -27,21 +45,41 @@ export function ReleasesCard({ env }: { env: Environment }) {
       </CardHeader>
       <CardContent className="flex flex-col">
         <p className="mb-2 text-xs text-muted-foreground">
-          The per-service release ledger — state, not events: which tag is
-          active, which are superseded. This is what rollback reads to
-          pre-select the previous tag (a successful redeploy of the current tag
-          never advances it). Live execution lives on the Tasks tab.
+          Inspect active and superseded Service Releases. Open a Release for its
+          exact image and deployment details; track execution in Tasks.
         </p>
         <div className="overflow-x-auto rounded-lg border border-border">
           <Table className="w-full text-sm">
             <TableHeader>
               <TableRow className="border-b border-border text-left text-xs font-semibold text-muted-foreground">
-                <TableSortHead sort={table} field="service" className="px-3 py-2">Service</TableSortHead>
-                <TableSortHead sort={table} field="tag" className="px-3 py-2">Tag</TableSortHead>
+                <TableSortHead
+                  sort={table}
+                  field="service"
+                  className="px-3 py-2"
+                >
+                  Service
+                </TableSortHead>
+                <TableSortHead sort={table} field="tag" className="px-3 py-2">
+                  Tag
+                </TableSortHead>
                 <TableHead className="px-3 py-2">Digest</TableHead>
-                <TableSortHead sort={table} field="strategy" className="px-3 py-2">Strategy</TableSortHead>
-                <TableSortHead sort={table} field="when" className="px-3 py-2">When</TableSortHead>
-                <TableSortHead sort={table} field="status" className="px-3 py-2">Status</TableSortHead>
+                <TableSortHead
+                  sort={table}
+                  field="strategy"
+                  className="px-3 py-2"
+                >
+                  Strategy
+                </TableSortHead>
+                <TableSortHead sort={table} field="when" className="px-3 py-2">
+                  When
+                </TableSortHead>
+                <TableSortHead
+                  sort={table}
+                  field="status"
+                  className="px-3 py-2"
+                >
+                  Status
+                </TableSortHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -59,16 +97,20 @@ export function ReleasesCard({ env }: { env: Environment }) {
                     </Link>
                   </TableCell>
                   <TableCell className="px-3 py-2 font-mono text-xs">
-                    {d.tag}
+                    <ImageReference value={d.tag} />
                   </TableCell>
                   <TableCell className="max-w-[220px] truncate px-3 py-2 font-mono text-xs text-muted-foreground">
-                    {d.digest}
+                    {d.digest ? (
+                      <ImageReference value={d.digest} />
+                    ) : (
+                      "Not recorded"
+                    )}
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     <StrategyPill strategy={d.strategy} />
                   </TableCell>
                   <TableCell className="px-3 py-2 text-xs text-muted-foreground">
-                    {d.when}
+                    {formatTimestamp(d.when, "Time unavailable")}
                   </TableCell>
                   <TableCell className="px-3 py-2">
                     {d.status === "active" ? (
@@ -98,7 +140,9 @@ export function ReleasesCard({ env }: { env: Environment }) {
             </TableBody>
           </Table>
         </div>
-        <div className="mt-3"><TablePagination table={table} label="Releases" /></div>
+        <div className="mt-3">
+          <TablePagination table={table} label="Releases" />
+        </div>
       </CardContent>
     </Card>
   );

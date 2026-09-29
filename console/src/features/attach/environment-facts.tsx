@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Database } from "lucide-react";
-import { useStore } from "@/lib/store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/common/copy-button";
+import { EmptyState } from "@/components/common/empty-state";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useStore } from "@/lib/store";
 import type { Environment } from "@/lib/types";
+import { Database } from "lucide-react";
+import { useState } from "react";
 
 export function FactsCard({ env }: { env: Environment }) {
   const store = useStore();
@@ -27,7 +28,14 @@ export function FactsCard({ env }: { env: Environment }) {
     return [{ id: `facts-${a.id}`, title: `for ${a.service}`, sets }];
   });
 
-  if (factGroups.length === 0) return null;
+  if (factGroups.length === 0)
+    return (
+      <EmptyState
+        icon={<Database />}
+        title="No Attach facts yet"
+        description="Connect a Service to a backing service to publish its provisioning facts. Entries can reference those facts explicitly."
+      />
+    );
 
   return (
     <Card>

@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ChevronRight, RefreshCw } from "lucide-react";
+import { Activity, RefreshCw } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusDot } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TaskDetailDrawer as AuthoritativeTaskDrawer } from "@/components/common/task-detail-drawer";
+import { TaskJournalItem } from "@/components/common/task-journal-item";
 import { TaskPagination } from "./task-pagination";
 import type { ActivityEntry, Environment, TaskJournalScope } from "@/lib/types";
 
@@ -26,7 +25,6 @@ export function TasksCard({ env }: { env: Environment }) {
   const running = tasks.filter(
     (t) => t.status === "running" || t.status === "pending",
   ).length;
-  const [open, setOpen] = useState<ActivityEntry | null>(null);
   useEffect(() => {
     void store.loadTaskJournal("tasks", scope).catch(() => undefined);
   }, [scope, store.loadTaskJournal]);
@@ -70,7 +68,11 @@ export function TasksCard({ env }: { env: Environment }) {
         </CardTitle>
         <div className="flex items-center gap-2">
           <Badge variant={running > 0 ? "success" : "muted"}>
-            {running > 0 ? <>{running} in-flight on this page</> : "No in-flight tasks on this page"}
+            {running > 0 ? (
+              <>{running} in-flight on this page</>
+            ) : (
+              "No in-flight tasks on this page"
+            )}
           </Badge>
           <Button
             variant="outline"
@@ -87,8 +89,8 @@ export function TasksCard({ env }: { env: Environment }) {
       <CardContent className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
-            Task history for this Environment. Filters apply to this page.
-            Click a task to open its details and controls.
+            Task history for this Environment. Filters apply to this page. Click
+            a task to open its details and controls.
           </p>
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
             {filters.map((f) => (
@@ -144,39 +146,18 @@ export function TasksCard({ env }: { env: Environment }) {
           </div>
         ) : (
           <div className="flex flex-col gap-1.5">
-            {visible.map((t) => (
-              <Button
-                variant="ghost"
-                size="content"
-                key={t.id}
-                type="button"
-                onClick={() => setOpen(t)}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-ring/60 hover:bg-surface/60"
-              >
-                <div className="flex min-w-0 items-center gap-2 text-sm">
-                  <StatusDot status={t.status} />
-                  <span className="truncate font-medium">{t.title}</span>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {t.status}
-                  </span>
-                  <ChevronRight className="size-3.5 text-muted-foreground/50" />
-                </div>
-              </Button>
+            {visible.map((task) => (
+              <TaskJournalItem
+                key={task.id}
+                entry={task}
+                scope={scope}
+                surface="tasks"
+              />
             ))}
           </div>
         )}
         <TaskPagination scope={scope} surface="tasks" />
       </CardContent>
-      {open && (
-        <AuthoritativeTaskDrawer
-          entry={open}
-          scope={scope}
-          surface="tasks"
-          onOpenChange={(value) => !value && setOpen(null)}
-        />
-      )}
     </Card>
   );
 }

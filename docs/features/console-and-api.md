@@ -14,9 +14,17 @@ including the MVP's single Agent, do not need pagination.
 
 Navigation follows Platform or Tenant → Project → Environment. Host owns
 Controller and Agent management; Components owns integration settings.
+An Environment opens on Services. Its workspace sidebar groups Network
+(Zones, Routes, backing connections and Router), Configuration (Blueprint,
+Entries, Attach facts, Volumes and Scripts), Operations (Tasks, Releases,
+Release groups and Backups) and Settings. Project and shared-infrastructure
+links remain available in the sidebar. The breadcrumbs switch resource scope.
 Activity and Task views show the same durable operations, with scope and status
 filters. Opening a Task shows its details; its resource link opens the affected
 page.
+Service inspection puts Logs, Configure and Deploy beside the heading. Runtime,
+desired Configuration, Logs and History have separate views; saving configuration
+does not deploy it. Long forms retain their action footer while scrolling.
 
 Loading, errors, missing data and expired observations are explicit. The Console
 must not substitute sample data for unavailable health or claim an operation
@@ -56,6 +64,5 @@ an adjacent asset directory. API paths never fall through to HTML.
 
 [Console architecture](../architecture.md#console) owns component and feature
 boundaries. [Capability status](../capabilities.md) owns remaining parity and
-qualification limits. The recent UI/code restructuring was not build- or
-runtime-verified. Basic rendering and wiring do not require dedicated tests;
+qualification limits. Basic rendering and wiring do not require dedicated tests;
 follow [testing policy](../delivery.md#testing-policy).

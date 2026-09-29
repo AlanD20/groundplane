@@ -1,11 +1,7 @@
 "use client";
 
-import { ZoneFormDialog } from "@/features/environment/zone-form-dialog";
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { useRequiredParams } from "@/lib/router";
-import { ChevronRight, Database, Plus, Trash2 } from "lucide-react";
-import { useStore } from "@/lib/store";
+import { DetailRow } from "@/components/common/detail-row";
+import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DialogFooter,
@@ -13,16 +9,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
-import { DetailRow } from "@/features/environment/service-details-drawer";
-import { ServiceCard } from "@/features/environment/services-list";
-import { ZoneMap, type ZoneSelection } from "@/features/environment/zone-map";
-import type { Environment, Zone } from "@/lib/types";
-import { ServiceFormDialog } from "@/features/service/environment-service-dialog";
 import {
-  RenameAttach,
   DetachAttach,
+  RenameAttach,
 } from "@/features/attach/environment-attaches";
+import { ServiceCard } from "@/features/environment/services-list";
+import { ZoneFormDialog } from "@/features/environment/zone-form-dialog";
+import { ZoneMap, type ZoneSelection } from "@/features/environment/zone-map";
+import { ServiceFormDialog } from "@/features/service/environment-service-dialog";
+import { useRequiredParams } from "@/lib/router";
+import { useStore } from "@/lib/store";
+import type { Environment, Zone } from "@/lib/types";
+import { ChevronRight, Database, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
 
 export function Topology({ env }: { env: Environment }) {
   const [zoneOpen, setZoneOpen] = useState(false);

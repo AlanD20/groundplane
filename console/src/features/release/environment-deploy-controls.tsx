@@ -1,19 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { useDraftField } from "@/lib/use-draft-field";
-import { useRequiredParams } from "@/lib/router";
-import { ArrowUpCircle, History } from "lucide-react";
-import { useStore } from "@/lib/store";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { ImagePicker } from "@/features/image-delivery/image-picker";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { ImagePicker } from "@/features/image-delivery/image-picker";
+import { useRequiredParams } from "@/lib/router";
+import { useStore } from "@/lib/store";
 import type { Environment, Service, TaskStep } from "@/lib/types";
+import { useDraftField } from "@/lib/use-draft-field";
+import { ArrowUpCircle, History } from "lucide-react";
+import { useState } from "react";
 
 // Deploy / Rollback live in their own component so opening a dialog only
 // re-renders this small subtree, not the whole environment page.
@@ -35,27 +35,43 @@ export function DeployControls({
       >
         <History className="size-4" /> Rollback
       </Button>
-      <Button disabled={disabled || env.services.length === 0} onClick={() => setDeployOpen(true)}>
+      <Button
+        disabled={disabled || env.services.length === 0}
+        onClick={() => setDeployOpen(true)}
+      >
         <ArrowUpCircle className="size-4" /> Deploy
       </Button>
-      {deployOpen && <DeployDialog env={env} open onOpenChange={setDeployOpen} />}
-      {rollbackOpen && <RollbackDialog
-        env={env}
-        open
-        onOpenChange={setRollbackOpen}
-      />}
+      {deployOpen && (
+        <DeployDialog env={env} open onOpenChange={setDeployOpen} />
+      )}
+      {rollbackOpen && (
+        <RollbackDialog env={env} open onOpenChange={setRollbackOpen} />
+      )}
     </>
   );
 }
 
-function MissingServiceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  return <Drawer open={open} onOpenChange={onOpenChange}>
-    <DrawerContent>
-      <DialogHeader><DialogTitle>Service no longer available</DialogTitle></DialogHeader>
-      <p role="alert">The selected Service was removed. Close and reopen this action to select a current Service.</p>
-      <Button onClick={() => onOpenChange(false)}>Close</Button>
-    </DrawerContent>
-  </Drawer>
+function MissingServiceDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent>
+        <DialogHeader>
+          <DialogTitle>Service no longer available</DialogTitle>
+        </DialogHeader>
+        <p role="alert">
+          The selected Service was removed. Close and reopen this action to
+          select a current Service.
+        </p>
+        <Button onClick={() => onOpenChange(false)}>Close</Button>
+      </DrawerContent>
+    </Drawer>
+  );
 }
 
 // ---- Deploy: per-service, tag + strategy chosen at deploy time ----
@@ -64,23 +80,29 @@ export function DeployDialog({
   env,
   open,
   onOpenChange,
+  serviceId,
 }: {
   env: Environment;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  serviceId?: string;
 }) {
   const store = useStore();
   const params = useRequiredParams("tenant");
-  const defaultSvc =
-    env.services.find((s) => s.strategy === "blue-green") ?? env.services[0];
+  const defaultSvc = serviceId
+    ? env.services.find((s) => s.id === serviceId)
+    : (env.services.find((s) => s.strategy === "blue-green") ??
+      env.services[0]);
   const [service, setService] = useState(defaultSvc?.id ?? "");
   const svc = env.services.find((s) => s.id === service);
   const [image, setImage] = useDraftField(svc?.image ?? "", service);
   const [strategy, setStrategy] = useDraftField<Service["strategy"]>(
-    svc?.strategy ?? "recreate", service,
+    svc?.strategy ?? "recreate",
+    service,
   );
 
-  if (!svc) return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
+  if (!svc)
+    return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
   const steps = deploySteps(env, svc.name, strategy);
 
   return (
@@ -133,9 +155,7 @@ export function DeployDialog({
               {svc.image}
             </span>
             <span className="mx-2 text-muted-foreground">→</span>
-            <span className="flex-1 truncate text-foreground">
-              {image}
-            </span>
+            <span className="flex-1 truncate text-foreground">{image}</span>
           </div>
           <div className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 font-mono text-xs">
             <span className="w-24 text-muted-foreground">Strategy</span>
@@ -152,9 +172,14 @@ export function DeployDialog({
       }
       steps={steps}
       startDisabled={!image.trim()}
-      onDispatch={() => store.commitDeploy(env.id, svc.name, image.trim(), strategy)}
+      onDispatch={() =>
+        store.commitDeploy(env.id, svc.name, image.trim(), strategy)
+      }
       onSettled={async () => {
-        await Promise.all([store.refreshEnvironmentReleases(env.id), store.refreshEnvironmentServices(env.id)]);
+        await Promise.all([
+          store.refreshEnvironmentReleases(env.id),
+          store.refreshEnvironmentServices(env.id),
+        ]);
       }}
     />
   );
@@ -166,14 +191,19 @@ export function RollbackDialog({
   env,
   open,
   onOpenChange,
+  serviceId,
 }: {
   env: Environment;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  serviceId?: string;
 }) {
   const store = useStore();
   const params = useRequiredParams("tenant");
-  const lastService = env.services.find((s) => s.name === env.deploys[0]?.service) ?? env.services[0];
+  const lastService = serviceId
+    ? env.services.find((s) => s.id === serviceId)
+    : (env.services.find((s) => s.name === env.deploys[0]?.service) ??
+      env.services[0]);
   const [service, setService] = useState(lastService?.id ?? "");
   const svc = env.services.find((s) => s.id === service);
   const history = env.deploys.filter((d) => d.service === svc?.name);
@@ -186,7 +216,8 @@ export function RollbackDialog({
       ?.tag ?? "";
   const [tag, setTag] = useDraftField(previousTag, service);
 
-  if (!svc) return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
+  if (!svc)
+    return <MissingServiceDialog open={open} onOpenChange={onOpenChange} />;
 
   return (
     <TaskRunnerDialog
@@ -263,7 +294,10 @@ export function RollbackDialog({
       ]}
       onDispatch={() => store.commitRollback(env.id, svc.name, tag)}
       onSettled={async () => {
-        await Promise.all([store.refreshEnvironmentReleases(env.id), store.refreshEnvironmentServices(env.id)]);
+        await Promise.all([
+          store.refreshEnvironmentReleases(env.id),
+          store.refreshEnvironmentServices(env.id),
+        ]);
       }}
     />
   );
@@ -290,9 +324,7 @@ export function deploySteps(
   serviceName: string,
   strategy: Service["strategy"],
 ): TaskStep[] {
-  const service = env.services.find(
-    (service) => service.name === serviceName,
-  );
+  const service = env.services.find((service) => service.name === serviceName);
   const hasPublic = env.routes.some(
     (route) =>
       route.exposure === "public" && route.targetServiceId === service?.id,
@@ -325,7 +357,12 @@ export function deploySteps(
     { label: "Run pre-deploy hooks", state: "pending" },
     { label: "Stop current container", state: "pending" },
     { label: "Start new container", state: "pending" },
-    { label: service?.healthcheck ? "Wait for healthcheck" : "Wait for containers to run", state: "pending" },
+    {
+      label: service?.healthcheck
+        ? "Wait for healthcheck"
+        : "Wait for containers to run",
+      state: "pending",
+    },
     { label: "Run post-deploy hooks", state: "pending" },
   ];
 }
