@@ -21,10 +21,23 @@ import {
 } from "@/features/environment/operation-storage";
 import { newULID } from "@/lib/utils";
 import { isDefinitiveRemovalRequestRejection } from "@/features/environment/removal-outcome";
-import { requestResourceRemoval } from "./resource-removal-api";
+import {
+  requestResourceRemoval,
+  type RemovableEnvironmentResource,
+} from "./resource-removal-api";
 import { retryTask } from "@/features/task/api";
 
 const resourceRemovalObservationFreshMs = 1_500;
+const removalResources: Record<
+  PendingResourceRemoval["kind"],
+  RemovableEnvironmentResource
+> = {
+  environment: "environments",
+  service: "services",
+  route: "routes",
+  entry: "entries",
+  script: "scripts",
+};
 export function useEnvironmentLifecycle<
   State extends EnvironmentLifecycleDraft,
 >(options: EnvironmentLifecycleOptions<State>): EnvironmentLifecycle<State> {
@@ -146,14 +159,7 @@ export function useEnvironmentLifecycle<
                 "child",
               ),
             };
-      const resource =
-        removal.kind === "environment"
-          ? "environments"
-          : removal.kind === "route"
-            ? "routes"
-            : removal.kind === "entry"
-              ? "entries"
-              : "scripts";
+      const resource = removalResources[removal.kind];
       const intent = resourceRemovalIntents.current.get(key) ?? {
         removal: trackedRemoval,
         idempotencyKey: `groundplane:${newULID()}`,
