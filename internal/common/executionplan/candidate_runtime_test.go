@@ -232,29 +232,40 @@ func TestPrepareCandidateRuntimesRejectsRetainedProxyResourceConflict(t *testing
 // exact ComposeApply, health wait, and recreate acknowledgement still select
 // one singleton runtime with zero proxy metadata.
 func TestPrepareCandidateRuntimesPortlessRecreate(t *testing.T) {
-	plan := candidateRuntimeRecreatePlan(t)
-	got, err := PrepareCandidateRuntimes(plan)
-	if err != nil {
-		t.Fatalf("PrepareCandidateRuntimes() error = %v", err)
-	}
-	if len(got) != 1 || got[0].Target != "singleton" || got[0].ProxyGeneration != 0 ||
-		len(got[0].ProxyConfigSHA256) != 0 || len(got[0].RetainedPriorArtifact) != 0 {
-		t.Fatalf("portless recreate runtime = %#v", got)
-	}
-	current := candidateRuntimeOpenArtifact(t, got[0].CurrentArtifact)
-	if len(current.GetServices()) != 1 || current.GetServices()[0].GetRole() !=
-		agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
-		current.GetServices()[0].GetComposeName() != "api" ||
-		bytes.Contains(current.GetCanonicalYaml(), []byte("worker:")) {
-		t.Fatalf("portless recreate selection = %#v\n%s", current.GetServices(), current.GetCanonicalYaml())
-	}
-	if err := ValidateNativePredecessorWitness(
-		candidateRuntimeEnvironmentID,
-		candidateRuntimeServiceID,
-		got[0].CurrentArtifact,
-		nil,
-	); err != nil {
-		t.Fatalf("portless recreate runtime is not a native witness: %v", err)
+	for _, hasHealthcheck := range []bool{true, false} {
+		t.Run(fmt.Sprintf("healthcheck=%t", hasHealthcheck), func(t *testing.T) {
+			plan := candidateRuntimeRecreatePlan(t)
+			plan.Artifacts[0].Services[0].HasHealthcheck = hasHealthcheck
+			plan.PlanHash = nil
+			plan, err := Seal(plan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := PrepareCandidateRuntimes(plan)
+			if err != nil {
+				t.Fatalf("PrepareCandidateRuntimes() error = %v", err)
+			}
+			if len(got) != 1 || got[0].Target != "singleton" || got[0].ProxyGeneration != 0 ||
+				len(got[0].ProxyConfigSHA256) != 0 || len(got[0].RetainedPriorArtifact) != 0 {
+				t.Fatalf("portless recreate runtime = %#v", got)
+			}
+			current := candidateRuntimeOpenArtifact(t, got[0].CurrentArtifact)
+			if len(current.GetServices()) != 1 || current.GetServices()[0].GetRole() !=
+				agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON ||
+				current.GetServices()[0].GetComposeName() != "api" ||
+				current.GetServices()[0].GetHasHealthcheck() != hasHealthcheck ||
+				bytes.Contains(current.GetCanonicalYaml(), []byte("worker:")) {
+				t.Fatalf("portless recreate selection = %#v\n%s", current.GetServices(), current.GetCanonicalYaml())
+			}
+			if err := ValidateNativePredecessorWitness(
+				candidateRuntimeEnvironmentID,
+				candidateRuntimeServiceID,
+				got[0].CurrentArtifact,
+				nil,
+			); err != nil {
+				t.Fatalf("portless recreate runtime is not a native witness: %v", err)
+			}
+		})
 	}
 }
 

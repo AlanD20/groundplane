@@ -171,7 +171,7 @@ func nativePredecessorServices(
 func validateNativePredecessorWorkload(service *agentpb.ComposeService) error {
 	labels, err := nativePredecessorLabels(service.GetExpectedLabels())
 	if err != nil || service.GetComposeName() == "" || service.GetExpectedReplicas() == 0 ||
-		!service.GetHasHealthcheck() || !workloadimage.LocalIDValid(service.GetImageReference()) ||
+		!workloadimage.LocalIDValid(service.GetImageReference()) ||
 		service.GetOwnerComponentId() != "" || ids.Validate(ids.KindService, service.GetServiceId()) != nil {
 		return invalidNativePredecessorWitness()
 	}
@@ -185,7 +185,8 @@ func validateNativePredecessorWorkload(service *agentpb.ComposeService) error {
 			return invalidNativePredecessorWitness()
 		}
 	case agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT:
-		if (service.GetSlot() != "blue" && service.GetSlot() != "green") || labels[labelSlot] != service.GetSlot() ||
+		if !service.GetHasHealthcheck() || (service.GetSlot() != "blue" && service.GetSlot() != "green") ||
+			labels[labelSlot] != service.GetSlot() ||
 			runtimeRole != "slot" {
 			return invalidNativePredecessorWitness()
 		}

@@ -290,12 +290,12 @@ export function deploySteps(
   serviceName: string,
   strategy: Service["strategy"],
 ): TaskStep[] {
-  const serviceId = env.services.find(
+  const service = env.services.find(
     (service) => service.name === serviceName,
-  )?.id;
+  );
   const hasPublic = env.routes.some(
     (route) =>
-      route.exposure === "public" && route.targetServiceId === serviceId,
+      route.exposure === "public" && route.targetServiceId === service?.id,
   );
   if (strategy === "blue-green")
     return [
@@ -325,7 +325,7 @@ export function deploySteps(
     { label: "Run pre-deploy hooks", state: "pending" },
     { label: "Stop current container", state: "pending" },
     { label: "Start new container", state: "pending" },
-    { label: "Wait for healthcheck", state: "pending" },
+    { label: service?.healthcheck ? "Wait for healthcheck" : "Wait for containers to run", state: "pending" },
     { label: "Run post-deploy hooks", state: "pending" },
   ];
 }

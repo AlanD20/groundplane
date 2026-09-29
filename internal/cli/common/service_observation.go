@@ -49,12 +49,16 @@ func PresentServiceObservation(
 	}
 
 	counts := observation.Replicas
+	releaseID := ""
+	if observation.ServingReleaseID != nil {
+		releaseID = *observation.ServingReleaseID
+	}
 	return ServiceObservationPresentation{
 		Observation:      observation,
 		State:            string(observation.State),
 		ObservedAt:       observation.ObservedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:        observation.ExpiresAt.UTC().Format(time.RFC3339),
-		ServingReleaseID: *observation.ServingReleaseID,
+		ServingReleaseID: releaseID,
 		ExpectedReplicas: strconv.FormatUint(uint64(*observation.ExpectedReplicas), 10),
 		Running:          strconv.FormatUint(uint64(counts.Running), 10),
 		Healthy:          strconv.FormatUint(uint64(counts.Healthy), 10),
@@ -101,7 +105,9 @@ func AddServiceObservationFields(fields map[string]any, observation ServiceObser
 	}
 	fields["observation_observed_at"] = observation.ObservedAt
 	fields["observation_expires_at"] = observation.ExpiresAt
-	fields["observation_serving_release_id"] = observation.ServingReleaseID
+	if observation.ServingReleaseID != "" {
+		fields["observation_serving_release_id"] = observation.ServingReleaseID
+	}
 	fields["observation_expected_replicas"] = observation.ExpectedReplicas
 	fields["observation_running"] = observation.Running
 	fields["observation_healthy"] = observation.Healthy
@@ -137,8 +143,9 @@ func validServiceObservation(observation *apiTypes.ServiceObservation, now time.
 		return observation.ObservedAt == nil && observation.ExpiresAt == nil && observation.ServingReleaseID == nil &&
 			observation.ExpectedReplicas == nil && observation.Replicas == nil
 	}
-	if observation.ObservedAt == nil || observation.ExpiresAt == nil || observation.ServingReleaseID == nil ||
-		*observation.ServingReleaseID == "" || observation.ExpectedReplicas == nil ||
+	if observation.ObservedAt == nil || observation.ExpiresAt == nil ||
+		observation.ServingReleaseID != nil &&
+			*observation.ServingReleaseID == "" || observation.ExpectedReplicas == nil ||
 		*observation.ExpectedReplicas == 0 || observation.Replicas == nil {
 		return false
 	}
