@@ -39,7 +39,8 @@ func blueprintManagedHealthSelection(
 
 // evaluateComposeConvergence is the pure decision behind WaitHealthy. The
 // observer supplies evidence; this function never queries Docker and never
-// guesses whether a partial or healthcheck-less project is ready.
+// guesses whether a partial project is ready. Recreate singletons may run
+// without a healthcheck; other roles retain their explicit health requirement.
 func evaluateComposeConvergence(
 	artifact *agentpb.ComposeArtifact,
 	observed *agentpb.ObservedProject,
@@ -155,7 +156,8 @@ func evaluateSelectedComposeConvergence(
 	})
 
 	for _, service := range services {
-		if requireHealthcheck && !service.GetHasHealthcheck() {
+		if requireHealthcheck && !service.GetHasHealthcheck() &&
+			service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON {
 			return composeConvergence{}, errs.Newf(
 				errs.KindValidationFailed,
 				"compose service %s cannot be used by WaitHealthy without a healthcheck",
@@ -196,7 +198,7 @@ func evaluateSelectedComposeConvergence(
 		}
 	}
 
-	return composeConvergence{Ready: true, Summary: "all selected services are healthy"}, nil
+	return composeConvergence{Ready: true, Summary: "all selected services meet their readiness requirements"}, nil
 }
 
 // evaluateReleaseWorkloadConvergence scopes collision evidence to the selected

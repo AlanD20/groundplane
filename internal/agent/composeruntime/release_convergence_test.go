@@ -1,7 +1,9 @@
 package composeruntime
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -44,5 +46,26 @@ func TestEvaluateReleaseWorkloadConvergenceAcceptsRunningServiceWithoutHealthche
 	}
 	if _, err := evaluateComposeConvergence(artifact, observed, []string{"api"}); err == nil {
 		t.Fatal("WaitHealthy accepted a service without a healthcheck")
+	}
+
+	// SVC-05: first recreate Deploy executes WaitHealthy before acknowledgement;
+	// that actual runtime path must accept running unchecked singletons only.
+	artifact.Services[0].Role = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON
+	runtime := &Runtime{observer: &recreateArtifactObserver{
+		projects: map[string]*agentpb.ObservedProject{artifact.ArtifactId: observed},
+	}}
+	plan := &agentpb.ExecutionPlan{
+		Artifacts:                 []*agentpb.ComposeArtifact{artifact},
+		CandidateReleaseProcedure: &agentpb.CandidateReleaseProcedure{},
+	}
+	wait := &agentpb.WaitHealthy{ArtifactId: artifact.ArtifactId, ServiceIds: []string{"svc_api"}}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if result, err := runtime.waitHealthy(ctx, plan, wait); err != nil || result.ReconciliationRequired {
+		t.Fatalf("unchecked recreate wait = %#v, %v", result, err)
+	}
+	artifact.Services[0].Role = agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT
+	if _, err := runtime.waitHealthy(ctx, plan, wait); err == nil {
+		t.Fatal("blue-green slot without a healthcheck passed runtime wait")
 	}
 }
