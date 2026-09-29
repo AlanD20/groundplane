@@ -105,6 +105,9 @@ The installer accepts mutually exclusive `--controller-only` and `--agent-only`.
 A Controller-only update keeps the existing Agent; a Controller-only fresh install
 selects the latest Agent release when none exists. Agent-only requires the
 Controller and an enrolled Agent and does not replace the Controller.
+Pulls from GP's managed registry select its installer-managed Docker credentials
+automatically, including updates of ref-built Agents. No `DOCKER_CONFIG` override
+or global Docker login is required for that registry.
 
 Updating both runs the guarded Controller update first, preserving the Agent,
 then its independent update. A failed second operation does not undo a completed

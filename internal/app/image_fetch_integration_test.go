@@ -74,6 +74,10 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 	if err := service.Execute(ctx, claim.Task.Record); err == nil {
 		t.Fatal("wrong host image was accepted as successful delivery")
 	}
+	failedProgress, err := tasks.GetTask(ctx, accepted.TaskID)
+	if err != nil || failedProgress.Record.ImageFetchProgress.ErrorCode != "state.conflict" || failedProgress.Record.ImageFetchProgress.Phase != "verifying" {
+		t.Fatalf("fetch failure diagnostic was not persisted: %#v, %v", failedProgress.Record.ImageFetchProgress, err)
+	}
 	if _, err := tasks.AcknowledgeControllerTask(ctx, accepted.TaskID, taskjournal.TaskStatusFailed, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
@@ -102,11 +106,21 @@ func TestImageFetchPinsContentAcrossFailureRetryAndRequestReplay(t *testing.T) {
 		t.Fatalf("claim retry: found=%t, error=%v", found, err)
 	}
 	registry.returnedID = original.ConfigDigest
+	if claim.Task.Record.ImageFetchProgress.Phase != "" {
+		t.Fatal("retry inherited failed attempt progress")
+	}
 	if err := service.Execute(ctx, claim.Task.Record); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tasks.AcknowledgeControllerTask(ctx, retry.TaskID, taskjournal.TaskStatusCompleted, time.Now().UTC()); err != nil {
 		t.Fatal(err)
+	}
+	verified, err := tasks.GetTask(ctx, retry.TaskID)
+	if err != nil || verified.Record.ImageFetchProgress.Phase != "verified" || verified.Record.ImageFetchProgress.ErrorCode != "" {
+		t.Fatalf("retry progress did not record verified content: %#v, %v", verified.Record.ImageFetchProgress, err)
+	}
+	if err := service.Execute(ctx, claim.Task.Record); err == nil {
+		t.Fatal("late progress overwrote a completed Task")
 	}
 	if registry.resolutions != 1 || len(registry.fetched) != 2 || registry.fetched[0] != original ||
 		registry.fetched[1] != original {
@@ -189,7 +203,10 @@ func (registry *imageFetchRegistry) Resolve(context.Context, string) (imagefetch
 	return registry.selected, nil
 }
 
-func (registry *imageFetchRegistry) Fetch(_ context.Context, plan imagefetch.Plan) (string, error) {
+func (registry *imageFetchRegistry) Fetch(_ context.Context, plan imagefetch.Plan, report imagefetch.Reporter) (string, error) {
+	if err := report(imagefetch.Progress{Phase: "verifying"}); err != nil {
+		return "", err
+	}
 	registry.fetched = append(registry.fetched, plan)
 	return registry.returnedID, nil
 }

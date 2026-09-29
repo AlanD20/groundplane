@@ -122,7 +122,7 @@ class BundleTests(unittest.TestCase):
     def test_native_update_only_pulls_agent_and_uses_guarded_activation(self):
         for stage in (False, True):
             run, execute = self.invoke("native", stage)
-            run.assert_any_call(["docker", "pull", self.agent], check=True)
+            run.assert_any_call(["docker", "pull", self.agent], check=True, timeout=600)
             self.assertEqual(run.call_count, 2)
             argv = run.call_args.args[0]
             self.assertEqual(argv[1], str(self.root / "install-runtime.sh"))
@@ -133,8 +133,8 @@ class BundleTests(unittest.TestCase):
             run, _ = self.invoke("bootstrap")
         self.assertEqual(run.call_args_list[:3], [
             mock.call(["sh", str(self.root / "setup-host.sh")], check=True),
-            mock.call(["docker", "pull", self.agent], check=True),
-            mock.call(["docker", "pull", self.runner], check=True)])
+            mock.call(["docker", "pull", self.agent], check=True, timeout=600),
+            mock.call(["docker", "pull", self.runner], check=True, timeout=600)])
 
     def test_stage_on_fresh_host_and_config_on_native_refuse(self):
         with self.assertRaisesRegex(ValueError, "existing native"):

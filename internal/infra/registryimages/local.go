@@ -25,12 +25,12 @@ func (Local) Resolve(ctx context.Context, requested string) (imagefetch.Plan, er
 	return plan, errors.Join(err, registryClient.Close())
 }
 
-func (Local) Fetch(ctx context.Context, plan imagefetch.Plan) (string, error) {
+func (Local) Fetch(ctx context.Context, plan imagefetch.Plan, report imagefetch.Reporter) (string, error) {
 	registryClient, err := NewLocal(ctx, strings.HasPrefix(plan.Repository, imagefetch.RegistryAuthority+"/"))
 	if err != nil {
 		return "", err
 	}
-	imageID, err := registryClient.Fetch(ctx, plan)
+	imageID, err := registryClient.Fetch(ctx, plan, report)
 	return imageID, errors.Join(err, registryClient.Close())
 }
 

@@ -5,6 +5,7 @@ import type { BackingHooks } from "@/features/backing-service/api";
 import type { Script } from "@/features/script/types";
 import type { Volume } from "@/features/volume/types";
 import type { BackupPolicy } from "@/features/backup/types";
+import type { TaskResponse } from "@/features/task/api";
 export type { EnvironmentEntry, EnvironmentEntrySource } from "./entry-types";
 
 // Groundplane desired-state model (prototype). Mirrors the Blueprint contract.
@@ -438,6 +439,7 @@ export type TaskJournalState = {
 };
 
 export type ActivityEntry = {
+	imageFetch?: TaskResponse["image_fetch"];
   id: string;
   operationId?: string;
   retryOf?: string;

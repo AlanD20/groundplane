@@ -15,6 +15,18 @@ INVENTORY = (200, {"items": [{"id": AGENT, "status": "healthy"}]})
 
 
 class AgentInstallationTests(unittest.TestCase):
+    # PKG-08: ref-built Agents use managed credentials; public pulls must not
+    # silently adopt GP's credential selection or overwrite global Docker state.
+    def test_pull_selects_credentials_only_for_managed_registry(self):
+        for authority in ("localhost:5000", "registry.groundplane.internal:5000", "ghcr.io", "localhost:5000.evil.example"):
+            with self.subTest(authority=authority), patch.object(install_agent.subprocess, "run") as run:
+                image = authority + "/groundplane-agent@sha256:" + "a" * 64
+                install_agent.pull_image(image)
+                command = ["docker"]
+                if authority in {"localhost:5000", "registry.groundplane.internal:5000"}:
+                    command += ["--config", "/etc/groundplane/registry/client"]
+                run.assert_called_once_with([*command, "pull", image], check=True, timeout=600)
+
     def test_lost_acceptance_reuses_key_and_blocks_a_different_image(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

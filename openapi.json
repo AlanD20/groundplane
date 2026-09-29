@@ -3499,6 +3499,29 @@
         ],
         "type": "object"
       },
+      "Progress": {
+        "additionalProperties": false,
+        "properties": {
+          "downloaded_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "error_detail": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "total_bytes": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "Project": {
         "additionalProperties": false,
         "properties": {
@@ -5697,6 +5720,9 @@
           "id": {
             "type": "string"
           },
+          "image_fetch": {
+            "$ref": "#/components/schemas/TaskImageFetch"
+          },
           "operation_id": {
             "type": "string"
           },
@@ -5846,6 +5872,30 @@
           "attempt",
           "ordinal",
           "received_at"
+        ],
+        "type": "object"
+      },
+      "TaskImageFetch": {
+        "additionalProperties": false,
+        "properties": {
+          "image": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/components/schemas/Progress"
+          },
+          "requested": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requested",
+          "image",
+          "platform",
+          "progress"
         ],
         "type": "object"
       },

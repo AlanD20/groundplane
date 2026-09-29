@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"time"
 )
 
@@ -49,6 +50,14 @@ type Task struct {
 	StartedAt     *time.Time        `json:"started_at"`
 	FinishedAt    *time.Time        `json:"finished_at"`
 	Steps         []TaskStep        `json:"steps,omitempty"`
+	ImageFetch    *TaskImageFetch   `json:"image_fetch,omitempty"`
+}
+
+type TaskImageFetch struct {
+	Requested string              `json:"requested"`
+	Image     string              `json:"image"`
+	Platform  string              `json:"platform"`
+	Progress  imagefetch.Progress `json:"progress"`
 }
 
 type TaskStepKind string

@@ -2576,6 +2576,15 @@ export interface components {
             /** Format: int64 */
             revision?: number;
         };
+        Progress: {
+            /** Format: int64 */
+            downloaded_bytes?: number;
+            error_code?: string;
+            error_detail?: string;
+            phase?: string;
+            /** Format: int64 */
+            total_bytes?: number;
+        };
         Project: {
             /**
              * Format: uri
@@ -3267,6 +3276,7 @@ export interface components {
             /** Format: date-time */
             finished_at: string | null;
             id: string;
+            image_fetch?: components["schemas"]["TaskImageFetch"];
             operation_id: string;
             plan_hash?: string;
             project_id?: string;
@@ -3305,6 +3315,12 @@ export interface components {
             /** @enum {string} */
             state: "pending" | "running" | "completed" | "failed" | "aborted" | "timed_out";
             step_id: string;
+        };
+        TaskImageFetch: {
+            image: string;
+            platform: string;
+            progress: components["schemas"]["Progress"];
+            requested: string;
         };
         TaskStep: {
             /** @enum {string} */

@@ -12,6 +12,13 @@ import time
 from controller_update import Receipt, TASK_ID, TERMINAL, Transport
 
 
+def pull_image(image):
+    command = ["docker"]
+    if image.split("/", 1)[0] in {"localhost:5000", "registry.groundplane.internal:5000"}:
+        command += ["--config", "/etc/groundplane/registry/client"]
+    subprocess.run([*command, "pull", image], check=True, timeout=600)
+
+
 def current_image():
     result = subprocess.run(["docker", "inspect", "groundplane-agent"], capture_output=True, text=True, timeout=30)
     if result.returncode:
@@ -63,7 +70,7 @@ def install(image, *, allow_enroll=False):
         if not absent and (active is None or active["status"] in TERMINAL) and current_image() == image and agent["status"] == "healthy":
             print("Agent is already installed and healthy; skipped.")
             return
-        subprocess.run(["docker", "pull", image], check=True, timeout=600)
+        pull_image(image)
         release = enrollment_release if enrolling else "sha256:" + hashlib.sha256((identity + "\n" + image).encode()).hexdigest()
         value = receipt.begin(release, "agent-install-" + secrets.token_hex(16))
         if not value["task_id"]:

@@ -149,7 +149,8 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     retryOf: task.retry_of,
     planHash: task.plan_hash,
     type,
-    title: taskTitle(type, task.target),
+    title: taskTitle(type, task.image_fetch?.requested ?? task.target),
+    imageFetch: task.image_fetch,
     target: task.target,
     workspace:
       task.workspace_type === "platform" ? "platform" : task.tenant_id!,

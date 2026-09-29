@@ -127,7 +127,7 @@ def install(source: Path, output: Path, version: str, identity: str,
             current = install_agent.installed_image() if mode == "native" else None
             missing_agent = mode == "native" and current is None
             selected_agent = current or release_selection.agent_image()
-            run("docker", "pull", selected_agent)
+            install_agent.pull_image(selected_agent)
         for path in (deploy.RELEASE_STAGER, deploy.BOOTSTRAP_HELPER, deploy.UPDATE_CLIENT,
                      deploy.CONTROLLER_UNIT, deploy.TMPFILES, deploy.CONFIG_EXAMPLE):
             shutil.copyfile(path, output / path.name)

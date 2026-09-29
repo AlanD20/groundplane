@@ -2017,6 +2017,15 @@ type PageZone struct {
 	Revision   *int64  `json:"revision,omitempty"`
 }
 
+// Progress defines model for Progress.
+type Progress struct {
+	DownloadedBytes *int64  `json:"downloaded_bytes,omitempty"`
+	ErrorCode       *string `json:"error_code,omitempty"`
+	ErrorDetail     *string `json:"error_detail,omitempty"`
+	Phase           *string `json:"phase,omitempty"`
+	TotalBytes      *int64  `json:"total_bytes,omitempty"`
+}
+
 // Project defines model for Project.
 type Project struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -2730,6 +2739,7 @@ type Task struct {
 	EnvironmentId *string           `json:"environment_id,omitempty"`
 	FinishedAt    *time.Time        `json:"finished_at"`
 	Id            string            `json:"id"`
+	ImageFetch    *TaskImageFetch   `json:"image_fetch,omitempty"`
 	OperationId   string            `json:"operation_id"`
 	PlanHash      *string           `json:"plan_hash,omitempty"`
 	ProjectId     *string           `json:"project_id,omitempty"`
@@ -2774,6 +2784,14 @@ type TaskEvent struct {
 
 // TaskEventState defines model for TaskEvent.State.
 type TaskEventState string
+
+// TaskImageFetch defines model for TaskImageFetch.
+type TaskImageFetch struct {
+	Image     string   `json:"image"`
+	Platform  string   `json:"platform"`
+	Progress  Progress `json:"progress"`
+	Requested string   `json:"requested"`
+}
 
 // TaskStep defines model for TaskStep.
 type TaskStep struct {

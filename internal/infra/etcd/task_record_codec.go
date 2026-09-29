@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -13,6 +14,7 @@ import (
 )
 
 type taskRecordData struct {
+	ImageFetchProgress imagefetch.Progress                       `json:"image_fetch_progress,omitzero"`
 	ID                 string                                    `json:"id"`
 	OperationID        string                                    `json:"operation_id"`
 	RetryOf            string                                    `json:"retry_of,omitempty"`
@@ -83,7 +85,8 @@ func DecodeTaskRecord(value []byte) (TaskRecord, error) {
 
 func taskRecordToData(record TaskRecord) taskRecordData {
 	return taskRecordData{
-		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
+		ImageFetchProgress: record.ImageFetchProgress,
+		ID:                 record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
 		IdempotencyKey: record.IdempotencyKey, Owner: record.Owner, Actor: record.Actor,
 		Executor: record.Executor, PlanID: record.PlanID,
 		PlanHash: record.PlanHash, RenderGeneration: record.RenderGeneration,
@@ -141,6 +144,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		Executor: data.Executor, PlanID: data.PlanID,
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
 		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
+		ImageFetchProgress:     data.ImageFetchProgress,
 		ComponentActionStepIDs: append([]string(nil), data.ComponentActionStepIDs...),
 		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(
 			data.ManagedComponentTeardownSources,

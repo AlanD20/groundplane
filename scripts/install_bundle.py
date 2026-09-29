@@ -73,7 +73,7 @@ def install(bundle: Path, args, manifest: dict, layout: Layout) -> None:
     # Native updates do not pull or replace Runner, CLI, config, keys or etcd.
     roles = ("agent_image",) if mode == "native" else ("agent_image", "runner_image")
     for role in roles:
-        subprocess.run(["docker", "pull", manifest[role]], check=True)
+        install_agent.pull_image(manifest[role])
     subprocess.run(["sh", str(bundle / "install-runtime.sh"), str(bundle), args.version,
                      manifest["agent_image"], manifest["runner_image"], args.listen_ip,
                      "1" if args.stage_only else "0", "0"], check=True)

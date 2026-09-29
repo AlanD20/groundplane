@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -35,6 +36,7 @@ type TaskRecord struct {
 	Configuration      *taskconfiguration.TaskConfiguration      `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
 	Status             taskjournal.TaskStatus                    `json:"status"`
+	ImageFetchProgress imagefetch.Progress                       `json:"image_fetch_progress,omitzero"`
 	Result             *taskjournal.TaskResultRecord             `json:"result,omitempty"`
 	TerminalAssignment *taskjournal.TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                                    `json:"next_event_sequence"`

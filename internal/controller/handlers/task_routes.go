@@ -239,8 +239,13 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() {
 		return apiTypes.Task{}, errs.New(errs.KindInternal, "task has an invalid durable timeline")
 	}
+	fetch, err := imageFetchTaskDetails(record)
+	if err != nil {
+		return apiTypes.Task{}, err
+	}
 	return apiTypes.Task{
-		ID: record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
+		ImageFetch: fetch,
+		ID:         record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
 		PlanHash: record.PlanHash, Type: taskType, Target: record.Target, Status: status,
 		WorkspaceType: workspace, TenantID: record.Owner.TenantID, ProjectID: record.Owner.ProjectID,
 		EnvironmentID: record.Owner.EnvironmentID, Actor: actor,

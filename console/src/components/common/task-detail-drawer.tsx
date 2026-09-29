@@ -12,6 +12,7 @@ import { Drawer, DrawerContent } from '@/components/ui/drawer'
 import { taskDetailActions } from '@/lib/task-detail-actions'
 import { requestTask } from '@/features/task/api'
 import { taskFromAPI } from '@/features/task/journal-model'
+import { ImageFetchTaskDetails } from '@/features/image-delivery/image-fetch-task-details'
 import type { ActivityEntry, TaskJournalScope, TaskJournalSurface } from '@/lib/types'
 
 export function TaskDetailDrawer({
@@ -102,6 +103,7 @@ export function TaskDetailDrawer({
           )}
           {detail && task && (
             <>
+              {task.imageFetch ? <><StatusBadge status={task.status} /><ImageFetchTaskDetails task={task} /></> : <>
               <div className="flex flex-wrap gap-1.5">
                 <span className="rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
                   {task.id}
@@ -147,6 +149,7 @@ export function TaskDetailDrawer({
                   <p className="text-xs text-muted-foreground">no steps recorded</p>
                 )}
               </div>
+              </>}
             </>
           )}
           {actionError && (

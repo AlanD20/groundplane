@@ -76,6 +76,13 @@ a failed attempt can leave downloaded content on the host. `nginx:latest` stays 
 with the digest that Fetch selected even if the registry later moves the tag.
 This history lasts as long as its Task record; it is not a local Docker tag.
 
+Fetch Task details show the requested image, selected platform, current
+checking/download/verification stage and the recorded failure explanation.
+Download counts cover layers reported by Docker so far, not a fixed overall
+percentage; cached layers need no download. Progress survives Console reloads.
+Full image digests and operation IDs are under technical details. Completion
+means the image was verified locally, not that a Service was deployed.
+
 Use `groundplane image ls` to inspect the same inventory. Removal uses
 `groundplane image remove sha256:...` and creates a Task for that exact local
 image ID, never a mutable name. The API exposes `GET /images`, `POST /images/fetch`

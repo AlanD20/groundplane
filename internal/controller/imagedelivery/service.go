@@ -24,7 +24,7 @@ const RemoveRoute = "/images/{id}"
 
 type Registry interface {
 	Resolve(context.Context, string) (imagefetch.Plan, error)
-	Fetch(context.Context, imagefetch.Plan) (string, error)
+	Fetch(context.Context, imagefetch.Plan, imagefetch.Reporter) (string, error)
 	List(context.Context) ([]imagefetch.LocalImage, error)
 	Remove(context.Context, string) error
 }
@@ -202,14 +202,7 @@ func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error
 	if err != nil {
 		return err
 	}
-	configDigest, err := service.registry.Fetch(ctx, plan)
-	if err != nil {
-		return err
-	}
-	if configDigest != plan.ConfigDigest {
-		return errs.New(errs.KindStateConflict, "fetched image differs from the accepted content")
-	}
-	return nil
+	return service.executeFetch(ctx, task, plan)
 }
 
 func (service *Service) prepare(
