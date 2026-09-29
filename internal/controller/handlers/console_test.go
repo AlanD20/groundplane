@@ -148,7 +148,8 @@ func TestConsoleDispatcherAcceptsEncodedAPIImageID(t *testing.T) {
 	}
 	for _, suffix := range []string{"sha256%253A" + strings.Repeat("a", 64), "a%2fb", "a%5cb", "%2e%2e", "a%00b"} {
 		response := httptest.NewRecorder()
-		server.requestHandler().ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/images/"+suffix, nil))
+		server.requestHandler().
+			ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/images/"+suffix, nil))
 		if response.Code != http.StatusNotFound {
 			t.Fatalf("unsafe path %q: %d", suffix, response.Code)
 		}

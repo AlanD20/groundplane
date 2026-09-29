@@ -43,9 +43,14 @@ func TestImageRemovalRetainsTerminalComponentImages(t *testing.T) {
 		BaselineGeneration: 1, BaselineSHA256: task.PlanHash, HostResolutionInputRevision: 1, HostResolutionSHA256: task.PlanHash,
 		Config: core.CoreDNSComponentConfig{UpstreamAuto: true}, GeneratedServiceID: ids.New(ids.KindService),
 		DefinitionSHA256: task.PlanHash, CatalogSHA256: task.PlanHash, ActionID: "activate-config",
-		ArtifactID: ids.New(ids.KindConfig), ComposeArtifactID: ids.New(ids.KindConfig), OwnershipPlanID: task.PlanID, OwnershipGeneration: 1,
+		ArtifactID: ids.New(
+			ids.KindConfig,
+		), ComposeArtifactID: ids.New(ids.KindConfig), OwnershipPlanID: task.PlanID, OwnershipGeneration: 1,
 		ImageRepository: "example/resolver", ImageIndexDigest: strings.Repeat("1", 64), ImageChildDigest: strings.Repeat("2", 64),
-		ImageConfigDigest: strings.Repeat("3", 64), ImageReference: "example/resolver@sha256:" + strings.Repeat("2", 64),
+		ImageConfigDigest: strings.Repeat(
+			"3",
+			64,
+		), ImageReference: "example/resolver@sha256:" + strings.Repeat("2", 64),
 		ImageOS: "linux", ImageArchitecture: "amd64", ArtifactSHA256: task.PlanHash, ArtifactLength: 1,
 		PlanSHA256: task.PlanHash, ExecutionPlanSHA256: task.PlanHash,
 		EnsureService: true, ExpectedPreviousArtifactSHA256: task.PlanHash, ExpectedPreviousArtifactID: ids.New(ids.KindConfig),
@@ -75,12 +80,22 @@ func TestImageRemovalRetainsTerminalComponentImages(t *testing.T) {
 	}}
 	service := removalServiceFactory(t, store, tasks, engine)()
 	for _, status := range []taskjournal.TaskStatus{taskjournal.TaskStatusRunning, taskjournal.TaskStatusFailed, taskjournal.TaskStatusTimedOut, taskjournal.TaskStatusAborted} {
-		attempt, err := etcd.TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, now.Add(time.Second))
+		attempt, err := etcd.TransitionTaskStatus(
+			task,
+			taskjournal.TaskStatusPending,
+			taskjournal.TaskStatusRunning,
+			now.Add(time.Second),
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if status != taskjournal.TaskStatusRunning {
-			attempt, err = etcd.TransitionTaskStatus(attempt, taskjournal.TaskStatusRunning, status, now.Add(2*time.Second))
+			attempt, err = etcd.TransitionTaskStatus(
+				attempt,
+				taskjournal.TaskStatusRunning,
+				status,
+				now.Add(2*time.Second),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -112,54 +127,69 @@ func TestImageRemovalRetainsTerminalComponentImages(t *testing.T) {
 // IMG-02: a failed Blueprint must retain its historical projection rather than
 // locking unrelated images or consulting only the latest Environment head.
 func TestImageRemovalRetainsFailedBlueprintImages(t *testing.T) {
-	testBlueprintExecutedArtifact(t, false, false, func(fixture *ExecutedArtifactFixture, _ *taskplanning.TaskPlanResolver, render releaserender.ReleaseRenderInput, _ domain.Intent, _ *agentpb.ComposeArtifact) {
-		page, err := fixture.store.Range(t.Context(), keyvalue.RangeRequest{Prefix: taskjournal.TaskPrefix, Limit: 128})
-		if err != nil {
-			t.Fatal(err)
-		}
-		found := false
-		for _, value := range page.Values {
-			task, err := etcd.DecodeTaskRecord(value.Value)
+	testBlueprintExecutedArtifact(
+		t,
+		false,
+		false,
+		func(fixture *ExecutedArtifactFixture, _ *taskplanning.TaskPlanResolver, render releaserender.ReleaseRenderInput, _ domain.Intent, _ *agentpb.ComposeArtifact) {
+			page, err := fixture.store.Range(
+				t.Context(),
+				keyvalue.RangeRequest{Prefix: taskjournal.TaskPrefix, Limit: 128},
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if task.PlanID != render.PlanID {
-				// This shared fixture also publishes later pending work. Isolate
-				// the failed attempt, retaining all of its runtime/Release inputs.
-				if _, err := fixture.store.Delete(t.Context(), value.Key); err != nil {
+			found := false
+			for _, value := range page.Values {
+				task, err := etcd.DecodeTaskRecord(value.Value)
+				if err != nil {
 					t.Fatal(err)
 				}
-				continue
+				if task.PlanID != render.PlanID {
+					// This shared fixture also publishes later pending work. Isolate
+					// the failed attempt, retaining all of its runtime/Release inputs.
+					if _, err := fixture.store.Delete(t.Context(), value.Key); err != nil {
+						t.Fatal(err)
+					}
+					continue
+				}
+				found = true
+				// The shared release fixture calls the lower-level preparer directly;
+				// supply the procedure normally stamped by Blueprint admission.
+				task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(
+					taskcontract.BlueprintComposeProcedureCandidateReleases,
+				)
+				task.Status = taskjournal.TaskStatusFailed
+				task.Result = nil
+				task.TerminalAssignment = nil
+				raw, err := etcd.EncodeTaskRecord(task)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := fixture.store.Put(t.Context(), value.Key, raw); err != nil {
+					t.Fatal(err)
+				}
 			}
-			found = true
-			// The shared release fixture calls the lower-level preparer directly;
-			// supply the procedure normally stamped by Blueprint admission.
-			task.Params[taskcontract.EnvironmentBlueprintProcedureParam] = string(taskcontract.BlueprintComposeProcedureCandidateReleases)
-			task.Status = taskjournal.TaskStatusFailed
-			task.Result = nil
-			task.TerminalAssignment = nil
-			raw, err := etcd.EncodeTaskRecord(task)
+			if !found {
+				t.Fatal("fixture Blueprint Task not found")
+			}
+			engine := &removalEngine{
+				images: []imagefetch.LocalImage{
+					{ID: "sha256:" + strings.Repeat("f", 64)},
+					{ID: render.CandidateWorkload.LocalImageID},
+				},
+			}
+			service := removalServiceFactory(t, fixture.store.memoryHierarchyStore, fixture.Tasks, engine)()
+			inventory, err := service.ListImages(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := fixture.store.Put(t.Context(), value.Key, raw); err != nil {
+			if inventory.Images[0].RemovalBlocked != "" || inventory.Images[1].RemovalBlocked == "" {
+				t.Fatalf("failed Blueprint protection: %#v", inventory.Images)
+			}
+			if _, err := service.RemoveImage(t.Context(), engine.images[0].ID, "remove-unrelated-to-blueprint"); err != nil {
 				t.Fatal(err)
 			}
-		}
-		if !found {
-			t.Fatal("fixture Blueprint Task not found")
-		}
-		engine := &removalEngine{images: []imagefetch.LocalImage{{ID: "sha256:" + strings.Repeat("f", 64)}, {ID: render.CandidateWorkload.LocalImageID}}}
-		service := removalServiceFactory(t, fixture.store.memoryHierarchyStore, fixture.Tasks, engine)()
-		inventory, err := service.ListImages(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if inventory.Images[0].RemovalBlocked != "" || inventory.Images[1].RemovalBlocked == "" {
-			t.Fatalf("failed Blueprint protection: %#v", inventory.Images)
-		}
-		if _, err := service.RemoveImage(t.Context(), engine.images[0].ID, "remove-unrelated-to-blueprint"); err != nil {
-			t.Fatal(err)
-		}
-	})
+		},
+	)
 }

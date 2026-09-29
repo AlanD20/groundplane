@@ -47,7 +47,11 @@ func (service *Service) executeFetch(ctx context.Context, task etcd.TaskRecord, 
 	return errors.Join(err, service.recordFetchProgress(cleanup, task, progress))
 }
 
-func (service *Service) recordFetchProgress(ctx context.Context, task etcd.TaskRecord, progress imagefetch.Progress) error {
+func (service *Service) recordFetchProgress(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	progress imagefetch.Progress,
+) error {
 	key := taskjournal.TaskStorageKey(task.ID)
 	for range 3 {
 		read, err := service.store.Get(ctx, key)
@@ -73,8 +77,11 @@ func (service *Service) recordFetchProgress(ctx context.Context, task etcd.TaskR
 		if err != nil {
 			return err
 		}
-		result, err := service.store.Transact(ctx, []keyvalue.Condition{{Key: key, ModRevision: read.Entry.ModRevision}},
-			[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}})
+		result, err := service.store.Transact(
+			ctx,
+			[]keyvalue.Condition{{Key: key, ModRevision: read.Entry.ModRevision}},
+			[]keyvalue.Mutation{{Type: keyvalue.MutationPut, Key: key, Value: value}},
+		)
 		clear(value)
 		if err != nil {
 			return err

@@ -17,7 +17,12 @@ import (
 // A terminal Task is not a reference to every image on the host. Resolve its
 // immutable inputs, including predecessor runtime, before releasing that broad
 // barrier. Unknown procedures keep the barrier; missing/corrupt inputs fail closed.
-func (service *Service) retainTaskImages(ctx context.Context, retention *imageRetention, task etcd.TaskRecord, revision int64) (bool, error) {
+func (service *Service) retainTaskImages(
+	ctx context.Context,
+	retention *imageRetention,
+	task etcd.TaskRecord,
+	revision int64,
+) (bool, error) {
 	if !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return false, nil
 	}
@@ -40,13 +45,19 @@ func (service *Service) retainTaskImages(ctx context.Context, retention *imageRe
 	return false, nil
 }
 
-func (service *Service) retainComponentTaskImages(ctx context.Context, retention *imageRetention, task etcd.TaskRecord, revision int64) error {
+func (service *Service) retainComponentTaskImages(
+	ctx context.Context,
+	retention *imageRetention,
+	task etcd.TaskRecord,
+	revision int64,
+) error {
 	key := platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)
 	read, err := service.store.GetMany(ctx, keyvalue.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return err
 	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil || read.Values[0].Key != key {
+	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil ||
+		read.Values[0].Key != key {
 		return errs.New(errs.KindInternal, "retained Component Task image input is missing")
 	}
 	input, err := platformcomponents.DecodePlatformComponentTaskRenderInput(read.Values[0].Value)
@@ -65,17 +76,29 @@ func (service *Service) retainComponentTaskImages(ctx context.Context, retention
 	return nil
 }
 
-func (service *Service) retainBlueprintTaskImages(ctx context.Context, retention *imageRetention, task etcd.TaskRecord, revision int64) error {
+func (service *Service) retainBlueprintTaskImages(
+	ctx context.Context,
+	retention *imageRetention,
+	task etcd.TaskRecord,
+	revision int64,
+) error {
 	reason := "Retained Task " + task.ID
 	retainProjection := func(environmentID, revisionID string) error {
-		projection, found, err := blueprints.ReadEffectiveProjectionRevision(ctx, service.store, environmentID, revisionID, revision)
+		projection, found, err := blueprints.ReadEffectiveProjectionRevision(
+			ctx,
+			service.store,
+			environmentID,
+			revisionID,
+			revision,
+		)
 		if err != nil {
 			return err
 		}
 		if !found || projection.ReadRevision != revision {
 			return errs.New(errs.KindInternal, "retained Blueprint Task image input is missing")
 		}
-		if revisionID == task.Params[blueprints.EnvironmentDesiredRevisionParam] && projection.Record.RenderGeneration != uint64(task.RenderGeneration) {
+		if revisionID == task.Params[blueprints.EnvironmentDesiredRevisionParam] &&
+			projection.Record.RenderGeneration != uint64(task.RenderGeneration) {
 			return errs.New(errs.KindInternal, "retained Blueprint Task image generation differs from its Task")
 		}
 		return retention.artifact(projection.Record.ComposeArtifact, reason)

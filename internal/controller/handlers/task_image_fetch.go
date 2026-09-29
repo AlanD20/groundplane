@@ -8,7 +8,8 @@ import (
 )
 
 func imageFetchTaskDetails(task etcd.TaskRecord) (*apiTypes.TaskImageFetch, error) {
-	if task.Type != taskjournal.TaskFetch || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceImage {
+	if task.Type != taskjournal.TaskFetch ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceImage {
 		return nil, nil
 	}
 	plan, err := imagefetch.Decode(task.Params[taskjournal.TaskImageFetchInputParam], task.PlanHash)
@@ -19,5 +20,10 @@ func imageFetchTaskDetails(task etcd.TaskRecord) (*apiTypes.TaskImageFetch, erro
 	if plan.Variant != "" {
 		platform += "/" + plan.Variant
 	}
-	return &apiTypes.TaskImageFetch{Requested: plan.Requested, Image: plan.Reference(), Platform: platform, Progress: task.ImageFetchProgress}, nil
+	return &apiTypes.TaskImageFetch{
+		Requested: plan.Requested,
+		Image:     plan.Reference(),
+		Platform:  platform,
+		Progress:  task.ImageFetchProgress,
+	}, nil
 }

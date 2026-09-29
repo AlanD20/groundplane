@@ -121,7 +121,10 @@ func removeDockerReference(ctx context.Context, engine *client.Client, selector 
 		return nil
 	}
 	if errdefs.IsConflict(err) {
-		return errs.New(errs.KindResourceInUse, "Docker still needs this image; container, dependency or reference protection prevents removal")
+		return errs.New(
+			errs.KindResourceInUse,
+			"Docker still needs this image; container, dependency or reference protection prevents removal",
+		)
 	}
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, err)

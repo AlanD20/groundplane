@@ -41,7 +41,12 @@ func TestFetchVerifiesSelectedContentAcrossDockerStores(t *testing.T) {
 // IMG-01: familiar Docker Hub names must verify as the same pinned repository;
 // normalizing a name must never accept another repository, digest or platform.
 func TestFetchVerifiesNormalizedRepositoryDigest(t *testing.T) {
-	plan := imagefetch.Plan{Repository: "docker.io/library/nginx", Architecture: "amd64", ManifestDigest: "sha256:" + strings.Repeat("a", 64), ConfigDigest: "sha256:" + strings.Repeat("b", 64)}
+	plan := imagefetch.Plan{
+		Repository:     "docker.io/library/nginx",
+		Architecture:   "amd64",
+		ManifestDigest: "sha256:" + strings.Repeat("a", 64),
+		ConfigDigest:   "sha256:" + strings.Repeat("b", 64),
+	}
 	for _, value := range []struct {
 		ref      string
 		accepted bool
@@ -54,7 +59,14 @@ func TestFetchVerifiesNormalizedRepositoryDigest(t *testing.T) {
 		{"nginx:latest", false},
 	} {
 		t.Run(value.ref, func(t *testing.T) {
-			observed := client.ImageInspectResult{InspectResponse: image.InspectResponse{ID: plan.ConfigDigest, Os: "linux", Architecture: "amd64", RepoDigests: []string{value.ref}}}
+			observed := client.ImageInspectResult{
+				InspectResponse: image.InspectResponse{
+					ID:           plan.ConfigDigest,
+					Os:           "linux",
+					Architecture: "amd64",
+					RepoDigests:  []string{value.ref},
+				},
+			}
 			_, err := verifyImage(observed, plan)
 			if (err == nil) != value.accepted {
 				t.Fatalf("accepted=%t, error=%v", value.accepted, err)

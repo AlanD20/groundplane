@@ -18,7 +18,13 @@ import (
 func TestFetchStreamReportsProgressAndRejectsDaemonFailure(t *testing.T) {
 	for _, failed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "download", true: "daemon failure"}[failed], func(t *testing.T) {
-			plan := imagefetch.Plan{Requested: "nginx:latest", Repository: "docker.io/library/nginx", Architecture: "amd64", ManifestDigest: "sha256:" + strings.Repeat("a", 64), ConfigDigest: "sha256:" + strings.Repeat("b", 64)}
+			plan := imagefetch.Plan{
+				Requested:      "nginx:latest",
+				Repository:     "docker.io/library/nginx",
+				Architecture:   "amd64",
+				ManifestDigest: "sha256:" + strings.Repeat("a", 64),
+				ConfigDigest:   "sha256:" + strings.Repeat("b", 64),
+			}
 			pulled := false
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
@@ -52,7 +58,11 @@ func TestFetchStreamReportsProgressAndRejectsDaemonFailure(t *testing.T) {
 				}
 			}))
 			defer server.Close()
-			engine, err := client.New(client.WithHost(server.URL), client.WithAPIVersion("1.55"), client.WithHTTPClient(server.Client()))
+			engine, err := client.New(
+				client.WithHost(server.URL),
+				client.WithAPIVersion("1.55"),
+				client.WithHTTPClient(server.Client()),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -63,7 +73,11 @@ func TestFetchStreamReportsProgressAndRejectsDaemonFailure(t *testing.T) {
 			}()
 			registry := &Client{engine: engine, architecture: "amd64"}
 			var reported []imagefetch.Progress
-			id, err := registry.Fetch(context.Background(), plan, func(value imagefetch.Progress) error { reported = append(reported, value); return nil })
+			id, err := registry.Fetch(
+				context.Background(),
+				plan,
+				func(value imagefetch.Progress) error { reported = append(reported, value); return nil },
+			)
 			if failed {
 				if err == nil || id != "" {
 					t.Fatal("daemon error accepted as success")

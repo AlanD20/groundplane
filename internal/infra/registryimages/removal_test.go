@@ -109,7 +109,11 @@ func TestImageRemovalHandlesAliasesWithoutForce(t *testing.T) {
 				write([]image.DeleteResponse{})
 			}))
 			defer server.Close()
-			engine, err := client.New(client.WithHost(server.URL), client.WithAPIVersion("1.55"), client.WithHTTPClient(server.Client()))
+			engine, err := client.New(
+				client.WithHost(server.URL),
+				client.WithAPIVersion("1.55"),
+				client.WithHTTPClient(server.Client()),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}

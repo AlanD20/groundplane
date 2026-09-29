@@ -18,7 +18,11 @@ import (
 // Fetch uses only pinned manifest content. It neither changes a Service nor
 // moves a local mutable tag. It returns the verified OCI configuration digest,
 // independent of the host Docker store's local identifier representation.
-func (registryClient *Client) Fetch(ctx context.Context, plan imagefetch.Plan, report imagefetch.Reporter) (string, error) {
+func (registryClient *Client) Fetch(
+	ctx context.Context,
+	plan imagefetch.Plan,
+	report imagefetch.Reporter,
+) (string, error) {
 	if err := plan.Validate(); err != nil {
 		return "", err
 	}
@@ -63,7 +67,13 @@ func (registryClient *Client) Fetch(ctx context.Context, plan imagefetch.Plan, r
 			return "", errs.Wrap(errs.KindInternal, streamErr)
 		}
 		if message.Error != nil {
-			return "", errors.Join(errs.New(errs.KindStateConflict, "Docker could not download the selected image; check registry access and host disk space, then retry"), errs.Wrap(errs.KindInternal, message.Error))
+			return "", errors.Join(
+				errs.New(
+					errs.KindStateConflict,
+					"Docker could not download the selected image; check registry access and host disk space, then retry",
+				),
+				errs.Wrap(errs.KindInternal, message.Error),
+			)
 		}
 		if message.Status != "Downloading" || message.Progress == nil || message.ID == "" {
 			continue
