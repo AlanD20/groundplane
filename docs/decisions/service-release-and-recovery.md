@@ -17,6 +17,14 @@ or Volumes. If the Service has never been applied, the action is still an
 observable Controller-owned no-op Task. A durable per-Service owner serializes
 lifecycle actions so queued work cannot execute a newer Blueprint accidentally.
 
+Remove captures the acknowledged runtime separately from desired configuration.
+Its publication compares that runtime's revision, including absence for an
+undeployed Service. Cleanup selects the captured proxy, active workload and
+retained slot with their original ownership; desired names alone are not runtime
+authority. Each physical member must disappear, and unexpected or remaining
+members block completion before the Service definition is deleted. See
+[removal planning](../../internal/controller/taskplanning/service_removal_runtime.go).
+
 ## Releases are immutable history
 
 A Release is an append-only candidate record with immutable render input and a

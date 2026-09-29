@@ -29,6 +29,9 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 	artifactID string,
 	stepID string,
 ) (etcd.TaskRecord, error) {
+	if err := environmentchanges.ValidateServiceRemovalIntent(intent); err != nil {
+		return etcd.TaskRecord{}, err
+	}
 	if resolver == nil ||
 		ctx == nil ||
 		ids.Validate(ids.KindConfig, artifactID) != nil ||
@@ -48,6 +51,18 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 		blueprints.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
 	}
 	prepared.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}
+	if intent.AcknowledgedRuntime != nil {
+		artifacts, err := serviceRemovalRuntimeArtifacts(prepared, intent)
+		if err != nil {
+			return etcd.TaskRecord{}, err
+		}
+		for index := 1; index < len(artifacts); index++ {
+			prepared.Steps = append(prepared.Steps, taskjournal.TaskStepRecord{
+				Kind: taskjournal.TaskStepOperation,
+				ID:   ids.DeriveAt(ids.KindStep, task.CreatedAt, task.ID, artifacts[index].Services[0].ComposeName),
+			})
+		}
+	}
 	plan, err := resolver.buildServiceRemovalPlan(ctx, prepared, intent)
 	if err != nil {
 		return etcd.TaskRecord{}, err
@@ -82,6 +97,9 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 ) (*agentpb.ExecutionPlan, error) {
 	if err := validateServiceRemovalPlanTask(task, intent); err != nil {
 		return nil, err
+	}
+	if intent.AcknowledgedRuntime != nil {
+		return resolver.buildAcknowledgedServiceRemovalPlan(task, intent)
 	}
 	environment, err := resolver.blueprints.GetEnvironment(ctx, intent.EnvironmentID)
 	if err != nil {
@@ -128,7 +146,7 @@ func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent environmentchan
 		task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.ServiceID ||
 		len(task.Params) != 4 ||
-		len(task.Steps) != 1 ||
+		len(task.Steps) == 0 || len(task.Steps) > 3 || intent.AcknowledgedRuntime == nil && len(task.Steps) != 1 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||

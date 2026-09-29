@@ -13,10 +13,17 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type serviceMutationRepository interface {
+	GetServiceRemovalRuntime(
+		context.Context,
+		string,
+		string,
+		int64,
+	) (etcdstore.Versioned[serviceruntimerecord.Record], error)
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
@@ -72,6 +79,12 @@ type MutationRepository struct {
 	zones     *etcd.ZoneRepository
 	desired   *desiredrevisionstore.Repository
 	releases  *etcd.ReleaseLedger
+}
+
+func (repository *MutationRepository) GetServiceRemovalRuntime(
+	ctx context.Context, environmentID, serviceID string, revision int64,
+) (etcdstore.Versioned[serviceruntimerecord.Record], error) {
+	return repository.services.GetServiceRemovalRuntime(ctx, environmentID, serviceID, revision)
 }
 
 func NewMutationRepository(

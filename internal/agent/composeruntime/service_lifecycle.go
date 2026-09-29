@@ -18,6 +18,9 @@ func (runtime *Runtime) executeServiceLifecycleMutation(
 	if err != nil {
 		return StepResult{}, err
 	}
+	if assignment.Plan.GetOperation() == agentpb.PlanOperation_PLAN_OPERATION_REMOVE {
+		return runtime.removeServicePhysicalMember(ctx, assignment, step, artifact, source)
+	}
 	if step.GetComposeStop() != nil || step.GetComposeRemove() != nil {
 		observed, observeErr := runtime.observer.Observe(ctx, assignment.Plan, artifactID)
 		if observeErr != nil {

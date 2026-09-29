@@ -190,6 +190,19 @@ func (service *serviceMutationService) removeServiceOnce(
 			"Service removal planner is not configured",
 		)
 	}
+	runtimeSource, err := service.repository.GetServiceRemovalRuntime(
+		ctx,
+		intentValue.environmentID,
+		serviceID,
+		projection.ReadRevision,
+	)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	removalIntent.AcknowledgedRuntimeRevision = runtimeSource.Revision
+	if runtimeSource.Revision != 0 {
+		removalIntent.AcknowledgedRuntime = &runtimeSource.Record
+	}
 	task, err = service.lifecycle.plans.PrepareServiceRemovalTask(
 		ctx, task, removalIntent,
 		serviceStableIDFromRevision(ids.KindConfig, taskID), serviceStableIDFromRevision(ids.KindStep, taskID),

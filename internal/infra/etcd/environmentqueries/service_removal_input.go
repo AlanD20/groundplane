@@ -4,10 +4,54 @@ import (
 	"context"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+func (repository *ServiceReader) GetServiceRemovalRuntime(
+	ctx context.Context, environmentID, serviceID string, revision int64,
+) (etcdstore.Versioned[serviceruntimerecord.Record], error) {
+	if ctx == nil || revision <= 0 || ids.Validate(ids.KindEnvironment, environmentID) != nil ||
+		ids.Validate(ids.KindService, serviceID) != nil {
+		return etcdstore.Versioned[serviceruntimerecord.Record]{}, errs.New(
+			errs.KindValidationFailed,
+			"Service removal runtime request is invalid",
+		)
+	}
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{serviceruntimerecord.Key(serviceID)}, Revision: revision,
+	})
+	if err != nil {
+		return etcdstore.Versioned[serviceruntimerecord.Record]{}, err
+	}
+	if read == nil || len(read.Values) != 1 || read.ReadRevision != revision {
+		return etcdstore.Versioned[serviceruntimerecord.Record]{}, errs.New(
+			errs.KindInternal,
+			"Service removal runtime read is incomplete",
+		)
+	}
+	result := etcdstore.Versioned[serviceruntimerecord.Record]{ReadRevision: revision}
+	if read.Values[0] == nil {
+		return result, nil
+	}
+	defer etcdstore.ClearValues(read.Values)
+	result.Record, err = releases.DecodeReleaseRecord[serviceruntimerecord.Record](
+		read.Values[0].Value,
+		"service-acknowledged-runtime",
+	)
+	if err != nil || result.Record.EnvironmentID != environmentID || result.Record.Runtime.ServiceID != serviceID ||
+		serviceruntimerecord.Validate(result.Record) != nil {
+		return etcdstore.Versioned[serviceruntimerecord.Record]{}, errs.New(
+			errs.KindInternal,
+			"Service removal runtime is corrupt",
+		)
+	}
+	result.Revision = read.Values[0].ModRevision
+	return result, nil
+}
 
 func (repository *ServiceReader) GetServiceRemovalIntent(
 	ctx context.Context,

@@ -43,8 +43,10 @@ func validateServiceLifecyclePlan(plan *agentpb.ExecutionPlan) error {
 		plan.GetComponentRollbackObservation() != nil ||
 		(plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_START &&
 			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_STOP &&
-			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_DESTROY) ||
-		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > 2 ||
+			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_DESTROY &&
+			plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_REMOVE) ||
+		len(procedure.GetSources()) == 0 || len(procedure.GetSources()) > 3 ||
+		plan.GetOperation() != agentpb.PlanOperation_PLAN_OPERATION_REMOVE && len(procedure.GetSources()) > 2 ||
 		len(procedure.GetSources()) != len(plan.GetArtifacts()) || len(procedure.GetSources()) != len(plan.GetSteps()) {
 		return errs.New(errs.KindValidationFailed, "service lifecycle procedure shape is invalid")
 	}
@@ -118,7 +120,7 @@ func serviceLifecycleStepMatches(
 		stop := step.GetComposeStop()
 		return stop != nil && stop.GetArtifactId() == source.GetArtifactId() && stop.GetGraceSeconds() > 0 &&
 			slices.Equal(stop.GetServiceIds(), []string{source.GetServiceId()})
-	case agentpb.PlanOperation_PLAN_OPERATION_DESTROY:
+	case agentpb.PlanOperation_PLAN_OPERATION_DESTROY, agentpb.PlanOperation_PLAN_OPERATION_REMOVE:
 		remove := step.GetComposeRemove()
 		return remove != nil && remove.GetArtifactId() == source.GetArtifactId() && !remove.GetWholeProject() &&
 			slices.Equal(remove.GetServiceIds(), []string{source.GetServiceId()})

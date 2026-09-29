@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -18,20 +19,22 @@ const serviceRemovalIntentPrefix = "/v1/records/service-removal-intents/"
 // ServiceRemovalIntent owns one sealed desired candidate while the active
 // Service and desired head remain public until Agent cleanup succeeds.
 type ServiceRemovalIntent struct {
-	TaskID                    string                                        `json:"task_id"`
-	EnvironmentID             string                                        `json:"environment_id"`
-	ServiceID                 string                                        `json:"service_id"`
-	ServiceName               string                                        `json:"service_name"`
-	ServiceRevision           int64                                         `json:"service_revision"`
-	RuntimeRevision           int64                                         `json:"runtime_revision"`
-	CurrentProjectionRevision int64                                         `json:"current_projection_revision"`
-	ExpectedHeadRevision      int64                                         `json:"expected_head_revision"`
-	Claim                     blueprints.EnvironmentBlueprintStageClaim     `json:"claim"`
-	CurrentProjection         projectionrecord.EnvironmentComposeProjection `json:"current_projection"`
-	CandidateProjection       projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
-	Status                    taskjournal.TaskStatus                        `json:"status"`
-	CreatedAt                 time.Time                                     `json:"created_at"`
-	TerminalAt                *time.Time                                    `json:"terminal_at,omitempty"`
+	TaskID                      string                                        `json:"task_id"`
+	EnvironmentID               string                                        `json:"environment_id"`
+	ServiceID                   string                                        `json:"service_id"`
+	ServiceName                 string                                        `json:"service_name"`
+	ServiceRevision             int64                                         `json:"service_revision"`
+	RuntimeRevision             int64                                         `json:"runtime_revision"`
+	AcknowledgedRuntimeRevision int64                                         `json:"acknowledged_runtime_revision"`
+	AcknowledgedRuntime         *serviceruntimerecord.Record                  `json:"acknowledged_runtime,omitempty"`
+	CurrentProjectionRevision   int64                                         `json:"current_projection_revision"`
+	ExpectedHeadRevision        int64                                         `json:"expected_head_revision"`
+	Claim                       blueprints.EnvironmentBlueprintStageClaim     `json:"claim"`
+	CurrentProjection           projectionrecord.EnvironmentComposeProjection `json:"current_projection"`
+	CandidateProjection         projectionrecord.EnvironmentComposeProjection `json:"candidate_projection"`
+	Status                      taskjournal.TaskStatus                        `json:"status"`
+	CreatedAt                   time.Time                                     `json:"created_at"`
+	TerminalAt                  *time.Time                                    `json:"terminal_at,omitempty"`
 }
 
 func NewServiceRemovalIntent(
@@ -79,6 +82,15 @@ func TerminalServiceRemovalIntent(
 }
 
 func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
+	if intent.AcknowledgedRuntimeRevision < 0 ||
+		(intent.AcknowledgedRuntime == nil) != (intent.AcknowledgedRuntimeRevision == 0) {
+		return errs.New(errs.KindValidationFailed, "Service removal runtime source is invalid")
+	}
+	if source := intent.AcknowledgedRuntime; source != nil &&
+		(source.EnvironmentID != intent.EnvironmentID || source.Runtime.ServiceID != intent.ServiceID ||
+			serviceruntimerecord.Validate(*source) != nil) {
+		return errs.New(errs.KindValidationFailed, "Service removal runtime source changed")
+	}
 	if ids.Validate(ids.KindTask, intent.TaskID) != nil ||
 		ids.Validate(ids.KindEnvironment, intent.EnvironmentID) != nil ||
 		ids.Validate(ids.KindService, intent.ServiceID) != nil ||
@@ -158,6 +170,13 @@ func DecodeServiceRemovalIntent(value []byte) (ServiceRemovalIntent, error) {
 }
 
 func cloneServiceRemovalIntent(intent ServiceRemovalIntent) ServiceRemovalIntent {
+	if intent.AcknowledgedRuntime != nil {
+		source := *intent.AcknowledgedRuntime
+		source.Runtime.CurrentArtifact = append([]byte(nil), source.Runtime.CurrentArtifact...)
+		source.Runtime.RetainedPriorArtifact = append([]byte(nil), source.Runtime.RetainedPriorArtifact...)
+		source.Runtime.ProxyConfigSHA256 = append([]byte(nil), source.Runtime.ProxyConfigSHA256...)
+		intent.AcknowledgedRuntime = &source
+	}
 	intent.Claim.Intent.Ciphertext = append([]byte(nil), intent.Claim.Intent.Ciphertext...)
 	intent.CurrentProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.CurrentProjection)
 	intent.CandidateProjection = projectionrecord.CloneEnvironmentComposeProjection(intent.CandidateProjection)

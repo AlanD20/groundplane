@@ -128,6 +128,7 @@ func TestServiceLifecyclePlanSelectsAppliedSealedAddressableRuntime(t *testing.T
 		services["api--singleton"].GetImageReference() != seal.LocalImageID {
 		t.Fatalf("lifecycle selected services = %#v", services)
 	}
+	assertRemovalSelectsAcknowledgedMembers(t, resolver, task, plan.Artifacts[0])
 }
 
 func TestServiceLifecycleProcedureUsesTargetedComposeOperations(t *testing.T) {

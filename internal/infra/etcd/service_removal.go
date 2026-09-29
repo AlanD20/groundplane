@@ -14,6 +14,7 @@ import (
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"slices"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -265,6 +266,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
+		{Key: serviceruntimerecord.Key(intent.ServiceID), ModRevision: intent.AcknowledgedRuntimeRevision},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
