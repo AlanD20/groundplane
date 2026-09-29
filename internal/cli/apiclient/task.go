@@ -15,6 +15,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/cli/apiclient/generated"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/slug"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -266,6 +267,21 @@ func taskFromGenerated(task generated.Task) (apiTypes.Task, error) {
 	}
 	if task.EnvironmentId != nil {
 		result.EnvironmentID = *task.EnvironmentId
+	}
+	if fetch := task.ImageFetch; fetch != nil {
+		result.ImageFetch = &apiTypes.TaskImageFetch{
+			Requested: fetch.Requested, Image: fetch.Image, Platform: fetch.Platform,
+			Progress: imagefetch.Progress{
+				Phase: valueOrEmpty(fetch.Progress.Phase), ErrorCode: valueOrEmpty(fetch.Progress.ErrorCode),
+				ErrorDetail: valueOrEmpty(fetch.Progress.ErrorDetail),
+			},
+		}
+		if fetch.Progress.DownloadedBytes != nil {
+			result.ImageFetch.Progress.DownloadedBytes = *fetch.Progress.DownloadedBytes
+		}
+		if fetch.Progress.TotalBytes != nil {
+			result.ImageFetch.Progress.TotalBytes = *fetch.Progress.TotalBytes
+		}
 	}
 	if task.Steps != nil {
 		result.Steps = make([]apiTypes.TaskStep, len(*task.Steps))
