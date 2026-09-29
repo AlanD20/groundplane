@@ -111,4 +111,15 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 			}
 		})
 	}
+	artifact.Services[0].HasHealthcheck = false
+	for _, observed := range valid.Containers {
+		observed.Health = agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE
+	}
+	if err := releaseRestorationWorkloadSetProven(artifact, valid, "api"); err != nil {
+		t.Fatalf("running singleton without healthcheck cannot be restored: %v", err)
+	}
+	valid.Containers[0].State = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_EXITED
+	if err := releaseRestorationWorkloadSetProven(artifact, valid, "api"); err == nil {
+		t.Fatal("stopped singleton without healthcheck accepted as restored")
+	}
 }

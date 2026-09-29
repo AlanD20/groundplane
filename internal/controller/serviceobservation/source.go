@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
@@ -29,6 +30,11 @@ type Services interface {
 
 // Releases exposes only the immutable serving-source and runtime-receipt reads.
 type Releases interface {
+	GetAppliedProjectionAt(
+		context.Context,
+		string,
+		int64,
+	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	ResolveServing(context.Context, string, string, int64) (releasequeries.ServingRelease, error)
 	GetReleaseRenderInputAt(
 		context.Context,
@@ -55,6 +61,9 @@ func capture(
 	releases Releases,
 	service etcdstore.Versioned[servicerecord.ServiceRecord],
 ) (source, bool) {
+	if service.Record.BackingNetworkID != "" {
+		return captureBacking(ctx, releases, service)
+	}
 	environmentID, serviceID, revision := service.Record.EnvironmentID, service.Record.Desired.ID, service.ReadRevision
 	serving, err := releases.ResolveServing(ctx, environmentID, serviceID, revision)
 	if err != nil || serving.Revision != revision || serving.ProjectionRevision <= 0 || serving.IntentRevision <= 0 {

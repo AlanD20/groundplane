@@ -123,7 +123,7 @@ func observedRecreateSetEvidence(
 	}
 	if workload == nil || workload.GetExpectedReplicas() < 1 ||
 		!workloadimage.LocalIDValid(workload.GetImageReference()) ||
-		!workload.GetHasHealthcheck() ||
+		(target != recreateRuntimeRole && !workload.GetHasHealthcheck()) ||
 		!hasCanonicalRecreateRole(workload, target) {
 		return nil
 	}
@@ -155,7 +155,8 @@ func observedRecreateSetEvidence(
 			container.GetImageReference() != workload.GetImageReference() ||
 			container.GetImageId() != workload.GetImageReference() ||
 			container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING ||
-			container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
+			workload.GetHasHealthcheck() &&
+				container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 			return nil
 		}
 		replicas++

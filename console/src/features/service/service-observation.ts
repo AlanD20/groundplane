@@ -12,7 +12,7 @@ export type ServiceObservation =
       state: AvailableServiceObservationState
       observedAt: string
       expiresAt: string
-      servingReleaseId: string
+      servingReleaseId?: string
       expectedReplicas: number
       replicas: ServiceReplicaCounts
     }
@@ -61,7 +61,6 @@ export function serviceObservationFromAPI(observation: WireServiceObservation | 
     !replicas ||
     !observedAt ||
     !expiresAt ||
-    !servingReleaseId ||
     expectedReplicas === undefined ||
     !Number.isInteger(expectedReplicas) ||
     expectedReplicas < 1 ||

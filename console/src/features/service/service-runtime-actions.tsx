@@ -32,7 +32,7 @@ export function ServiceStateBadges({
   return (
     <span className="flex flex-wrap items-center gap-1">
       <Badge variant={observationBadgeVariant(observation.state)} className={compact ? 'px-1 py-0 font-mono text-[10px]' : 'font-mono'}>
-        runtime {observation.state}
+        {observation.state === 'running' ? 'Running—no healthcheck' : `runtime ${observation.state}`}
       </Badge>
       {observation.state !== 'unavailable' && (
         <Badge variant="outline" className={compact ? 'px-1 py-0 font-mono text-[10px]' : 'font-mono'}>
@@ -83,7 +83,7 @@ export function ServiceObservationDetails({ service, now = Date.now() }: { servi
         <Badge variant={observationBadgeVariant(observation.state)} className="font-mono">{observation.state}</Badge>
       </div>
       <dl className="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
-        <div><dt className="text-muted-foreground">Serving Release</dt><dd className="break-all font-mono">{observation.servingReleaseId}</dd></div>
+        {observation.servingReleaseId && <div><dt className="text-muted-foreground">Serving Release</dt><dd className="break-all font-mono">{observation.servingReleaseId}</dd></div>}
         <div><dt className="text-muted-foreground">Observed replicas</dt><dd className="font-mono">{replicaTotal(observation.replicas)} / {observation.expectedReplicas} expected by serving Release</dd></div>
         <div><dt className="text-muted-foreground">Observed at</dt><dd className="font-mono">{new Date(observation.observedAt).toLocaleString()}</dd></div>
         <div><dt className="text-muted-foreground">Expires at</dt><dd className="font-mono">{new Date(observation.expiresAt).toLocaleString()}</dd></div>

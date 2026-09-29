@@ -119,6 +119,11 @@ scripts, Components, and retained releases do not. Addressable Services also
 check the exactly owned stable proxy and acknowledged configuration, without
 claiming end-to-end application reachability.
 
+Backing provisioning does not create a Release. For a Backing Service, the source
+is its acknowledged Environment artifact at the same fixed storage revision.
+Its explicit backing target has no Release or slot and matches the provisioning
+plan and generation. Desired configuration is never a substitute for that receipt.
+
 Each Service result is either one complete bounded count partition or
 unavailable. Empty complete evidence means absent; malformed, duplicate,
 overflowing, changing, timed-out, disconnected, or ownership-mismatched

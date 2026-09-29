@@ -15,7 +15,8 @@ const (
 )
 
 // Rationale: recreate steps can reach the host only when every candidate and prior
-// workload they reference has a positive exact count, sealed image, and healthcheck.
+// workload has an exact count and sealed image. Singleton healthchecks are optional;
+// blue-green predecessor slots still require health proof.
 func TestValidateServiceRecreateStepsRequireHealthySealedSets(t *testing.T) {
 	artifacts := recreateHealthArtifacts()
 	acknowledge := &agentpb.ServiceRecreateAcknowledge{
@@ -46,12 +47,13 @@ func TestValidateServiceRecreateStepsRequireHealthySealedSets(t *testing.T) {
 		name     string
 		validate func(map[string]*agentpb.ComposeArtifact) error
 		mutate   func(map[string]*agentpb.ComposeArtifact)
+		wantOK   bool
 	}{
-		{name: "acknowledgement candidate", mutate: clearCandidateHealth,
+		{name: "acknowledgement candidate", mutate: clearCandidateHealth, wantOK: true,
 			validate: func(values map[string]*agentpb.ComposeArtifact) error {
 				return validateServiceRecreateAcknowledge(agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, acknowledge, values)
 			}},
-		{name: "probe candidate", mutate: clearCandidateHealth,
+		{name: "probe candidate", mutate: clearCandidateHealth, wantOK: true,
 			validate: func(values map[string]*agentpb.ComposeArtifact) error {
 				return validateServiceRecreateProbe(agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, probe, values)
 			}},
@@ -59,7 +61,7 @@ func TestValidateServiceRecreateStepsRequireHealthySealedSets(t *testing.T) {
 			validate: func(values map[string]*agentpb.ComposeArtifact) error {
 				return validateServiceRecreateProbe(agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, probe, values)
 			}},
-		{name: "compensation candidate", mutate: clearCandidateHealth,
+		{name: "compensation candidate", mutate: clearCandidateHealth, wantOK: true,
 			validate: func(values map[string]*agentpb.ComposeArtifact) error {
 				return validateServiceRecreateCompensate(agentpb.PlanOperation_PLAN_OPERATION_DEPLOY, compensate, values)
 			}},
@@ -74,8 +76,8 @@ func TestValidateServiceRecreateStepsRequireHealthySealedSets(t *testing.T) {
 				owned[id] = proto.Clone(artifact).(*agentpb.ComposeArtifact)
 			}
 			test.mutate(owned)
-			if err := test.validate(owned); err == nil {
-				t.Fatal("recreate validator accepted a referenced workload without a healthcheck")
+			if err := test.validate(owned); (err == nil) != test.wantOK {
+				t.Fatalf("recreate validation = %v, want accepted %t", err, test.wantOK)
 			}
 		})
 	}

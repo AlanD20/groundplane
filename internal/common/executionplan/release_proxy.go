@@ -245,12 +245,12 @@ func validateRecreateArtifact(
 }
 
 func validObservedRecreateService(service *agentpb.ComposeService) bool {
-	if service == nil || service.GetExpectedReplicas() < 1 || !service.GetHasHealthcheck() ||
+	if service == nil || service.GetExpectedReplicas() < 1 ||
 		service.GetImageReference() == "" {
 		return false
 	}
 	return service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT ||
-		service.GetExpectedReplicas() == 1
+		service.GetExpectedReplicas() == 1 && service.GetHasHealthcheck()
 }
 
 func expectedReleaseLabel(service *agentpb.ComposeService) string {

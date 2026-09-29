@@ -38,6 +38,7 @@ type sourceRead struct {
 }
 
 type fakeReleases struct {
+	applied        *testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
 	fixtures       map[string]sourceFixture
 	resolveCalls   []sourceRead
 	renderCalls    []sourceRead
@@ -49,6 +50,21 @@ type fakeReleases struct {
 	mutateRender   func(string, int, *testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput])
 	mutateRuntime  func(string, int, *testkeyvalue.Versioned[serviceruntimerecord.Record])
 	runtimeCounts  map[string]int
+}
+
+func (releases *fakeReleases) GetAppliedProjectionAt(
+	_ context.Context,
+	environmentID string,
+	revision int64,
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
+	if releases.applied == nil || releases.applied.Record.EnvironmentID != environmentID {
+		return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{}, false, nil
+	}
+	result := *releases.applied
+	if releases.followRevision {
+		result.ReadRevision = revision
+	}
+	return result, true, nil
 }
 
 func (releases *fakeReleases) LoadAcknowledgedServiceRuntimesAtRevision(

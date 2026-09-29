@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { RefreshCw } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import { Button } from '@/components/ui/button'
 import { imageReferences } from './api'
 import { useImageInventory } from './use-image-inventory'
@@ -14,7 +14,8 @@ export function ImagePicker({ id, value, onChange }: { id: string; value: string
   return <div className="flex min-w-0 flex-col gap-2">
     <Input id={id} value={value} onChange={event => onChange(event.target.value)} placeholder="nginx:latest or a pinned registry reference" />
     <div className="flex min-w-0 gap-2">
-      <Select aria-label="Choose an image on the Agent host" value={references.includes(value) ? value : null}
+      <SearchableSelect aria-label="Choose an image on the Agent host" value={references.includes(value) ? value : null}
+        searchPlaceholder="Search image names, tags or digests…" emptyText="No matching host images. Fetch the image first if it is missing."
         placeholder={loading ? 'Loading host images…' : 'Choose an available image…'}
         options={references.map(reference => ({ value: reference, label: reference }))} onValueChange={onChange}
         disabled={loading || references.length === 0} className="min-w-0 flex-1 [&>span]:truncate" />

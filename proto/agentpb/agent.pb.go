@@ -2927,7 +2927,7 @@ type ServiceObservationTarget struct {
 	PlanId                string                 `protobuf:"bytes,4,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
 	RenderGeneration      uint64                 `protobuf:"varint,5,opt,name=render_generation,json=renderGeneration,proto3" json:"render_generation,omitempty"`
 	ComposeName           string                 `protobuf:"bytes,6,opt,name=compose_name,json=composeName,proto3" json:"compose_name,omitempty"`
-	RuntimeRole           string                 `protobuf:"bytes,7,opt,name=runtime_role,json=runtimeRole,proto3" json:"runtime_role,omitempty"`                  // exactly singleton or slot
+	RuntimeRole           string                 `protobuf:"bytes,7,opt,name=runtime_role,json=runtimeRole,proto3" json:"runtime_role,omitempty"`                  // exactly singleton, slot, or backing (no Release)
 	Slot                  string                 `protobuf:"bytes,8,opt,name=slot,proto3" json:"slot,omitempty"`                                                   // empty for singleton; blue or green for slot
 	ProxyComposeName      string                 `protobuf:"bytes,9,opt,name=proxy_compose_name,json=proxyComposeName,proto3" json:"proxy_compose_name,omitempty"` // empty for a portless Service
 	ProxyPlanId           string                 `protobuf:"bytes,10,opt,name=proxy_plan_id,json=proxyPlanId,proto3" json:"proxy_plan_id,omitempty"`

@@ -74,7 +74,10 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		servicerecord.ServiceRuntimeKey(intent.ServiceID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
+		blueprints.EnvironmentBlueprintEffectiveProjectionKey(
+			intent.EnvironmentID,
+			intent.CurrentProjection.RevisionID,
+		),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -88,7 +91,6 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 			state.Values[0],
 		) ||
 		state.Values[2].ModRevision != intent.ExpectedHeadRevision ||
-		state.Values[3].ModRevision != intent.CurrentProjectionRevision ||
 		string(state.Values[4].Value) != task.ID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal terminal state changed")
 	}
@@ -194,15 +196,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err
 	}
-	candidateValue, err := projectionrecord.EncodeEnvironmentComposeProjectionStorage(intent.CandidateProjection)
-	if err != nil {
-		clear(publication.publishedDescriptor)
-		identityPublication.clear()
-		clear(headReference)
-		clearRouteTaskChange(change)
-		return routeTaskChange{}, err
-	}
-	change.values = append(change.values, publication.publishedDescriptor, headReference, candidateValue)
+	change.values = append(change.values, publication.publishedDescriptor, headReference)
 	for _, mutation := range identityPublication.mutations {
 		change.values = append(change.values, mutation.Value)
 	}
@@ -229,7 +223,6 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	change.mutations = append(
 		change.mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[2], Value: headReference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[3], Value: candidateValue},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: serviceruntimerecord.Key(intent.ServiceID)},
 	)
@@ -265,13 +258,17 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		!intent.TerminalAt.Equal(*task.FinishedAt) {
 		return errs.New(errs.KindStateConflict, "Service removal intent does not match terminal Task")
 	}
+	wantProjection := intent.CurrentProjection
+	if terminalStatus == taskjournal.TaskStatusCompleted {
+		wantProjection = intent.CandidateProjection
+	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		servicerecord.ServiceRuntimeKey(
 			intent.ServiceID,
 		), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		blueprints.EnvironmentBlueprintHeadKey(
 			intent.EnvironmentID,
-		), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
+		), blueprints.EnvironmentBlueprintEffectiveProjectionKey(intent.EnvironmentID, wantProjection.RevisionID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}, Revision: revision})
 	if err != nil {
@@ -282,13 +279,11 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		return errs.New(errs.KindStateConflict, "Service removal terminal fence is inconsistent")
 	}
 	wantRevision := intent.ExpectedHeadRevision
-	wantProjection := intent.CurrentProjection
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if state.Values[0] != nil {
 			return errs.New(errs.KindStateConflict, "completed Service removal retained its target")
 		}
 		wantRevision = state.Values[2].ModRevision
-		wantProjection = intent.CandidateProjection
 	} else if !etcdstore.ConditionMatchesRead(etcdstore.Condition{Key: servicerecord.ServiceRuntimeKey(intent.ServiceID), ModRevision: intent.RuntimeRevision}, state.Values[0]) {
 		return errs.New(errs.KindStateConflict, "failed Service removal lost its target")
 	}

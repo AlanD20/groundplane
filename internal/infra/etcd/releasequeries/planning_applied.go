@@ -16,8 +16,16 @@ func (ledger *Reader) GetPlanningAppliedProjection(
 	ctx context.Context,
 	scope ReleasePlanningScope,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
-	if ctx == nil || ledger == nil || ledger.store == nil || scope.ReadRevision <= 0 ||
-		ids.Validate(ids.KindEnvironment, scope.Environment.Record.ID) != nil {
+	return ledger.GetAppliedProjectionAt(ctx, scope.Environment.Record.ID, scope.ReadRevision)
+}
+
+// GetAppliedProjectionAt reads acknowledged runtime at a fixed revision, never
+// the desired Blueprint head, including Backing Services provisioned without a Release.
+func (ledger *Reader) GetAppliedProjectionAt(
+	ctx context.Context, environmentID string, revision int64,
+) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
+	if ctx == nil || ledger == nil || ledger.store == nil || revision <= 0 ||
+		ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"release applied projection scope is invalid",
@@ -26,28 +34,28 @@ func (ledger *Reader) GetPlanningAppliedProjection(
 	read, err := ledger.store.GetMany(
 		ctx,
 		etcdstore.GetManyRequest{
-			Keys:     []string{projectionrecord.EnvironmentComposeProjectionStorageKey(scope.Environment.Record.ID)},
-			Revision: scope.ReadRevision,
+			Keys:     []string{projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID)},
+			Revision: revision,
 		},
 	)
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
-	if read == nil || read.ReadRevision != scope.ReadRevision || len(read.Values) != 1 {
+	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, releases.CorruptReleaseRecord()
 	}
 	if read.Values[0] == nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
-			ReadRevision: scope.ReadRevision,
+			ReadRevision: revision,
 		}, false, nil
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[0].Value)
-	if err != nil || projection.EnvironmentID != scope.Environment.Record.ID {
+	if err != nil || projection.EnvironmentID != environmentID {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, releases.CorruptReleaseRecord()
 	}
 	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record:       projection,
 		Revision:     read.Values[0].ModRevision,
-		ReadRevision: scope.ReadRevision,
+		ReadRevision: revision,
 	}, true, nil
 }

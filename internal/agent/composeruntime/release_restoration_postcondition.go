@@ -347,7 +347,7 @@ func releaseRestorationWorkloadTargetProven(
 	}
 	for _, service := range expected {
 		if service.GetExpectedReplicas() < 1 || !workloadimage.LocalIDValid(service.GetImageReference()) ||
-			!service.GetHasHealthcheck() {
+			(service.GetRole() != agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_RECREATE_SINGLETON && !service.GetHasHealthcheck()) {
 			return errs.New(errs.KindInternal, "agent: sealed predecessor workload health authority is incomplete")
 		}
 	}
@@ -383,7 +383,8 @@ func releaseRestorationWorkloadTargetProven(
 		if matched == -1 || container.GetImageReference() != expected[matched].GetImageReference() ||
 			container.GetImageId() != expected[matched].GetImageReference() ||
 			container.GetState() != agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING ||
-			container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
+			expected[matched].GetHasHealthcheck() &&
+				container.GetHealth() != agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY {
 			return errs.New(errs.KindStateConflict, "agent: predecessor workload is foreign or unhealthy")
 		}
 		counts[matched]++

@@ -38,13 +38,17 @@ func ValidateRequest(request *agentpb.ObserveServices) error {
 		if target == nil || len(target.ProtoReflect().GetUnknown()) != 0 ||
 			ids.Validate(ids.KindEnvironment, target.EnvironmentId) != nil ||
 			ids.Validate(ids.KindService, target.ServiceId) != nil ||
-			ids.Validate(ids.KindDeployment, target.ReleaseId) != nil ||
 			ids.Validate(ids.KindPlan, target.PlanId) != nil || target.RenderGeneration == 0 ||
 			!composeNameValid(target.ComposeName) || target.EnvironmentId != request.Targets[0].EnvironmentId ||
 			seen[target.ServiceId] || seenNames[target.ComposeName] {
 			return invalid()
 		}
-		if target.RuntimeRole == "singleton" && target.Slot != "" ||
+		if target.RuntimeRole == "backing" {
+			if target.ReleaseId != "" || target.Slot != "" || target.ProxyComposeName != "" {
+				return invalid()
+			}
+		} else if ids.Validate(ids.KindDeployment, target.ReleaseId) != nil ||
+			target.RuntimeRole == "singleton" && target.Slot != "" ||
 			target.RuntimeRole == "slot" && target.Slot != "blue" && target.Slot != "green" ||
 			target.RuntimeRole != "singleton" && target.RuntimeRole != "slot" {
 			return invalid()

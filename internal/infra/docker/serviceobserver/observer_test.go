@@ -336,6 +336,27 @@ func runRead(t *testing.T, engine *readEngine, request *agentpb.ObserveServices)
 	return result
 }
 
+// Backing provisioning uses no Release labels. Exact plan and generation still
+// prevent a foreign or stale container from becoming healthy backing evidence.
+func TestObservationBackingRequiresExactProvisionedIdentity(t *testing.T) {
+	request := readRequest()
+	target := request.Targets[0]
+	target.ReleaseId, target.RuntimeRole, target.Slot = "", "backing", ""
+	labels := readLabels(target, 1)
+	delete(labels, "com.groundplane.runtime-role")
+	engine := &readEngine{}
+	engine.add("backing", labels, &container.State{Status: container.StateRunning, Running: true,
+		Health: &container.Health{Status: container.Healthy}})
+	result := runRead(t, engine, request)
+	if result.Observations[0].GetReplicas().GetHealthy() != 1 {
+		t.Fatal("healthy backing container was not observed")
+	}
+	engine.inspects["backing"].Container.Config.Labels["com.groundplane.plan-id"] = "other-plan"
+	if !runRead(t, engine, request).Observations[0].GetUnavailable() {
+		t.Fatal("accepted changed backing ownership")
+	}
+}
+
 // Rationale: retained slots and stable proxies share a Service id but are not
 // serving replicas. Unrelated runtime must not even be inspected by this read.
 func TestObservationSelectsOnlyServingWorkload(t *testing.T) {

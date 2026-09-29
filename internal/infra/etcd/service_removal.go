@@ -185,7 +185,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+		blueprints.EnvironmentBlueprintEffectiveProjectionKey(environment.Record.ID, projection.Record.RevisionID),
 		servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
 	}, Revision: mutationContext.ReadRevision()})
@@ -194,8 +194,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	}
 	if indexes == nil || len(indexes.Values) != 4 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		indexes.Values[2] != nil || indexes.Values[3] != nil ||
-		indexes.Values[0].ModRevision != intent.ExpectedHeadRevision ||
-		indexes.Values[1].ModRevision != projection.Revision {
+		indexes.Values[0].ModRevision != intent.ExpectedHeadRevision {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Service removal baseline changed")
 	}
 	hierarchy := composeHierarchyRepository(repository.store)
@@ -252,7 +251,10 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID)},
 		{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)},
 		{
-			Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+			Key: blueprints.EnvironmentBlueprintEffectiveProjectionKey(
+				environment.Record.ID,
+				projection.Record.RevisionID,
+			),
 			ModRevision: indexes.Values[1].ModRevision,
 		},
 		{Key: servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID)},

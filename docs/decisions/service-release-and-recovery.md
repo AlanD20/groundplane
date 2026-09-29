@@ -51,6 +51,11 @@ for each Service: restore the exact proved serving predecessor, or prove exact
 candidate absence when no predecessor existed. Host observation proves a
 selected alternative; it never chooses one.
 
+Recreate acknowledgement and restoration require every sealed replica running
+with its exact image and ownership. Health must pass when the sealed workload
+defines a healthcheck. An unchecked singleton can be running, never proved
+healthy; blue-green slots continue to require healthchecks.
+
 Forward execution has a durable effect barrier. Once a mutation-capable step
 has durable running evidence, or a Script reaches start authorization, a
 reconnect cannot replay the forward prefix. An unproved terminal report creates

@@ -116,7 +116,7 @@ message ServiceObservationTarget {
   string plan_id = 4;
   uint64 render_generation = 5;
   string compose_name = 6;
-  string runtime_role = 7; // exactly singleton or slot
+  string runtime_role = 7; // exactly singleton, slot, or backing (no Release)
   string slot = 8; // empty for singleton; blue or green for slot
   string proxy_compose_name = 9; // empty for a portless Service
   string proxy_plan_id = 10;

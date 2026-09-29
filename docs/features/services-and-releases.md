@@ -40,7 +40,7 @@ explicit positive count.
 | Strategy | Behavior and limits |
 | --- | --- |
 | `blue-green` | One replica and an addressable internal TCP port are required. GP starts the inactive slot, waits for candidate health and switches the stable proxy. The old healthy slot is retained. Live and restart proxy configuration must agree. |
-| `recreate` | Stops the previous set before starting the requested replica count. Downtime is expected. Success requires the full selected set, not one healthy replica. |
+| `recreate` | Stops the previous set before starting the requested replica count. Downtime is expected. Every selected container must be running; configured healthchecks must also pass. Without a healthcheck, GP reports running, not healthy. |
 | `rolling` | Not implemented; rejected. |
 
 Switching between blue-green and recreate is accepted only when both the previous
@@ -103,6 +103,10 @@ container without a healthcheck is not evidence of application health. Addressab
 Services also require their stable proxy. Observations become stale after 15
 seconds from the request's start; disconnection or identity mismatch is reported
 as unavailable. Route reachability is a separate observation.
+
+Backing Services use their acknowledged provisioning configuration rather than a
+Deploy Release. Their containers are observed with the same freshness and exact
+ownership checks; a saved definition alone cannot produce a healthy status.
 
 ## Design and qualification
 

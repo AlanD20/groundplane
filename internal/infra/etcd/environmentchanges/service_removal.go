@@ -133,6 +133,9 @@ func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 	}
 	expected.ServiceDependencyPlans = expected.ServiceDependencyPlans.WithoutService(intent.ServiceName)
 	delete(expected.ServiceExtensions, intent.ServiceName)
+	if len(expected.ServiceExtensions) == 0 {
+		expected.ServiceExtensions = nil
+	}
 	if !removedDesired || !SameServiceRemovalProjection(expected, intent.CandidateProjection) {
 		return errs.New(errs.KindValidationFailed, "Service removal candidate projection changed")
 	}

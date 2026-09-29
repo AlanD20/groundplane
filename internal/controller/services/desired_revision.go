@@ -387,7 +387,7 @@ func buildServiceRemovalProjection(
 	candidate.NormalizedCompose = append([]byte(nil), normalizedArtifact.GetCanonicalYaml()...)
 	candidate.ServiceExtensions = controllerrevision.CloneServiceExtensions(current.ServiceExtensions)
 	delete(candidate.ServiceExtensions, record.Desired.Name)
-	if current.ServiceExtensions == nil {
+	if len(candidate.ServiceExtensions) == 0 {
 		candidate.ServiceExtensions = nil
 	}
 	candidate.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(mutated)

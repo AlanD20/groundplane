@@ -258,6 +258,9 @@ func (s *Server) removeService(ctx context.Context, request *serviceRemoveInput)
 	}
 	response, err := s.serviceMutations.RemoveService(ctx, request.ID, request.IdempotencyKey)
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Error("controller: remove Service", slog.String("service_id", request.ID), slog.Any("error", err))
+		}
 		return nil, normalizeProjectError(err)
 	}
 	return s.serviceMutationResponse(response), nil

@@ -216,12 +216,16 @@ func (observer *Observer) proxyConfigMatches(ctx context.Context, containerID st
 // candidates. A selected candidate with corrupt ownership is unavailable, not
 // silently omitted from an otherwise healthy count.
 func selected(labels map[string]string, target *agentpb.ServiceObservationTarget) bool {
+	role := target.RuntimeRole
+	if role == "backing" {
+		role = ""
+	}
 	return labels["com.groundplane.managed"] == "true" && labels["com.groundplane.kind"] == "service" &&
 		labels["com.groundplane.component-id"] == "" &&
 		labels["com.groundplane.environment-id"] == target.EnvironmentId &&
 		labels["com.groundplane.service-id"] == target.ServiceId &&
 		labels["com.groundplane.release-id"] == target.ReleaseId &&
-		labels["com.groundplane.runtime-role"] == target.RuntimeRole &&
+		labels["com.groundplane.runtime-role"] == role &&
 		labels["com.groundplane.slot"] == target.Slot && labels["com.docker.compose.oneoff"] != "True"
 }
 

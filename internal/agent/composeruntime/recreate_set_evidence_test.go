@@ -106,9 +106,12 @@ func TestObservedRecreateSetRequiresExactSealedReplicas(t *testing.T) {
 			project.Containers[1].State = agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_DEAD
 		}},
 		{
-			name: "missing sealed healthcheck",
-			mutate: func(artifact *agentpb.ComposeArtifact, _ *agentpb.ObservedProject) {
+			name: "running without healthcheck", want: true,
+			mutate: func(artifact *agentpb.ComposeArtifact, project *agentpb.ObservedProject) {
 				artifact.Services[0].HasHealthcheck = false
+				for _, container := range project.Containers {
+					container.Health = agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_NONE
+				}
 			},
 		},
 		{

@@ -67,10 +67,14 @@ func publicObservation(observation Observation, now time.Time) api.ServiceObserv
 		return api.ServiceObservation{State: api.ServiceObservationUnavailable}
 	}
 	counts := snapshot.Replicas
+	var releaseID *string
+	if snapshot.ServingReleaseID != "" {
+		releaseID = &snapshot.ServingReleaseID
+	}
 	return api.ServiceObservation{
 		State:      api.ServiceObservationState(observation.State),
 		ObservedAt: &snapshot.ObservedAt, ExpiresAt: &snapshot.ExpiresAt,
-		ServingReleaseID: &snapshot.ServingReleaseID, ExpectedReplicas: &snapshot.ExpectedReplicas,
+		ServingReleaseID: releaseID, ExpectedReplicas: &snapshot.ExpectedReplicas,
 		Replicas: &api.ServiceReplicaCounts{
 			Running: counts.Running, Healthy: counts.Healthy, Starting: counts.Starting,
 			Unhealthy: counts.Unhealthy, Transitional: counts.Transitional, Stopped: counts.Stopped, Failed: counts.Failed,
