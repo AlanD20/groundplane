@@ -444,6 +444,12 @@ and any external GitHub effects require appropriate authority.
 | IMG-02 | Remove one image with several tags/repositories; retry after a lost untag response; reject changed content and running/stopped/child containers. Also retain Release, Runner, Component and Blueprint recovery inputs. | One Remove deletes all selected-image references without force or pruning; partial untagging is not success. Protected images explain why removal is unavailable. Concurrent selection, rollback and unknown authority stay protected. | PARTIAL: retained-input/fence and multi-reference SDK behavior checks pass, including interrupted untag retry, changed content, stopped/child containers and final deletion conflicts. Live Console removal deleted three tags across two repositories and the selected image; another image in the same repository survived. A stopped-container reference blocked removal with HTTP 409; CLI removal passed after releasing it. Live interruption/recovery variants remain unrun. |
 | IMG-03 | Race image selection/publication with removal; interrupt removal and retry after Controller recreation. | Atomic publication rejects the stale selection; uncertain removal retains its durable fence; the original operation settles before new selections resume. | PARTIAL: Controller/storage race and interrupted-operation checks; live process interruption remains unrun. |
 
+Inventory follow-up (2026-09-29): live API/CLI container-use records agree;
+container identities match Docker, including a stopped container. Console usage
+links open the owning Service, with non-container protection shown separately.
+Image name/date/size sorting, five-row pagination and a ten-row selection were
+checked live. No additional removal or recovery variant is claimed by these reads.
+
 ## Scripts and hooks
 
 | Case | Setup and action | Pass condition | Record |
