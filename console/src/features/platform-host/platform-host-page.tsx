@@ -1,6 +1,6 @@
 'use client'
 
-import { ArrowLeftRight, Clock, Cpu, Database, HardDrive, MemoryStick, Server } from 'lucide-react'
+import { ArrowLeftRight, Boxes, Clock, Cpu, Database, HardDrive, MemoryStick, Server } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useStore } from '@/lib/store'
 import { PageHeader } from '@/components/common/page-header'
@@ -8,9 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge } from '@/components/common/status-badge'
 import { HostAgentsTable } from './host-agents-table'
 import { MetaPill } from '@/components/common/meta-pill'
+import { buttonVariants } from '@/components/ui/button'
 
 export default function PlatformHostPage() {
   const { host, hostLoading, hostError } = useStore()
+  const imagesAction = <Link to="/platform/host/images" className={buttonVariants()}><Boxes aria-hidden="true" /> Manage images</Link>
   if (!host) {
     return (
       <div className="flex flex-col gap-6">
@@ -18,6 +20,7 @@ export default function PlatformHostPage() {
           title="Host"
           description="Machine health, Controller settings and local Agents."
           icon={<Server />}
+          actions={imagesAction}
         />
         <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">
@@ -26,7 +29,6 @@ export default function PlatformHostPage() {
         </Card>
         <Link to="/platform/host/controller" className="text-sm text-primary">Controller settings</Link>
         <HostAgentsTable />
-        <Link to="/platform/host/images" className="text-sm text-primary hover:underline">Manage Agent images</Link>
       </div>
     )
   }
@@ -36,6 +38,7 @@ export default function PlatformHostPage() {
         title="Host"
         description="Machine health, Controller settings and local Agents."
         icon={<Server />}
+        actions={imagesAction}
         meta={
           <>
             <MetaPill icon={<Server />}>{host.hostname}</MetaPill>
@@ -115,7 +118,6 @@ export default function PlatformHostPage() {
         </div>
       </div>
       <HostAgentsTable />
-      <Link to="/platform/host/images" className="text-sm text-primary hover:underline">Manage Agent images</Link>
     </div>
   )
 }
