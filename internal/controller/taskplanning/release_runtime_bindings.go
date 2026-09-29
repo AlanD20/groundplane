@@ -29,24 +29,29 @@ func loadPinnedEnvironmentProject(
 	if err != nil || len(releases) == 0 {
 		return project, err
 	}
-	identities, err := composerender.ComposeIdentitySnapshotFromProjection(projection)
-	if err != nil {
-		return nil, err
-	}
-	entries, err := composerender.ProjectEnvironmentEntries(
-		project, projection.EnvironmentID, volumeDir, identities.Services, projection.Entries,
-	)
-	if err != nil {
-		return nil, err
+	// A directly created Environment with no Entries has no generated env file.
+	// Do not invent a required file binding outside its pinned configuration.
+	if len(projection.Entries) != 0 {
+		identities, err := composerender.ComposeIdentitySnapshotFromProjection(projection)
+		if err != nil {
+			return nil, err
+		}
+		entries, err := composerender.ProjectEnvironmentEntries(
+			project, projection.EnvironmentID, volumeDir, identities.Services, projection.Entries,
+		)
+		if err != nil {
+			return nil, err
+		}
+		project = entries.Project
 	}
 	joins, err := sealedReleaseAttachJoins(projection)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := ProjectAttachNetworks(entries.Project, projection, joins); err != nil {
+	if _, err := ProjectAttachNetworks(project, projection, joins); err != nil {
 		return nil, err
 	}
-	return entries.Project, nil
+	return project, nil
 }
 
 func sealedReleaseAttachJoins(
