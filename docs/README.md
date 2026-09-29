@@ -7,8 +7,11 @@ you need below. [Product scope](mvp.md) explains the resource model and trust
 boundary. [Capability status](capabilities.md) distinguishes available
 implementation from unfinished or unqualified behavior.
 
-[CLI and API usage](api-cli.md) explains scope, request replay and asynchronous
-operations. [Blueprint reference](blueprint.md) explains authored configuration.
+[CLI and API usage](api-cli.md) covers connection, scope, everyday commands,
+HTTP examples, request replay and asynchronous operations.
+[Blueprint authoring](features/blueprints.md) walks through export, validation,
+Apply and recovery; the [Blueprint reference](blueprint.md) defines YAML fields,
+references, defaults and current syntax limits.
 The [changelog](../CHANGELOG.md) records release changes, not production readiness.
 
 ## Features

@@ -1,4 +1,4 @@
-# Groundplane Blueprint operator reference
+# Blueprint reference
 
 A Blueprint is the authored desired configuration for one Groundplane
 Environment. It combines a native Compose project with a small, closed set of
@@ -6,7 +6,26 @@ Environment. It combines a native Compose project with a small, closed set of
 accepted authoring grammar. Feature guides own behavior, lifecycle, and current
 implementation status.
 
-The current envelope schema is `1`:
+- [Start with one Service](#start-with-one-service)
+- [Envelope and references](#envelope-and-references)
+- [Identity, omission, and removal](#identity-omission-and-removal)
+- [Closed bundle input](#closed-bundle-input)
+- [Native Compose with Groundplane policy](#native-compose-with-groundplane-policy)
+- [Groundplane extension overview](#groundplane-extension-overview)
+- [Groundplane field reference](#groundplane-field-reference)
+- [Connector documents](#connector-documents)
+- [Validation and safety summary](#validation-and-safety-summary)
+
+For runnable CLI commands, export, Apply recovery and Task handling, use
+[Blueprint authoring and application](features/blueprints.md). This page explains
+what to put in the document. Sections marked **not available** retain accepted
+syntax without presenting it as usable today.
+
+## Start with one Service
+
+Create the Tenant, Project and Environment first. Choose an available Environment
+pool inside the host's configured allocation pool and preload the workload image.
+Save this complete example as `blueprint/blueprint.yaml`:
 
 ```yaml
 kind: environment
@@ -15,51 +34,73 @@ metadata:
   tenant: acme
   project: storefront
   environment: production
+
+x-gp-network-pool: 10.42.0.0/24
+
+services:
+  api:
+    image: registry.example/storefront-api:2026-09-29
+    expose: ["8080"]
+    networks: [application]
+    x-gp-release:
+      default_strategy: recreate
+
+networks:
+  application:
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.42.0.0/25
 ```
 
-The metadata must match the Environment addressed by the API route. Human
-labels locate that Environment; the Controller resolves and stores stable ids.
-Do not put generated ids, Docker names, host paths, observations, Task state, or
-render metadata in an authored Blueprint.
+Replace the labels, CIDRs and image with your own. `expose` describes an internal
+container port; it does not make the application reachable from outside GP.
+Add a [Route](#x-gp-routes) and an enabled [HTTP router](#x-gp-components) when
+you need HTTP access. This example has no health check; running does not mean
+application health has been verified.
 
-See [Blueprint authoring and application](features/blueprints.md) for the
-operator journey, [Component boundaries](decisions/component-boundaries.md) for
-the trust boundary, and [Desired-state publication](decisions/desired-state-publication.md)
-for publication and recovery semantics.
+## Envelope and references
 
-## Read, validate, and apply
+The root document requires the envelope above and `x-gp-network-pool`.
+`kind` is `environment` and `schema` is the integer `1`. Metadata contains the
+current Tenant slug, Project slug and Environment name, matching the Environment
+addressed by the API route. Creating parents is a separate action; metadata
+does not create or rename them.
 
-Use `environment blueprint show`, `environment blueprint validate`, and
-`environment blueprint apply`, or the Environment Blueprint editor in the
-Console.
+Only the root file contains the envelope and root `x-gp-*` fields. Additional
+Compose sources can contain native definitions and Service/Volume extensions.
+Unknown Groundplane fields, misspelled fields and fields in the wrong scope fail
+validation. Generated ids that identify new resources, Docker names, derived
+host paths, observations and Task state do not belong in authored input.
 
-1. Read the current Blueprint and its desired revision.
-2. Edit locally. A draft has no effect until submitted.
-3. Validate the same bundle that will be applied, using the exact quoted
-   revision in `If-Match`.
-4. Apply with the same revision. Apply publishes one reconcile Task.
-5. Follow the Task to a terminal outcome. Acceptance is not runtime success.
+References to existing resources are operator decisions. Use the form required
+by each field; a name and an id are not interchangeable everywhere:
 
-Revision `0` means the Environment has no desired head. A stale `If-Match`
-fails without changing desired state. Validate performs the same input parsing
-and planning checks as Apply, but creates no desired revision, Task, or host
-effect.
+| Reference | Authored value |
+| --- | --- |
+| Entry exposure, Script `service`, Route `target`, release-group members | Compose Service names in this Environment |
+| Explicit Script `volume` | Immutable top-level Compose Volume key |
+| Explicit Script `entries` | `x-gp-entry` keys |
+| Attach `backing_project` / `backing_service` | Backing Project slug / Service name |
+| Attach `credential.attach` | Direct owner key in this document's attachment map |
+| Entry `source.fact.attach` | Attach name; optional `grant` selects a declared grant |
+| Entry `source.secret_ref` | Reusable Secret key or allowed stable Secret id |
+| Component `settings.zone_ids` / `secret_id` | Existing stable Zone / Secret ids |
+| Backup `connector`, Attach `ref`, Volume `ref` | Same-Environment Connector name, Attach name, Volume slug |
+| Connector credential `secret_ref` | Reusable env-var Secret key, resolved Project before Platform |
 
-`show` returns canonical single-file YAML reconstructed from normalized desired
-state. It preserves decisions, not the submitted file layout: comments, anchors,
-aliases, source ordering outside Compose precedence, and multi-file boundaries
-are not round-tripped.
+Quoting strings such as image tags, numeric-looking env values and schedule
+expressions avoids unintended YAML types. Supply numbers and booleans as their
+actual types where required. Interpolation is for native Compose input, not for
+storing secret values or replacing the Groundplane envelope.
 
 Apply never pulls or builds workload images. Every required image must already
 exist in the host Docker daemon. Existing Service runtime intent is separate
 from desired configuration: applying a Blueprint must not restart a Service an
 operator deliberately stopped or destroyed merely because its definition is
-still present.
-
-Automatic latest-wins supersession is an accepted design but is not connected
-end to end. The selector exists; durable unit state, late planning, safe
-handoff, and runtime integration remain incomplete. Do not depend on a newer
-Apply automatically cancelling older work.
+still present. [Component boundaries](decisions/component-boundaries.md) and
+[desired-state publication](decisions/desired-state-publication.md) explain the
+trust and execution design.
 
 ## Identity, omission, and removal
 
@@ -102,10 +143,16 @@ An Environment import is one closed `BlueprintBundle` containing:
   path-to-bytes namespace; and
 - an explicit interpolation map containing only non-secret values.
 
-The CLI accepts a bundle directory, ordered repeatable Compose sources, and
-explicit interpolation variables. The API represents the same logical bundle
-as multipart input. Wire encoding details belong to
-[the API and CLI contract](api-cli.md); they do not change Blueprint meaning.
+The CLI reads every regular file under `--bundle-dir`, including nested and
+hidden files. Use a dedicated directory containing only intended Blueprint
+inputs. There is no ignore-file mechanism; symlinks and special files fail.
+`--root` is relative to that directory. Repeat `--compose-file` for additional
+layers, in precedence order; the root is already the first layer.
+Repeat `--var KEY=VALUE` for explicit non-secret interpolation values.
+See the [multi-file example](features/blueprints.md#multi-file-bundles).
+
+The API represents the same bundle as multipart input. Its
+[upload encoding](api-cli.md#upload-encoding) does not change YAML meaning.
 
 Compose `include`, `extends`, `env_file`, `label_file`, config files, and
 read-only bind sources may refer only to declared bundle members. Paths are
@@ -126,16 +173,25 @@ The decoded input limits are:
 | alias/include/extends resolution depth | 16 |
 | resolved Compose resources | 512 |
 
+Paths in the bundle manifest are normalized, for example `config/app.env`,
+not `/config/app.env`, `./config/app.env` or `../app.env`. File references use
+Compose's base directory: layered sources are based on the root's directory;
+an included project uses its own directory unless `project_directory` says
+otherwise. All references must remain inside the declared bundle.
+
 Each Compose source contains exactly one YAML document. Duplicate paths,
 duplicate source entries, cycles, undeclared references, invalid interpolation
 keys, and interpolation values containing NUL are rejected before publication.
+Interpolation keys match `^[A-Za-z_][A-Za-z0-9_]*$`; duplicate CLI `--var` keys
+are invalid. Submitted values must be NUL-free UTF-8.
 
 ## Native Compose with Groundplane policy
 
 Use Compose for container topology: Services, networks, Volumes, images,
 commands, environment, health checks, mounts, aliases, dependencies, resource
-limits, logging, and restart policy. Groundplane keeps native Compose decisions
-unless an explicit safety or product rule below rejects them.
+limits, logging, and restart policy. The accepted grammar keeps native Compose
+decisions subject to Groundplane policy. Parsing support and current Apply
+support differ where noted below.
 
 This example is intentionally ordinary Compose plus a few Groundplane
 decisions. It declares one locally available workload, an internal Zone, a
@@ -153,7 +209,7 @@ x-gp-network-pool: 10.42.0.0/24
 
 services:
   api:
-    image: registry.example/storefront-api:2026-09-21
+    image: registry.example/storefront-api:2026-09-29
     command: ["/app/server"]
     environment:
       APP_ENV: production
@@ -222,12 +278,25 @@ Groundplane adds these restrictions to native Compose:
 | rolling release | Declared but deferred in the MVP. `x-gp-release.default_strategy: rolling` is rejected. |
 | runtime intent | Controller-owned operational state; it is not authored here. |
 
+**Current Apply limits:** native `configs` and Compose `secrets`, including
+external definitions, are rejected after parsing. Use Entries for configuration.
+External networks and network extensions are unavailable. Volumes must be
+GP-managed: `external` Volumes and any `driver_opts` are rejected, including
+read-only local bind Volume definitions that satisfy the accepted grammar.
+Service-level read-only binds from bundle files remain a separate supported
+input. These limits do not remove the accepted syntax above.
+
 `x-gp-network-pool` is required and must be a canonical IPv4 CIDR. It reserves
 address space for the Environment but does not itself create a Docker network.
 Every managed native Compose network has one explicit subnet inside the pool;
 network name, subnet, `internal` setting, and ownership are immutable. Subnets
 must not overlap other reserved Zones. See
 [Network and shared access](decisions/network-and-shared-access.md).
+
+Current Zones are IPv4 bridge networks. Use one `ipam.config` item with only
+`subnet`; do not supply gateway, address range, auxiliary addresses, driver
+options, attachable mode or IPv6. If Compose would create an implicit `default`
+network, declare that network with its explicit subnet too.
 
 ## Groundplane extension overview
 
@@ -248,7 +317,7 @@ Controller-generated fields in authored input are rejected.
 | `x-gp-release` | Service | default release strategy and failure policy |
 | `x-gp-depends_on` | Service | Environment-local lifecycle prerequisites |
 | `x-gp-slug` | top-level Volume | renamable public Volume label |
-| `x-gp-adapter` | sole Service of a Backing Blueprint | built-in or custom Backing adapter |
+| `x-gp-adapter` | sole Service of a Backing Blueprint | built-in or custom adapter; upload not available |
 
 `x-gp-resource`, `x-gp-execution`, and `x-gp-managed` are generated execution
 metadata and are forbidden in authored input. The reserved `x-gp-network`
@@ -264,7 +333,7 @@ operable Environment. Ordinary Zone decisions use native Compose networks.
 ```yaml
 services:
   api:
-    image: registry.example/storefront-api:2026-09-21
+    image: registry.example/storefront-api:2026-09-29
     x-gp-release:
       default_strategy: blue-green
       on_failure: switch_back
@@ -272,12 +341,19 @@ services:
 
 When authored, `default_strategy` is `blue-green` or `recreate`; `rolling`
 remains deferred.
+When the extension is present, `default_strategy` is required. Blue-green supports one
+replica; use recreate for more than one. `deploy.replicas` defaults to one.
 `on_failure` is `switch_back` or `leave_active` and defaults to
 `switch_back`. The standard Compose `image` field is the requested image
 reference. Selection, local image resolution, immutable Release records,
 serving state, and retry checkpoints are Controller-owned; see
 [Services and releases](features/services-and-releases.md) and
 [Release packaging](decisions/release-packaging.md).
+
+Current Blueprint Apply prepares native workload candidates with `recreate`.
+Setting `blue-green` here supplies a default for explicit Service Deploy;
+it does not make Apply perform a blue-green rollout. Use the explicit Deploy
+workflow when that strategy is required.
 
 ### `x-gp-release-groups`
 
@@ -295,8 +371,9 @@ x-gp-release-groups:
 The map key is the group name. A group contains 2 through 32 distinct enabled
 Services. When `order` is omitted, `services` order is used; an explicitly
 empty or null `order` is invalid. A supplied order must contain every member
-exactly once. `on_failure` uses the same values as Service releases. Groups are
-never inferred from names or shared images.
+exactly once. `tag` is optional. `on_failure` uses the same values and default
+as Service releases. Declaring a group does not run its Deploy action; groups
+are never inferred from names or shared images.
 
 ### `x-gp-depends_on` and `x-gp-requires`
 
@@ -365,11 +442,14 @@ x-gp-attachments:
 
 - `new` rejects `credential.attach` and may list at most eight direct grants;
 - `existing` requires `credential.attach`, rejects grants, and names a direct
-  credential owner on the same Backing Service; and
+  credential owner declared in the same `x-gp-attachments` map, on the same
+  Backing Service; and
 - credential-owner reference chains are rejected.
 
 An Attach makes facts available; it does not inject them. Use `x-gp-entry` to
-select a fact and its destination.
+select a fact and its destination. Declare every consumer Service used in these
+snippets. `backing_project` and `backing_service` locate existing shared
+infrastructure; an attachment declaration does not create the Backing Service.
 
 For the current implementation of a Custom backing adapter with hooks, first
 complete a standalone Attach before referencing its new facts or credential
@@ -413,9 +493,16 @@ x-gp-entry:
 
 `kind` is `env` or `file`. Sources are:
 
-- `source.literal`, at most 256 KiB;
-- `source.secret_ref`, which requires `secret: true`; or
+- `source.literal`, a string of at most 256 KiB;
+- `source.secret_ref`, a reusable Secret key or allowed stable id, requiring
+  `secret: true`; or
 - `source.fact` with `attach`, optional `grant`, and fact `key`.
+
+`secret` defaults to false. A confidential fact must have a secret destination;
+the fact key is the exact adapter-published name, including its prefix. Optional
+`grant` selects another Attach that this credential owner is granted access to.
+Do not put credentials in native Compose `environment`, `env_file`, companion
+files or interpolation values to avoid the protected Entry/Secret path.
 
 For an `env` Entry, the map key is also the destination environment key and
 `path`, `uid`, and `gid` are omitted. A `file` Entry uses a relative path inside
@@ -427,6 +514,18 @@ from an image.
 Groundplane never exposes an Entry merely because a Service has an Attach.
 Script Entry grants are also limited to Entries already exposed to that
 Script's associated Service.
+
+A secret literal can be declared explicitly:
+
+```yaml
+x-gp-entry:
+  API_TOKEN:
+    kind: env
+    source:
+      literal: ""
+    exposure: [api]
+    secret: true
+```
 
 A secret literal in a Blueprint has an empty `source.literal`; nonempty secret
 plaintext is rejected. A new key-only secret Entry creates an empty protected
@@ -459,6 +558,8 @@ Its key is `direct-` followed by the lowercase suffix of its stable Script id;
 renaming its slug does not change that key. Omitting a Script key removes the
 Script from the next active Script set.
 
+Declare at most 64 Scripts. Their targets must be enabled Services with a
+positive effective replica count.
 Keys and slugs are 1 through 63 lowercase ASCII bytes matching
 `^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`. `when` is `manual`,
 `pre-deploy`, `post-deploy`, `pre-rollback`, `post-rollback`, or
@@ -481,6 +582,10 @@ execution:
       read_only: false
   entries: [DATABASE_URL]
 ```
+
+Place `execution` beside `slug`, `service`, `when`, `order` and `script` in one
+Script definition; this snippet is not a separate root section. Replace the
+illustrative digest with the exact digest of an available image.
 
 Explicit execution requires a repository reference pinned by a lowercase
 SHA-256 digest and an explicit numeric `uid:gid`. The image must already be
@@ -511,7 +616,11 @@ x-gp-routes:
     exposure: public
 ```
 
-`path` defaults to `/`. `exposure` is `public` or `internal`. A public Route is
+`target` and `target_port` are required; the port is an integer from 1 through
+65535. `path` defaults to `/`; it is absolute, contains no query or fragment,
+and permits only a terminal `*`. `exposure` is required and is `public` or
+`internal`. A public Route requires a lowercase ASCII DNS hostname; internal
+Routes may omit it. Duplicate host/path matches are invalid. A public Route is
 only served when an enabled HTTP-router Component can reach a Zone shared with
 the target. Routes do not publish host ports. See
 [Components](features/components.md) and the
@@ -536,13 +645,33 @@ x-gp-components:
         {gp.routes}
 ```
 
-The accepted capabilities and implementation-specific settings are documented
-in [Components](features/components.md). Blueprint input never contains a
+Current Environment choices are:
+
+| Map key | `implementation` | Settings while enabled |
+| --- | --- | --- |
+| `http-router` | `caddy` | Nonempty ordered `zone_ids`; optional `alias`; optional `implementation_config.caddyfile_template` |
+| `edge-tunnel` | `cloudflare-tunnel` | Nonempty ordered `zone_ids` and `secret_id`; no alias or Caddy template |
+
+`enabled` is a boolean and defaults to false. Zone references are existing stable
+ids, not Compose network names; use the Zone list to obtain them. The first Zone
+has the primary-address role. Tunnel needs a reachable non-internal Zone for
+egress. `dns-resolver` / `coredns` is Platform-owned and cannot be configured in
+an Environment Blueprint.
+
+The Caddy template above is a minimal routes-only illustration. Follow
+[router templates](features/router-template.md) to author the complete serving
+policy. Omitting a previously configured optional Environment Component disables
+it; unchanged configuration can retain its runtime. See
+[Components](features/components.md) for lifecycle and implementation settings.
+Blueprint input never contains a
 Component's generated Services, addresses, grants, artifacts, Tasks, or
 observations. Secret material is referenced by stable `secret_id`; it is not
 embedded in Component configuration.
 
 ### `x-gp-backup`
+
+**Backup/Restore is not operationally complete and remains deferred.** This
+section defines policy input, not a qualified data-recovery procedure.
 
 Backup policy is Environment desired state, not Compose topology:
 
@@ -557,12 +686,20 @@ x-gp-backup:
     - kind: attach
       ref: api-db
     - kind: volume
-      ref: app-data
+      ref: storefront-data
     - kind: config
 ```
 
 Source kinds are `attach`, `volume`, and `config`; `config` refers to this
-Environment's Entries and has no `ref`. `keep` is an integer from 1 through
+Environment's Entries and has no `ref`. Attach `ref` is a credential-owning
+PostgreSQL Attach name; Volume `ref` is its public slug (`x-gp-slug`), not its
+immutable Compose key. Valkey and Custom Attach backup sources are unsupported.
+
+`frequency` is a whole-second UTC daily or weekly expression, for example
+`"*-*-* 03:15:00"` or `"Sun *-*-* 03:15:00"`; it is not a cron expression.
+`encryption` is `age` or `none`; Config sources require `age`. Select 1 through
+12 distinct sources in explicit order for a configured policy.
+`keep` is an integer from 1 through
 `9007199254740991`. An enabled policy requires a Connector. `enabled: false`
 alone is the unconfigured disabled form. Omitting `x-gp-backup` also disables
 and unconfigures the policy; it does not retain the previous settings or sources.
@@ -592,6 +729,8 @@ accepted Service field, not a file the current Environment Blueprint parser can
 apply. A Backing Service Blueprint does not use tenant or project metadata; its
 own envelope is not implemented yet. Do not add `x-gp-adapter` to a tenant
 Environment Blueprint to work around that limit.
+Create shared infrastructure through the [Backing Service action](features/backing-services.md)
+instead.
 
 `x-gp-adapter` is valid only on the sole Service of a Backing Blueprint. Native
 Compose still owns its networks, health check, resources, Volumes, and restart
@@ -654,9 +793,10 @@ in [Backing services](features/backing-services.md).
 
 ## Connector documents
 
-A Connector document uses the same envelope version but is not part of an
-Environment Compose bundle and is not accepted by the Environment Blueprint
-Apply command:
+**Connector document upload is not available.** The model below uses the same
+envelope version, but is not part of an Environment Compose bundle or accepted
+by Blueprint Apply. Create a Connector with the Console, `connector add`, or
+the Connector API. This retained document shape describes the accepted intent:
 
 ```yaml
 kind: connector
@@ -675,9 +815,9 @@ connector:
   path_style: false
   credentials:
     access_key:
-      secret_ref: sec_01J00000000000000000000000
+      secret_ref: BACKUP_ACCESS_KEY
     secret_key:
-      secret_ref: sec_01J00000000000000000000001
+      secret_ref: BACKUP_SECRET_KEY
 ```
 
 `metadata.name`, the complete tenant/project/environment chain,
@@ -687,10 +827,16 @@ stored encrypted and is not returned in canonical authored output. Connector
 scope, credential resolution, and backup use are documented in
 [Secrets and Connectors](features/secrets-and-connectors.md).
 
+Connector credential `secret_ref` is an env-var Secret **key**, resolved in the
+owning Project before Platform fallback. This differs from Entry references,
+which may select a stable Secret id. Credentials contain exactly `access_key`
+and `secret_key`; neither is an ambient host credential.
+
 ## Validation and safety summary
 
-The Controller is the only Blueprint interpreter. It rejects the entire input
-before publication when, among other cases:
+The Controller is the only Blueprint interpreter. It checks the envelope,
+bundle and grammar, then resolves and prepares the candidate operation.
+Apply rejects input before publication when, among other cases:
 
 - the envelope does not address the routed Environment;
 - a bundle path, reference, interpolation value, YAML document, or complexity
@@ -710,6 +856,13 @@ Validation failure creates no desired revision, Task, marker, materialization,
 or runtime effect. After publication, partial failure remains visible through
 the Task and retry uses captured immutable input rather than rereading a newer
 Blueprint.
+
+**A successful Validate is a preview, not a reservation or proof of Apply
+success.** Both paths share the parser, but current Validate does not execute
+every Apply preparation check, including local image resolution and executable
+resource preparation. Apply can still reject that candidate. Concurrent changes
+can also invalidate its revision or dependencies. See the
+[operator guide](features/blueprints.md#read-edit-validate-and-apply).
 
 ## Implementation references
 

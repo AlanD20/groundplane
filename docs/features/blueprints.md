@@ -6,18 +6,116 @@ extensions. It is not a record of running containers.
 
 ## Read, edit, validate and apply
 
-Use `environment blueprint show|validate|apply` in the CLI, or the Environment
-Blueprint editor in the Console. Export produces canonical single-file YAML.
-Import can accept a closed multi-file bundle.
+Use the Environment Blueprint editor in the Console, or the CLI workflow below.
+The Tenant, Project and Environment must already exist. For a first Blueprint,
+start with the [complete example](../blueprint.md#start-with-one-service).
+
+For an existing Environment, export its desired configuration into a dedicated
+bundle directory:
+
+```sh
+mkdir -p blueprint
+groundplane environment blueprint show production \
+  --tenant acme --project storefront > blueprint/blueprint.yaml
+```
+
+Show takes the Environment name; it writes YAML directly, without `--output`.
+Edit the exported file, then preview and submit it:
+
+```sh
+groundplane environment blueprint validate production \
+  --tenant acme --project storefront \
+  --bundle-dir ./blueprint --root blueprint.yaml
+
+groundplane environment blueprint apply production \
+  --tenant acme --project storefront \
+  --bundle-dir ./blueprint --root blueprint.yaml
+```
+
+`--bundle-dir` and `--root` are required for both commands. The CLI uploads every
+regular file in that directory, including hidden and nested files; keep unrelated
+source, private files and export/review output outside it.
 
 Export reconstructs normalized desired state. It does not preserve comments,
 anchors, aliases or source-file boundaries. Script bodies use literal YAML
-blocks. Drafts stay local until explicitly submitted.
+blocks. It is one YAML document, not a full archive: any referenced companion
+files must still be supplied in the import bundle. Drafts stay local until
+explicitly submitted.
 
-Read the desired revision before Validate or Apply and send that exact quoted
-`If-Match`. A stale revision fails without writes. Revision zero means no
-desired head. Validate parses the same input as Apply but creates no Task,
-revision or host effect; its diff is create, update, remove or retain.
+The API requires the exact last-read quoted revision in `If-Match`; see
+[Blueprint requests](../api-cli.md#blueprint-requests). Revision zero means no
+desired head. A stale revision fails without writes. The Console retains its
+loaded revision. The CLI automatically reads a revision separately for each
+Validate and ordinary Apply invocation; it does not pin Apply to a previous
+Validate result. If another operator changes the Environment between those
+commands, review it again. Use the API when automation needs to enforce the
+exact reviewed revision.
+
+Validate creates no Task, desired revision or host effect. Its diff uses
+`create`, `update`, `remove` and `retain`; JSON output also identifies new empty
+secret values. It shares Apply's parser but does not run all of Apply's
+preparation checks, including local image resolution and executable resource
+preparation. A successful preview is not a reservation or proof that Apply
+will be accepted. This is a current implementation gap, not a reduced
+validation contract.
+
+Apply publishes one reconcile Task with immutable inputs. Follow its returned id:
+
+```sh
+groundplane task show task_01J00000000000000000000000
+groundplane task events task_01J00000000000000000000000
+```
+
+Replace the illustrative id with the actual result. Acceptance does not imply
+successful application. Required workload images must already exist in the host
+Docker daemon. While the Apply Task is pending or running, a second Apply to
+that Environment is refused; wait for settlement.
+
+Current Apply rolls out native Service candidates with recreate. A declared
+blue-green default belongs to the explicit Service Deploy workflow; Apply
+does not promise its traffic-switch behavior. See the
+[release fields](../blueprint.md#x-gp-release).
+
+## Multi-file bundles
+
+A bundle can contain native Compose layers and companion files:
+
+```text
+blueprint/
+  blueprint.yaml
+  production.yaml
+  config/
+    app.env
+```
+
+The root contains the Groundplane envelope and root extensions. For example,
+an additional `production.yaml` can override the root's API image:
+
+```yaml
+services:
+  api:
+    image: ${API_IMAGE}
+    env_file:
+      - path: config/app.env
+```
+
+`config/app.env` contains only non-secret configuration, for example
+`LOG_LEVEL=info`. Submit the layer and its explicit interpolation value:
+
+```sh
+groundplane environment blueprint validate production \
+  --tenant acme --project storefront \
+  --bundle-dir ./blueprint --root blueprint.yaml \
+  --compose-file production.yaml \
+  --var API_IMAGE=registry.example/storefront-api:2026-09-29
+```
+
+Use the same bundle options for Apply. Repeat `--compose-file` for additional
+layers in order; the root is already first. Repeat `--var` for different keys.
+There is no implicit `.env`, host environment, undeclared file or remote lookup.
+Bundle paths and limits are defined in the [reference](../blueprint.md#closed-bundle-input).
+
+## Resolve an uncertain Apply
 
 If the CLI reports an unknown Apply outcome, keep the bundle unchanged. Repeat
 the Apply against the same Environment ID with the reported `--retry-key` and
@@ -26,11 +124,20 @@ revision or creating a second intent. If the bundle changed, the Controller
 rejects the replay. The Console retains its original request in the current
 browser tab and offers **Resolve original Apply** after an uncertain response.
 
-Apply publishes one reconcile Task with immutable inputs. Follow its outcome;
-acceptance does not imply successful application. Required workload images must
-already exist in the host Docker daemon.
-While that Apply Task is pending or running, a second Apply to the same
-Environment is refused. Wait for the first Task to settle before applying again.
+For example, using the Environment id, revision and key printed by the error:
+
+```sh
+groundplane environment blueprint apply env_01J00000000000000000000000 --id \
+  --bundle-dir ./blueprint --root blueprint.yaml \
+  --retry-key 01J000000000000000000000000 \
+  --retry-revision 0
+```
+
+Replace all three recovery values with the reported values. Both retry flags
+are required together; the key is the original Apply ULID and the revision is
+`0` or its original `task_…` revision. Preserve additional layer and interpolation
+options too. Request replay resolves the original acceptance; Task Retry is a
+separate action after an eligible execution failure.
 
 ## Removal and identity
 
@@ -54,9 +161,12 @@ Attaches, use its impact-approved Remove action before omitting it from the
 Blueprint; this Environment's `If-Match` does not approve disruption to those
 consumers.
 
-Other resource omissions still have
-[implementation limits](../issues/runtime-qualification.md#incomplete-features);
-the Console must not promise removal that the Controller retains or rejects.
+Current Validate rejects omission of existing Services, Zones, Attaches and
+Routes because protected removal through that preview path is unavailable.
+Use their explicit dependency-checked Remove/Detach actions before exporting
+and editing the next Blueprint. Other omission paths can still retain or reject
+resources; see [implementation limits](../issues/runtime-qualification.md#incomplete-features).
+The Console must not promise removal that the Controller retains or rejects.
 
 Blueprint Entry keys identify their reconciliation identity, separately from
 destination env keys or file paths. Source/exposure edits retain the Entry id;

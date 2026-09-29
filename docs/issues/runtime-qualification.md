@@ -81,6 +81,11 @@ Environment state without orphaning data or unrelated resources.
 
 ### Other limits
 
+- Blueprint Validate shares the parser but does not run every Apply preparation
+  check, including local image resolution and executable resource preparation.
+  A successful preview can still be rejected by Apply. Native configs/secrets,
+  external networks and Volume driver options also remain unavailable to current
+  Apply despite parser support. See the [Blueprint reference](../blueprint.md#native-compose-with-groundplane-policy).
 - Latest-wins Blueprint reconciliation has an accepted design but lacks complete
   publication, late planning, handoff and runtime integration. BP-13/14/15 cannot
   pass until that work is explicitly authorized and delivered.
