@@ -100,7 +100,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 			Revision: assignmentValue.ModRevision,
 		},
 	}
-	report, reportCondition, reportMutation, err := repository.prepareScriptClosingReport(ctx,
+	report, reportCondition, reportMutation, err := repository.prepareTaskClosingReport(ctx,
 		current, status, result, *terminalAt, root.Phase == scriptsourceevidence.ScriptOperationSourceActive)
 	if err != nil {
 		return scriptTerminalSourceRelease{}, false, err

@@ -110,7 +110,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			resolved := recoveryAcknowledgement.result
 			result = &resolved
 		}
-		if executor == taskjournal.TaskExecutorAgent && result != nil && taskHasScriptClosingReport(task) &&
+		if executor == taskjournal.TaskExecutorAgent && result != nil && taskHasClosingReport(task) &&
 			(task.Type == taskjournal.TaskScript || !result.ReconciliationRequired) {
 			var processed bool
 			terminalScriptSourceRelease, processed, err = repository.prepareTerminalScriptSourceRelease(
@@ -143,10 +143,16 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		if executor == taskjournal.TaskExecutorAgent && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
 			task.Type != taskjournal.TaskUpdate {
-			processed, err := repository.finalizeReleaseTaskBatch(
-				ctx, task, assignment, terminalStatus, *result, agentID, terminalAt,
-				primaryAndAssignment.ReadRevision, recoveryAcknowledgement.conditions...,
-			)
+			var processed bool
+			if recoveryAcknowledgement.final {
+				processed, err = repository.finalizeRestoredRelease(ctx, task, assignment, recoveryAcknowledgement,
+					terminalAt, primaryAndAssignment.ReadRevision, terminalScriptSourceRelease.conditions...)
+			} else {
+				processed, err = repository.finalizeReleaseTaskBatch(
+					ctx, task, assignment, terminalStatus, *result, agentID, terminalAt,
+					primaryAndAssignment.ReadRevision, terminalScriptSourceRelease.conditions...,
+				)
+			}
 			if err != nil {
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}

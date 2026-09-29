@@ -27,8 +27,8 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 		return nil, errs.New(errs.KindStateConflict, "release terminal execution epoch changed")
 	}
 	var conditions []etcdstore.Condition
-	if taskHasScriptClosingReport(task) {
-		report, value, err := repository.readScriptClosingReport(ctx, current)
+	if taskHasClosingReport(task) {
+		report, value, err := repository.readTaskClosingReport(ctx, current)
 		if err != nil {
 			return nil, err
 		}

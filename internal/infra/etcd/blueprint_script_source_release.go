@@ -51,6 +51,19 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	submittedResult taskjournal.TaskResultRecord,
 	advanceNow bool,
 ) (scriptTerminalSourceRelease, bool, error) {
+	if task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
+		return repository.prepareOrdinaryReleaseClosingReport(ctx, TaskAssignment{
+			Task: etcdstore.Versioned[TaskRecord]{
+				Record:       task,
+				Revision:     taskValue.ModRevision,
+				ReadRevision: revision,
+			},
+			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
+				Record:   assignment,
+				Revision: assignmentValue.ModRevision,
+			},
+		}, submittedStatus, submittedResult, terminalAt, recovery.conditions)
+	}
 	if task.Type == taskjournal.TaskScript {
 		return repository.prepareManualScriptTerminalRelease(ctx, task, taskValue, assignment,
 			assignmentValue, assignmentIndexValue, terminalStatus, terminalAt, revision, submittedResult)
@@ -212,7 +225,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 				Revision: assignmentValue.ModRevision,
 			},
 		}
-		report, condition, mutation, reportErr := repository.prepareScriptClosingReport(
+		report, condition, mutation, reportErr := repository.prepareTaskClosingReport(
 			ctx,
 			current,
 			submittedStatus,

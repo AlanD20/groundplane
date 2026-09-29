@@ -64,6 +64,18 @@ recovery-only execution. Recovery probes before compensation, advances a
 durable cursor, and may run only the sealed probe and restoration steps. It
 cannot run candidate apply, Script, health, switch or another target.
 
+The Controller saves a received terminal report before publishing incremental
+Release results. Reconnect resumes that bookkeeping from the saved report;
+it does not interpret incomplete bookkeeping as permission to undo accepted
+host effects. The saved report fences later events and assignment epochs and
+is removed atomically with Task completion.
+
+An interrupted Task can require restoration without any individual step having
+failed. Exact restoration proof closes that Task with its original failure,
+without inventing a failed step. Settlement updates current serving/runtime
+facts and the execution checkpoint; already-published Release summaries remain
+history rather than being rewritten to describe the restored state.
+
 The original failure remains primary. The original Task becomes terminal only
 after exact restoration or absence proof and cleanup. If proof remains
 ambiguous, the operation and fences remain gated; ordinary Task Retry resumes

@@ -31,8 +31,8 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 			assignment.AgentGeneration != expected.Assignment.Record.AgentGeneration {
 			return TaskAssignment{}, errs.New(errs.KindStateConflict, "Agent reconnect assignment authority changed")
 		}
-		if taskHasScriptClosingReport(task) {
-			if terminal, closing, err := repository.resumeScriptClosingReport(ctx, current); err != nil || closing {
+		if taskHasClosingReport(task) {
+			if terminal, closing, err := repository.resumeTaskClosingReport(ctx, current); err != nil || closing {
 				return terminal, err
 			}
 		}

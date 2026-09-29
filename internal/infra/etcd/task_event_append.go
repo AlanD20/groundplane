@@ -36,12 +36,12 @@ func (repository *TaskRepository) AppendTaskEvent(
 		result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			taskjournal.TaskStorageKey(input.Identity.TaskID), taskjournal.TaskEventDedupKey(input.Identity), claimKey,
 			taskjournal.TaskAssignmentIndexKey(input.Identity.TaskID), blueprintClosingReportKey(input.Identity.TaskID),
-			manualScriptClosingReportKey(input.Identity.TaskID),
+			manualTaskClosingReportKey(input.Identity.TaskID), releaseClosingReportKey(input.Identity.TaskID),
 		}})
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		if len(result.Values) != 6 {
+		if len(result.Values) != 7 {
 			return TaskEventAppend{}, errs.New(errs.KindInternal, "task event read returned an invalid record count")
 		}
 		taskValue := result.Values[0]
@@ -104,10 +104,10 @@ func (repository *TaskRepository) AppendTaskEvent(
 			}
 			return TaskEventAppend{Sequence: prepared.Sequence, Revision: result.ReadRevision, Duplicate: true}, nil
 		}
-		if result.Values[4] != nil || result.Values[5] != nil {
+		if result.Values[4] != nil || result.Values[5] != nil || result.Values[6] != nil {
 			return TaskEventAppend{}, errs.New(
 				errs.KindStateConflict,
-				"task event arrived after Script source closure",
+				"task event arrived after terminal report acceptance",
 			)
 		}
 
@@ -193,7 +193,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 			{Key: taskjournal.TaskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
 			{Key: taskjournal.TaskEventDedupKey(input.Identity)},
 			{Key: eventKey},
-			{Key: scriptClosingReportKey(task)},
+			{Key: taskClosingReportKey(task)},
 		}
 		if recoveryValue != nil {
 			conditions = append(

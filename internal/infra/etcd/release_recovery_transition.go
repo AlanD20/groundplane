@@ -109,6 +109,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 		)
 	}
 	conditions := []etcdstore.Condition{
+		{Key: taskClosingReportKey(task)},
 		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 		{Key: assignmentValue.Key, ModRevision: assignmentValue.ModRevision},
 		{Key: assignmentIndexValue.Key, ModRevision: assignmentIndexValue.ModRevision},

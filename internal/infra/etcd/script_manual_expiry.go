@@ -27,7 +27,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
 		taskjournal.TaskActiveOperationKey(
 			task.OperationID,
-		), taskjournal.TaskAssignmentIndexKey(task.ID), manualScriptClosingReportKey(task.ID),
+		), taskjournal.TaskAssignmentIndexKey(task.ID), manualTaskClosingReportKey(task.ID),
 	}, Revision: revision})
 	if err != nil {
 		return false, err
@@ -69,7 +69,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
 		{Key: retention.Key, ModRevision: retention.ModRevision},
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskAssignmentIndexKey(task.ID)},
-		{Key: manualScriptClosingReportKey(task.ID)},
+		{Key: manualTaskClosingReportKey(task.ID)},
 		{Key: read.Values[1].Key, ModRevision: read.Values[1].ModRevision},
 	}
 	authority, err := scriptsourcepublication.NewAuthority(repository.store)

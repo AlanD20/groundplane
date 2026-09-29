@@ -42,6 +42,7 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 		return errs.New(errs.KindStateConflict, "Agent reconnect lifecycle authority changed")
 	}
 	conditions := []etcdstore.Condition{
+		{Key: taskClosingReportKey(current.Task.Record)},
 		{Key: taskjournal.TaskStorageKey(record.TaskID), ModRevision: current.Task.Revision},
 		{
 			Key:         taskjournal.TaskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID),

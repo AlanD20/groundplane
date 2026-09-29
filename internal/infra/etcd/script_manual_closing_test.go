@@ -41,7 +41,7 @@ func TestManualScriptClosingResumesOriginalReport(t *testing.T) {
 				current.Assignment.Revision != assignment.Assignment.Revision {
 				t.Fatalf("source closure changed Task or assignment authority: %v", err)
 			}
-			report, reportValue, err := tasks.readScriptClosingReport(ctx, current)
+			report, reportValue, err := tasks.readTaskClosingReport(ctx, current)
 			if err != nil || reportValue == nil || !report.matches(testtaskjournal.TaskStatusCompleted, result) ||
 				!report.ObservedAt.Equal(terminalAt) {
 				t.Fatalf("original report was not durable: %v", err)
@@ -83,7 +83,7 @@ func TestManualScriptClosingResumesOriginalReport(t *testing.T) {
 				resumed.Assignment.Revision != assignment.Assignment.Revision {
 				t.Fatalf("Controller-only terminal resumption lost original authority: %v", err)
 			}
-			for _, key := range []string{testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID), manualScriptClosingReportKey(assignment.Task.Record.ID)} {
+			for _, key := range []string{testscriptsourceevidence.ScriptSourceRootKey(execution.OperationID), manualTaskClosingReportKey(assignment.Task.Record.ID)} {
 				if store.valueAt(key, store.revision) != nil {
 					t.Fatalf("terminal resumption retained continuation authority: %s", key)
 				}

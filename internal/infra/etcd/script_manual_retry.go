@@ -51,7 +51,7 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	return scriptTerminalSourceRelease{
 		conditions: append(append([]etcdstore.Condition(nil), fragment.Conditions()...),
 			etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
-			etcdstore.Condition{Key: manualScriptClosingReportKey(task.ID)}),
+			etcdstore.Condition{Key: manualTaskClosingReportKey(task.ID)}),
 		mutations: cloneBlueprintCandidateMutations(fragment.Mutations()),
 	}, nil
 }
@@ -154,7 +154,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 			etcdstore.Condition{
 				Key: taskjournal.TaskAssignmentIndexKey(source.ID),
 			},
-			etcdstore.Condition{Key: manualScriptClosingReportKey(source.ID)},
+			etcdstore.Condition{Key: manualTaskClosingReportKey(source.ID)},
 		),
 		mutations: mutations, values: values,
 	}, nil
