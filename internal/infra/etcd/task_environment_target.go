@@ -19,8 +19,9 @@ func ordinaryTaskEnvironmentMutationTarget(
 	connectorChange bool,
 ) (string, bool, error) {
 	targets := make([]string, 0, 1)
-	if materializationChange {
-		targets = append(targets, task.Params[taskjournal.TaskMaterializationEnvironmentParam])
+	if target, declared := task.Params[taskjournal.TaskMaterializationEnvironmentParam]; materializationChange &&
+		declared {
+		targets = append(targets, target)
 	}
 	if attachChange {
 		targets = append(targets, task.Params[taskjournal.TaskMutationEnvironmentParam])

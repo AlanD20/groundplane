@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -8,6 +9,35 @@ import (
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+// SVC-05: the first Service Deploy acknowledges an empty configuration without
+// becoming an ordinary file writer. Its Release already owns the Environment fence.
+func TestFirstReleaseConfigurationAcknowledgementDoesNotInventFileWriter(t *testing.T) {
+	_, store, _, _ := backupPolicyRepositoryTestHierarchy(t)
+	task := configurationTaskFixture()
+	task.Type, task.Target = testtaskjournal.TaskDeploy, ids.New(ids.KindService)
+	task.Materializations = nil
+	delete(task.Params, testtaskjournal.TaskMaterializationEnvironmentParam)
+	prepared, err := prepareRuntimeConfigurationTask(context.Background(), store, task, store.revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared.Status = testtaskjournal.TaskStatusCompleted
+	change, err := prepareRuntimeConfigurationAcknowledgement(prepared)
+	if err != nil || !change.applies {
+		t.Fatalf("first empty configuration acknowledgement = %#v, %v", change, err)
+	}
+	defer clearTaskMaterializationProjectionChange(change)
+	if target, applies, err := ordinaryTaskEnvironmentMutationTarget(prepared, change.applies, false, false, false, false); err != nil ||
+		applies ||
+		target != "" {
+		t.Fatalf("Release invented ordinary file-writer ownership: %q, %v, %v", target, applies, err)
+	}
+	prepared.Params[testtaskjournal.TaskMaterializationEnvironmentParam] = ""
+	if _, _, err := ordinaryTaskEnvironmentMutationTarget(prepared, true, false, false, false, false); err == nil {
+		t.Fatal("explicit empty file-writer identity was accepted")
+	}
+}
 
 // ENT-08/SVC-15: metadata deletion and file acknowledgement are distinct
 // effects in the same Environment, not conflicting owners. A foreign target
