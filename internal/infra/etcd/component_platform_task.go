@@ -142,8 +142,9 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
-		{Key: platformComponentTaskActiveKey(replacement.Desired.ID)},
+		{Key: platformcomponents.ActiveTaskKey(replacement.Desired.ID)},
 	}
+	conditions = append(conditions, renderInput.ReferenceConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(replacement.Desired.ID), Value: componentValue},
 		componentrecord.WriteFenceMutation(replacement.Desired.ID),
@@ -162,7 +163,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   platformComponentTaskActiveKey(replacement.Desired.ID),
+			Key:   platformcomponents.ActiveTaskKey(replacement.Desired.ID),
 			Value: []byte(task.ID),
 		},
 	}

@@ -20,8 +20,6 @@ import (
 const (
 	maximumArtifactBytes = 96 * 1024
 	maximumMetricsBytes  = 256 * 1024
-	maximumLogBytes      = 256 * 1024
-	maximumLogLines      = 256
 	probeDeadline        = 60 * time.Second
 	maximumProofAttempts = 3
 	dockerSocketPath     = "/var/run/docker.sock"
@@ -51,7 +49,6 @@ type Request struct {
 
 type runtimeEvidence struct {
 	artifact            []byte
-	logs                []byte
 	verifiedImageDigest [sha256.Size]byte
 	// imageConfigAuthority is observed for classic Docker, or bound from the
 	// sealed catalog after verifying the selected child on containerd. It is

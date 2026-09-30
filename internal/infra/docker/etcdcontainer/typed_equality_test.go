@@ -1,6 +1,7 @@
 package etcdcontainer
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/config"
 	"testing"
 
 	"github.com/moby/moby/api/types/container"
@@ -10,17 +11,17 @@ import (
 // Rationale: Docker may report mount options that are invisible in the basic
 // source/target fields; those options must trigger drift reconciliation.
 func TestMatchesDesiredRejectsTypedMountDrift(t *testing.T) {
-	desired := createOptions()
+	desired := createOptions(config.DefaultEtcdConfig())
 	inspect := container.InspectResponse{Config: desired.Config, HostConfig: desired.HostConfig}
 	inspect.HostConfig.Mounts = append([]mount.Mount(nil), desired.HostConfig.Mounts...)
 	inspect.HostConfig.Mounts[0].BindOptions = &mount.BindOptions{}
-	if matchesDesired(inspect) {
+	if matchesDesired(inspect, config.DefaultEtcdConfig()) {
 		t.Fatal("mount option drift was accepted")
 	}
 
 	inspect.HostConfig.Mounts[0] = desired.HostConfig.Mounts[0]
 	inspect.HostConfig.Mounts[0].Consistency = mount.ConsistencyCached
-	if matchesDesired(inspect) {
+	if matchesDesired(inspect, config.DefaultEtcdConfig()) {
 		t.Fatal("mount consistency drift was accepted")
 	}
 }

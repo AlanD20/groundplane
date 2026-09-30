@@ -160,11 +160,20 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 			}
 			definition := testResolverDefinition(t)
 			planner, err := NewPlatformRenderPlanner(
-				fixedProjectionReader{record: projection}, renderPlannerBaselineRepository{record: baseline},
-				renderPlannerObservationRepository{}, func(context.Context) ([]byte, error) {
+				fixedProjectionReader{
+					record: projection,
+				},
+				emptyDNSRecordsResolver{},
+				renderPlannerBaselineRepository{record: baseline},
+				renderPlannerObservationRepository{},
+				func(context.Context) ([]byte, error) {
 					return append([]byte(nil), baselineContent...), nil
-				}, rendererPin{}, renderPlannerEnvironmentPlanner{}, renderPlannerCatalog{definition: definition},
-				"activate-config", netip.MustParseAddr("127.0.0.1"),
+				},
+				rendererPin{},
+				renderPlannerEnvironmentPlanner{},
+				renderPlannerCatalog{definition: definition},
+				"activate-config",
+				netip.MustParseAddr("127.0.0.1"),
 			)
 			if err != nil {
 				t.Fatalf("NewPlatformRenderPlanner() error = %v", err)

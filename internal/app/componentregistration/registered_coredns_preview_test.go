@@ -9,11 +9,24 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	testhostresolution "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	testresolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
+	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type registeredCoreDNSPreviewRecords struct {
 	projection testhostresolution.HostResolutionProjectionRecord
+}
+
+func (registeredCoreDNSPreviewRecords) ResolveDNSRecords(
+	_ context.Context,
+	records []core.DNSRecord,
+	_ int64,
+) ([]testplatformcomponents.PlatformDNSHost, []testkeyvalue.Condition, error) {
+	if len(records) != 0 {
+		return nil, nil, errs.New(errs.KindInternal, "preview fixture has no DNS targets")
+	}
+	return nil, nil, nil
 }
 
 func (records registeredCoreDNSPreviewRecords) GetHostResolutionProjection(
@@ -41,7 +54,7 @@ func TestRegisteredCoreDNSManagedConfigProjectorUsesCompiledRenderer(t *testing.
 		t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 	}
 	records := registeredCoreDNSPreviewRecords{projection: projection}
-	projector, err := NewDNSManagedConfigProjector(records, records, netip.MustParseAddr("127.0.0.1"))
+	projector, err := NewDNSManagedConfigProjector(records, records, records, netip.MustParseAddr("127.0.0.1"))
 	if err != nil {
 		t.Fatalf("NewDNSManagedConfigProjector() error = %v", err)
 	}

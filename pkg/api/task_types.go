@@ -33,24 +33,25 @@ const (
 )
 
 type Task struct {
-	ID            string            `json:"id"`
-	OperationID   string            `json:"operation_id"`
-	RetryOf       string            `json:"retry_of,omitempty"`
-	PlanHash      string            `json:"plan_hash,omitempty"`
-	Type          string            `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate,fetch"`
-	Target        string            `json:"target"`
-	Status        TaskStatus        `json:"status"`
-	WorkspaceType TaskWorkspaceType `json:"workspace_type"           enum:"platform,tenant"`
-	TenantID      string            `json:"tenant_id,omitempty"`
-	ProjectID     string            `json:"project_id,omitempty"`
-	EnvironmentID string            `json:"environment_id,omitempty"`
-	Actor         TaskActor         `json:"actor"                    enum:"operator,system"`
-	CreatedAt     time.Time         `json:"created_at"`
-	UpdatedAt     time.Time         `json:"updated_at"`
-	StartedAt     *time.Time        `json:"started_at"`
-	FinishedAt    *time.Time        `json:"finished_at"`
-	Steps         []TaskStep        `json:"steps,omitempty"`
-	ImageFetch    *TaskImageFetch   `json:"image_fetch,omitempty"`
+	ID                     string            `json:"id"`
+	OperationID            string            `json:"operation_id"`
+	RetryOf                string            `json:"retry_of,omitempty"`
+	PlanHash               string            `json:"plan_hash,omitempty"`
+	Type                   string            `json:"type"                     enum:"deploy,rollback,backup,backup_prune,restore,attach,detach,run,script,provision,create,update,remove,start,stop,destroy,rotate,fetch"`
+	Target                 string            `json:"target"`
+	Status                 TaskStatus        `json:"status"`
+	ReconciliationRequired bool              `json:"reconciliation_required"`
+	WorkspaceType          TaskWorkspaceType `json:"workspace_type"           enum:"platform,tenant"`
+	TenantID               string            `json:"tenant_id,omitempty"`
+	ProjectID              string            `json:"project_id,omitempty"`
+	EnvironmentID          string            `json:"environment_id,omitempty"`
+	Actor                  TaskActor         `json:"actor"                    enum:"operator,system"`
+	CreatedAt              time.Time         `json:"created_at"`
+	UpdatedAt              time.Time         `json:"updated_at"`
+	StartedAt              *time.Time        `json:"started_at"`
+	FinishedAt             *time.Time        `json:"finished_at"`
+	Steps                  []TaskStep        `json:"steps,omitempty"`
+	ImageFetch             *TaskImageFetch   `json:"image_fetch,omitempty"`
 }
 
 type TaskImageFetch struct {

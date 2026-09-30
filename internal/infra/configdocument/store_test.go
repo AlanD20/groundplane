@@ -1,4 +1,4 @@
-package controllerconfig
+package configdocument
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func TestStoreReplacePersistsExactBytesAndDurableReplay(t *testing.T) {
 	if err := os.WriteFile(path, initial, 0o644); err != nil {
 		t.Fatalf("write initial config: %v", err)
 	}
-	store, err := New(ctx, path, initial)
+	store, err := New(ctx, path, initial, "controller.config.set", commonconfig.ValidateControllerDocument)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -61,7 +61,7 @@ func TestStoreReplacePersistsExactBytesAndDurableReplay(t *testing.T) {
 		t.Fatalf("replay directory mode = %v, %v; want 0700", directoryInfo.Mode().Perm(), err)
 	}
 
-	restarted, err := New(ctx, path, updated)
+	restarted, err := New(ctx, path, updated, "controller.config.set", commonconfig.ValidateControllerDocument)
 	if err != nil {
 		t.Fatalf("New(restart) error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestStoreStartupRevisionUsesExactLoadedDocumentWhenPathChanges(t *testing.T
 	if err := os.WriteFile(path, changed, 0o600); err != nil {
 		t.Fatalf("replace config after startup parse: %v", err)
 	}
-	store, err := New(ctx, path, startupDocument)
+	store, err := New(ctx, path, startupDocument, "controller.config.set", commonconfig.ValidateControllerDocument)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -154,7 +154,7 @@ func TestStoreRestartRequiredClearsOnExactRevert(t *testing.T) {
 	if err := os.WriteFile(path, initial, 0o600); err != nil {
 		t.Fatalf("write initial config: %v", err)
 	}
-	store, err := New(ctx, path, initial)
+	store, err := New(ctx, path, initial, "controller.config.set", commonconfig.ValidateControllerDocument)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -190,7 +190,7 @@ func TestStoreReplaceUsesStrictBoundedStartupValidation(t *testing.T) {
 	if err := os.WriteFile(path, initial, 0o600); err != nil {
 		t.Fatalf("write initial config: %v", err)
 	}
-	store, err := New(ctx, path, initial)
+	store, err := New(ctx, path, initial, "controller.config.set", commonconfig.ValidateControllerDocument)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

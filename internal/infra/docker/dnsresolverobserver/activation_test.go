@@ -41,12 +41,12 @@ func TestAwaitConfigurationAcrossReload(t *testing.T) {
 			name = "mounted candidate replaced during wait"
 		}
 		t.Run(name, func(t *testing.T) {
-			candidate := runtimeEvidence{artifact: artifact, logs: reloadLog(effective)}
+			candidate := runtimeEvidence{artifact: artifact}
 			if changed {
 				candidate.artifact = []byte("unexpected replacement")
 			}
 			runtime := &delayedResolverRuntime{values: []runtimeEvidence{
-				{artifact: artifact, logs: reloadLog(old)}, candidate,
+				{artifact: artifact}, candidate,
 			}}
 			executor := &Executor{
 				runtime: runtime,

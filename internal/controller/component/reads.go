@@ -14,6 +14,7 @@ import (
 )
 
 type readRepository interface {
+	GetPlatformComponentActiveTask(context.Context, string, int64) (string, error)
 	GetComponent(context.Context, string) (etcdstore.Versioned[componentrecord.Record], error)
 	ListEnvironmentComponents(
 		context.Context,
@@ -107,8 +108,16 @@ func (service *ReadService) GetComponentConfig(
 	if managedFiles == nil {
 		managedFiles = []apiTypes.ManagedConfigFile{}
 	}
+	activeTaskID := ""
+	if component.Owner == core.ComponentOwnerPlatform {
+		activeTaskID, err = service.repository.GetPlatformComponentActiveTask(ctx, id, record.ReadRevision)
+		if err != nil {
+			return apiTypes.ComponentConfigResponse{}, err
+		}
+	}
 	return apiTypes.ComponentConfigResponse{
 		Config: projectComponentConfig(component), ManagedFiles: managedFiles,
+		ActiveTaskID: activeTaskID,
 	}, nil
 }
 
@@ -191,6 +200,7 @@ func projectComponentConfig(component core.Component) *apiTypes.ComponentConfig 
 	tailnetDelegation := config.CoreDNS.TailnetDelegation
 	result := &apiTypes.ComponentConfig{
 		CoreDNS: &apiTypes.CoreDNSComponentConfig{
+			Records:           append([]core.DNSRecord(nil), config.CoreDNS.Records...),
 			CorefileTemplate:  config.CoreDNS.CorefileTemplate,
 			UpstreamAuto:      upstreamAuto,
 			UpstreamResolvers: projectResolverEndpoints(config.CoreDNS.UpstreamResolvers),

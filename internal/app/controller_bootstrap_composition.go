@@ -14,7 +14,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/imagefetch"
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
-	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/controllerconfig"
+	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/configdocument"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/docker/registryhost"
 	"github.com/AlanD20/groundplane/internal/infra/environmentroot"
@@ -58,7 +58,13 @@ func newControllerBootstrapComposition(
 	if err != nil {
 		return controllerBootstrapComposition{}, err
 	}
-	controllerConfig, err := controllerconfigstore.New(ctx, configPath, startupDocument)
+	controllerConfig, err := controllerconfigstore.New(
+		ctx,
+		configPath,
+		startupDocument,
+		"controller.config.set",
+		config.ValidateControllerDocument,
+	)
 	if err != nil {
 		return controllerBootstrapComposition{}, fmt.Errorf(
 			"controller: initialize Controller config store: %w",

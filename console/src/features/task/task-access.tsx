@@ -1,59 +1,191 @@
 import { TaskDetailDrawer } from "@/components/common/task-detail-drawer";
 import { TaskLink } from "@/components/common/task-link";
 import { Button } from "@/components/ui/button";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { StatusBadge } from "@/components/common/status-badge";
 import { useStore } from "@/lib/store";
 import type { ActivityEntry } from "@/lib/types";
-import { CheckCircle2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Bell, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { dismissAcceptedTask, useAcceptedTasks } from "./accepted-tasks";
+import {
+  dismissAcceptedTask,
+  markTaskNotificationsRead,
+  useAcceptedTasks,
+} from "./accepted-tasks";
 import { requestTask } from "./api";
 import { taskFromAPI } from "./journal-model";
 import { taskPresentation } from "./task-overview";
 
-export function AcceptedTasks() {
-  const tasks = useAcceptedTasks();
-  if (!tasks.length) return null;
+export function TaskNotifications() {
+  const notifications = useAcceptedTasks();
+  const [open, setOpen] = useState(false);
+  const [tasks, setTasks] = useState<Record<string, ActivityEntry>>({});
+  const taskCache = useRef<Record<string, ActivityEntry>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const unread = notifications.filter((item) => item.unread).length;
+  const toasts = notifications.filter((item) => item.toast).slice(0, 3);
+  // One polling loop owns all accepted Tasks; opening the center adds no requests.
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      const pending = notifications.filter(
+        ({ id }) =>
+          !taskCache.current[id] || !isTerminal(taskCache.current[id]),
+      );
+      await Promise.all(
+        pending.map(async ({ id }) => {
+          try {
+            const task = taskFromAPI(await requestTask(id, controller.signal));
+            if (controller.signal.aborted) return;
+            taskCache.current[id] = task;
+            setTasks((current) => ({ ...current, [id]: task }));
+            setErrors((current) => {
+              const next = { ...current };
+              delete next[id];
+              return next;
+            });
+          } catch (error) {
+            if (!controller.signal.aborted)
+              setErrors((current) => ({
+                ...current,
+                [id]:
+                  error instanceof Error
+                    ? error.message
+                    : "Unable to load Task",
+              }));
+          }
+        }),
+      );
+      if (pending.length && !controller.signal.aborted)
+        timer = setTimeout(() => void poll(), 2000);
+    };
+    void poll();
+    return () => {
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [notifications]);
+
+  // Toast dismissal never discards the operation from the notification center.
+  useEffect(() => {
+    const terminal = toasts.filter(
+      (item) => tasks[item.id] && isTerminal(tasks[item.id]),
+    );
+    if (!terminal.length) return;
+    const timer = setTimeout(
+      () => terminal.forEach((item) => dismissAcceptedTask(item.id)),
+      10000,
+    );
+    return () => clearTimeout(timer);
+  }, [toasts, tasks]);
   return (
-    <section
-      aria-label="Recently triggered Tasks"
-      aria-live="polite"
-      className="mb-5 divide-y divide-border rounded-lg border border-primary/20 bg-card"
-    >
-      {tasks.map((id) => (
-        <AcceptedTask key={id} id={id} />
-      ))}
-    </section>
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative"
+        aria-label={`Task notifications${unread ? `, ${unread} unread` : ""}`}
+        onClick={() => {
+          setOpen(true);
+          markTaskNotificationsRead();
+        }}
+      >
+        <Bell className="size-4" />
+        {!!unread && (
+          <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />
+        )}
+      </Button>
+      {createPortal(
+        <section
+          aria-label="Task updates"
+          aria-live="polite"
+          className="pointer-events-none fixed right-4 top-20 z-40 flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2"
+        >
+          {toasts.map(({ id }) => (
+            <div
+              key={id}
+              className="pointer-events-auto rounded-xl border border-border bg-card p-4 shadow-lg animate-in fade-in slide-in-from-top-2"
+            >
+              <TaskNotificationRow
+                id={id}
+                task={tasks[id]}
+                error={errors[id]}
+              />
+              <div className="mt-3 flex items-center justify-between">
+                <TaskLink taskId={id}>Open Task</TaskLink>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label="Dismiss notification"
+                  onClick={() => dismissAcceptedTask(id)}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </section>,
+        document.body,
+      )}
+      <Drawer open={open} onOpenChange={setOpen}>
+        <DrawerContent>
+          <DialogHeader>
+            <DialogTitle>Task notifications</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {!notifications.length && (
+              <p className="text-sm text-muted-foreground">
+                Operations you start in this session appear here.
+              </p>
+            )}
+            {notifications.map(({ id }) => (
+              <div
+                key={id}
+                className="space-y-3 rounded-lg border border-border p-4"
+              >
+                <TaskNotificationRow
+                  id={id}
+                  task={tasks[id]}
+                  error={errors[id]}
+                />
+                <TaskLink taskId={id} onClick={() => setOpen(false)}>
+                  Open Task
+                </TaskLink>
+              </div>
+            ))}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }
 
-function AcceptedTask({ id }: { id: string }) {
+function isTerminal(task: ActivityEntry) {
+  return ["completed", "failed", "timed_out", "aborted"].includes(task.status);
+}
+
+function TaskNotificationRow({
+  task,
+  error,
+}: {
+  id: string;
+  task?: ActivityEntry;
+  error?: string;
+}) {
   const store = useStore();
-  const [task, setTask] = useState<ActivityEntry>();
-  useEffect(() => {
-    const controller = new AbortController();
-    void requestTask(id, controller.signal)
-      .then((response) => {
-        if (!controller.signal.aborted) setTask(taskFromAPI(response));
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [id]);
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-3 px-3 py-2 text-xs">
-      <CheckCircle2 className="size-3.5 shrink-0 text-primary" />
-      <span className="min-w-0 flex-1 truncate">
+    <div className="space-y-2">
+      <p className="break-words text-sm font-medium">
         {task ? taskPresentation(task, store).title : "Operation accepted"}
-      </span>
-      <TaskLink taskId={id}>Inspect Task</TaskLink>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={`Dismiss Task ${id}`}
-        onClick={() => dismissAcceptedTask(id)}
-      >
-        <X className="size-3.5" />
-      </Button>
+      </p>
+      {task && <StatusBadge status={task.status} />}
+      {error && (
+        <p className="text-xs text-destructive">Status unavailable: {error}</p>
+      )}
     </div>
   );
 }

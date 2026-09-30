@@ -9,9 +9,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/AlanD20/groundplane/internal/common/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -28,6 +30,7 @@ type PlatformDNSHost struct {
 }
 
 type PlatformComponentTaskRenderInput struct {
+	ReferenceConditions            []keyvalue.Condition        `json:"reference_conditions,omitempty"`
 	PlanID                         string                      `json:"plan_id"`
 	TaskID                         string                      `json:"task_id"`
 	ComponentID                    string                      `json:"component_id"`
@@ -102,6 +105,14 @@ func DecodePlatformComponentTaskRenderInput(value []byte) (PlatformComponentTask
 }
 
 func ValidatePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInput) error {
+	if err := dnsrecords.ValidateDNSRecords(input.Config.Records); err != nil {
+		return err
+	}
+	for _, condition := range input.ReferenceConditions {
+		if condition.Key == "" || condition.ModRevision < 0 || condition.Prefix {
+			return errs.New(errs.KindValidationFailed, "DNS reference condition is invalid")
+		}
+	}
 	if input.PrivateListener != "" {
 		address, err := netip.ParseAddr(input.PrivateListener)
 		if err != nil || !address.Is4() || !address.IsPrivate() || address.String() != input.PrivateListener {
@@ -211,6 +222,7 @@ func validComponentActionToken(value string) bool {
 
 func clonePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInput) PlatformComponentTaskRenderInput {
 	clone := input
+	clone.ReferenceConditions = append([]keyvalue.Condition(nil), input.ReferenceConditions...)
 	clone.Config = *core.CloneComponentConfig(core.ComponentConfig{CoreDNS: &input.Config}).CoreDNS
 	clone.Hosts = make([]PlatformDNSHost, len(input.Hosts))
 	if input.ComposeArtifact != nil {

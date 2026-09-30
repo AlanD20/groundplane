@@ -37,14 +37,41 @@ It supports upstream resolvers and per-domain forwarding. Tailnet detection
 provides an overridable default. A network Zone is not a DNS zone and does not
 automatically become a DNS name.
 
-The accepted local-registry design also uses this resolver for its managed
-internal name. That integration is not yet available: the current resolver binds
-only to host loopback; Runner daemon access requires a private listener and
-resolver wiring. It must not expose a public DNS resolver. See [Runners](runners.md).
+The managed private registry also uses this resolver. Host Docker and Runner
+daemons resolve its internal name through private DNS reachability, not public
+DNS. See [Runners](runners.md).
+
+Add exact hostname records in CoreDNS settings. A target is either an IPv4
+address or a TCP Service and one of its Zones. Deploy the Service first: GP must
+have applied its reserved proxy address before accepting it as a DNS target.
+Service records retain stable Service and Zone IDs, not labels or workload IPs.
+Recreate and blue-green deployments preserve that proxy address. UDP-only and
+Backing Services cannot be selected as Service targets; use an explicit address
+when managing such a record yourself. A hostname cannot override a Route name
+with a different address.
+
+DNS references block Service, selected Zone and containing hierarchy removal.
+The Console offers to remove the records first, waits for the DNS Task, then
+opens the resource-removal confirmation. Cancel keeps both. Saving a replacement
+is insufficient: last-applied references remain protected until its Task succeeds.
+An explicit-address record is operator-managed and has no resource-removal guard.
 
 Provide a full Corefile containing exactly one `{groundplane}` marker for GP's
-managed directives. Invalid configuration must leave serving configuration in
+managed directives. The Console shows the exact generated replacement alongside
+the complete desired Corefile. That preview is not proof that those bytes are
+active. Invalid configuration must leave serving configuration in
 place. Removing DNS restores the captured predecessor resolver configuration.
+
+A configuration Task owns the resolver until application or recovery settles.
+The Console links that Task, disables conflicting edits and refreshes ownership
+automatically. Observation checks the mounted file, the live reload fingerprint
+and serving probes; it does not depend on an old reload message remaining in the
+query log tail.
+
+An unresolved failure is recorded without disconnecting the Agent. The resolver
+stays locked because restoration has not been proved; unrelated Tasks can proceed.
+Use the failed Task's explicit Retry action to retry its sealed configuration.
+GP does not repeatedly publish new resolver Tasks over uncertain effects.
 
 ## Configuration and owned resources
 

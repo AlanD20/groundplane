@@ -67,6 +67,7 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 		Target:     domain.WorkloadSingleton, ServingTarget: domain.WorkloadBlue,
 		ServingReleaseID: "baseline", ServingProxyGeneration: 1,
 	}}
+	addReservedProxyNetwork(&input, serviceID)
 	artifact, err := RenderCompose(input)
 	if err != nil {
 		t.Fatalf("RenderCompose() error = %v", err)
@@ -96,6 +97,7 @@ func TestRenderComposeAddressableRecreateHasOneWorkloadAndStableProxy(t *testing
 	if !reflect.DeepEqual(rendered.Services["api"].Command, wantCommand) {
 		t.Fatalf("stable proxy command = %#v, want %#v", rendered.Services["api"].Command, wantCommand)
 	}
+	assertReservedProxyNetwork(t, artifact)
 }
 
 // Rationale: the ordinary Release artifact is the immutable observation authority;
@@ -114,6 +116,7 @@ func TestRenderComposeSealsBlueGreenWorkloadImages(t *testing.T) {
 		ServingTarget: domain.WorkloadGreen, ServingReleaseID: composeIdentityTestID(ids.KindDeployment, 41),
 		ServingProxyGeneration: 1,
 	}}
+	addReservedProxyNetwork(&input, serviceID)
 	artifact, err := RenderCompose(input)
 	if err != nil {
 		t.Fatalf("RenderCompose() error = %v", err)
@@ -126,6 +129,46 @@ func TestRenderComposeSealsBlueGreenWorkloadImages(t *testing.T) {
 	}
 	if images["blue"] != "example/api:next" || images["green"] != "example/api:previous" {
 		t.Fatalf("sealed workload images = %#v", images)
+	}
+	assertReservedProxyNetwork(t, artifact)
+}
+
+// Recreate and blue-green must attach the reserved address to the singleton
+// proxy, never a replaceable workload or inactive slot.
+func addReservedProxyNetwork(input *ComposeRenderInput, serviceID string) {
+	service := input.Project.Services["api"]
+	service.Networks = map[string]*composetypes.ServiceNetworkConfig{"frontend": {}}
+	input.Project.Services["api"] = service
+	input.Project.Networks = composetypes.Networks{"frontend": {}}
+	input.Identities.Networks = []composeidentity.Resource{
+		{ID: composeIdentityTestID(ids.KindNetwork, 42), Name: "frontend"},
+	}
+	identity := input.Releases[serviceID]
+	identity.ProxyAddresses = map[string]string{"frontend": "10.40.0.14"}
+	input.Releases[serviceID] = identity
+}
+
+func assertReservedProxyNetwork(t *testing.T, artifact *agentpb.ComposeArtifact) {
+	t.Helper()
+	var rendered struct {
+		Services map[string]struct {
+			Networks map[string]struct {
+				IPv4 string `yaml:"ipv4_address"`
+			} `yaml:"networks"`
+		} `yaml:"services"`
+	}
+	if err := yaml.Unmarshal(artifact.CanonicalYaml, &rendered); err != nil {
+		t.Fatal(err)
+	}
+	for _, service := range artifact.Services {
+		address := rendered.Services[service.ComposeName].Networks["frontend"].IPv4
+		if service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_STABLE_PROXY {
+			if address != "10.40.0.14" {
+				t.Fatalf("proxy lost reserved address: %q", address)
+			}
+		} else if address != "" {
+			t.Fatalf("workload stole stable address: %q", address)
+		}
 	}
 }
 

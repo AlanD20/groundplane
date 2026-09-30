@@ -42,7 +42,7 @@ export function useTaskJournal(
     async (surface, scope, cursor, requestedPageSize) => {
       const key = taskJournalKey(scope);
       const pageSize = requestedPageSize ?? pageSizes.current.get(key) ?? 5;
-      if (pageSize !== (pageSizes.current.get(key) ?? 25)) cursor = undefined;
+      if (pageSize !== (pageSizes.current.get(key) ?? 5)) cursor = undefined;
       pageSizes.current.set(key, pageSize);
       const epoch = (taskJournalEpochs.current.get(key) ?? 0) + 1;
       taskJournalEpochs.current.set(key, epoch);
@@ -74,7 +74,10 @@ export function useTaskJournal(
           const pageIndex = knownPage < 0 ? journal.pageIndex + 1 : knownPage;
           journal.entries = entries;
           journal.pageIndex = pageIndex;
-          journal.pageCursors = [...journal.pageCursors.slice(0, pageIndex), cursor];
+          journal.pageCursors = [
+            ...journal.pageCursors.slice(0, pageIndex),
+            cursor,
+          ];
           journal.nextCursor = page.next_cursor ?? null;
           journal.loaded = true;
           journal.loading = false;

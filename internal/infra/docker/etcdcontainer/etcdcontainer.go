@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net"
 	"os"
 	"slices"
+	"sync"
 	"time"
 
 	containerderrdefs "github.com/containerd/errdefs"
@@ -17,6 +17,8 @@ import (
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 
+	"github.com/AlanD20/groundplane/internal/common/config"
+	"github.com/AlanD20/groundplane/internal/infra/configdocument"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -53,13 +55,20 @@ type engineClient interface {
 	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
 	ContainerCreate(context.Context, client.ContainerCreateOptions) (client.ContainerCreateResult, error)
 	ContainerStart(context.Context, string, client.ContainerStartOptions) (client.ContainerStartResult, error)
+	ContainerStop(context.Context, string, client.ContainerStopOptions) (client.ContainerStopResult, error)
 	ContainerRemove(context.Context, string, client.ContainerRemoveOptions) (client.ContainerRemoveResult, error)
 	ImagePull(context.Context, string, client.ImagePullOptions) (client.ImagePullResponse, error)
 	Close() error
 }
 
 type Manager struct {
-	client engineClient
+	client     engineClient
+	mu         sync.Mutex
+	active     config.EtcdConfig
+	document   *configdocument.Store
+	activation *configdocument.Store
+	operation  *configdocument.Store
+	probe      func(context.Context) error
 }
 
 func Endpoints() []string {
@@ -80,10 +89,24 @@ func New(ctx context.Context) (*Manager, error) {
 	if err != nil {
 		return nil, operationError(ctx, "create Docker client", err)
 	}
-	return &Manager{client: engine}, nil
+	manager := &Manager{client: engine, active: config.DefaultEtcdConfig(), probe: probeReadiness}
+	if err := manager.openConfiguration(ctx); err != nil {
+		_ = engine.Close()
+		return nil, err
+	}
+	return manager, nil
 }
 
 func (m *Manager) Reconcile(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.recoverInterrupted(ctx); err != nil {
+		return err
+	}
+	return m.reconcile(ctx)
+}
+
+func (m *Manager) reconcile(ctx context.Context) error {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "etcd container: reconcile context is required")
 	}
@@ -101,8 +124,14 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 			ContainerName,
 		)
 	}
-	if exists && !matchesDesired(inspected) {
-		if _, err := m.client.ContainerRemove(ctx, inspected.ID, client.ContainerRemoveOptions{Force: true}); err != nil {
+	if exists && !matchesDesired(inspected, m.active) {
+		if inspected.State != nil && inspected.State.Running {
+			timeout := 20
+			if _, err := m.client.ContainerStop(ctx, inspected.ID, client.ContainerStopOptions{Timeout: &timeout}); err != nil {
+				return operationError(ctx, "stop drifted container", err)
+			}
+		}
+		if _, err := m.client.ContainerRemove(ctx, inspected.ID, client.ContainerRemoveOptions{}); err != nil {
 			return operationError(ctx, "remove drifted container", err)
 		}
 		exists = false
@@ -111,7 +140,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		if err := m.pullImage(ctx); err != nil {
 			return err
 		}
-		created, err := m.client.ContainerCreate(ctx, createOptions())
+		created, err := m.client.ContainerCreate(ctx, createOptions(m.active))
 		if err != nil {
 			return operationError(ctx, "create container", err)
 		}
@@ -182,14 +211,14 @@ func (m *Manager) pullImage(ctx context.Context) error {
 	return nil
 }
 
-func createOptions() client.ContainerCreateOptions {
+func createOptions(cfg config.EtcdConfig) client.ContainerCreateOptions {
 	return client.ContainerCreateOptions{
 		Name: ContainerName,
 		Config: &container.Config{
 			Image:      Image,
 			User:       "0",
 			Entrypoint: []string{"/usr/local/bin/etcd"},
-			Cmd:        append([]string(nil), command...),
+			Cmd:        append(append([]string(nil), command...), cfg.Arguments()...),
 			Labels: map[string]string{
 				labelManaged: "true",
 				labelKind:    "etcd",
@@ -212,11 +241,11 @@ func owned(inspected container.InspectResponse) bool {
 		inspected.Config.Labels[labelKind] == "etcd"
 }
 
-func matchesDesired(inspected container.InspectResponse) bool {
+func matchesDesired(inspected container.InspectResponse, cfg config.EtcdConfig) bool {
 	if !owned(inspected) || inspected.HostConfig == nil {
 		return false
 	}
-	desired := createOptions()
+	desired := createOptions(cfg)
 	return inspected.Config.Image == desired.Config.Image &&
 		inspected.Config.User == desired.Config.User &&
 		equalEtcdStrings(inspected.Config.Entrypoint, desired.Config.Entrypoint) &&
@@ -330,14 +359,13 @@ func (m *Manager) waitReady(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		connection, err := (&net.Dialer{Timeout: time.Second}).DialContext(ctx, "tcp", endpoint)
+		err := m.probe(ctx)
 		if err == nil {
-			_ = connection.Close()
 			inspected, exists, inspectErr := m.inspect(ctx)
 			if inspectErr != nil {
 				return inspectErr
 			}
-			if exists && owned(inspected) && inspected.State != nil && inspected.State.Running {
+			if exists && matchesDesired(inspected, m.active) && inspected.State != nil && inspected.State.Running {
 				return nil
 			}
 			return errs.New(errs.KindStorageUnavailable, "etcd container: managed process stopped before readiness")

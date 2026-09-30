@@ -151,7 +151,7 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 	}
 	if result, transactErr := store.Transact(ctx, nil, []testkeyvalue.Mutation{
 		{Type: testkeyvalue.MutationPut, Key: testplatformcomponents.PlatformComponentTaskRenderInputKey(planID), Value: renderValue},
-		{Type: testkeyvalue.MutationPut, Key: platformComponentTaskActiveKey(input.ComponentID), Value: []byte(taskID)},
+		{Type: testkeyvalue.MutationPut, Key: testplatformcomponents.ActiveTaskKey(input.ComponentID), Value: []byte(taskID)},
 	}); transactErr != nil || !result.Succeeded {
 		t.Fatalf("seed render input transaction = %#v, %v", result, transactErr)
 	}
@@ -190,7 +190,7 @@ func TestPlatformComponentAcknowledgementAtomicallyPublishesObservation(t *testi
 	}
 	acknowledgementMutations := append([]testkeyvalue.Mutation(nil), change.mutations...)
 	acknowledgementMutations = append(acknowledgementMutations, testkeyvalue.Mutation{
-		Type: testkeyvalue.MutationDelete, Key: platformComponentTaskActiveKey(input.ComponentID),
+		Type: testkeyvalue.MutationDelete, Key: testplatformcomponents.ActiveTaskKey(input.ComponentID),
 	})
 	if transaction, transactErr := store.Transact(
 		ctx,

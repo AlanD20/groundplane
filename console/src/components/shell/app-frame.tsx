@@ -1,7 +1,7 @@
 "use client";
 
 import { ThemeToggle } from "@/components/common/theme-toggle";
-import { AcceptedTasks } from "@/features/task/task-access";
+import { TaskNotifications } from "@/features/task/task-access";
 import { Brand } from "./brand";
 
 import { Button } from "@/components/ui/button";
@@ -169,10 +169,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             <div className="min-w-0 flex-1">
               <Topbar pathname={pathname} />
             </div>
+            <TaskNotifications />
             <ThemeToggle />
           </div>
           <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 pb-12 pt-7 sm:px-6 lg:px-9 console-content">
-            <AcceptedTasks />
             <div className="console-page" key={pathname}>
               {children}
             </div>

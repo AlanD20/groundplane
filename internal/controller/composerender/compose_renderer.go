@@ -59,6 +59,7 @@ const (
 )
 
 type ComposeReleaseIdentity struct {
+	ProxyAddresses         map[string]string
 	ProxyImage             *domain.ProxyImage
 	ReleaseID              string
 	Target                 domain.WorkloadTarget

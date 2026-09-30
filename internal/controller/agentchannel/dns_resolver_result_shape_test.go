@@ -104,8 +104,8 @@ func TestDNSResolverResultShapeDerivesRollbackRequirementFromExecutedPlan(t *tes
 	}
 	unproved := dnsResolverShapeAck(agentpb.TaskTerminal_TASK_TERMINAL_FAILED, "publish", nil, nil)
 	unproved.GetComposeResult().ReconciliationRequired = true
-	if err := validateDNSResolverResultShape(unproved, plan); err == nil {
-		t.Fatal("ambiguous publish failure accepted without compensation proof")
+	if err := validateDNSResolverResultShape(unproved, plan); err != nil {
+		t.Fatalf("valid unresolved failure must remain reportable, not become a protocol failure: %v", err)
 	}
 	before := &agentpb.ExecutionStep{
 		StepId:  "before-publish",

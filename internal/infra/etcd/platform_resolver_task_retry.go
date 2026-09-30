@@ -29,7 +29,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			platformcomponents.PlatformComponentTaskRenderInputKey(source.Record.PlanID),
-			platformComponentTaskActiveKey(source.Record.Target),
+			platformcomponents.ActiveTaskKey(source.Record.Target),
 		},
 		Revision: source.ReadRevision,
 	})
@@ -81,18 +81,23 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 		origin.Record.PlanID != input.PlanID || origin.Record.Target != input.ComponentID {
 		return hostResolutionReconciliationChange{}, nil
 	}
+	activeRevision := int64(0)
 	if state.Values[1] != nil {
-		return hostResolutionReconciliationChange{}, errs.New(
-			errs.KindStateConflict,
-			"platform resolver already has an active successor",
-		)
+		if string(state.Values[1].Value) != source.Record.ID || source.Record.Result == nil ||
+			!source.Record.Result.ReconciliationRequired {
+			return hostResolutionReconciliationChange{}, errs.New(
+				errs.KindStateConflict,
+				"platform resolver already has an active successor",
+			)
+		}
+		activeRevision = state.Values[1].ModRevision
 	}
 	conditions := []etcdstore.Condition{
 		{
 			Key:         platformcomponents.PlatformComponentTaskRenderInputKey(input.PlanID),
 			ModRevision: state.Values[0].ModRevision,
 		},
-		{Key: platformComponentTaskActiveKey(input.ComponentID)},
+		{Key: platformcomponents.ActiveTaskKey(input.ComponentID), ModRevision: activeRevision},
 	}
 	if origin.Record.ID != source.Record.ID {
 		conditions = append(
@@ -105,7 +110,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 		applies:    true,
 		conditions: conditions,
 		mutations: []etcdstore.Mutation{{
-			Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(input.ComponentID), Value: value,
+			Type: etcdstore.MutationPut, Key: platformcomponents.ActiveTaskKey(input.ComponentID), Value: value,
 		}},
 		values: [][]byte{value},
 	}, nil

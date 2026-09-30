@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { operations } from "@/lib/api.generated";
 import type {
   PlatformInfra,
@@ -17,6 +17,8 @@ export type ComponentState = {
   managedConfigFiles: ManagedConfigFile[];
   managedConfigLoading: boolean;
   managedConfigError: string | null;
+  managedConfigComponentId: string | null;
+  managedConfigTaskId: string | null;
 };
 export type ComponentRefreshActions = {
   refreshPlatformComponents: (
@@ -39,6 +41,7 @@ export function useComponentRefresh(
     ) => void,
   ) => void,
 ): ComponentRefreshActions {
+  const configEpoch = useRef(0);
   const refreshPlatformComponents = useCallback(
     async (signal?: AbortSignal) => {
       const hydrated = hydratePlatformComponents(
@@ -57,7 +60,13 @@ export function useComponentRefresh(
 
   const refreshComponentConfig = useCallback(
     async (componentId: string, signal?: AbortSignal) => {
+      const epoch = ++configEpoch.current;
       update((draft) => {
+        if (draft.managedConfigComponentId !== componentId) {
+          draft.managedConfigFiles = [];
+          draft.managedConfigTaskId = null;
+        }
+        draft.managedConfigComponentId = componentId;
         draft.managedConfigLoading = true;
         draft.managedConfigError = null;
       });
@@ -71,14 +80,18 @@ export function useComponentRefresh(
           path: file.path,
           template: file.template,
           rendered: file.rendered,
+          generatedDirectives: file.generated_directives,
         }));
+        if (signal?.aborted || configEpoch.current !== epoch) return files;
         update((draft) => {
+          draft.managedConfigTaskId = response.active_task_id ?? null;
           draft.managedConfigFiles = files;
           draft.managedConfigLoading = false;
           draft.managedConfigError = null;
         });
         return files;
       } catch (error) {
+        if (signal?.aborted || configEpoch.current !== epoch) throw error;
         update((draft) => {
           draft.managedConfigLoading = false;
           draft.managedConfigError =

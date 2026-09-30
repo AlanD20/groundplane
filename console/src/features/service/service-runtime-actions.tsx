@@ -2,6 +2,7 @@
 
 import { HelpHint, ResourcePanel } from "@/components/common/resource-panel";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { DNSProtectedRemoval } from "@/features/platform-component/dns-protected-removal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/lib/store";
@@ -176,36 +177,42 @@ export function ServiceOperationDialog({
       ];
 
   return (
-    <TaskRunnerDialog
-      open
+    <DNSProtectedRemoval
+      open={removing}
       onOpenChange={onOpenChange}
-      title={title}
-      description={description}
-      type={operation}
-      target={service.id}
-      workspace={workspace}
-      destructive={operation === "destroy" || removing}
-      confirmText={
-        operation === "destroy" || removing ? service.name : undefined
-      }
-      startLabel={
-        removing
-          ? "Remove Service"
-          : operation === "destroy"
-            ? "Destroy runtime"
-            : `${operation[0].toUpperCase()}${operation.slice(1)} service`
-      }
-      steps={steps}
-      {...(removing
-        ? {
-            onDispatch: () => store.deleteService(env.id, service.id),
-            onCommit: onRemoved,
-          }
-        : {
-            onDispatch: () =>
-              store.runServiceRuntimeAction(env.id, service.id, operation),
-          })}
-    />
+      serviceId={service.id}
+    >
+      <TaskRunnerDialog
+        open
+        onOpenChange={onOpenChange}
+        title={title}
+        description={description}
+        type={operation}
+        target={service.id}
+        workspace={workspace}
+        destructive={operation === "destroy" || removing}
+        confirmText={
+          operation === "destroy" || removing ? service.name : undefined
+        }
+        startLabel={
+          removing
+            ? "Remove Service"
+            : operation === "destroy"
+              ? "Destroy runtime"
+              : `${operation[0].toUpperCase()}${operation.slice(1)} service`
+        }
+        steps={steps}
+        {...(removing
+          ? {
+              onDispatch: () => store.deleteService(env.id, service.id),
+              onCommit: onRemoved,
+            }
+          : {
+              onDispatch: () =>
+                store.runServiceRuntimeAction(env.id, service.id, operation),
+            })}
+      />
+    </DNSProtectedRemoval>
   );
 }
 

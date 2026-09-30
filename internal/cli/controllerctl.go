@@ -109,6 +109,7 @@ func newControllerCmd(deps Dependencies) *cobra.Command {
 			return inspectErr
 		},
 	})
+	etcd.AddCommand(newEtcdConfigCmd())
 	cmd.AddCommand(etcd)
 
 	configCmd := &cobra.Command{Use: "config", Short: "The Controller startup configuration"}

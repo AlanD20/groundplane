@@ -701,6 +701,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/etcd/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show saved etcd configuration */
+        get: operations["etcd.config.show"];
+        /** Validate and save etcd configuration without restarting */
+        put: operations["etcd.config.set"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/etcd/config/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply saved etcd configuration through a native Task */
+        post: operations["etcd.config.apply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/host": {
         parameters: {
             query?: never;
@@ -1836,6 +1871,15 @@ export interface components {
                 domain: string;
                 resolvers: string[];
             }[];
+            records?: ({
+                /** Format: ipv4 */
+                address: string;
+                hostname: string;
+            } | {
+                hostname: string;
+                service_id: string;
+                zone_id: string;
+            })[];
             tailnet_delegation: boolean;
             upstream_auto: boolean;
             upstream_resolvers: string[];
@@ -1871,6 +1915,15 @@ export interface components {
                     domain: string;
                     resolvers: string[];
                 }[];
+                records?: ({
+                    /** Format: ipv4 */
+                    address: string;
+                    hostname: string;
+                } | {
+                    hostname: string;
+                    service_id: string;
+                    zone_id: string;
+                })[];
                 tailnet_delegation: boolean;
                 upstream_auto: boolean;
                 upstream_resolvers: string[];
@@ -1893,6 +1946,7 @@ export interface components {
              * @example /api/v1/ComponentConfigResponse.json
              */
             readonly $schema?: string;
+            active_task_id?: string;
             config: components["schemas"]["ComponentConfig"] | null;
             managed_files: components["schemas"]["ManagedConfigFile"][];
         };
@@ -2243,6 +2297,37 @@ export interface components {
             title: string;
             type: string;
         };
+        EtcdConfigApplyRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EtcdConfigApplyRequest.json
+             */
+            readonly $schema?: string;
+            expected_revision: string;
+        };
+        EtcdConfigDocument: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EtcdConfigDocument.json
+             */
+            readonly $schema?: string;
+            apply_required: boolean;
+            content: string;
+            path: string;
+            revision: string;
+        };
+        EtcdConfigReplacement: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/v1/EtcdConfigReplacement.json
+             */
+            readonly $schema?: string;
+            content: string;
+            expected_revision: string;
+        };
         HierarchyDeleteOutputBody: {
             /**
              * Format: uri
@@ -2397,6 +2482,7 @@ export interface components {
             truncated: boolean;
         };
         ManagedConfigFile: {
+            generated_directives?: string;
             path: string;
             rendered: string;
             template: string;
@@ -3301,6 +3387,7 @@ export interface components {
             operation_id: string;
             plan_hash?: string;
             project_id?: string;
+            reconciliation_required: boolean;
             retry_of?: string;
             /** Format: date-time */
             started_at: string | null;
@@ -3562,6 +3649,9 @@ export interface operations {
                 environment?: string;
                 project?: string;
                 workspace?: string;
+                status?: "pending" | "running" | "completed" | "failed" | "timed_out" | "aborted";
+                type?: string;
+                resource_kind?: string;
             };
             header?: never;
             path?: never;
@@ -5514,6 +5604,106 @@ export interface operations {
             };
         };
     };
+    "etcd.config.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EtcdConfigDocument"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "etcd.config.set": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EtcdConfigReplacement"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EtcdConfigDocument"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    "etcd.config.apply": {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EtcdConfigApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAccepted"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     "host.show": {
         parameters: {
             query?: never;
@@ -7355,6 +7545,9 @@ export interface operations {
                 environment?: string;
                 project?: string;
                 workspace?: string;
+                status?: "pending" | "running" | "completed" | "failed" | "timed_out" | "aborted";
+                type?: string;
+                resource_kind?: string;
             };
             header?: never;
             path?: never;

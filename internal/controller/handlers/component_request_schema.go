@@ -83,6 +83,7 @@ func componentEnableRequestSchema(registry huma.Registry) *huma.Schema {
 
 func coreDNSComponentConfigSchema() *huma.Schema {
 	five := 5
+	six := 6
 	resolverList := &huma.Schema{
 		Type:  huma.TypeArray,
 		Items: &huma.Schema{Type: huma.TypeString},
@@ -100,7 +101,11 @@ func coreDNSComponentConfigSchema() *huma.Schema {
 		Type:                 huma.TypeObject,
 		AdditionalProperties: false,
 		Properties: map[string]*huma.Schema{
-			"corefile_template":  {Type: huma.TypeString},
+			"corefile_template": {Type: huma.TypeString},
+			"records": {
+				Type:  huma.TypeArray,
+				Items: &huma.Schema{OneOf: []*huma.Schema{dnsAddressRecordSchema(), dnsServiceRecordSchema()}},
+			},
 			"upstream_auto":      {Type: huma.TypeBoolean},
 			"upstream_resolvers": resolverList,
 			"forwarders":         {Type: huma.TypeArray, Items: forwarder},
@@ -114,7 +119,7 @@ func coreDNSComponentConfigSchema() *huma.Schema {
 			"tailnet_delegation",
 		},
 		MinProperties: &five,
-		MaxProperties: &five,
+		MaxProperties: &six,
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
@@ -174,6 +175,11 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
+	dnsConditions, err := dnsrecords.NewReader(repository.store).
+		RequireDNSUnreferenced(ctx, "", zone.Record.Desired.ID, authorities.Desired.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 
 	tombstoneKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID)
 	conditions := []etcdstore.Condition{
@@ -207,6 +213,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
+	conditions = append(conditions, dnsConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{

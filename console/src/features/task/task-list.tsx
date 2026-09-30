@@ -4,50 +4,28 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useStore } from "@/lib/store";
 import type {
-  ActivityEntry,
   TaskJournalScope,
   TaskJournalSurface,
+  TaskStatus,
+  TaskType,
 } from "@/lib/types";
 import { RefreshCw } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { TaskPagination } from "./task-pagination";
 
 const filters = [
-  { value: "all", label: "All statuses", match: () => true },
-  {
-    value: "running",
-    label: "Running",
-    match: (task: ActivityEntry) => task.status === "running",
-  },
-  {
-    value: "pending",
-    label: "Queued",
-    match: (task: ActivityEntry) => task.status === "pending",
-  },
-  {
-    value: "completed",
-    label: "Completed",
-    match: (task: ActivityEntry) => task.status === "completed",
-  },
-  {
-    value: "failed",
-    label: "Failed",
-    match: (task: ActivityEntry) => task.status === "failed",
-  },
-  {
-    value: "timed_out",
-    label: "Timed out",
-    match: (task: ActivityEntry) => task.status === "timed_out",
-  },
-  {
-    value: "aborted",
-    label: "Aborted",
-    match: (task: ActivityEntry) => task.status === "aborted",
-  },
+  { value: "all", label: "All statuses" },
+  { value: "running", label: "Running" },
+  { value: "pending", label: "Queued" },
+  { value: "completed", label: "Completed" },
+  { value: "failed", label: "Failed" },
+  { value: "timed_out", label: "Timed out" },
+  { value: "aborted", label: "Aborted" },
 ];
 
 export function TaskList({
-  scope,
+  scope: ownerScope,
   title,
   surface = "tasks",
   filters: ownerFilters,
@@ -58,12 +36,23 @@ export function TaskList({
   filters?: ReactNode;
 }) {
   const store = useStore();
-  const [filter, setFilter] = useState("all");
-  const journal = store.getTaskJournal(scope);
-  const visible = journal.entries.filter(
-    (task) =>
-      filters.find((item) => item.value === filter)?.match(task) ?? true,
+  const [search] = useSearchParams();
+  const [filter, setFilter] = useState(search.get("status") ?? "all");
+  const [resource, setResource] = useState(
+    search.get("resource_kind") ?? "all",
   );
+  const [operation, setOperation] = useState(search.get("type") ?? "all");
+  const scope = useMemo(
+    () => ({
+      ...ownerScope,
+      status: filter === "all" ? undefined : (filter as TaskStatus),
+      resourceKind: resource === "all" ? undefined : resource,
+      taskType: operation === "all" ? undefined : (operation as TaskType),
+    }),
+    [ownerScope, filter, resource, operation],
+  );
+  const journal = store.getTaskJournal(scope);
+  const visible = journal.entries;
   const busy = journal.loading || journal.loadingMore;
   useEffect(() => {
     void store.loadTaskJournal(surface, scope).catch(() => undefined);
@@ -74,8 +63,7 @@ export function TaskList({
         <span className="flex items-center gap-2">
           {title}
           <HelpHint label="About Task filtering">
-            Newest first. Status filters apply to the current page, not the
-            entire history.
+            Newest first. Filters search the whole recorded history.
           </HelpHint>
         </span>
       }
@@ -88,6 +76,72 @@ export function TaskList({
             value={filter}
             options={filters}
             onValueChange={setFilter}
+          />
+          <Select
+            aria-label="Task resource"
+            className="w-40"
+            value={resource}
+            onValueChange={setResource}
+            options={[
+              { value: "all", label: "All resources" },
+              ...[
+                "component",
+                "service",
+                "image",
+                "agent",
+                "controller",
+                "etcd",
+                "runner",
+                "route",
+                "entry",
+                "secret",
+                "volume",
+                "backing_zone",
+                "connector",
+                "script",
+                "release_group",
+                "hierarchy_deletion",
+              ].map((value) => ({
+                value,
+                label: value
+                  .replaceAll("_", " ")
+                  .replace(/^./, (letter) => letter.toUpperCase()),
+              })),
+            ]}
+          />
+          <Select
+            aria-label="Task operation"
+            className="w-40"
+            value={operation}
+            onValueChange={setOperation}
+            options={[
+              { value: "all", label: "All operations" },
+              ...[
+                "deploy",
+                "rollback",
+                "backup",
+                "backup_prune",
+                "restore",
+                "attach",
+                "detach",
+                "run",
+                "script",
+                "provision",
+                "create",
+                "update",
+                "remove",
+                "start",
+                "stop",
+                "destroy",
+                "rotate",
+                "fetch",
+              ].map((value) => ({
+                value,
+                label: value
+                  .replaceAll("_", " ")
+                  .replace(/^./, (letter) => letter.toUpperCase()),
+              })),
+            ]}
           />
           <Button
             variant="outline"
@@ -134,7 +188,7 @@ export function TaskList({
       )}
       {!journal.loading && visible.length === 0 && (
         <p className="py-4 text-center text-xs text-muted-foreground">
-          No Tasks on this page match this filter.
+          No recorded Tasks match these filters.
         </p>
       )}
       <div className="divide-y divide-border">

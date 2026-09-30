@@ -122,14 +122,14 @@ export default function PlatformHostPage() {
                   <TableCell>{host.controller.version}</TableCell>
                   <TableCell>{host.controller.service}</TableCell>
                 </ResourceRow>
-                <TableRow>
+                <ResourceRow href="/platform/host/etcd">
                   <TableCell className="font-medium">etcd</TableCell>
                   <TableCell>
                     <StatusBadge status={host.etcd.status} />
                   </TableCell>
                   <TableCell>{host.etcd.dbSize}</TableCell>
                   <TableCell>{host.etcd.node}</TableCell>
-                </TableRow>
+                </ResourceRow>
               </TableBody>
             </Table>
           </ResourceTable>

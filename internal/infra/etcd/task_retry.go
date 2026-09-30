@@ -21,10 +21,11 @@ func CloneRetryTask(
 	if err := ValidateTaskRecord(source); err != nil {
 		return TaskRecord{}, err
 	}
-	if source.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController {
+	if source.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceController ||
+		source.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEtcd {
 		return TaskRecord{}, errs.New(
 			errs.KindTaskNotRetryable,
-			"Controller update requires a fresh explicit release selection",
+			"native Controller/etcd updates require a fresh explicit selection",
 		)
 	}
 	if source.Status != taskjournal.TaskStatusFailed && source.Status != taskjournal.TaskStatusTimedOut &&

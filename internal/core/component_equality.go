@@ -23,6 +23,7 @@ func EqualComponentConfig(left, right ComponentConfig) bool {
 		return true
 	}
 	if left.CoreDNS.CorefileTemplate != right.CoreDNS.CorefileTemplate ||
+		!slices.Equal(left.CoreDNS.Records, right.CoreDNS.Records) ||
 		left.CoreDNS.UpstreamAuto != right.CoreDNS.UpstreamAuto ||
 		left.CoreDNS.TailnetDelegation != right.CoreDNS.TailnetDelegation ||
 		!equalComponentSlice(left.CoreDNS.UpstreamResolvers, right.CoreDNS.UpstreamResolvers) ||

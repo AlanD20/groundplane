@@ -53,6 +53,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		},
 		{Key: releases.ReleasePublicationKey(evidence.Manifest.Record.PublicationID)},
 	}
+	conditions = append(conditions, evidence.ProxyAddresses.Conditions()...)
 	nativeConditions, err := ledger.blueprintNativePredecessorConditions(ctx, evidence)
 	if err != nil {
 		return BlueprintReleasePublication{}, err
@@ -87,6 +88,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			Value: publicationValue,
 		},
 	}
+	mutations = append(mutations, evidence.ProxyAddresses.Mutations()...)
 	for _, member := range evidence.Manifest.Record.Members {
 		environmentValue, encodeErr := json.Marshal(releases.ReleaseEnvironmentIndexValue{
 			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,

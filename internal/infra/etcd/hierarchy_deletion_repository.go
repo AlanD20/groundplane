@@ -212,15 +212,15 @@ type HierarchyDeletionBeginResult struct {
 }
 
 type hierarchyDeletionRoot struct {
-	targetKey        string
-	targetRevision   int64
-	targetValue      []byte
-	rootSlug         string
-	workspace        hierarchydeletion.HierarchyDeletionWorkspace
-	owner            taskjournal.TaskOwner
-	primaryFences    []etcdstore.Condition
-	coordination     []etcdstore.Versioned[hierarchydeletion.HierarchyCoordinationRecord]
-	coordinationKeys []string
+	targetKey                      string
+	targetRevision                 int64
+	targetValue                    []byte
+	rootSlug                       string
+	workspace                      hierarchydeletion.HierarchyDeletionWorkspace
+	owner                          taskjournal.TaskOwner
+	primaryFences, referenceFences []etcdstore.Condition
+	coordination                   []etcdstore.Versioned[hierarchydeletion.HierarchyCoordinationRecord]
+	coordinationKeys               []string
 }
 
 func (repository *HierarchyDeletionRepository) Begin(

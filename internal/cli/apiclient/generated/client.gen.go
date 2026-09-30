@@ -841,6 +841,66 @@ func (e ZoneRemovalImpactMode) Valid() bool {
 	}
 }
 
+// Defines values for ActivityListParamsStatus.
+const (
+	ActivityListParamsStatusAborted   ActivityListParamsStatus = "aborted"
+	ActivityListParamsStatusCompleted ActivityListParamsStatus = "completed"
+	ActivityListParamsStatusFailed    ActivityListParamsStatus = "failed"
+	ActivityListParamsStatusPending   ActivityListParamsStatus = "pending"
+	ActivityListParamsStatusRunning   ActivityListParamsStatus = "running"
+	ActivityListParamsStatusTimedOut  ActivityListParamsStatus = "timed_out"
+)
+
+// Valid indicates whether the value is a known member of the ActivityListParamsStatus enum.
+func (e ActivityListParamsStatus) Valid() bool {
+	switch e {
+	case ActivityListParamsStatusAborted:
+		return true
+	case ActivityListParamsStatusCompleted:
+		return true
+	case ActivityListParamsStatusFailed:
+		return true
+	case ActivityListParamsStatusPending:
+		return true
+	case ActivityListParamsStatusRunning:
+		return true
+	case ActivityListParamsStatusTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskListParamsStatus.
+const (
+	TaskListParamsStatusAborted   TaskListParamsStatus = "aborted"
+	TaskListParamsStatusCompleted TaskListParamsStatus = "completed"
+	TaskListParamsStatusFailed    TaskListParamsStatus = "failed"
+	TaskListParamsStatusPending   TaskListParamsStatus = "pending"
+	TaskListParamsStatusRunning   TaskListParamsStatus = "running"
+	TaskListParamsStatusTimedOut  TaskListParamsStatus = "timed_out"
+)
+
+// Valid indicates whether the value is a known member of the TaskListParamsStatus enum.
+func (e TaskListParamsStatus) Valid() bool {
+	switch e {
+	case TaskListParamsStatusAborted:
+		return true
+	case TaskListParamsStatusCompleted:
+		return true
+	case TaskListParamsStatusFailed:
+		return true
+	case TaskListParamsStatusPending:
+		return true
+	case TaskListParamsStatusRunning:
+		return true
+	case TaskListParamsStatusTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
 // Agent defines model for Agent.
 type Agent struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1191,9 +1251,28 @@ type ComponentConfig2 struct {
 		Domain    string   `json:"domain"`
 		Resolvers []string `json:"resolvers"`
 	} `json:"forwarders"`
-	TailnetDelegation bool     `json:"tailnet_delegation"`
-	UpstreamAuto      bool     `json:"upstream_auto"`
-	UpstreamResolvers []string `json:"upstream_resolvers"`
+	Records           *[]ComponentConfig_2_Records_Item `json:"records,omitempty"`
+	TailnetDelegation bool                              `json:"tailnet_delegation"`
+	UpstreamAuto      bool                              `json:"upstream_auto"`
+	UpstreamResolvers []string                          `json:"upstream_resolvers"`
+}
+
+// ComponentConfig2Records0 defines model for ComponentConfig.2.Records.0.
+type ComponentConfig2Records0 struct {
+	Address  string `json:"address"`
+	Hostname string `json:"hostname"`
+}
+
+// ComponentConfig2Records1 defines model for ComponentConfig.2.Records.1.
+type ComponentConfig2Records1 struct {
+	Hostname  string `json:"hostname"`
+	ServiceId string `json:"service_id"`
+	ZoneId    string `json:"zone_id"`
+}
+
+// ComponentConfig_2_Records_Item defines model for ComponentConfig.2.Records.Item.
+type ComponentConfig_2_Records_Item struct {
+	union json.RawMessage
 }
 
 // ComponentConfigMutationRequest defines model for ComponentConfigMutationRequest.
@@ -1253,9 +1332,28 @@ type ComponentConfigMutationRequestConfig2 struct {
 		Domain    string   `json:"domain"`
 		Resolvers []string `json:"resolvers"`
 	} `json:"forwarders"`
-	TailnetDelegation bool     `json:"tailnet_delegation"`
-	UpstreamAuto      bool     `json:"upstream_auto"`
-	UpstreamResolvers []string `json:"upstream_resolvers"`
+	Records           *[]ComponentConfigMutationRequest_Config_2_Records_Item `json:"records,omitempty"`
+	TailnetDelegation bool                                                    `json:"tailnet_delegation"`
+	UpstreamAuto      bool                                                    `json:"upstream_auto"`
+	UpstreamResolvers []string                                                `json:"upstream_resolvers"`
+}
+
+// ComponentConfigMutationRequestConfig2Records0 defines model for ComponentConfigMutationRequest.Config.2.Records.0.
+type ComponentConfigMutationRequestConfig2Records0 struct {
+	Address  string `json:"address"`
+	Hostname string `json:"hostname"`
+}
+
+// ComponentConfigMutationRequestConfig2Records1 defines model for ComponentConfigMutationRequest.Config.2.Records.1.
+type ComponentConfigMutationRequestConfig2Records1 struct {
+	Hostname  string `json:"hostname"`
+	ServiceId string `json:"service_id"`
+	ZoneId    string `json:"zone_id"`
+}
+
+// ComponentConfigMutationRequest_Config_2_Records_Item defines model for ComponentConfigMutationRequest.config.2.records.Item.
+type ComponentConfigMutationRequest_Config_2_Records_Item struct {
+	union json.RawMessage
 }
 
 // ComponentConfigMutationRequest_Config defines model for ComponentConfigMutationRequest.Config.
@@ -1279,6 +1377,7 @@ type ComponentConfigResponse struct {
 	//
 	// Examples: /api/v1/ComponentConfigResponse.json
 	Schema       *string             `json:"$schema,omitempty"`
+	ActiveTaskId *string             `json:"active_task_id,omitempty"`
 	Config       *ComponentConfig    `json:"config"`
 	ManagedFiles []ManagedConfigFile `json:"managed_files"`
 }
@@ -1676,6 +1775,37 @@ type Error struct {
 	Type   string `json:"type"`
 }
 
+// EtcdConfigApplyRequest defines model for EtcdConfigApplyRequest.
+type EtcdConfigApplyRequest struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EtcdConfigApplyRequest.json
+	Schema           *string `json:"$schema,omitempty"`
+	ExpectedRevision string  `json:"expected_revision"`
+}
+
+// EtcdConfigDocument defines model for EtcdConfigDocument.
+type EtcdConfigDocument struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EtcdConfigDocument.json
+	Schema        *string `json:"$schema,omitempty"`
+	ApplyRequired bool    `json:"apply_required"`
+	Content       string  `json:"content"`
+	Path          string  `json:"path"`
+	Revision      string  `json:"revision"`
+}
+
+// EtcdConfigReplacement defines model for EtcdConfigReplacement.
+type EtcdConfigReplacement struct {
+	// Schema A URL to the JSON Schema for this object.
+	//
+	// Examples: /api/v1/EtcdConfigReplacement.json
+	Schema           *string `json:"$schema,omitempty"`
+	Content          string  `json:"content"`
+	ExpectedRevision string  `json:"expected_revision"`
+}
+
 // HierarchyDeleteOutputBody defines model for HierarchyDeleteOutputBody.
 type HierarchyDeleteOutputBody struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -1857,9 +1987,10 @@ type LogEventStream string
 
 // ManagedConfigFile defines model for ManagedConfigFile.
 type ManagedConfigFile struct {
-	Path     string `json:"path"`
-	Rendered string `json:"rendered"`
-	Template string `json:"template"`
+	GeneratedDirectives *string `json:"generated_directives,omitempty"`
+	Path                string  `json:"path"`
+	Rendered            string  `json:"rendered"`
+	Template            string  `json:"template"`
 }
 
 // OptionalNullableString defines model for OptionalNullableString.
@@ -2760,25 +2891,26 @@ type Task struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/Task.json
-	Schema        *string           `json:"$schema,omitempty"`
-	Actor         TaskActor         `json:"actor"`
-	CreatedAt     time.Time         `json:"created_at"`
-	EnvironmentId *string           `json:"environment_id,omitempty"`
-	FinishedAt    *time.Time        `json:"finished_at"`
-	Id            string            `json:"id"`
-	ImageFetch    *TaskImageFetch   `json:"image_fetch,omitempty"`
-	OperationId   string            `json:"operation_id"`
-	PlanHash      *string           `json:"plan_hash,omitempty"`
-	ProjectId     *string           `json:"project_id,omitempty"`
-	RetryOf       *string           `json:"retry_of,omitempty"`
-	StartedAt     *time.Time        `json:"started_at"`
-	Status        string            `json:"status"`
-	Steps         *[]TaskStep       `json:"steps,omitempty"`
-	Target        string            `json:"target"`
-	TenantId      *string           `json:"tenant_id,omitempty"`
-	Type          TaskType          `json:"type"`
-	UpdatedAt     time.Time         `json:"updated_at"`
-	WorkspaceType TaskWorkspaceType `json:"workspace_type"`
+	Schema                 *string           `json:"$schema,omitempty"`
+	Actor                  TaskActor         `json:"actor"`
+	CreatedAt              time.Time         `json:"created_at"`
+	EnvironmentId          *string           `json:"environment_id,omitempty"`
+	FinishedAt             *time.Time        `json:"finished_at"`
+	Id                     string            `json:"id"`
+	ImageFetch             *TaskImageFetch   `json:"image_fetch,omitempty"`
+	OperationId            string            `json:"operation_id"`
+	PlanHash               *string           `json:"plan_hash,omitempty"`
+	ProjectId              *string           `json:"project_id,omitempty"`
+	ReconciliationRequired bool              `json:"reconciliation_required"`
+	RetryOf                *string           `json:"retry_of,omitempty"`
+	StartedAt              *time.Time        `json:"started_at"`
+	Status                 string            `json:"status"`
+	Steps                  *[]TaskStep       `json:"steps,omitempty"`
+	Target                 string            `json:"target"`
+	TenantId               *string           `json:"tenant_id,omitempty"`
+	Type                   TaskType          `json:"type"`
+	UpdatedAt              time.Time         `json:"updated_at"`
+	WorkspaceType          TaskWorkspaceType `json:"workspace_type"`
 }
 
 // TaskActor defines model for Task.Actor.
@@ -3042,12 +3174,18 @@ type ZoneRemovalImpactService struct {
 
 // ActivityListParams defines parameters for ActivityList.
 type ActivityListParams struct {
-	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
-	Project     *string `form:"project,omitempty" json:"project,omitempty"`
-	Workspace   *string `form:"workspace,omitempty" json:"workspace,omitempty"`
+	Limit        *int64                    `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor       *string                   `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Environment  *string                   `form:"environment,omitempty" json:"environment,omitempty"`
+	Project      *string                   `form:"project,omitempty" json:"project,omitempty"`
+	Workspace    *string                   `form:"workspace,omitempty" json:"workspace,omitempty"`
+	Status       *ActivityListParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Type         *string                   `form:"type,omitempty" json:"type,omitempty"`
+	ResourceKind *string                   `form:"resource_kind,omitempty" json:"resource_kind,omitempty"`
 }
+
+// ActivityListParamsStatus defines parameters for ActivityList.
+type ActivityListParamsStatus string
 
 // AgentListParams defines parameters for AgentList.
 type AgentListParams struct {
@@ -3279,6 +3417,16 @@ type EnvironmentRenameParams struct {
 
 // BackupKeyRotateParams defines parameters for BackupKeyRotate.
 type BackupKeyRotateParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// EtcdConfigSetParams defines parameters for EtcdConfigSet.
+type EtcdConfigSetParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
+// EtcdConfigApplyParams defines parameters for EtcdConfigApply.
+type EtcdConfigApplyParams struct {
 	IdempotencyKey string `json:"Idempotency-Key"`
 }
 
@@ -3516,12 +3664,18 @@ type ServiceStopParams struct {
 
 // TaskListParams defines parameters for TaskList.
 type TaskListParams struct {
-	Limit       *int64  `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor      *string `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Environment *string `form:"environment,omitempty" json:"environment,omitempty"`
-	Project     *string `form:"project,omitempty" json:"project,omitempty"`
-	Workspace   *string `form:"workspace,omitempty" json:"workspace,omitempty"`
+	Limit        *int64                `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor       *string               `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Environment  *string               `form:"environment,omitempty" json:"environment,omitempty"`
+	Project      *string               `form:"project,omitempty" json:"project,omitempty"`
+	Workspace    *string               `form:"workspace,omitempty" json:"workspace,omitempty"`
+	Status       *TaskListParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Type         *string               `form:"type,omitempty" json:"type,omitempty"`
+	ResourceKind *string               `form:"resource_kind,omitempty" json:"resource_kind,omitempty"`
 }
+
+// TaskListParamsStatus defines parameters for TaskList.
+type TaskListParamsStatus string
 
 // TaskAbortParams defines parameters for TaskAbort.
 type TaskAbortParams struct {
@@ -3669,6 +3823,12 @@ type BlueprintValidateMultipartRequestBody = BlueprintValidateMultipartBody
 
 // EnvironmentRenameJSONRequestBody defines body for EnvironmentRename for application/json ContentType.
 type EnvironmentRenameJSONRequestBody = EnvironmentRename
+
+// EtcdConfigSetJSONRequestBody defines body for EtcdConfigSet for application/json ContentType.
+type EtcdConfigSetJSONRequestBody = EtcdConfigReplacement
+
+// EtcdConfigApplyJSONRequestBody defines body for EtcdConfigApply for application/json ContentType.
+type EtcdConfigApplyJSONRequestBody = EtcdConfigApplyRequest
 
 // ImageFetchJSONRequestBody defines body for ImageFetch for application/json ContentType.
 type ImageFetchJSONRequestBody = ImageFetchRequest
@@ -4075,6 +4235,68 @@ func (t *ComponentConfig) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsComponentConfig2Records0 returns the union data inside the ComponentConfig_2_Records_Item as a ComponentConfig2Records0
+func (t ComponentConfig_2_Records_Item) AsComponentConfig2Records0() (ComponentConfig2Records0, error) {
+	var body ComponentConfig2Records0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfig2Records0 overwrites any union data inside the ComponentConfig_2_Records_Item as the provided ComponentConfig2Records0
+func (t *ComponentConfig_2_Records_Item) FromComponentConfig2Records0(v ComponentConfig2Records0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfig2Records0 performs a merge with any union data inside the ComponentConfig_2_Records_Item, using the provided ComponentConfig2Records0
+func (t *ComponentConfig_2_Records_Item) MergeComponentConfig2Records0(v ComponentConfig2Records0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfig2Records1 returns the union data inside the ComponentConfig_2_Records_Item as a ComponentConfig2Records1
+func (t ComponentConfig_2_Records_Item) AsComponentConfig2Records1() (ComponentConfig2Records1, error) {
+	var body ComponentConfig2Records1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfig2Records1 overwrites any union data inside the ComponentConfig_2_Records_Item as the provided ComponentConfig2Records1
+func (t *ComponentConfig_2_Records_Item) FromComponentConfig2Records1(v ComponentConfig2Records1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfig2Records1 performs a merge with any union data inside the ComponentConfig_2_Records_Item, using the provided ComponentConfig2Records1
+func (t *ComponentConfig_2_Records_Item) MergeComponentConfig2Records1(v ComponentConfig2Records1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ComponentConfig_2_Records_Item) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ComponentConfig_2_Records_Item) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // AsComponentConfigMutationRequestConfig1Credential0 returns the union data inside the ComponentConfigMutationRequest_Config_1_Credential as a ComponentConfigMutationRequestConfig1Credential0
 func (t ComponentConfigMutationRequest_Config_1_Credential) AsComponentConfigMutationRequestConfig1Credential0() (ComponentConfigMutationRequestConfig1Credential0, error) {
 	var body ComponentConfigMutationRequestConfig1Credential0
@@ -4133,6 +4355,68 @@ func (t ComponentConfigMutationRequest_Config_1_Credential) MarshalJSON() ([]byt
 }
 
 func (t *ComponentConfigMutationRequest_Config_1_Credential) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsComponentConfigMutationRequestConfig2Records0 returns the union data inside the ComponentConfigMutationRequest_Config_2_Records_Item as a ComponentConfigMutationRequestConfig2Records0
+func (t ComponentConfigMutationRequest_Config_2_Records_Item) AsComponentConfigMutationRequestConfig2Records0() (ComponentConfigMutationRequestConfig2Records0, error) {
+	var body ComponentConfigMutationRequestConfig2Records0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig2Records0 overwrites any union data inside the ComponentConfigMutationRequest_Config_2_Records_Item as the provided ComponentConfigMutationRequestConfig2Records0
+func (t *ComponentConfigMutationRequest_Config_2_Records_Item) FromComponentConfigMutationRequestConfig2Records0(v ComponentConfigMutationRequestConfig2Records0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig2Records0 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_2_Records_Item, using the provided ComponentConfigMutationRequestConfig2Records0
+func (t *ComponentConfigMutationRequest_Config_2_Records_Item) MergeComponentConfigMutationRequestConfig2Records0(v ComponentConfigMutationRequestConfig2Records0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsComponentConfigMutationRequestConfig2Records1 returns the union data inside the ComponentConfigMutationRequest_Config_2_Records_Item as a ComponentConfigMutationRequestConfig2Records1
+func (t ComponentConfigMutationRequest_Config_2_Records_Item) AsComponentConfigMutationRequestConfig2Records1() (ComponentConfigMutationRequestConfig2Records1, error) {
+	var body ComponentConfigMutationRequestConfig2Records1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromComponentConfigMutationRequestConfig2Records1 overwrites any union data inside the ComponentConfigMutationRequest_Config_2_Records_Item as the provided ComponentConfigMutationRequestConfig2Records1
+func (t *ComponentConfigMutationRequest_Config_2_Records_Item) FromComponentConfigMutationRequestConfig2Records1(v ComponentConfigMutationRequestConfig2Records1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeComponentConfigMutationRequestConfig2Records1 performs a merge with any union data inside the ComponentConfigMutationRequest_Config_2_Records_Item, using the provided ComponentConfigMutationRequestConfig2Records1
+func (t *ComponentConfigMutationRequest_Config_2_Records_Item) MergeComponentConfigMutationRequestConfig2Records1(v ComponentConfigMutationRequestConfig2Records1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t ComponentConfigMutationRequest_Config_2_Records_Item) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *ComponentConfigMutationRequest_Config_2_Records_Item) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -5271,6 +5555,39 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /environments/{id}/router (the `RouterShow` operationId).
 	RouterShow(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EtcdConfigShow Show saved etcd configuration
+	//
+	// Corresponds with GET /etcd/config (the `EtcdConfigShow` operationId).
+	EtcdConfigShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EtcdConfigSetWithBody Validate and save etcd configuration without restarting
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /etcd/config (the `EtcdConfigSet` operationId).
+	EtcdConfigSetWithBody(ctx context.Context, params *EtcdConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EtcdConfigSet Validate and save etcd configuration without restarting
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /etcd/config (the `EtcdConfigSet` operationId).
+	EtcdConfigSet(ctx context.Context, params *EtcdConfigSetParams, body EtcdConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EtcdConfigApplyWithBody Apply saved etcd configuration through a native Task
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
+	EtcdConfigApplyWithBody(ctx context.Context, params *EtcdConfigApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EtcdConfigApply Apply saved etcd configuration through a native Task
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
+	EtcdConfigApply(ctx context.Context, params *EtcdConfigApplyParams, body EtcdConfigApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// HostShow Show host health
 	//
@@ -7066,6 +7383,89 @@ func (c *Client) RouterShow(ctx context.Context, id string, reqEditors ...Reques
 	return c.Client.Do(req)
 }
 
+// EtcdConfigShow Show saved etcd configuration
+//
+// Corresponds with GET /etcd/config (the `EtcdConfigShow` operationId).
+func (c *Client) EtcdConfigShow(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEtcdConfigShowRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EtcdConfigSetWithBody Validate and save etcd configuration without restarting
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /etcd/config (the `EtcdConfigSet` operationId).
+func (c *Client) EtcdConfigSetWithBody(ctx context.Context, params *EtcdConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEtcdConfigSetRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EtcdConfigSet Validate and save etcd configuration without restarting
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /etcd/config (the `EtcdConfigSet` operationId).
+func (c *Client) EtcdConfigSet(ctx context.Context, params *EtcdConfigSetParams, body EtcdConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEtcdConfigSetRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EtcdConfigApplyWithBody Apply saved etcd configuration through a native Task
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
+func (c *Client) EtcdConfigApplyWithBody(ctx context.Context, params *EtcdConfigApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEtcdConfigApplyRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EtcdConfigApply Apply saved etcd configuration through a native Task
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
+func (c *Client) EtcdConfigApply(ctx context.Context, params *EtcdConfigApplyParams, body EtcdConfigApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEtcdConfigApplyRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // HostShow Show host health
 //
 // Corresponds with GET /host (the `HostShow` operationId).
@@ -8766,6 +9166,42 @@ func NewActivityListRequest(server string, params *ActivityListParams) (*http.Re
 		if params.Workspace != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "workspace", *params.Workspace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Type != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ResourceKind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "resource_kind", *params.ResourceKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -11683,6 +12119,139 @@ func NewRouterShowRequest(server string, id string) (*http.Request, error) {
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
 	if err != nil {
 		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEtcdConfigShowRequest constructs an http.Request for the EtcdConfigShow method
+func NewEtcdConfigShowRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/etcd/config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEtcdConfigSetRequest calls the generic EtcdConfigSet builder with application/json body
+func NewEtcdConfigSetRequest(server string, params *EtcdConfigSetParams, body EtcdConfigSetJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEtcdConfigSetRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewEtcdConfigSetRequestWithBody constructs an http.Request for the EtcdConfigSet method, with any body, and a specified content type
+func NewEtcdConfigSetRequestWithBody(server string, params *EtcdConfigSetParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/etcd/config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewEtcdConfigApplyRequest calls the generic EtcdConfigApply builder with application/json body
+func NewEtcdConfigApplyRequest(server string, params *EtcdConfigApplyParams, body EtcdConfigApplyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEtcdConfigApplyRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewEtcdConfigApplyRequestWithBody constructs an http.Request for the EtcdConfigApply method, with any body, and a specified content type
+func NewEtcdConfigApplyRequestWithBody(server string, params *EtcdConfigApplyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/etcd/config/apply")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
 	}
 
 	return req, nil
@@ -14642,6 +15211,42 @@ func NewTaskListRequest(server string, params *TaskListParams) (*http.Request, e
 
 		}
 
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "status", *params.Status, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Type != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "type", *params.Type, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ResourceKind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "resource_kind", *params.ResourceKind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -16355,6 +16960,41 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /environments/{id}/router (the `RouterShow` operationId).
 	RouterShowWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RouterShowResponse, error)
+
+	// EtcdConfigShowWithResponse Show saved etcd configuration
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /etcd/config (the `EtcdConfigShow` operationId).
+	EtcdConfigShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*EtcdConfigShowResponse, error)
+
+	// EtcdConfigSetWithBodyWithResponse Validate and save etcd configuration without restarting
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /etcd/config (the `EtcdConfigSet` operationId).
+	EtcdConfigSetWithBodyWithResponse(ctx context.Context, params *EtcdConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EtcdConfigSetResponse, error)
+
+	// EtcdConfigSetWithResponse Validate and save etcd configuration without restarting
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /etcd/config (the `EtcdConfigSet` operationId).
+	EtcdConfigSetWithResponse(ctx context.Context, params *EtcdConfigSetParams, body EtcdConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*EtcdConfigSetResponse, error)
+
+	// EtcdConfigApplyWithBodyWithResponse Apply saved etcd configuration through a native Task
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
+	EtcdConfigApplyWithBodyWithResponse(ctx context.Context, params *EtcdConfigApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EtcdConfigApplyResponse, error)
+
+	// EtcdConfigApplyWithResponse Apply saved etcd configuration through a native Task
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
+	EtcdConfigApplyWithResponse(ctx context.Context, params *EtcdConfigApplyParams, body EtcdConfigApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*EtcdConfigApplyResponse, error)
 
 	// HostShowWithResponse Show host health
 	//
@@ -19994,6 +20634,157 @@ func (r RouterShowResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r RouterShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EtcdConfigShowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EtcdConfigDocument
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EtcdConfigShowResponse) GetJSON200() *EtcdConfigDocument {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EtcdConfigShowResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EtcdConfigShowResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EtcdConfigShowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EtcdConfigShowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EtcdConfigShowResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type EtcdConfigSetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *EtcdConfigDocument
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EtcdConfigSetResponse) GetJSON200() *EtcdConfigDocument {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EtcdConfigSetResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EtcdConfigSetResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EtcdConfigSetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EtcdConfigSetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EtcdConfigSetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EtcdConfigApplyResponse202Headers the declared response headers of an HTTP 202 response for EtcdConfigApply
+type EtcdConfigApplyResponse202Headers struct {
+	ContentType *string
+}
+
+type EtcdConfigApplyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *TaskAccepted
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Error
+	// Headers202 the parsed response headers for an HTTP 202 response
+	Headers202 *EtcdConfigApplyResponse202Headers
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r EtcdConfigApplyResponse) GetJSON202() *TaskAccepted {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EtcdConfigApplyResponse) GetApplicationproblemJSONDefault() *Error {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EtcdConfigApplyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EtcdConfigApplyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EtcdConfigApplyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EtcdConfigApplyResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -24851,6 +25642,71 @@ func (c *ClientWithResponses) RouterShowWithResponse(ctx context.Context, id str
 	return ParseRouterShowResponse(rsp)
 }
 
+// EtcdConfigShowWithResponse Show saved etcd configuration
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /etcd/config (the `EtcdConfigShow` operationId).
+func (c *ClientWithResponses) EtcdConfigShowWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*EtcdConfigShowResponse, error) {
+	rsp, err := c.EtcdConfigShow(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEtcdConfigShowResponse(rsp)
+}
+
+// EtcdConfigSetWithBodyWithResponse Validate and save etcd configuration without restarting
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /etcd/config (the `EtcdConfigSet` operationId).
+func (c *ClientWithResponses) EtcdConfigSetWithBodyWithResponse(ctx context.Context, params *EtcdConfigSetParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EtcdConfigSetResponse, error) {
+	rsp, err := c.EtcdConfigSetWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEtcdConfigSetResponse(rsp)
+}
+
+// EtcdConfigSetWithResponse Validate and save etcd configuration without restarting
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /etcd/config (the `EtcdConfigSet` operationId).
+func (c *ClientWithResponses) EtcdConfigSetWithResponse(ctx context.Context, params *EtcdConfigSetParams, body EtcdConfigSetJSONRequestBody, reqEditors ...RequestEditorFn) (*EtcdConfigSetResponse, error) {
+	rsp, err := c.EtcdConfigSet(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEtcdConfigSetResponse(rsp)
+}
+
+// EtcdConfigApplyWithBodyWithResponse Apply saved etcd configuration through a native Task
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
+func (c *ClientWithResponses) EtcdConfigApplyWithBodyWithResponse(ctx context.Context, params *EtcdConfigApplyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EtcdConfigApplyResponse, error) {
+	rsp, err := c.EtcdConfigApplyWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEtcdConfigApplyResponse(rsp)
+}
+
+// EtcdConfigApplyWithResponse Apply saved etcd configuration through a native Task
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /etcd/config/apply (the `EtcdConfigApply` operationId).
+func (c *ClientWithResponses) EtcdConfigApplyWithResponse(ctx context.Context, params *EtcdConfigApplyParams, body EtcdConfigApplyJSONRequestBody, reqEditors ...RequestEditorFn) (*EtcdConfigApplyResponse, error) {
+	rsp, err := c.EtcdConfigApply(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEtcdConfigApplyResponse(rsp)
+}
+
 // HostShowWithResponse Show host health
 //
 // Returns a wrapper object for the known response body format(s).
@@ -28432,6 +29288,118 @@ func ParseRouterShowResponse(rsp *http.Response) (*RouterShowResponse, error) {
 		}
 		response.ApplicationproblemJSONDefault = &dest
 
+	}
+
+	return response, nil
+}
+
+// ParseEtcdConfigShowResponse parses an HTTP response from a EtcdConfigShowWithResponse call
+func ParseEtcdConfigShowResponse(rsp *http.Response) (*EtcdConfigShowResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EtcdConfigShowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EtcdConfigDocument
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEtcdConfigSetResponse parses an HTTP response from a EtcdConfigSetWithResponse call
+func ParseEtcdConfigSetResponse(rsp *http.Response) (*EtcdConfigSetResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EtcdConfigSetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EtcdConfigDocument
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEtcdConfigApplyResponse parses an HTTP response from a EtcdConfigApplyWithResponse call
+func ParseEtcdConfigApplyResponse(rsp *http.Response) (*EtcdConfigApplyResponse, error) {
+	defer func() { _ = rsp.Body.Close() }()
+	bodyBytes, err := problemresponse.Read(rsp)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EtcdConfigApplyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest TaskAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 202:
+		var headers EtcdConfigApplyResponse202Headers
+		if values := rsp.Header.Values("Content-Type"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Content-Type", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ContentType = &value
+		}
+		response.Headers202 = &headers
 	}
 
 	return response, nil

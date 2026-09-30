@@ -23,7 +23,6 @@ type observerRuntimeStub struct{ evidence runtimeEvidence }
 func (runtime observerRuntimeStub) Inspect(context.Context, Request) (runtimeEvidence, error) {
 	evidence := runtime.evidence
 	evidence.artifact = append([]byte(nil), evidence.artifact...)
-	evidence.logs = append([]byte(nil), evidence.logs...)
 	return evidence, nil
 }
 func (observerRuntimeStub) Close() error { return nil }
@@ -84,8 +83,8 @@ func (dns *observerDNSStub) Query(
 }
 
 // Rationale: observation must bind the mounted Agent-local candidate to the
-// CoreDNS effective parsed-configuration SHA-512 reported at startup and
-// bounded static/recursive/forward serving, even before the reload metric exists.
+// CoreDNS effective parsed-configuration SHA-512 from its live reload metric
+// and bounded serving probes, without relying on logs evicted by query traffic.
 func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	artifact := []byte(". {\n  reload\n  prometheus 127.0.0.1:9153\n  hosts {\n" +
 		"    10.200.0.2 app.internal\n  }\n  forward corp.internal 10.30.0.1\n  forward . 1.1.1.1\n}\n")
@@ -94,12 +93,12 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	imageDigest := sha256.Sum256([]byte("verified child image"))
 	imageConfigDigest := sha256.Sum256([]byte("verified image config"))
 	dns := &observerDNSStub{}
-	baseCounters := forwardMetrics(nil, 4, 9)
-	catchCounters := forwardMetrics(nil, 4, 10)
-	forwardCounters := forwardMetrics(nil, 5, 10)
+	baseCounters := forwardMetrics(&reloadSHA512, 4, 9)
+	catchCounters := forwardMetrics(&reloadSHA512, 4, 10)
+	forwardCounters := forwardMetrics(&reloadSHA512, 5, 10)
 	executor := &Executor{
 		runtime: observerRuntimeStub{evidence: runtimeEvidence{
-			artifact: append([]byte(nil), artifact...), logs: reloadLog(reloadSHA512),
+			artifact:            append([]byte(nil), artifact...),
 			verifiedImageDigest: imageDigest, imageConfigAuthority: imageConfigDigest,
 		}},
 		metrics: &observerMetricsStub{values: [][]byte{
@@ -144,12 +143,11 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	}
 }
 
-// Rationale: raw-byte hashes, stale latest logs, malformed or ambiguous log
-// evidence, and a present mismatched reload metric must never prove a generation.
+// Rationale: raw-byte hashes and missing, stale, malformed or ambiguous live
+// metrics must never prove that the candidate configuration is serving.
 func TestObserveRejectsInvalidEffectiveConfigurationEvidence(t *testing.T) {
 	artifact := []byte(". {\n  reload\n  prometheus 127.0.0.1:9153\n  forward . 1.1.1.1\n}\n")
 	digest := sha256.Sum256(artifact)
-	effective := testEffectiveConfigSHA512(t, "/etc/coredns/Corefile", artifact)
 	raw := sha512.Sum512(artifact)
 	wrong := sha512.Sum512([]byte("another parsed configuration"))
 	request := Request{
@@ -164,32 +162,21 @@ func TestObserveRejectsInvalidEffectiveConfigurationEvidence(t *testing.T) {
 		ReloadMetric: "coredns_reload_version_info", ExpectedLabels: map[string]string{"owned": "true"},
 	}
 	tests := map[string]struct {
-		logs    []byte
 		metrics []byte
 	}{
-		"raw artifact hash": {logs: reloadLog(raw), metrics: forwardMetrics(nil, 0, 0)},
-		"stale matching log": {
-			logs: append(reloadLog(effective), reloadLog(wrong)...), metrics: forwardMetrics(nil, 0, 0),
+		"raw artifact hash":     {metrics: forwardMetrics(&raw, 0, 0)},
+		"missing reload metric": {metrics: forwardMetrics(nil, 0, 0)},
+		"malformed metric": {
+			metrics: []byte("coredns_reload_version_info{hash=\"sha512\",value=\"malformed\"} 1\n"),
 		},
-		"malformed log": {
-			logs:    []byte("[INFO] plugin/reload: Running configuration SHA512 = malformed\n"),
-			metrics: forwardMetrics(nil, 0, 0),
-		},
-		"oversized logs": {
-			logs: bytes.Repeat([]byte("x"), maximumLogBytes+1), metrics: forwardMetrics(nil, 0, 0),
-		},
-		"ambiguous log line": {
-			logs:    append(bytes.TrimSuffix(reloadLog(effective), []byte("\n")), reloadLog(wrong)...),
-			metrics: forwardMetrics(nil, 0, 0),
-		},
-		"present mismatched metric": {
-			logs: reloadLog(effective), metrics: forwardMetrics(&wrong, 0, 0),
-		},
+		"oversized metrics": {metrics: bytes.Repeat([]byte("x"), maximumMetricsBytes+1)},
+		"ambiguous metrics": {metrics: append(forwardMetrics(&raw, 0, 0), forwardMetrics(&wrong, 0, 0)...)},
+		"stale metric":      {metrics: forwardMetrics(&wrong, 0, 0)},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			executor := &Executor{
-				runtime: observerRuntimeStub{evidence: runtimeEvidence{artifact: artifact, logs: test.logs}},
+				runtime: observerRuntimeStub{evidence: runtimeEvidence{artifact: artifact}},
 				metrics: &observerMetricsStub{values: [][]byte{test.metrics}}, dns: &observerDNSStub{}, now: time.Now,
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -263,10 +250,6 @@ func testEffectiveConfigSHA512(t *testing.T, path string, artifact []byte) [sha5
 		t.Fatalf("marshal Corefile fixture: %v", err)
 	}
 	return sha512.Sum512(parsed)
-}
-
-func reloadLog(digest [sha512.Size]byte) []byte {
-	return []byte("[INFO] plugin/reload: Running configuration SHA512 = " + hex.EncodeToString(digest[:]) + "\n")
 }
 
 func forwardMetrics(reload *[sha512.Size]byte, corp, catch uint64) []byte {

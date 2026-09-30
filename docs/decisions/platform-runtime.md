@@ -30,6 +30,20 @@ than compatibility branches in the Compose adapter.
 Current source: [Agent Compose runtime](../../internal/agent/composeruntime) and
 [Compose rendering](../../internal/controller/composerender).
 
+## Independent etcd configuration activation
+
+The native etcd lifecycle owns saved and applied documents separately. Otherwise
+an unrelated Controller restart would activate a mere Save. Explicit Apply freezes
+both the selected document and its predecessor in a native Task, outside Agent
+execution. A local activation receipt survives store unavailability; interrupted
+activation restores the predecessor before bootstrap opens etcd. Completed
+activation replay verifies the selected runtime without another restart.
+
+The shared [configuration document store](../../internal/infra/configdocument)
+owns byte preservation, revision fences and protected replacement receipts.
+[etcd lifecycle](../../internal/infra/docker/etcdcontainer) owns host effects;
+[activation service](../../internal/controller/etcdconfig) owns publication.
+
 ## Controller-owned Agent
 
 `groundplane-controller.service` is the only persistent Groundplane service.

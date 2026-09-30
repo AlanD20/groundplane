@@ -119,6 +119,7 @@ func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 	var workspace string
 	var limit int
 	var cursor string
+	var status, taskType, resourceKind string
 	list := &cobra.Command{
 		Use:   "list",
 		Short: short,
@@ -128,6 +129,7 @@ func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			options.Status, options.Type, options.ResourceKind = status, taskType, resourceKind
 			var page apiTypes.Page[apiTypes.Task]
 			if activity {
 				page, err = fromContext(cmd).Client.ListActivity(cmd.Context(), options)
@@ -143,6 +145,10 @@ func newTaskJournalListCmd(short string, activity bool) *cobra.Command {
 	list.Flags().StringVar(&workspace, "workspace", "", "platform | <tenant slug>")
 	list.Flags().IntVar(&limit, "limit", 50, "page size from 1 through 200")
 	list.Flags().StringVar(&cursor, "cursor", "", "opaque next-page cursor")
+	list.Flags().StringVar(&status, "status", "", "filter the whole journal by Task status")
+	list.Flags().StringVar(&taskType, "type", "", "filter by Task operation type")
+	list.Flags().
+		StringVar(&resourceKind, "resource-kind", "", "filter by resource kind, e.g. component, service or image")
 	return list
 }
 

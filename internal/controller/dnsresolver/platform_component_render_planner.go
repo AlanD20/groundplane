@@ -59,6 +59,7 @@ type ActionCatalog interface {
 }
 
 type PlatformRenderPlanner struct {
+	records             DNSRecordsResolver
 	projections         PlatformProjectionReader
 	baselines           BaselineRepository
 	observations        ObservationRepository
@@ -73,6 +74,7 @@ type PlatformRenderPlanner struct {
 
 func NewPlatformRenderPlanner(
 	projections PlatformProjectionReader,
+	records DNSRecordsResolver,
 	baselines BaselineRepository,
 	observations ObservationRepository,
 	capture BaselineCapture,
@@ -82,12 +84,14 @@ func NewPlatformRenderPlanner(
 	managedConfigAction componentsdk.ActionID,
 	registryAddress netip.Addr,
 ) (*PlatformRenderPlanner, error) {
-	if projections == nil || baselines == nil || observations == nil || capture == nil || renderer == nil ||
+	if projections == nil || records == nil || baselines == nil || observations == nil || capture == nil ||
+		renderer == nil ||
 		environmentPlanner == nil ||
 		catalog == nil {
 		return nil, errs.New(errs.KindInternal, "platform Component render planner dependencies are required")
 	}
 	return &PlatformRenderPlanner{
+		records:     records,
 		projections: projections, baselines: baselines, observations: observations, capture: capture,
 		renderer: renderer, environmentPlanner: environmentPlanner, catalog: catalog,
 		managedConfigAction: managedConfigAction,
@@ -147,7 +151,7 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 			"registered dns-resolver capability is absent from the compiled catalog",
 		)
 	}
-	resolverInput, durableHosts, err := resolverInputFromProjection(
+	resolverInput, _, err := resolverInputFromProjection(
 		hostResolution.Record,
 		baseline.Record.Generation,
 		resolvers,
@@ -156,6 +160,22 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 	if err != nil {
 		return platformcomponents.PlatformComponentTaskRenderInput{}, err
 	}
+	if desired.Config.CoreDNS == nil {
+		return platformcomponents.PlatformComponentTaskRenderInput{}, invalid("CoreDNS config is required")
+	}
+	recordHosts, referenceConditions, err := planner.records.ResolveDNSRecords(
+		ctx,
+		desired.Config.CoreDNS.Records,
+		current.ReadRevision,
+	)
+	if err != nil {
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
+	}
+	mergedProjection, durableHosts, err := mergeResolverHosts(resolverInput.HostResolution, recordHosts)
+	if err != nil {
+		return platformcomponents.PlatformComponentTaskRenderInput{}, err
+	}
+	resolverInput.HostResolution = mergedProjection
 	generatedServiceID := ""
 	switch len(desired.GeneratedServices) {
 	case 0:
@@ -296,7 +316,8 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		rollbackComposeArtifact = proto.Clone(observation.Record.ComposeArtifact).(*agentpb.ComposeArtifact)
 	}
 	input := platformcomponents.PlatformComponentTaskRenderInput{
-		PlanID: task.PlanID, TaskID: task.ID, ComponentID: desired.ID,
+		ReferenceConditions: referenceConditions,
+		PlanID:              task.PlanID, TaskID: task.ID, ComponentID: desired.ID,
 		DesiredSHA256:      desiredSHA256,
 		BaselineGeneration: baseline.Record.Generation, BaselineSHA256: baseline.Record.SHA256,
 		HostResolutionInputRevision: hostResolution.Record.InputRevision,

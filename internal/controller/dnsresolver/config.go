@@ -4,6 +4,7 @@ import (
 	"net/netip"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
+	"github.com/AlanD20/groundplane/internal/common/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -19,6 +20,9 @@ type Config struct {
 func DecodeConfig(raw core.ComponentConfig) (Config, error) {
 	if raw.CoreDNS == nil || raw.Caddy != nil || raw.CloudflareTunnel != nil {
 		return Config{}, invalid("coredns: complete typed desired config is required")
+	}
+	if err := dnsrecords.ValidateDNSRecords(raw.CoreDNS.Records); err != nil {
+		return Config{}, err
 	}
 	upstreamResolvers, err := projectResolvers(raw.CoreDNS.UpstreamResolvers)
 	if err != nil {

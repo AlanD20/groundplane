@@ -176,6 +176,17 @@ func renderServiceProxyTopology(
 				),
 			},
 		}
+		for zone, address := range identity.ProxyAddresses {
+			network, exists := proxy.Networks[zone]
+			if !exists {
+				return nil, errs.New(errs.KindStateConflict, "reserved proxy Zone is absent from the Service")
+			}
+			if network == nil {
+				network = &composetypes.ServiceNetworkConfig{}
+				proxy.Networks[zone] = network
+			}
+			network.Ipv4Address = address
+		}
 		proxyLabels, proxyExpected, err := composeServiceRuntimeLabels(
 			authored.Labels,
 			serviceID,

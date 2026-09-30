@@ -4,11 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"slices"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -134,6 +136,12 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		return hierarchyDeletionRoot{}, 0, err
 	}
 	if err := hierarchydeletionplanning.NewPlanner(repository.store).RequireVolumeRemovalAbsent(ctx, result.ReadRevision, targetKind, targetID); err != nil {
+		clear(root.targetValue)
+		return hierarchyDeletionRoot{}, 0, err
+	}
+	root.referenceFences, err = dnsrecords.NewReader(repository.store).
+		ProtectDNSHierarchy(ctx, string(targetKind), targetID, result.ReadRevision)
+	if err != nil {
 		clear(root.targetValue)
 		return hierarchyDeletionRoot{}, 0, err
 	}
@@ -352,7 +360,7 @@ func prepareHierarchyDeletionPublication(
 		clear(fenceValue)
 		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
-	conditions := append([]etcdstore.Condition(nil), root.primaryFences...)
+	conditions := slices.Concat(root.primaryFences, root.referenceFences)
 	conditions = append(conditions,
 		etcdstore.Condition{Key: tombstoneKey}, etcdstore.Condition{Key: lockKey}, etcdstore.Condition{Key: replayKey},
 		etcdstore.Condition{Key: fenceKey}, etcdstore.Condition{Key: intentKey},

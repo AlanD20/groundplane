@@ -112,13 +112,14 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 			ModRevision: indexes.Values[2].ModRevision,
 		},
 		{Key: resolutionrecord.StorageKey},
-		{Key: platformComponentTaskActiveKey(task.Target)},
+		{Key: platformcomponents.ActiveTaskKey(task.Target)},
 		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)},
 		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{
 			Key: taskjournal.TaskActiveOperationKey(task.OperationID),
 		}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 	}
+	conditions = append(conditions, renderInput.ReferenceConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: resolutionrecord.StorageKey, Value: projectionValue},
 		{
@@ -134,7 +135,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(task.Target), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: platformcomponents.ActiveTaskKey(task.Target), Value: []byte(task.ID)},
 		{Type: etcdstore.MutationDelete, Key: platformcomponents.PlatformComponentBootstrapKey(task.Target)},
 	}
 	initiation, err := newPlatformTaskInitiation(taskjournal.TaskActorSystem)
@@ -177,7 +178,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 			errs.KindInternal, "platform resolver Task preparer is not configured",
 		)
 	}
-	if active != nil && (active.Key != platformComponentTaskActiveKey(current.Record.Desired.ID) ||
+	if active != nil && (active.Key != platformcomponents.ActiveTaskKey(current.Record.Desired.ID) ||
 		active.ModRevision <= 0 || string(active.Value) == "") {
 		return hostResolutionReconciliationChange{}, errs.New(
 			errs.KindInternal,
@@ -379,11 +380,14 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	} {
 		conditions = appendHostResolutionCondition(conditions, condition)
 	}
-	activeCondition := etcdstore.Condition{Key: platformComponentTaskActiveKey(current.Record.Desired.ID)}
+	activeCondition := etcdstore.Condition{Key: platformcomponents.ActiveTaskKey(current.Record.Desired.ID)}
 	if active != nil {
 		activeCondition.ModRevision = active.ModRevision
 	}
 	conditions = appendHostResolutionCondition(conditions, activeCondition)
+	for _, condition := range renderInput.ReferenceConditions {
+		conditions = appendHostResolutionCondition(conditions, condition)
+	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
 		{
@@ -402,7 +406,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskWorkspacePlatformIndexKey(task.ID), Value: []byte(task.ID)},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   platformComponentTaskActiveKey(current.Record.Desired.ID),
+			Key:   platformcomponents.ActiveTaskKey(current.Record.Desired.ID),
 			Value: []byte(task.ID),
 		},
 	}

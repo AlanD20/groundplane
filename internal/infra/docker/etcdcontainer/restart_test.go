@@ -3,6 +3,7 @@ package etcdcontainer
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/config"
 	"testing"
 
 	"github.com/moby/moby/api/types/container"
@@ -51,7 +52,7 @@ func (engine *restartEngine) ContainerInspect(
 	context.Context, string, client.ContainerInspectOptions,
 ) (client.ContainerInspectResult, error) {
 	engine.inspectCalls++
-	options := createOptions()
+	options := createOptions(config.DefaultEtcdConfig())
 	return client.ContainerInspectResult{Container: container.InspectResponse{
 		ID: "existing-etcd", Config: options.Config, HostConfig: options.HostConfig,
 		State: &container.State{Running: true},

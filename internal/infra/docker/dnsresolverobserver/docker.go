@@ -2,17 +2,14 @@ package dnsresolverobserver
 
 import (
 	"archive/tar"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
 	"path"
-	"strconv"
 	"strings"
 
-	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -23,7 +20,6 @@ import (
 type dockerEngine interface {
 	ContainerList(context.Context, client.ContainerListOptions) (client.ContainerListResult, error)
 	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
-	ContainerLogs(context.Context, string, client.ContainerLogsOptions) (client.ContainerLogsResult, error)
 	CopyFromContainer(context.Context, string, client.CopyFromContainerOptions) (client.CopyFromContainerResult, error)
 	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
 	Close() error
@@ -80,30 +76,14 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 	if err != nil {
 		return runtimeEvidence{}, err
 	}
-	logStream, err := inspector.engine.ContainerLogs(ctx, container.ID, client.ContainerLogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-		Tail:       strconv.Itoa(maximumLogLines),
-	})
-	if err != nil {
-		clear(artifact)
-		return runtimeEvidence{}, errs.Wrap(errs.KindInternal, err)
-	}
-	logs, err := readBoundedContainerLogs(logStream, container.Config.Tty)
-	if err != nil {
-		clear(artifact)
-		return runtimeEvidence{}, err
-	}
 	image, err := inspector.engine.ImageInspect(ctx, container.Image)
 	if err != nil {
 		clear(artifact)
-		clear(logs)
 		return runtimeEvidence{}, errs.Wrap(errs.KindInternal, err)
 	}
 	digest, err := verifiedImageDigest(image, request.ImageReference)
 	if err != nil {
 		clear(artifact)
-		clear(logs)
 		return runtimeEvidence{}, err
 	}
 	configAuthority, err := bindRuntimeImageConfigAuthority(
@@ -115,11 +95,10 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 	)
 	if err != nil {
 		clear(artifact)
-		clear(logs)
 		return runtimeEvidence{}, err
 	}
 	return runtimeEvidence{
-		artifact: artifact, logs: logs, verifiedImageDigest: digest,
+		artifact: artifact, verifiedImageDigest: digest,
 		imageConfigAuthority: configAuthority,
 	}, nil
 }
@@ -176,26 +155,6 @@ func observedClassicImageConfigDigest(
 	var result [sha256.Size]byte
 	copy(result[:], decoded)
 	return result, nil
-}
-
-func readBoundedContainerLogs(content io.ReadCloser, tty bool) ([]byte, error) {
-	if content == nil {
-		return nil, errs.New(errs.KindInternal, "DNS resolver log stream is missing")
-	}
-	defer content.Close()
-	limited := &io.LimitedReader{R: content, N: maximumLogBytes + 1}
-	buffer := &bytes.Buffer{}
-	var err error
-	if tty {
-		_, err = io.Copy(buffer, limited)
-	} else {
-		_, err = stdcopy.StdCopy(buffer, buffer, limited)
-	}
-	if err != nil || limited.N <= 0 || buffer.Len() == 0 || buffer.Len() > maximumLogBytes {
-		clear(buffer.Bytes())
-		return nil, errs.New(errs.KindStateConflict, "DNS resolver runtime logs are invalid")
-	}
-	return buffer.Bytes(), nil
 }
 
 func artifactDirectoryMountOwnsTarget(destination string, readWrite bool, target string) bool {

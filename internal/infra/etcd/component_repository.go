@@ -2,6 +2,7 @@ package etcd
 
 import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	platformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 
@@ -11,6 +12,7 @@ import (
 // ComponentRepository owns Environment-component singleton identity,
 // fixed-revision reads, and desired/runtime CAS separation.
 type ComponentRepository struct {
+	*dnsrecords.Reader
 	*platformcomponents.Persistence
 	*componentrecord.Repository
 	store hierarchyStore
@@ -25,6 +27,7 @@ func newComponentRepository(store hierarchyStore) (*ComponentRepository, error) 
 		return nil, errs.New(errs.KindInternal, "Component store is required")
 	}
 	return &ComponentRepository{
+		Reader:      dnsrecords.NewReader(store),
 		Persistence: platformcomponents.NewPersistence(store),
 		Repository:  componentrecord.NewRepository(store),
 		store:       store,

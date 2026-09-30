@@ -6,9 +6,12 @@ import { TaskList } from "@/features/task/task-list";
 import { useStore } from "@/lib/store";
 import type { TaskJournalScope } from "@/lib/types";
 import { Activity } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 
 function activityScope(filter: string): TaskJournalScope {
+  if (filter === "platform")
+    return { kind: "workspace", workspace: "platform" };
   const separator = filter.indexOf(":");
   if (separator < 0) return { kind: "all" };
   const kind = filter.slice(0, separator);
@@ -21,10 +24,14 @@ function activityScope(filter: string): TaskJournalScope {
 
 export default function PlatformActivityPage() {
   const store = useStore();
-  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useSearchParams();
+  const filter = search.get("owner") ?? "all";
   const scope = useMemo(() => activityScope(filter), [filter]);
   const options = useMemo(() => {
-    const result = [{ value: "all", label: "All activity" }];
+    const result = [
+      { value: "all", label: "All activity" },
+      { value: "platform", label: "Platform" },
+    ];
     for (const tenant of store.tenants) {
       result.push({
         value: `tenant:${tenant.id}`,
@@ -62,7 +69,16 @@ export default function PlatformActivityPage() {
             aria-label="Activity owner"
             className="w-64 max-w-full"
             value={filter}
-            onValueChange={setFilter}
+            onValueChange={(value) => {
+              setSearch(
+                (current) => {
+                  const next = new URLSearchParams(current);
+                  next.set("owner", value);
+                  return next;
+                },
+                { replace: true },
+              );
+            }}
             options={options}
           />
         }

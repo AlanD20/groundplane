@@ -16,6 +16,9 @@ import { ArrowLeft, Network, RefreshCw } from "lucide-react";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { CoreDnsSettings } from "./coredns-settings";
+import { DNSRecordSettings } from "./dns-record-settings";
+import { coreDNSConfigInput, type CoreDNSDraft } from "./core-dns-config";
+import type { DNSRecord } from "@/lib/types";
 const kindIcon: Record<string, React.ReactNode> = {
   coredns: <Network className="size-4 text-muted-foreground" />,
 };
@@ -30,6 +33,8 @@ export default function PlatformComponentPage() {
     managedConfigFiles,
     managedConfigLoading,
     managedConfigError,
+    managedConfigTaskId,
+    managedConfigComponentId,
     setComponentEnabled,
     updateComponentConfig,
     refreshPlatformComponents,
@@ -49,6 +54,38 @@ export default function PlatformComponentPage() {
     return () => controller.abort();
   }, [componentId, refreshComponentConfig]);
 
+  useEffect(() => {
+    if (
+      !componentId ||
+      managedConfigComponentId !== componentId ||
+      !managedConfigTaskId
+    )
+      return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        await refreshComponentConfig(componentId, controller.signal);
+        await refreshPlatformComponents(controller.signal);
+      } catch {
+        /* Refresh actions expose their errors without discarding drafts. */
+      }
+      if (!controller.signal.aborted)
+        timer = setTimeout(() => void poll(), 2000);
+    };
+    timer = setTimeout(() => void poll(), 2000);
+    return () => {
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    componentId,
+    managedConfigComponentId,
+    managedConfigTaskId,
+    refreshComponentConfig,
+    refreshPlatformComponents,
+  ]);
+
   const { unavailable: environmentsWithoutComponentProjection } =
     environmentPlatformIngress(tenantProjects);
   const dnsConfig =
@@ -63,6 +100,7 @@ export default function PlatformComponentPage() {
           tailnetDelegation: platform.dns.tailnetDelegation,
           corefileTemplate: platform.dns.corefileTemplate,
           forwarders: platform.dns.forwarders,
+          records: platform.dns.records ?? [],
         }
       : undefined;
   const editableDNSConfig = dnsConfig ?? {
@@ -71,6 +109,7 @@ export default function PlatformComponentPage() {
     tailnetDelegation: false,
     corefileTemplate: "",
     forwarders: [],
+    records: [],
   };
 
   if (platformComponentsLoading) {
@@ -139,6 +178,11 @@ export default function PlatformComponentPage() {
       </SummaryStrip>
       <div>
         <CoreDnsSettings
+          activeTaskId={
+            managedConfigComponentId === component.id
+              ? managedConfigTaskId
+              : null
+          }
           upstream={editableDNSConfig.upstream}
           upstreamAuto={editableDNSConfig.upstreamAuto}
           tailnetDelegation={editableDNSConfig.tailnetDelegation}
@@ -152,6 +196,7 @@ export default function PlatformComponentPage() {
           onRefreshManagedConfig={() => refreshComponentConfig(component.id)}
           onEnabled={async (enabled) => {
             await setComponentEnabled(component.id, enabled);
+            await refreshComponentConfig(component.id);
             await refreshPlatformComponents();
           }}
           onTailnet={(tailnetDelegation) =>
@@ -206,6 +251,23 @@ export default function PlatformComponentPage() {
         />
       </div>
 
+      <DNSRecordSettings
+        records={editableDNSConfig.records}
+        disabled={
+          managedConfigComponentId === component.id && !!managedConfigTaskId
+        }
+        onChange={(records) =>
+          replaceCoreDNSConfig(
+            updateComponentConfig,
+            refreshPlatformComponents,
+            refreshComponentConfig,
+            component.id,
+            editableDNSConfig,
+            { records },
+          )
+        }
+      />
+
       <AdvancedDetails>
         <DetailRow label="Component ID" value={component.id} mono />
         <DetailRow
@@ -236,19 +298,13 @@ export default function PlatformComponentPage() {
 }
 
 type CoreDNSConfigUpdate = {
+  records?: DNSRecord[];
   upstream?: string;
   upstreamAuto?: boolean;
   tailnetDelegation?: boolean;
   corefileTemplate?: string;
   forwarders?: { domain: string; upstream: string }[];
 };
-
-function resolverList(value: string): string[] {
-  return value
-    .trim()
-    .split(/[\s,]+/)
-    .filter(Boolean);
-}
 
 async function replaceCoreDNSConfig(
   updateComponentConfig: ReturnType<typeof useStore>["updateComponentConfig"],
@@ -257,26 +313,11 @@ async function replaceCoreDNSConfig(
   >["refreshPlatformComponents"],
   refreshComponentConfig: ReturnType<typeof useStore>["refreshComponentConfig"],
   componentId: string,
-  current: {
-    upstream: string;
-    upstreamAuto: boolean;
-    tailnetDelegation: boolean;
-    corefileTemplate: string;
-    forwarders: { domain: string; upstream: string }[];
-  },
+  current: CoreDNSDraft,
   update: CoreDNSConfigUpdate,
 ) {
   const next = { ...current, ...update };
-  await updateComponentConfig(componentId, {
-    upstream_auto: next.upstreamAuto,
-    upstream_resolvers: next.upstreamAuto ? [] : resolverList(next.upstream),
-    forwarders: next.forwarders.map((forwarder) => ({
-      domain: forwarder.domain,
-      resolvers: resolverList(forwarder.upstream),
-    })),
-    tailnet_delegation: next.tailnetDelegation,
-    corefile_template: next.corefileTemplate,
-  });
+  await updateComponentConfig(componentId, coreDNSConfigInput(next));
   await refreshPlatformComponents();
   await refreshComponentConfig(componentId);
 }

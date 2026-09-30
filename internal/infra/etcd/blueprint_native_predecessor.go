@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
@@ -218,6 +219,7 @@ func validateNativeRestorationDescriptor(
 }
 
 type BlueprintReleasePublicationEvidence struct {
+	ProxyAddresses             networkreservations.ProxyAddresses
 	NativePredecessors         []BlueprintNativePredecessorCapture
 	Manifest                   releases.VersionedReleaseManifest
 	EnvironmentID              string

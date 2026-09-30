@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	"github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -45,6 +46,15 @@ func (service *Service) publish(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
+	proxyServices := make([]core.Service, len(candidates))
+	for i, candidate := range candidates {
+		proxyServices[i] = candidate.planning.Service.Record.Desired
+	}
+	addresses, err := taskplanning.PrepareServiceProxyAddresses(ctx, service.ledger.Planner, projection, proxyServices)
+	if err != nil {
+		return idempotencyrecord.IdempotencyResponse{}, err
+	}
+	defer addresses.Clear()
 	now := service.now().UTC()
 	operationKind := domain.OperationDeploy
 	taskType := taskjournal.TaskDeploy
@@ -117,7 +127,8 @@ func (service *Service) publish(
 			priorArtifactID = ids.New(ids.KindConfig)
 		}
 		render := releaserender.ReleaseRenderInput{
-			ReleaseID: releaseID, PlanID: planID, ArtifactID: artifactID, PriorArtifactID: priorArtifactID,
+			ProxyAddresses: addresses.ForService(candidate.planning.Service.Record.Desired.ID),
+			ReleaseID:      releaseID, PlanID: planID, ArtifactID: artifactID, PriorArtifactID: priorArtifactID,
 			ServiceID:         candidate.planning.Service.Record.Desired.ID,
 			ServiceName:       candidate.planning.Service.Record.Desired.Name,
 			CandidateWorkload: candidate.workload, PriorWorkload: conditionalPriorWorkload(priorArtifactID != "", candidate.priorWorkload),
@@ -274,7 +285,8 @@ func (service *Service) publish(
 		CreatedAt: now, UpdatedAt: now,
 	}
 	result, err := service.ledger.Publish(ctx, etcd.ReleasePublicationEvidence{
-		Manifest: manifest, EnvironmentID: scope.Environment.Record.ID,
+		ProxyAddresses: addresses,
+		Manifest:       manifest, EnvironmentID: scope.Environment.Record.ID,
 		ProjectID: scope.Project.Record.ID, TenantID: scope.Tenant.Record.ID,
 		DesiredKind: desiredKind, DesiredID: desiredID, DesiredRevision: desiredRevision,
 		EnvironmentEpochRevision: scope.EnvironmentEpochRevision,

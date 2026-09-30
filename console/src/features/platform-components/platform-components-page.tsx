@@ -11,13 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { TaskList } from "@/features/task/task-list";
 import { useStore } from "@/lib/store";
-import type { TaskJournalScope } from "@/lib/types";
 import { Network, RefreshCw, Server } from "lucide-react";
 import { Link } from "react-router-dom";
-
-const scope: TaskJournalScope = { kind: "workspace", workspace: "platform" };
 
 export default function PlatformInfraPage() {
   const {
@@ -28,7 +24,20 @@ export default function PlatformInfraPage() {
   } = useStore();
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Components" icon={<Server />} />
+      <PageHeader
+        title="Components"
+        icon={<Server />}
+        actions={
+          <Button
+            variant="outline"
+            render={
+              <Link to="/platform/activity?owner=platform&resource_kind=component" />
+            }
+          >
+            View activity
+          </Button>
+        }
+      />
       <ResourcePanel title="Platform Components">
         {platformComponentsLoading && (
           <p role="status" className="text-sm text-muted-foreground">
@@ -95,7 +104,6 @@ export default function PlatformInfraPage() {
           </ResourceTable>
         )}
       </ResourcePanel>
-      <TaskList scope={scope} title="Platform Tasks" />
     </div>
   );
 }

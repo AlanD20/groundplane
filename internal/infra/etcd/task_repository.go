@@ -68,8 +68,11 @@ type TaskEventSnapshot struct {
 // and platform scope, or contains the stable Tenant, Project, or Environment
 // id selected by the corresponding scope.
 type TaskListScope struct {
-	Kind TaskListScopeKind
-	ID   string
+	Kind         TaskListScopeKind
+	ID           string
+	Status       taskjournal.TaskStatus
+	Type         taskjournal.TaskType
+	ResourceKind string
 }
 
 type TaskListScopeKind string
@@ -280,7 +283,7 @@ func visibleOperatorTask(record TaskRecord) bool {
 }
 
 // ListTasksByScope returns the selected immutable journal at one fixed MVCC
-// revision. Every scope uses the logical collection identity "tasks", so a
+// revision. The collection identity binds all filters, so a
 // cursor is route-agnostic between GET /tasks and GET /activity while still
 // binding its exact owner scope.
 func (repository *TaskRepository) ListTasksByScope(
@@ -288,6 +291,15 @@ func (repository *TaskRepository) ListTasksByScope(
 	scope TaskListScope,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[TaskRecord], error) {
+	filters := taskjournal.ListFilter{Status: scope.Status, Type: scope.Type, ResourceKind: scope.ResourceKind}
+	if err := filters.Validate(); err != nil {
+		return etcdstore.Page[TaskRecord]{}, err
+	}
+	collection := filters.Collection()
+	visible := func(record TaskRecord) bool {
+		return visibleOperatorTask(record) &&
+			filters.Matches(record.Status, record.Type, record.Params[taskjournal.TaskResourceKindParam])
+	}
 	identity := func(record TaskRecord) string { return record.ID }
 	switch scope.Kind {
 	case TaskListScopeGlobal:
@@ -298,8 +310,8 @@ func (repository *TaskRepository) ListTasksByScope(
 			)
 		}
 		page, err := recordquery.ListFilteredPrimary(
-			ctx, repository.store, "tasks", "global", "-", taskjournal.TaskPrefix, ids.KindTask,
-			request.NewestFirst(), DecodeTaskRecord, identity, visibleOperatorTask,
+			ctx, repository.store, collection, "global", "-", taskjournal.TaskPrefix, ids.KindTask,
+			request.NewestFirst(), DecodeTaskRecord, identity, visible,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopePlatformWorkspace:
@@ -310,10 +322,10 @@ func (repository *TaskRepository) ListTasksByScope(
 			)
 		}
 		page, err := recordquery.ListVisibleIndex(
-			ctx, repository.store, "tasks", "workspace", "platform", taskjournal.TaskWorkspacePlatformPrefix,
+			ctx, repository.store, collection, "workspace", "platform", taskjournal.TaskWorkspacePlatformPrefix,
 			taskjournal.TaskStorageKey, ids.KindTask, request.NewestFirst(), DecodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform },
-			visibleOperatorTask,
+			visible,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeTenantWorkspace:
@@ -324,14 +336,14 @@ func (repository *TaskRepository) ListTasksByScope(
 			)
 		}
 		page, err := recordquery.ListVisibleIndex(
-			ctx, repository.store, "tasks", "workspace", scope.ID,
+			ctx, repository.store, collection, "workspace", scope.ID,
 			taskjournal.TaskWorkspaceTenantPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask,
 			request.NewestFirst(), DecodeTaskRecord, identity,
 			func(record TaskRecord) bool {
 				return record.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant &&
 					record.Owner.TenantID == scope.ID
 			},
-			visibleOperatorTask,
+			visible,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeProject:
@@ -341,7 +353,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		page, err := recordquery.ListFilteredPrimary(
 			ctx,
 			repository.store,
-			"tasks",
+			collection,
 			"project",
 			scope.ID,
 			taskjournal.TaskPrefix,
@@ -349,7 +361,7 @@ func (repository *TaskRepository) ListTasksByScope(
 			request.NewestFirst(),
 			DecodeTaskRecord,
 			identity,
-			func(record TaskRecord) bool { return visibleOperatorTask(record) && record.Owner.ProjectID == scope.ID },
+			func(record TaskRecord) bool { return visible(record) && record.Owner.ProjectID == scope.ID },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeEnvironment:
@@ -360,11 +372,11 @@ func (repository *TaskRepository) ListTasksByScope(
 			)
 		}
 		page, err := recordquery.ListVisibleIndex(
-			ctx, repository.store, "tasks", "environment", scope.ID,
+			ctx, repository.store, collection, "environment", scope.ID,
 			taskjournal.TaskEnvironmentIndexPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask,
 			request.NewestFirst(), DecodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.EnvironmentID == scope.ID },
-			visibleOperatorTask,
+			visible,
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	default:

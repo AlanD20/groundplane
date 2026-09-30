@@ -89,10 +89,19 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 	definition := testResolverDefinition(t)
 	environmentPlanner := renderPlannerEnvironmentPlanner{}
 	renderPlanner, err := NewPlatformRenderPlanner(
-		fixedProjectionReader{record: projection}, renderPlannerBaselineRepository{record: baseline},
-		renderPlannerObservationRepository{}, func(context.Context) ([]byte, error) {
+		fixedProjectionReader{
+			record: projection,
+		},
+		emptyDNSRecordsResolver{},
+		renderPlannerBaselineRepository{record: baseline},
+		renderPlannerObservationRepository{},
+		func(context.Context) ([]byte, error) {
 			return append([]byte(nil), baselineContent...), nil
-		}, rendererPin{}, environmentPlanner, renderPlannerCatalog{definition: definition}, "activate-config",
+		},
+		rendererPin{},
+		environmentPlanner,
+		renderPlannerCatalog{definition: definition},
+		"activate-config",
 		netip.MustParseAddr("127.0.0.1"),
 	)
 	if err != nil {

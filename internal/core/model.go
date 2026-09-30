@@ -354,6 +354,7 @@ type DNSForwarder struct {
 }
 
 type CoreDNSComponentConfig struct {
+	Records           []DNSRecord           `yaml:"records,omitempty" json:"records,omitempty"`
 	CorefileTemplate  string                `yaml:"corefile_template" json:"corefile_template"`
 	UpstreamAuto      bool                  `yaml:"upstream_auto" json:"upstream_auto"`
 	UpstreamResolvers []DNSResolverEndpoint `yaml:"upstream_resolvers" json:"upstream_resolvers"`
@@ -396,6 +397,7 @@ func CloneComponentConfig(config ComponentConfig) ComponentConfig {
 	}
 	if config.CoreDNS != nil {
 		value := *config.CoreDNS
+		value.Records = append([]DNSRecord(nil), value.Records...)
 		value.UpstreamResolvers = append([]DNSResolverEndpoint(nil), value.UpstreamResolvers...)
 		value.Forwarders = make([]DNSForwarder, len(config.CoreDNS.Forwarders))
 		for index, forwarder := range config.CoreDNS.Forwarders {

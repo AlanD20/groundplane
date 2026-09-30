@@ -1,5 +1,7 @@
 package api
 
+import "github.com/AlanD20/groundplane/internal/common/dnsrecords"
+
 // Component is the generic environment-component record. Caddy and Cloudflare
 // Tunnel are component KINDS ("caddy", "cloudflare-tunnel"),
 // not bespoke resources — see blueprint.md, "x-gp-components".
@@ -42,6 +44,7 @@ type ComponentConfig struct {
 // ComponentConfigResponse is the generator-safe response envelope for the
 // config singleton. Its nested config is null while disabled or unconfigured.
 type ComponentConfigResponse struct {
+	ActiveTaskID string              `json:"active_task_id,omitempty"`
 	Config       *ComponentConfig    `json:"config"`
 	ManagedFiles []ManagedConfigFile `json:"managed_files"`
 }
@@ -49,9 +52,10 @@ type ComponentConfigResponse struct {
 // ManagedConfigFile is a side-effect-free Controller projection of one
 // registered Component's authored template and current rendered content.
 type ManagedConfigFile struct {
-	Path     string `json:"path"`
-	Template string `json:"template"`
-	Rendered string `json:"rendered"`
+	Path                string `json:"path"`
+	Template            string `json:"template"`
+	Rendered            string `json:"rendered"`
+	GeneratedDirectives string `json:"generated_directives,omitempty"`
 }
 
 type CaddyComponentConfig struct {
@@ -66,6 +70,7 @@ type CloudflareTunnelComponentConfig struct {
 }
 
 type CoreDNSComponentConfig struct {
+	Records           []dnsrecords.DNSRecord  `json:"records,omitempty"`
 	CorefileTemplate  string                  `json:"corefile_template"`
 	UpstreamAuto      bool                    `json:"upstream_auto"`
 	UpstreamResolvers []string                `json:"upstream_resolvers"`
@@ -100,6 +105,7 @@ type CloudflareTunnelComponentConfigMutationInput struct {
 }
 
 type CoreDNSComponentConfigMutationInput struct {
+	Records           []dnsrecords.DNSRecord   `json:"records,omitempty"`
 	CorefileTemplate  *string                  `json:"corefile_template"`
 	UpstreamAuto      *bool                    `json:"upstream_auto"`
 	UpstreamResolvers *[]string                `json:"upstream_resolvers"`

@@ -110,6 +110,8 @@ export function seed(): State {
     managedConfigFiles: [],
     managedConfigLoading: false,
     managedConfigError: null,
+    managedConfigComponentId: null,
+    managedConfigTaskId: null,
     agentsLoading: true,
     agentError: null,
     agentConfig: null,

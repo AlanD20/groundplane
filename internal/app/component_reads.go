@@ -23,6 +23,7 @@ func newComponentReadService(
 ) (*componentcapability.ReadService, error) {
 	platform, err := componentregistration.NewDNSManagedConfigProjector(
 		projections,
+		components,
 		baselines,
 		imagefetch.RegistryAddress(cfg.Listen.HTTP),
 	)

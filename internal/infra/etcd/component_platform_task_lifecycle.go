@@ -39,7 +39,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	stateKeys := []string{
 		componentrecord.RecordKey(task.Target),
 		platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
-		platformComponentTaskActiveKey(task.Target),
+		platformcomponents.ActiveTaskKey(task.Target),
 		platformcomponents.ComponentObservationKey(task.Target),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
@@ -99,7 +99,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 		},
 	}
 	change.conditions = append(change.conditions, etcdstore.Condition{
-		Key: platformComponentTaskActiveKey(task.Target), ModRevision: state.Values[2].ModRevision,
+		Key: platformcomponents.ActiveTaskKey(task.Target), ModRevision: state.Values[2].ModRevision,
 	})
 	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return change, nil
@@ -199,6 +199,7 @@ func newPlatformComponentObservation(
 		observedAt = result.DNSResolverCandidateObservation.ObservedAt
 	}
 	record := platformcomponents.ComponentObservationRecord{
+		DNSRecords:  append([]core.DNSRecord(nil), input.Config.Records...),
 		ComponentID: input.ComponentID, ServiceID: input.GeneratedServiceID,
 		PlanID: input.OwnershipPlanID, ComposeArtifactID: input.ComposeArtifactID,
 		Enabled: component.Desired.Enabled, Healthy: component.Desired.Enabled,
@@ -273,7 +274,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
-			platformComponentTaskActiveKey(task.Target),
+			platformcomponents.ActiveTaskKey(task.Target),
 		},
 		Revision: revision,
 	})
@@ -300,7 +301,8 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 			return err
 		}
 	}
-	if state.Values[1] != nil && string(state.Values[1].Value) == task.ID {
+	if state.Values[1] != nil && string(state.Values[1].Value) == task.ID &&
+		(task.Result == nil || !task.Result.ReconciliationRequired) {
 		return errs.New(errs.KindStateConflict, "terminal platform Component Task retained its active fence")
 	}
 	return nil

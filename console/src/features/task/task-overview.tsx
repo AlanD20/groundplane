@@ -12,14 +12,9 @@ import {
   type TaskNavigationContext,
 } from "@/lib/task-navigation";
 import type { ActivityEntry } from "@/lib/types";
-import {
-  ArrowUpRight,
-  CheckCircle2,
-  Circle,
-  LoaderCircle,
-  XCircle,
-} from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { TaskExecutionTerminal } from "./task-execution-terminal";
 
 export function taskPresentation(
   task: ActivityEntry,
@@ -152,6 +147,16 @@ export function TaskOverview({
           value={timestamp(task.finishedAt ?? task.updatedAt)}
         />
       </dl>
+      {task.reconciliationRequired && (
+        <p
+          role="alert"
+          className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm"
+        >
+          Restoration is not proven. The resolver stays locked to this Task;
+          retry it to apply the same sealed configuration. GP has not reported a
+          successful restore.
+        </p>
+      )}
       {task.note && (
         <p className="rounded-lg border border-border p-3 text-sm">
           {task.note}
@@ -175,73 +180,7 @@ export function TaskOverview({
           its ID below to find the diagnostic in the Controller or Agent logs.
         </p>
       )}
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium">Execution steps</h3>
-        {task.status === "completed" &&
-          steps.some((step) => step.state === "pending") && (
-            <p className="text-xs text-muted-foreground">
-              The Task completed. Some plan steps have no completion record; the
-              list below shows the recorded history.
-            </p>
-          )}
-        {steps.length ? (
-          <ol className="space-y-2">
-            {steps.map((step, index) => {
-              const Icon =
-                step.state === "done"
-                  ? CheckCircle2
-                  : step.state === "failed"
-                    ? XCircle
-                    : step.state === "running"
-                      ? LoaderCircle
-                      : Circle;
-              return (
-                <li
-                  key={`${index}/${step.label}`}
-                  className="flex items-start gap-2 rounded-lg border border-border p-3 text-sm"
-                >
-                  <Icon
-                    aria-hidden
-                    className={`mt-0.5 size-4 shrink-0 ${step.state === "running" ? "animate-spin text-primary" : step.state === "failed" ? "text-destructive" : step.state === "done" ? "text-success" : "text-muted-foreground"}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="break-words">
-                      {/^[a-z]+_[A-Z0-9]{20,}$/.test(step.label)
-                        ? `Step ${index + 1}`
-                        : step.label.replaceAll("_", " ")}
-                    </p>
-                    {/^[a-z]+_[A-Z0-9]{20,}$/.test(step.label) && (
-                      <details className="mt-1 text-xs text-muted-foreground">
-                        <summary className="cursor-pointer">
-                          Step reference
-                        </summary>
-                        <code className="break-all">{step.label}</code>
-                      </details>
-                    )}
-                    {step.detail && (
-                      <p className="mt-1 break-words text-xs text-muted-foreground">
-                        {step.detail}
-                      </p>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {step.state === "done"
-                      ? "Completed"
-                      : step.state === "pending" && task.status === "completed"
-                        ? "Not recorded"
-                        : step.state}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No individual step updates are recorded for this Task. Its overall
-            status is shown above.
-          </p>
-        )}
-      </section>
+      <TaskExecutionTerminal task={task} />
       <AdvancedDetails>
         <dl className="mt-3 space-y-3 text-xs">
           {[

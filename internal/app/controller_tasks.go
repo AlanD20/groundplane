@@ -18,7 +18,7 @@ import (
 func newControllerTaskRuntime(
 	ctx context.Context,
 	tasks *etcd.TaskRepository,
-	handler *taskdispatch.ResourceHandler,
+	handler controllertask.Handler,
 	keys *backupkey.Service,
 	hierarchy taskdispatch.HierarchyExecutor,
 	agents *localagent.Manager,

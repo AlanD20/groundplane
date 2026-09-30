@@ -118,8 +118,9 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		}
 		images[member.Render.ServiceName] = member.Render.CandidateWorkload
 		labels[member.Render.ServiceID] = composerender.ComposeReleaseIdentity{
-			ProxyImage: member.Render.ProxyImage,
-			ReleaseID:  member.Render.ReleaseID, Target: member.Render.CandidateTarget, Image: member.Render.CandidateWorkload.LocalImageID,
+			ProxyAddresses: member.Render.ProxyAddresses,
+			ProxyImage:     member.Render.ProxyImage,
+			ReleaseID:      member.Render.ReleaseID, Target: member.Render.CandidateTarget, Image: member.Render.CandidateWorkload.LocalImageID,
 			ServingReleaseID:       member.Intent.PriorServingReleaseID,
 			ServingTarget:          member.Render.PriorTarget,
 			ServingProxyGeneration: member.Render.PriorProxyGeneration, Strategy: member.Render.Strategy,

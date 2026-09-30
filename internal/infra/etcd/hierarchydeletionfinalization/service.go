@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
@@ -53,6 +54,16 @@ func (repository *Preparer) prepareHierarchyDeletionServiceFinalizer(
 	}
 	effects.conditions = append(effects.conditions, etcdstore.Condition{Key: activeKey})
 	effects.conditions = append(effects.conditions, scriptConditions...)
+	addresses, err := networkreservations.PrepareProxyAddressRelease(ctx, repository.store, record.ServiceID, 0)
+	if err != nil {
+		etcdstore.ClearByteSlices(effects.values)
+		return Effects{}, err
+	}
+	effects.conditions = append(effects.conditions, addresses.Conditions()...)
+	effects.mutations = append(effects.mutations, addresses.Mutations()...)
+	for _, mutation := range addresses.Mutations() {
+		effects.values = append(effects.values, mutation.Value)
+	}
 	effects.mutations = append(
 		effects.mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: serviceruntimerecord.Key(record.ServiceID)},

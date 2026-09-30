@@ -140,7 +140,7 @@ func (repository *TaskRepository) platformResolverActiveAtRevision(
 	revision int64,
 ) (*etcdstore.KeyValue, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{platformComponentTaskActiveKey(componentID)}, Revision: revision,
+		Keys: []string{platformcomponents.ActiveTaskKey(componentID)}, Revision: revision,
 	})
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func (repository *TaskRepository) platformResolverActiveAtRevision(
 	if active == nil {
 		return nil, nil
 	}
-	if active.Key != platformComponentTaskActiveKey(componentID) ||
+	if active.Key != platformcomponents.ActiveTaskKey(componentID) ||
 		ids.Validate(ids.KindTask, string(active.Value)) != nil {
 		return nil, errs.New(errs.KindInternal, "platform resolver active fence is corrupt")
 	}

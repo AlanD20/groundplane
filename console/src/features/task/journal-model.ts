@@ -39,15 +39,16 @@ export function emptyTaskJournal(): TaskJournalState {
   };
 }
 export function taskJournalKey(scope: TaskJournalScope): string {
+  const filters = `:${scope.status ?? ""}:${scope.taskType ?? ""}:${scope.resourceKind ?? ""}`;
   switch (scope.kind) {
     case "all":
-      return "all";
+      return "all" + filters;
     case "workspace":
-      return `workspace:${scope.workspace}`;
+      return `workspace:${scope.workspace}` + filters;
     case "project":
-      return `project:${scope.projectId}`;
+      return `project:${scope.projectId}` + filters;
     case "environment":
-      return `environment:${scope.environmentId}`;
+      return `environment:${scope.environmentId}` + filters;
   }
 }
 export function taskJournalQuery(
@@ -56,6 +57,9 @@ export function taskJournalQuery(
   pageSize: TaskPageSize = 5,
 ): string {
   const query = new URLSearchParams({ limit: String(pageSize) });
+  if (scope.status) query.set("status", scope.status);
+  if (scope.taskType) query.set("type", scope.taskType);
+  if (scope.resourceKind) query.set("resource_kind", scope.resourceKind);
   if (cursor) query.set("cursor", cursor);
   if (scope.kind === "workspace") query.set("workspace", scope.workspace);
   if (scope.kind === "project") query.set("project", scope.projectId);
@@ -145,6 +149,7 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
 
   return {
     id: task.id,
+    reconciliationRequired: task.reconciliation_required,
     operationId: task.operation_id,
     retryOf: task.retry_of,
     planHash: task.plan_hash,
@@ -167,6 +172,7 @@ export function taskFromAPI(value: TaskPageItem): ActivityEntry {
     finishedAt,
     steps: task.steps?.map((step) => ({
       label: step.name,
+      detail: step.script_slug,
       state: taskStepState(step.status),
     })),
   };

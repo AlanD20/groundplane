@@ -1,4 +1,5 @@
 import type { operations } from "@/lib/api.generated";
+import type { DNSRecord } from "@/lib/types";
 import { controllerRequest } from "@/lib/controller-json-request";
 type ComponentTaskAccepted =
   operations["component.enable"]["responses"][202]["content"]["application/json"];
@@ -14,6 +15,7 @@ type ComponentConfigInput =
     }
   | {
       upstream_auto: boolean;
+      records: DNSRecord[];
       upstream_resolvers: string[];
       forwarders: { domain: string; resolvers: string[] }[];
       tailnet_delegation: boolean;

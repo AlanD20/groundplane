@@ -32,6 +32,11 @@ restart etcd or interrupt application requests, held connections or data.
 Host reboot necessarily interrupts the host; recovery must restore operation
 without manual repair. GP software upgrades must preserve application service.
 
+etcd configuration has separate Save and Apply actions. Save never activates
+settings through a Controller restart. Explicit Apply restarts etcd independently
+without restarting application containers; failed activation restores its
+predecessor settings while retaining the same data directory.
+
 ## Resource model
 
 | Resource | Meaning |
@@ -92,6 +97,10 @@ exception: omission is rejected until the protected Volume Remove action has
 completed. A Backing Zone serving external Attaches also requires its separate
 impact-approved Remove action before omission; the Blueprint's Environment
 revision cannot approve effects on those consumers.
+
+DNS references also protect their Service, selected Zone and containing hierarchy.
+Removal requires a successful DNS update first; a saved or failed replacement
+cannot release references still applied by the resolver.
 
 Reusable Project and Platform Secrets are separate resources; an Environment
 Blueprint declares their Entry references, never their values.

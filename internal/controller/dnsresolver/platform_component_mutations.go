@@ -391,6 +391,7 @@ func platformComponentConfigIntent(
 		Query: requestidempotency.Object(),
 		Body: requestidempotency.JSONBody(requestidempotency.Object(
 			requestidempotency.Field{Name: "config", Value: requestidempotency.Object(
+				requestidempotency.Field{Name: "records", Value: dnsRecordsIntent(config.Records)},
 				requestidempotency.Field{
 					Name:  "corefile_template",
 					Value: requestidempotency.String(config.CorefileTemplate),
@@ -447,6 +448,7 @@ func coreDNSConfigMutation(input apiTypes.ComponentConfigMutationInput) (core.Co
 	}
 	sort.Slice(forwarders, func(left int, right int) bool { return forwarders[left].Domain < forwarders[right].Domain })
 	return core.CoreDNSComponentConfig{
+		Records:          append([]core.DNSRecord(nil), input.CoreDNS.Records...),
 		CorefileTemplate: *input.CoreDNS.CorefileTemplate,
 		UpstreamAuto:     *input.CoreDNS.UpstreamAuto, UpstreamResolvers: resolvers,
 		Forwarders: forwarders, TailnetDelegation: *input.CoreDNS.TailnetDelegation,
@@ -508,6 +510,7 @@ func publicCoreDNSConfig(config core.CoreDNSComponentConfig) apiTypes.ComponentC
 	}
 	return apiTypes.ComponentConfig{
 		CoreDNS: &apiTypes.CoreDNSComponentConfig{
+			Records:          append([]core.DNSRecord(nil), config.Records...),
 			CorefileTemplate: config.CorefileTemplate,
 			UpstreamAuto:     upstreamAuto, UpstreamResolvers: resolvers,
 			Forwarders: forwarders, TailnetDelegation: tailnetDelegation,

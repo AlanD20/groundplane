@@ -37,6 +37,23 @@ tenant network isolation; strict peer firewalling is post-MVP.
 Current source: [network reservation planner](../../internal/infra/etcd/networkreservations)
 and [network persistence](../../internal/infra/etcd/network).
 
+## Service DNS targets
+
+DNS points to a reserved Service proxy address, not a workload replica. Replicas
+can change during recreate or blue-green deployment without changing the name's
+target. Proxy and Component reservations share the Zone allocator to prevent
+collisions. The reservation commits with the sealed Release Task and is released
+only after proven Service removal; failed Deploy or runtime destruction retains it.
+
+Record admission requires an acknowledged proxy artifact carrying that address.
+Desired and last-applied DNS references fence resource deletion atomically, so a
+pending or failed resolver update cannot silently free its target. Explicit-IP
+records deliberately have no resource ownership.
+
+Current source: [proxy reservations](../../internal/infra/etcd/networkreservations/service_proxy_addresses.go),
+[DNS reference authority](../../internal/infra/etcd/dnsrecords), and
+[proxy rendering](../../internal/controller/composerender/service_proxy.go).
+
 ## Runner registry resolution
 
 The accepted [Runner delivery design](runner-isolation.md#one-private-registry-and-existing-dns)
@@ -45,7 +62,8 @@ and make it reachable from the host Docker daemon and the Runner's rootless
 daemon. A container-only DNS setting cannot govern a daemon's image push/pull.
 This requires private DNS reachability, not a public listener or a second resolver.
 The registry is shared infrastructure, not an Environment Zone or a public Route.
-The integration remains unimplemented; existing Route DNS behavior is unchanged.
+The listener and daemon wiring are private host infrastructure; existing Route
+DNS behavior is unchanged.
 
 ## Connector and credentials
 

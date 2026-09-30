@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -22,6 +23,7 @@ import (
 )
 
 type ReleaseLedger struct {
+	*networkreservations.Planner
 	*releases.Stager
 	*releasequeries.Reader
 	store etcdstore.Store
@@ -33,10 +35,11 @@ func NewReleaseLedger(store etcdstore.Store, tasks *TaskRepository) (*ReleaseLed
 		return nil, errs.New(errs.KindInternal, "release ledger dependencies are not configured")
 	}
 	return &ReleaseLedger{
-		Stager: releases.NewStager(store),
-		Reader: releasequeries.NewReader(store),
-		store:  store,
-		tasks:  tasks,
+		Planner: networkreservations.NewPlanner(store),
+		Stager:  releases.NewStager(store),
+		Reader:  releasequeries.NewReader(store),
+		store:   store,
+		tasks:   tasks,
 	}, nil
 }
 
@@ -48,6 +51,7 @@ const (
 )
 
 type ReleasePublicationEvidence struct {
+	ProxyAddresses             networkreservations.ProxyAddresses
 	Manifest                   releases.VersionedReleaseManifest
 	EnvironmentID              string
 	ProjectID                  string
@@ -175,6 +179,7 @@ func (ledger *ReleaseLedger) Publish(
 		fragment.condition,
 	}
 	conditions = append(conditions, hookFragment.conditions...)
+	conditions = append(conditions, evidence.ProxyAddresses.Conditions()...)
 	configurationCondition, hasConfiguration, err := taskConfigurationCondition(evidence.Task)
 	if err != nil {
 		return ReleasePublicationResult{}, err
@@ -185,6 +190,7 @@ func (ledger *ReleaseLedger) Publish(
 		configurationConditions = 1
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(evidence.Manifest.Record.Members)*2+11)
+	mutations = append(mutations, evidence.ProxyAddresses.Mutations()...)
 	for _, member := range evidence.Manifest.Record.Members {
 		environmentValue, encodeErr := json.Marshal(releases.ReleaseEnvironmentIndexValue{
 			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,

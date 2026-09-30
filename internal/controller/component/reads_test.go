@@ -12,6 +12,10 @@ import (
 
 type managedConfigReadRepository struct{ record testcomponents.Record }
 
+func (managedConfigReadRepository) GetPlatformComponentActiveTask(context.Context, string, int64) (string, error) {
+	return "", nil
+}
+
 func (repository managedConfigReadRepository) GetComponent(
 	context.Context, string,
 

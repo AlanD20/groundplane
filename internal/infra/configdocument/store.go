@@ -1,6 +1,6 @@
-// Package controllerconfig owns bounded, revision-fenced access to the native
-// Controller startup file.
-package controllerconfig
+// Package configdocument owns bounded, revision-fenced native configuration
+// files. Each consumer supplies its authoritative schema validator.
+package configdocument
 
 import (
 	"bytes"
@@ -19,7 +19,6 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	commonconfig "github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -36,7 +35,11 @@ type Store struct {
 	mu              sync.Mutex
 	path            string
 	startupRevision string
+	validate        Validator
+	operation       string
 }
+
+type Validator func(context.Context, []byte) error
 
 type replayState string
 
@@ -62,18 +65,24 @@ type replayRecord struct {
 	Response         replayResponse `json:"response"`
 }
 
-func New(ctx context.Context, path string, startupDocument []byte) (*Store, error) {
+func New(
+	ctx context.Context,
+	path string,
+	startupDocument []byte,
+	operation string,
+	validate Validator,
+) (*Store, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if !filepath.IsAbs(path) {
-		return nil, errs.New(errs.KindInternal, "controller config path must be absolute")
+	if !filepath.IsAbs(path) || validate == nil || operation == "" {
+		return nil, errs.New(errs.KindInternal, "configuration document path must be absolute")
 	}
 	currentDocument, err := readDocument(path)
 	if err != nil {
 		return nil, err
 	}
-	store := &Store{path: path, startupRevision: revision(startupDocument)}
+	store := &Store{path: path, startupRevision: revision(startupDocument), operation: operation, validate: validate}
 	if err := store.recoverPending(ctx, currentDocument); err != nil {
 		return nil, err
 	}
@@ -110,19 +119,19 @@ func (s *Store) Replace(
 	}
 	bytesToWrite := []byte(content)
 	if len(bytesToWrite) > maximumDocumentBytes {
-		return "", "", false, errs.New(errs.KindValidationFailed, "controller config exceeds 1 MiB")
+		return "", "", false, errs.New(errs.KindValidationFailed, "configuration document exceeds 1 MiB")
 	}
 	if !utf8.Valid(bytesToWrite) || bytes.IndexByte(bytesToWrite, 0) >= 0 {
 		return "", "", false, errs.New(
 			errs.KindValidationFailed,
-			"controller config must contain valid NUL-free UTF-8",
+			"configuration document must contain valid NUL-free UTF-8",
 		)
 	}
-	if _, err := commonconfig.ParseControllerDocument(ctx, bytesToWrite); err != nil {
+	if err := s.validate(ctx, bytesToWrite); err != nil {
 		return "", "", false, errs.New(errs.KindValidationFailed, err.Error())
 	}
 
-	intentDigest := replacementIntentDigest(expectedRevision, bytesToWrite)
+	intentDigest := s.replacementIntentDigest(expectedRevision, bytesToWrite)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -141,11 +150,11 @@ func (s *Store) Replace(
 		if subtle.ConstantTimeCompare([]byte(existing.IntentDigest), []byte(intentDigest)) != 1 {
 			return "", "", false, errs.New(
 				errs.KindIdempotencyMismatch,
-				"idempotency key was used for a different Controller config replacement",
+				"idempotency key was used for a different configuration document replacement",
 			)
 		}
 		if existing.State != replayCompleted {
-			return "", "", false, errs.New(errs.KindStateConflict, "controller config replacement is unresolved")
+			return "", "", false, errs.New(errs.KindStateConflict, "configuration document replacement is unresolved")
 		}
 		return replayResult(existing.Response)
 	}
@@ -154,7 +163,7 @@ func (s *Store) Replace(
 	if currentRevision != expectedRevision {
 		return "", "", false, errs.New(
 			errs.KindStateConflict,
-			"controller config changed after it was loaded; reload before saving",
+			"configuration document changed after it was loaded; reload before saving",
 		)
 	}
 	requestedRevision := revision(bytesToWrite)
@@ -200,10 +209,10 @@ func (s *Store) recoverPending(ctx context.Context, current []byte) error {
 		return nil
 	}
 	if err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: read replay directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: read replay directory: %w", err))
 	}
 	if len(entries) > maximumReplayRecords {
-		return errs.New(errs.KindInternal, "controller config replay record limit is exceeded")
+		return errs.New(errs.KindInternal, "configuration document replay record limit is exceeded")
 	}
 	currentRevision := revision(current)
 	for _, entry := range entries {
@@ -233,7 +242,7 @@ func (s *Store) recoverPending(ctx context.Context, current []byte) error {
 		default:
 			return errs.New(
 				errs.KindStateConflict,
-				"controller config has an unresolved replacement; restore its expected or target revision",
+				"configuration document has an unresolved replacement; restore its expected or target revision",
 			)
 		}
 	}
@@ -255,7 +264,7 @@ func (s *Store) readReplay(key string) (replayRecord, bool, error) {
 	if record.Key != key {
 		return replayRecord{}, false, errs.New(
 			errs.KindIdempotencyMismatch,
-			"idempotency key was used for a different Controller config replacement",
+			"idempotency key was used for a different configuration document replacement",
 		)
 	}
 	return record, true, nil
@@ -267,10 +276,10 @@ func (s *Store) writeReplay(record replayRecord) error {
 	}
 	encoded, err := json.Marshal(record)
 	if err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: encode replay record: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: encode replay record: %w", err))
 	}
 	if len(encoded) > maximumReplayBytes {
-		return errs.New(errs.KindInternal, "controller config replay record exceeds 8 MiB")
+		return errs.New(errs.KindInternal, "configuration document replay record exceeds 8 MiB")
 	}
 	encoded = append(encoded, '\n')
 	return writeAtomicFile(replayFilePath(s.path, record.Key), encoded, 0o600)
@@ -286,7 +295,7 @@ func validateReplayRecord(configPath string, filename string, record replayRecor
 		record.Response.Path != configPath ||
 		record.Response.Revision != record.TargetRevision ||
 		(record.State != replayPending && record.State != replayCompleted) {
-		return errs.New(errs.KindInternal, "controller config replay record is corrupt")
+		return errs.New(errs.KindInternal, "configuration document replay record is corrupt")
 	}
 	return nil
 }
@@ -302,7 +311,7 @@ func readReplayFile(path string) (replayRecord, error) {
 	if err := decoder.Decode(&record); err != nil {
 		return replayRecord{}, errs.Wrap(
 			errs.KindInternal,
-			fmt.Errorf("controller config: decode replay record: %w", err),
+			fmt.Errorf("configuration document: decode replay record: %w", err),
 		)
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
@@ -315,9 +324,9 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 	var trailing any
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
-			return errs.New(errs.KindInternal, "controller config replay record has trailing data")
+			return errs.New(errs.KindInternal, "configuration document replay record has trailing data")
 		}
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: decode replay record trailer: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: decode replay record trailer: %w", err))
 	}
 	return nil
 }
@@ -326,21 +335,24 @@ func ensureReplayDirectory(path string) error {
 	created := false
 	if err := os.Mkdir(path, 0o700); err != nil {
 		if !errors.Is(err, fs.ErrExist) {
-			return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: create replay directory: %w", err))
+			return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: create replay directory: %w", err))
 		}
 	} else {
 		created = true
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: inspect replay directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: inspect replay directory: %w", err))
 	}
 	if !info.IsDir() {
-		return errs.New(errs.KindInternal, "controller config replay path is not a directory")
+		return errs.New(errs.KindInternal, "configuration document replay path is not a directory")
 	}
 	if info.Mode().Perm() != 0o700 {
 		if err := os.Chmod(path, 0o700); err != nil {
-			return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: set replay directory mode: %w", err))
+			return errs.Wrap(
+				errs.KindInternal,
+				fmt.Errorf("configuration document: set replay directory mode: %w", err),
+			)
 		}
 	}
 	if created {
@@ -351,7 +363,10 @@ func ensureReplayDirectory(path string) error {
 
 func removeReplayFile(directoryPath string, filename string) error {
 	if err := os.Remove(filepath.Join(directoryPath, filename)); err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: remove unapplied replay record: %w", err))
+		return errs.Wrap(
+			errs.KindInternal,
+			fmt.Errorf("configuration document: remove unapplied replay record: %w", err),
+		)
 	}
 	return syncDirectory(directoryPath)
 }
@@ -369,9 +384,9 @@ func replayFilename(key string) string {
 	return fmt.Sprintf("%x.json", digest)
 }
 
-func replacementIntentDigest(expectedRevision string, content []byte) string {
+func (s *Store) replacementIntentDigest(expectedRevision string, content []byte) string {
 	digest := sha256.New()
-	_, _ = io.WriteString(digest, "controller.config.set:v1\x00")
+	_, _ = io.WriteString(digest, s.operation+":v1\x00")
 	_, _ = io.WriteString(digest, expectedRevision)
 	_, _ = digest.Write([]byte{0})
 	_, _ = digest.Write(content)
@@ -387,7 +402,7 @@ func readDocument(path string) ([]byte, error) {
 		return nil, err
 	}
 	if !utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0 {
-		return nil, errs.New(errs.KindInternal, "controller config file must contain valid NUL-free UTF-8")
+		return nil, errs.New(errs.KindInternal, "configuration document file must contain valid NUL-free UTF-8")
 	}
 	return content, nil
 }
@@ -396,39 +411,39 @@ func readBoundedRegularFile(path string, maximumBytes int64) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: inspect file: %w", err))
+			return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: inspect file: %w", err))
 		}
 		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return nil, errs.New(errs.KindInternal, "controller config path is not a regular file")
+		return nil, errs.New(errs.KindInternal, "configuration document path is not a regular file")
 	}
 	if info.Size() > maximumBytes {
-		return nil, errs.New(errs.KindInternal, "controller config file exceeds its size limit")
+		return nil, errs.New(errs.KindInternal, "configuration document file exceeds its size limit")
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: open file: %w", err))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: open file: %w", err))
 	}
 	content, readErr := io.ReadAll(io.LimitReader(file, maximumBytes+1))
 	closeErr := file.Close()
 	if readErr != nil {
-		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: read file: %w", readErr))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: read file: %w", readErr))
 	}
 	if closeErr != nil {
-		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: close file: %w", closeErr))
+		return nil, errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: close file: %w", closeErr))
 	}
 	if int64(len(content)) > maximumBytes {
-		return nil, errs.New(errs.KindInternal, "controller config file exceeds its size limit")
+		return nil, errs.New(errs.KindInternal, "configuration document file exceeds its size limit")
 	}
 	return content, nil
 }
 
 func writeAtomicFile(path string, content []byte, mode fs.FileMode) error {
 	directoryPath := filepath.Dir(path)
-	temporary, err := os.CreateTemp(directoryPath, ".groundplane-controller-config-")
+	temporary, err := os.CreateTemp(directoryPath, ".groundplane-config-")
 	if err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: create temporary file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: create temporary file: %w", err))
 	}
 	temporaryPath := temporary.Name()
 	keepTemporary := true
@@ -442,23 +457,23 @@ func writeAtomicFile(path string, content []byte, mode fs.FileMode) error {
 		}
 	}()
 	if err := temporary.Chmod(mode); err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: set file mode: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: set file mode: %w", err))
 	}
 	written, err := temporary.Write(content)
 	if err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: write temporary file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: write temporary file: %w", err))
 	}
 	if written != len(content) {
 		return errs.Wrap(errs.KindInternal, io.ErrShortWrite)
 	}
 	if err := temporary.Sync(); err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: sync temporary file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: sync temporary file: %w", err))
 	}
 	if err := temporary.Close(); err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: close temporary file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: close temporary file: %w", err))
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: publish file: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: publish file: %w", err))
 	}
 	keepTemporary = false
 	// The rename makes replacement atomic to readers. Syncing the containing
@@ -469,7 +484,7 @@ func writeAtomicFile(path string, content []byte, mode fs.FileMode) error {
 func syncDirectory(path string) error {
 	directory, err := os.Open(path)
 	if err != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: open parent directory: %w", err))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: open parent directory: %w", err))
 	}
 	syncErr := directory.Sync()
 	closeErr := directory.Close()
@@ -477,10 +492,10 @@ func syncDirectory(path string) error {
 		if closeErr != nil {
 			syncErr = errors.Join(syncErr, closeErr)
 		}
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: sync parent directory: %w", syncErr))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: sync parent directory: %w", syncErr))
 	}
 	if closeErr != nil {
-		return errs.Wrap(errs.KindInternal, fmt.Errorf("controller config: close parent directory: %w", closeErr))
+		return errs.Wrap(errs.KindInternal, fmt.Errorf("configuration document: close parent directory: %w", closeErr))
 	}
 	return nil
 }

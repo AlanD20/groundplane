@@ -43,7 +43,7 @@ func (repository *TaskRepository) ReconcileResolverListener(ctx context.Context,
 	componentID := resolver.Record.Desired.ID
 	requestKey := "/v1/indexes/platform-resolver-listener-attempt/" + componentID
 	keys := []string{
-		platformComponentTaskActiveKey(componentID),
+		platformcomponents.ActiveTaskKey(componentID),
 		platformcomponents.ComponentObservationKey(componentID),
 		requestKey,
 	}

@@ -6,6 +6,7 @@ import (
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/dnsrecords"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -33,6 +34,7 @@ func ValidatePlatformComponentRecord(record componentrecord.Record) error {
 
 // ComponentObservationRecord is replaceable Agent evidence, separate from desired state.
 type ComponentObservationRecord struct {
+	DNSRecords          []core.DNSRecord                                `json:"dns_records,omitempty"`
 	ComponentID         string                                          `json:"component_id"`
 	ServiceID           string                                          `json:"service_id"`
 	PlanID              string                                          `json:"plan_id"`
@@ -57,6 +59,9 @@ type ComponentObservationRecord struct {
 }
 
 func ValidateComponentObservation(record ComponentObservationRecord) error {
+	if err := dnsrecords.ValidateDNSRecords(record.DNSRecords); err != nil {
+		return err
+	}
 	if ids.Validate(ids.KindComponent, record.ComponentID) != nil ||
 		ids.Validate(ids.KindService, record.ServiceID) != nil ||
 		ids.Validate(ids.KindPlan, record.PlanID) != nil ||

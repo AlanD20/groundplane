@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -160,6 +161,16 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		return routeTaskChange{}, err
 	}
 	change.conditions = append(change.conditions, scriptConditions...)
+	addresses, err := networkreservations.PrepareProxyAddressRelease(ctx, repository.store, intent.ServiceID, revision)
+	if err != nil {
+		clearRouteTaskChange(change)
+		return routeTaskChange{}, err
+	}
+	change.conditions = append(change.conditions, addresses.Conditions()...)
+	change.mutations = append(change.mutations, addresses.Mutations()...)
+	for _, mutation := range addresses.Mutations() {
+		change.values = append(change.values, mutation.Value)
+	}
 	hierarchy := composeHierarchyRepository(repository.store)
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
 		ctx,

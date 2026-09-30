@@ -80,6 +80,10 @@ export type Service = {
   authentication?: string; // raw immutable Valkey instance policy, projected from the backing facade and validated before use
 };
 
+export type DNSRecord =
+  | { hostname: string; address: string; service_id?: never; zone_id?: never }
+  | { hostname: string; service_id: string; zone_id: string; address?: never };
+
 export type Zone = {
   id: string;
   environmentId: string;
@@ -416,11 +420,16 @@ export type TaskWorkspaceType = "platform" | "tenant";
 
 export type TaskActor = "operator" | "system";
 
-export type TaskJournalScope =
+export type TaskJournalScope = (
   | { kind: "all" }
   | { kind: "workspace"; workspace: "platform" | string }
   | { kind: "project"; projectId: string }
-  | { kind: "environment"; environmentId: string };
+  | { kind: "environment"; environmentId: string }
+) & {
+  status?: TaskStatus;
+  resourceKind?: string;
+  taskType?: TaskType;
+};
 
 export type TaskJournalSurface = "tasks" | "activity";
 export type TaskPageSize = 5 | 10 | 25 | 50;
@@ -439,7 +448,8 @@ export type TaskJournalState = {
 };
 
 export type ActivityEntry = {
-	imageFetch?: TaskResponse["image_fetch"];
+  reconciliationRequired?: boolean;
+  imageFetch?: TaskResponse["image_fetch"];
   id: string;
   operationId?: string;
   retryOf?: string;
@@ -493,6 +503,7 @@ export type PlatformAgent = {
 };
 
 export type ManagedConfigFile = {
+  generatedDirectives?: string;
   path: string;
   template: string;
   rendered: string;
@@ -508,6 +519,7 @@ export type PlatformInfra = {
     status: "completed" | "failed";
   }[];
   dns: {
+    records?: DNSRecord[];
     enabled: boolean;
     listen?: string;
     // resolver addresses only (e.g. "1.1.1.1 8.8.8.8"); when upstreamAuto

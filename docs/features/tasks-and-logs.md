@@ -12,13 +12,16 @@ outcome. Rename or deletion does not move its history to a different owner.
 Step completion is not Task completion.
 
 Every Console action that publishes a Task provides an **Open task** link as
-soon as its ID is known. Recent accepted Tasks remain linked above the current
-page when the action dialog closes or you navigate elsewhere in the Console.
+soon as its ID is known. Top-right toasts follow accepted Tasks, and the bell
+opens the notification center for operations started in the current session.
+Dismissal hides a toast without losing its Task link; reloading the Console
+clears session notifications, not recorded Activity.
 The link opens that exact Task, not a filtered history list; it can be copied or
 opened in another tab. The inspector refreshes pending/running status until the
 Task finishes. A rejected request without a Task ID has no Task to open.
 The inspector leads with the action, affected resource, status and execution
-timing. Recorded steps show their outcomes; unavailable failure details are
+timing. The execution terminal shows durable step transitions, timestamps and
+attempts, not shell commands or stdout. Unavailable failure details are
 identified explicitly, not inferred from a failed status. Exact IDs and plan
 hashes remain available under Technical details.
 
@@ -30,7 +33,11 @@ retention boundary.
 
 Activity and Task lists show newest-created Tasks first (descending Task ID),
 with the same scope filters and fixed-revision cursor semantics on every page.
-There is no general Component or execution-target Task filter.
+Status, operation type and resource-kind filters search the full recorded
+journal, not just the current page. Continuation cursors bind the exact filters.
+Components links to the same Activity view filtered to platform Component work;
+it does not maintain a second Platform Task list. Exact execution-target filtering
+is not available.
 Console pages default to five Tasks, with 5/10/25/50 choices.
 
 ## Retry

@@ -9,7 +9,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-type ControllerConfigStore interface {
+type NativeConfigStore interface {
 	Path() string
 	Current(context.Context) (content string, revision string, restartRequired bool, err error)
 	Replace(

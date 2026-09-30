@@ -2,6 +2,7 @@
 
 import { DetailRow } from "@/components/common/detail-row";
 import { TaskRunnerDialog } from "@/components/common/task-runner-dialog";
+import { DNSProtectedRemoval } from "@/features/platform-component/dns-protected-removal";
 import { Button } from "@/components/ui/button";
 import {
   DialogFooter,
@@ -262,76 +263,90 @@ export function ZoneColumn({
         </DrawerContent>
       </Drawer>
 
-      <TaskRunnerDialog
+      <DNSProtectedRemoval
         open={removeOpen}
         onOpenChange={setRemoveOpen}
-        title={`Remove zone · ${zone.name}`}
-        description={`Removes ${zone.name} (${zone.subnet}) and disconnects ${services.length} joined service${services.length === 1 ? "" : "s"}.`}
-        type="destroy"
-        target={zone.id}
-        workspace={params.tenant}
-        destructive
-        confirmText={zone.name}
-        startLabel="Remove zone"
-        review={
-          <div className="flex flex-col gap-2 text-xs">
-            {removalImpactError ? (
-              <p className="text-destructive">{removalImpactError}</p>
-            ) : null}
-            {!removalImpact && !removalImpactError ? (
-              <p className="text-muted-foreground">
-                Loading exact removal impact...
-              </p>
-            ) : null}
-            {removalImpact ? (
-              <>
-                <p>
-                  {impactServices.length} affected service
-                  {impactServices.length === 1 ? "" : "s"}
-                </p>
-                {impactServices.map((service) => (
-                  <p key={service.id} className="font-mono">
-                    {service.name} ({service.id})
-                  </p>
-                ))}
-                <p>
-                  {impactAttaches.length} detach
-                  {impactAttaches.length === 1 ? "" : "es"}
-                </p>
-                {impactAttaches.map((attach) => (
-                  <p key={attach.id} className="font-mono">
-                    {attach.name} ({attach.id})
-                  </p>
-                ))}
-                <p>
-                  {impactDatabases.length} provisioned database
-                  {impactDatabases.length === 1 ? "" : "s"}
-                </p>
-                {impactDatabases.map((database) => (
-                  <p key={database.attach_id} className="font-mono">
-                    {database.name}
-                  </p>
-                ))}
-              </>
-            ) : null}
-          </div>
-        }
-        steps={[
-          {
-            label: "Validate dependent services and attaches",
-            state: "pending",
-          },
-          { label: `Remove network ${zone.name}`, state: "pending" },
-          { label: "Update affected service memberships", state: "pending" },
-        ]}
-        onDispatch={() => {
-          if (!removalImpact)
-            return Promise.reject(
-              new Error("Exact zone removal impact is not loaded"),
-            );
-          return store.removeZone(env.id, zone.id, removalImpact.impact_token);
+        zoneId={zone.id}
+        onReferencesRemoved={async () => {
+          const impact = await store.getZoneRemovalImpact(zone.id);
+          setRemovalImpact(impact);
         }}
-      />
+      >
+        <TaskRunnerDialog
+          open={removeOpen}
+          onOpenChange={setRemoveOpen}
+          title={`Remove zone · ${zone.name}`}
+          description={`Removes ${zone.name} (${zone.subnet}) and disconnects ${services.length} joined service${services.length === 1 ? "" : "s"}.`}
+          type="destroy"
+          target={zone.id}
+          workspace={params.tenant}
+          destructive
+          confirmText={zone.name}
+          startLabel="Remove zone"
+          review={
+            <div className="flex flex-col gap-2 text-xs">
+              {removalImpactError ? (
+                <p className="text-destructive">{removalImpactError}</p>
+              ) : null}
+              {!removalImpact && !removalImpactError ? (
+                <p className="text-muted-foreground">
+                  Loading exact removal impact...
+                </p>
+              ) : null}
+              {removalImpact ? (
+                <>
+                  <p>
+                    {impactServices.length} affected service
+                    {impactServices.length === 1 ? "" : "s"}
+                  </p>
+                  {impactServices.map((service) => (
+                    <p key={service.id} className="font-mono">
+                      {service.name} ({service.id})
+                    </p>
+                  ))}
+                  <p>
+                    {impactAttaches.length} detach
+                    {impactAttaches.length === 1 ? "" : "es"}
+                  </p>
+                  {impactAttaches.map((attach) => (
+                    <p key={attach.id} className="font-mono">
+                      {attach.name} ({attach.id})
+                    </p>
+                  ))}
+                  <p>
+                    {impactDatabases.length} provisioned database
+                    {impactDatabases.length === 1 ? "" : "s"}
+                  </p>
+                  {impactDatabases.map((database) => (
+                    <p key={database.attach_id} className="font-mono">
+                      {database.name}
+                    </p>
+                  ))}
+                </>
+              ) : null}
+            </div>
+          }
+          steps={[
+            {
+              label: "Validate dependent services and attaches",
+              state: "pending",
+            },
+            { label: `Remove network ${zone.name}`, state: "pending" },
+            { label: "Update affected service memberships", state: "pending" },
+          ]}
+          onDispatch={() => {
+            if (!removalImpact)
+              return Promise.reject(
+                new Error("Exact zone removal impact is not loaded"),
+              );
+            return store.removeZone(
+              env.id,
+              zone.id,
+              removalImpact.impact_token,
+            );
+          }}
+        />
+      </DNSProtectedRemoval>
     </div>
   );
 }

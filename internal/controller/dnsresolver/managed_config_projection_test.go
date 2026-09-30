@@ -61,7 +61,7 @@ func TestManagedConfigProjectorUsesOnlyDurableReadInputs(t *testing.T) {
 	baselines := &previewBaselineReader{found: true}
 	renderer := &previewRenderer{}
 	projector, err := NewManagedConfigProjector(
-		previewProjectionReader{record: projection}, baselines, renderer,
+		previewProjectionReader{record: projection}, emptyDNSRecordsResolver{}, baselines, renderer,
 		"/etc/groundplane/coredns/Corefile", netip.MustParseAddr("127.0.0.1"),
 	)
 	if err != nil {
@@ -97,7 +97,7 @@ func TestManagedConfigProjectorDoesNotCreateMissingBaseline(t *testing.T) {
 	}
 	baselines := &previewBaselineReader{}
 	projector, err := NewManagedConfigProjector(
-		previewProjectionReader{record: projection}, baselines, &previewRenderer{},
+		previewProjectionReader{record: projection}, emptyDNSRecordsResolver{}, baselines, &previewRenderer{},
 		"/etc/groundplane/coredns/Corefile", netip.MustParseAddr("127.0.0.1"),
 	)
 	if err != nil {

@@ -125,6 +125,20 @@ func (service *Service) prepareSelected(
 	input PrepareInput,
 	candidates []blueprints.EnvironmentBlueprintServiceChange,
 ) (Prepared, error) {
+	proxyServices := make([]core.Service, len(candidates))
+	for i, candidate := range candidates {
+		proxyServices[i] = candidate.Record.Desired
+	}
+	addresses, err := taskplanning.PrepareServiceProxyAddresses(
+		ctx,
+		service.ledger.Planner,
+		input.Projection,
+		proxyServices,
+	)
+	if err != nil {
+		return Prepared{}, err
+	}
+	defer addresses.Clear()
 	task, err := service.prepareTaskConfiguration(ctx, input, len(candidates) != 0)
 	if err != nil {
 		return Prepared{}, err
@@ -222,7 +236,8 @@ func (service *Service) prepareSelected(
 			return Prepared{}, sealErr
 		}
 		render := releaserender.ReleaseRenderInput{
-			ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
+			ProxyAddresses: addresses.ForService(candidate.Record.Desired.ID),
+			ReleaseID:      releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
 			ServiceID: candidate.Record.Desired.ID, ServiceName: candidate.Record.Desired.Name,
 			CandidateWorkload: workload, Strategy: domain.StrategyRecreate,
 			PriorStrategy: domain.StrategyRecreate, CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
@@ -345,6 +360,7 @@ func (service *Service) prepareSelected(
 		ctx,
 		service.sources,
 		etcd.BlueprintReleasePublicationEvidence{
+			ProxyAddresses:     addresses,
 			NativePredecessors: nativePredecessorCaptures(input, members),
 			Manifest:           manifest, EnvironmentID: input.Environment.Record.ID, Task: task, PublishedAt: input.CreatedAt,
 			CandidateReleaseDescriptor: candidateDescriptor,

@@ -7,6 +7,7 @@ import { ImageFetchTaskDetails } from "@/features/image-delivery/image-fetch-tas
 import { requestTask } from "@/features/task/api";
 import { taskFromAPI } from "@/features/task/journal-model";
 import { TaskOverview, taskPresentation } from "@/features/task/task-overview";
+import { TaskExecutionTerminal } from "@/features/task/task-execution-terminal";
 import { useStore } from "@/lib/store";
 import { taskDetailActions } from "@/lib/task-detail-actions";
 import type {
@@ -196,6 +197,7 @@ export function TaskDetailDrawer({
             {task.imageFetch ? (
               <>
                 <ImageFetchTaskDetails task={task} />
+                <TaskExecutionTerminal task={task} />
               </>
             ) : (
               <TaskOverview task={task} onClose={() => onOpenChange(false)} />

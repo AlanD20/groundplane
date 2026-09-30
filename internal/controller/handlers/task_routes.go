@@ -20,11 +20,14 @@ import (
 )
 
 type taskListInput struct {
-	Limit       int    `query:"limit" required:"false" minimum:"1" maximum:"200"`
-	Cursor      string `query:"cursor" required:"false"`
-	Environment string `query:"environment" required:"false" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Project     string `query:"project" required:"false" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
-	Workspace   string `query:"workspace" required:"false" pattern:"^(platform|tnt_[0-9A-HJKMNP-TV-Z]{26})$"`
+	Limit        int    `query:"limit" required:"false" minimum:"1" maximum:"200"`
+	Cursor       string `query:"cursor" required:"false"`
+	Environment  string `query:"environment" required:"false" pattern:"^env_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Project      string `query:"project" required:"false" pattern:"^prj_[0-9A-HJKMNP-TV-Z]{26}$"`
+	Workspace    string `query:"workspace" required:"false" pattern:"^(platform|tnt_[0-9A-HJKMNP-TV-Z]{26})$"`
+	Status       string `query:"status" required:"false" enum:"pending,running,completed,failed,timed_out,aborted"`
+	Type         string `query:"type" required:"false"`
+	ResourceKind string `query:"resource_kind" required:"false"`
 }
 
 type taskShowInput struct {
@@ -169,6 +172,9 @@ func (s *Server) listTasks(ctx context.Context, request *taskListInput) (*taskPa
 	if err != nil {
 		return nil, err
 	}
+	scope.Status = taskjournal.TaskStatus(request.Status)
+	scope.Type = taskjournal.TaskType(request.Type)
+	scope.ResourceKind = request.ResourceKind
 	page, err := s.tasks.ListTasksByScope(
 		ctx,
 		scope,
@@ -244,8 +250,9 @@ func taskListResponse(record etcd.TaskRecord) (apiTypes.Task, error) {
 		return apiTypes.Task{}, err
 	}
 	return apiTypes.Task{
-		ImageFetch: fetch,
-		ID:         record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
+		ReconciliationRequired: record.Result != nil && record.Result.ReconciliationRequired,
+		ImageFetch:             fetch,
+		ID:                     record.ID, OperationID: record.OperationID, RetryOf: record.RetryOf,
 		PlanHash: record.PlanHash, Type: taskType, Target: record.Target, Status: status,
 		WorkspaceType: workspace, TenantID: record.Owner.TenantID, ProjectID: record.Owner.ProjectID,
 		EnvironmentID: record.Owner.EnvironmentID, Actor: actor,
@@ -339,7 +346,7 @@ func (s *Server) validateTaskListQuery(ctx huma.Context, next func(huma.Context)
 	query := requestURL.Query()
 	for key, values := range query {
 		switch key {
-		case "environment", "project", "workspace", "limit", "cursor":
+		case "environment", "project", "workspace", "limit", "cursor", "status", "type", "resource_kind":
 		default:
 			s.writeTaskListProblem(ctx, http.StatusBadRequest, "Task list query is invalid")
 			return

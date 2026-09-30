@@ -45,6 +45,7 @@ func newControllerResolverComposition(
 	}
 	platformRenderPlanner, err := controllerdns.NewPlatformRenderPlanner(
 		resolutionProjections,
+		componentRecords,
 		resolverBaselines,
 		componentRecords,
 		controllerdns.BaselineCapture(hostresolution.CaptureBaseline),

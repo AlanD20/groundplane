@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -242,6 +243,11 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
+	dnsConditions, err := dnsrecords.NewReader(repository.store).
+		RequireDNSUnreferenced(ctx, current.Record.Desired.ID, "", projection.ReadRevision)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		{
@@ -268,6 +274,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: serviceruntimerecord.Key(intent.ServiceID), ModRevision: intent.AcknowledgedRuntimeRevision},
 	}
+	conditions = append(conditions, dnsConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{

@@ -22,12 +22,6 @@ type hostResolutionReconciliationChange struct {
 	values     [][]byte
 }
 
-const platformComponentTaskActivePrefix = "/v1/indexes/platform-component-tasks/by-component/"
-
-func platformComponentTaskActiveKey(componentID string) string {
-	return platformComponentTaskActivePrefix + componentID
-}
-
 func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRecord {
 	return TaskRecord{
 		ID: ids.New(ids.KindTask), OperationID: ids.New(ids.KindOperation),
@@ -247,6 +241,15 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		)
 	}
 	resolverTask := resolverAttempt
+	// A valid failure report is durable evidence, not a protocol violation.
+	// Retain exclusive resolver ownership until an explicit retry proves its
+	// effects settled; never auto-publish a successor over uncertain runtime.
+	if resolverTask && task.Result != nil && task.Result.ReconciliationRequired {
+		change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
+			Key: active.Key, ModRevision: active.ModRevision,
+		})
+		return change, nil
+	}
 	if active != nil && !resolverTask {
 		change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 			Key: active.Key, ModRevision: active.ModRevision,

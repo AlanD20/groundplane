@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/blueprintunits"
@@ -23,6 +24,10 @@ func prepareEnvironmentDesiredIdentityPublication(
 	expectedHeadRevision int64,
 	readRevision int64,
 ) (environmentDesiredIdentityPublication, error) {
+	dnsConditions, err := dnsrecords.NewReader(store).ProtectDNSProjection(ctx, projection, readRevision)
+	if err != nil {
+		return environmentDesiredIdentityPublication{}, err
+	}
 	if expectedHeadRevision < 0 {
 		return environmentDesiredIdentityPublication{}, errs.New(
 			errs.KindValidationFailed,
@@ -93,6 +98,7 @@ func prepareEnvironmentDesiredIdentityPublication(
 		},
 	}
 	publication.conditions = append(publication.conditions, initialAbsence.Conditions()...)
+	publication.conditions = append(publication.conditions, dnsConditions...)
 	publication.mutations = append(publication.mutations, initialAbsence.Mutations()...)
 	return publication, nil
 }

@@ -19,12 +19,14 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/controller/etcdconfig"
 	"github.com/AlanD20/groundplane/internal/controller/host"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
 	"github.com/AlanD20/groundplane/internal/infra/docker/agentcontainer"
+	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	"github.com/AlanD20/groundplane/internal/infra/systemd"
@@ -40,6 +42,7 @@ type controllerPlatformDependencies struct {
 	Idempotency   *etcd.IdempotencyRepository
 	Channel       *channeltransport.Runtime
 	EtcdEndpoints []string
+	EtcdLifecycle *etcdcontainer.Manager
 	Tick          time.Duration
 	Logger        *slog.Logger
 }
@@ -53,6 +56,7 @@ type controllerPlatform struct {
 	host           *host.HostService
 	reconciliation controllerScheduler
 	upgrades       *controllerupgrade.Service
+	etcdConfig     *etcdconfig.Service
 	native         controllertask.UpdateExecutor
 	readiness      *controllerupgrade.Readiness
 	container      *agentcontainer.Manager
@@ -227,5 +231,12 @@ func newControllerPlatform(
 		return nil, err
 	}
 	dependencies.Channel.OnReady = platform.readiness.MarkChannelReady
+	platform.etcdConfig, err = etcdconfig.New(
+		dependencies.EtcdLifecycle.Configuration(), dependencies.EtcdLifecycle,
+		dependencies.Tasks, dependencies.Idempotency, dependencies.Intents,
+	)
+	if err != nil {
+		return nil, err
+	}
 	return platform, nil
 }

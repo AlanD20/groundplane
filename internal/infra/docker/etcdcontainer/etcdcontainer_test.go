@@ -1,13 +1,14 @@
 package etcdcontainer
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/config"
 	"testing"
 
 	"github.com/moby/moby/api/types/container"
 )
 
 func TestDesiredContainerIsPrivatePersistentAndControllerOwned(t *testing.T) {
-	options := createOptions()
+	options := createOptions(config.DefaultEtcdConfig())
 	if options.Name != ContainerName || options.Config.Image != Image || options.Config.User != "0" {
 		t.Fatalf("identity = %q/%q/%q", options.Name, options.Config.Image, options.Config.User)
 	}
@@ -27,11 +28,11 @@ func TestDesiredContainerIsPrivatePersistentAndControllerOwned(t *testing.T) {
 	}
 
 	inspected := container.InspectResponse{Config: options.Config, HostConfig: options.HostConfig}
-	if !matchesDesired(inspected) {
+	if !matchesDesired(inspected, config.DefaultEtcdConfig()) {
 		t.Fatal("exact desired container did not match")
 	}
 	inspected.HostConfig.NetworkMode = container.NetworkMode("bridge")
-	if matchesDesired(inspected) {
+	if matchesDesired(inspected, config.DefaultEtcdConfig()) {
 		t.Fatal("drifted network mode matched desired container")
 	}
 }

@@ -1049,7 +1049,7 @@
           },
           {
             "additionalProperties": false,
-            "maxProperties": 5,
+            "maxProperties": 6,
             "minProperties": 5,
             "properties": {
               "corefile_template": {
@@ -1074,6 +1074,52 @@
                     "resolvers"
                   ],
                   "type": "object"
+                },
+                "type": "array"
+              },
+              "records": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "address": {
+                          "format": "ipv4",
+                          "type": "string"
+                        },
+                        "hostname": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hostname",
+                        "address"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "hostname": {
+                          "type": "string"
+                        },
+                        "service_id": {
+                          "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        },
+                        "zone_id": {
+                          "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "hostname",
+                        "service_id",
+                        "zone_id"
+                      ],
+                      "type": "object"
+                    }
+                  ]
                 },
                 "type": "array"
               },
@@ -1222,7 +1268,7 @@
               },
               {
                 "additionalProperties": false,
-                "maxProperties": 5,
+                "maxProperties": 6,
                 "minProperties": 5,
                 "properties": {
                   "corefile_template": {
@@ -1247,6 +1293,52 @@
                         "resolvers"
                       ],
                       "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "records": {
+                    "items": {
+                      "oneOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "address": {
+                              "format": "ipv4",
+                              "type": "string"
+                            },
+                            "hostname": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "hostname",
+                            "address"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "hostname": {
+                              "type": "string"
+                            },
+                            "service_id": {
+                              "pattern": "^svc_[0-9A-HJKMNP-TV-Z]{26}$",
+                              "type": "string"
+                            },
+                            "zone_id": {
+                              "pattern": "^net_[0-9A-HJKMNP-TV-Z]{26}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "hostname",
+                            "service_id",
+                            "zone_id"
+                          ],
+                          "type": "object"
+                        }
+                      ]
                     },
                     "type": "array"
                   },
@@ -1318,6 +1410,9 @@
             ],
             "format": "uri",
             "readOnly": true,
+            "type": "string"
+          },
+          "active_task_id": {
             "type": "string"
           },
           "config": {
@@ -2475,6 +2570,89 @@
         ],
         "type": "object"
       },
+      "EtcdConfigApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EtcdConfigApplyRequest.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "expected_revision": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "type": "object"
+      },
+      "EtcdConfigDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EtcdConfigDocument.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "apply_required": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "revision": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content",
+          "revision",
+          "apply_required"
+        ],
+        "type": "object"
+      },
+      "EtcdConfigReplacement": {
+        "additionalProperties": false,
+        "properties": {
+          "$schema": {
+            "description": "A URL to the JSON Schema for this object.",
+            "examples": [
+              "/api/v1/EtcdConfigReplacement.json"
+            ],
+            "format": "uri",
+            "readOnly": true,
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 8192,
+            "type": "string"
+          },
+          "expected_revision": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "expected_revision"
+        ],
+        "type": "object"
+      },
       "HierarchyDeleteOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -2999,6 +3177,9 @@
       "ManagedConfigFile": {
         "additionalProperties": false,
         "properties": {
+          "generated_directives": {
+            "type": "string"
+          },
           "path": {
             "type": "string"
           },
@@ -5812,6 +5993,9 @@
           "project_id": {
             "type": "string"
           },
+          "reconciliation_required": {
+            "type": "boolean"
+          },
           "retry_of": {
             "type": "string"
           },
@@ -5881,6 +6065,7 @@
           "type",
           "target",
           "status",
+          "reconciliation_required",
           "workspace_type",
           "actor",
           "created_at",
@@ -6679,6 +6864,38 @@
             "name": "workspace",
             "schema": {
               "pattern": "^(platform|tnt_[0-9A-HJKMNP-TV-Z]{26})$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "pending",
+                "running",
+                "completed",
+                "failed",
+                "timed_out",
+                "aborted"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "resource_kind",
+            "schema": {
               "type": "string"
             }
           }
@@ -9958,6 +10175,150 @@
         ]
       }
     },
+    "/etcd/config": {
+      "get": {
+        "operationId": "etcd.config.show",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EtcdConfigDocument"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Show saved etcd configuration",
+        "tags": [
+          "Host"
+        ]
+      },
+      "put": {
+        "operationId": "etcd.config.set",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EtcdConfigReplacement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EtcdConfigDocument"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Validate and save etcd configuration without restarting",
+        "tags": [
+          "Host"
+        ]
+      }
+    },
+    "/etcd/config/apply": {
+      "post": {
+        "operationId": "etcd.config.apply",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 16,
+              "pattern": "^[A-Za-z0-9._:-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EtcdConfigApplyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskAccepted"
+                }
+              }
+            },
+            "description": "Accepted",
+            "headers": {
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Apply saved etcd configuration through a native Task",
+        "tags": [
+          "Host"
+        ]
+      }
+    },
     "/host": {
       "get": {
         "operationId": "host.show",
@@ -13133,6 +13494,38 @@
             "name": "workspace",
             "schema": {
               "pattern": "^(platform|tnt_[0-9A-HJKMNP-TV-Z]{26})$",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "pending",
+                "running",
+                "completed",
+                "failed",
+                "timed_out",
+                "aborted"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "resource_kind",
+            "schema": {
               "type": "string"
             }
           }

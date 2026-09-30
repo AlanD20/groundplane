@@ -94,6 +94,7 @@ export function platformDNSFromComponent(
   }));
   return {
     enabled: item.enabled,
+    records: config.records ?? [],
     upstream: config.upstream_resolvers.join(" "),
     upstreamAuto: config.upstream_auto,
     tailnetDelegation: config.tailnet_delegation,

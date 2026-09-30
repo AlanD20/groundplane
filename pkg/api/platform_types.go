@@ -54,6 +54,22 @@ type ControllerConfigReplacement struct {
 	ExpectedRevision string `json:"expected_revision" pattern:"^sha256:[0-9a-f]{64}$"`
 }
 
+type EtcdConfigDocument struct {
+	Path          string `json:"path"`
+	Content       string `json:"content"`
+	Revision      string `json:"revision" pattern:"^sha256:[0-9a-f]{64}$"`
+	ApplyRequired bool   `json:"apply_required"`
+}
+
+type EtcdConfigReplacement struct {
+	Content          string `json:"content" maxLength:"8192"`
+	ExpectedRevision string `json:"expected_revision" pattern:"^sha256:[0-9a-f]{64}$"`
+}
+
+type EtcdConfigApplyRequest struct {
+	ExpectedRevision string `json:"expected_revision" pattern:"^sha256:[0-9a-f]{64}$"`
+}
+
 type LogEvent struct {
 	Sequence      uint64    `json:"sequence"`
 	ServiceID     string    `json:"service_id"`

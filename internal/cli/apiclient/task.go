@@ -27,11 +27,14 @@ const taskEventReconnectDelay = time.Second
 // Environment, Project, and Workspace are mutually exclusive stable API
 // identifiers; an empty set selects the global journal.
 type TaskListOptions struct {
-	Limit       int
-	Cursor      string
-	Environment string
-	Project     string
-	Workspace   string
+	Limit        int
+	Cursor       string
+	Environment  string
+	Project      string
+	Workspace    string
+	Status       string
+	Type         string
+	ResourceKind string
 }
 
 func (c *Client) RetryTask(ctx context.Context, id string) (apiTypes.TaskAccepted, error) {
@@ -133,6 +136,11 @@ func (c *Client) ListActivity(
 	params := &generated.ActivityListParams{
 		Limit: base.Limit, Cursor: base.Cursor, Environment: base.Environment,
 		Project: base.Project, Workspace: base.Workspace,
+		Type: base.Type, ResourceKind: base.ResourceKind,
+	}
+	if base.Status != nil {
+		status := generated.ActivityListParamsStatus(*base.Status)
+		params.Status = &status
 	}
 	response, err := client.ActivityListWithResponse(ctx, params)
 	if err != nil {
@@ -176,6 +184,16 @@ func taskListParams(options TaskListOptions) (*generated.TaskListParams, error) 
 		)
 	}
 	params := &generated.TaskListParams{}
+	if options.Status != "" {
+		value := generated.TaskListParamsStatus(options.Status)
+		params.Status = &value
+	}
+	if options.Type != "" {
+		params.Type = &options.Type
+	}
+	if options.ResourceKind != "" {
+		params.ResourceKind = &options.ResourceKind
+	}
 	if options.Limit != 0 {
 		value := int64(options.Limit)
 		params.Limit = &value

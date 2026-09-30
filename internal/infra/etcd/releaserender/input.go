@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	"maps"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -22,6 +23,7 @@ const TaskReleasePublicationParam = "release_publication_id"
 // candidate. It is staged before publication and never re-reads mutable labels,
 // Blueprint projection, image identity, or selected slot at dispatch time.
 type ReleaseRenderInput struct {
+	ProxyAddresses       map[string]string                                  `json:"proxy_addresses,omitempty"`
 	ReleaseID            string                                             `json:"release_id"`
 	PlanID               string                                             `json:"plan_id"`
 	ArtifactID           string                                             `json:"artifact_id"`
@@ -91,6 +93,9 @@ func DecodeReleaseRenderInput(value []byte) (ReleaseRenderInput, error) {
 }
 
 func ValidateReleaseRenderInput(input ReleaseRenderInput) error {
+	if err := validateProxyAddresses(input); err != nil {
+		return err
+	}
 	if err := validateOrdinaryPriorRuntime(input); err != nil {
 		return err
 	}
@@ -223,6 +228,7 @@ func CloneReleaseRenderInput(input ReleaseRenderInput) ReleaseRenderInput {
 	}
 	input.Projection = projectionrecord.CloneEnvironmentComposeProjection(input.Projection)
 	input.ProxyPorts = slices.Clone(input.ProxyPorts)
+	input.ProxyAddresses = maps.Clone(input.ProxyAddresses)
 	input.ServiceDependencyPlans = input.ServiceDependencyPlans.Clone()
 	input.Hooks = cloneReleaseHookRenderInputs(input.Hooks)
 	return input

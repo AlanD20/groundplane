@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testdnsrecords "github.com/AlanD20/groundplane/internal/infra/etcd/dnsrecords"
 	testhostresolution "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -222,7 +223,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || aborted.Record.Status != testtaskjournal.TaskStatusAborted {
 		t.Fatalf("AbortPendingTask(operator resolver) = %#v, %v", aborted, err)
 	}
-	if activeRead, readErr := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID)); readErr != nil ||
+	if activeRead, readErr := store.Get(ctx, testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID)); readErr != nil ||
 		activeRead.Entry != nil {
 		t.Fatalf("aborted operator resolver active fence = %#v, %v", activeRead, readErr)
 	}
@@ -256,7 +257,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || !found || firstClaim.Task.Record.ID != first.ID {
 		t.Fatalf("claim automatic resolver Task = %v, %v", found, err)
 	}
-	activeEntry, err := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID))
+	activeEntry, err := store.Get(ctx, testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID))
 	if err != nil || activeEntry.Entry == nil {
 		t.Fatalf("active resolver Task = %#v, %v", activeEntry, err)
 	}
@@ -300,7 +301,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		t.Fatalf("successor resolver Task transaction = %#v, %v", result, err)
 	}
 	clearHostResolutionReconciliationChange(secondChange)
-	updated, err := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID))
+	updated, err := store.Get(ctx, testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID))
 	if err != nil || updated.Entry == nil || string(updated.Entry.Value) != second.ID {
 		t.Fatalf("active resolver successor = %#v, %v", updated, err)
 	}
@@ -352,6 +353,9 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	observedAt := now.Add(2 * time.Second)
 	proofResult := platformDNSProof(secondInput, uint64(secondRecord.RenderGeneration), observedAt)
 	predecessorObservation := testplatformcomponents.ComponentObservationRecord{
+		DNSRecords: []core.DNSRecord{
+			{Hostname: "old.internal", ServiceID: serviceID, ZoneID: ids.NewAt(ids.KindNetwork, now, 20)},
+		},
 		ComponentID: secondInput.ComponentID, ServiceID: secondInput.GeneratedServiceID,
 		PlanID: secondInput.OwnershipPlanID, ComposeArtifactID: secondInput.ComposeArtifactID,
 		Enabled: true, Healthy: true, DesiredGeneration: uint64(current.Revision),
@@ -376,10 +380,43 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || !seedObservation.Succeeded {
 		t.Fatalf("seed predecessor observation = %#v, %v", seedObservation, err)
 	}
+	// Removing a desired record is not proof that the resolver stopped serving
+	// it. Retain the applied reference until the replacement is acknowledged.
+	dnsReferences := testdnsrecords.NewReader(store)
+	if _, err := dnsReferences.RequireDNSUnreferenced(ctx, serviceID, "", 0); err == nil {
+		t.Fatal("pending DNS replacement released its last-applied Service reference")
+	}
 	secondClaim, found, err := tasks.ClaimNextTask(ctx, agentID, 1, observedAt)
 	if err != nil || !found || secondClaim.Task.Record.ID != second.ID {
 		t.Fatalf("claim automatic successor = %v, %v", found, err)
 	}
+	// An unresolved terminal report must not release its fence or automatically
+	// create new work over uncertain resolver state.
+	unresolvedTask := cloneTaskRecord(secondClaim.Task.Record)
+	unresolvedTask.Status = testtaskjournal.TaskStatusFailed
+	unresolvedTask.Result = &testtaskjournal.TaskResultRecord{
+		Kind:                   testtaskjournal.TaskResultCompose,
+		Diagnostic:             testtaskjournal.TaskResultDiagnosticComposeFailed,
+		ReconciliationRequired: true,
+		ExecutionEpoch:         1,
+	}
+	unresolvedChange, err := tasks.prepareHostResolutionReconciliation(
+		ctx,
+		unresolvedTask,
+		testtaskjournal.TaskStatusFailed,
+		secondClaim.Task.ReadRevision,
+		nil,
+		platformComponentTaskChange{},
+	)
+	if err != nil {
+		t.Fatalf("unresolved terminal contribution: %v", err)
+	}
+	for _, mutation := range unresolvedChange.mutations {
+		if mutation.Key == testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID) {
+			t.Fatal("unresolved failure released/replaced resolver ownership")
+		}
+	}
+	clearHostResolutionReconciliationChange(unresolvedChange)
 	finishedAt := observedAt.Add(time.Second)
 	secondRecord.FinishedAt = &finishedAt
 	secondRecord.TerminalAssignment = &testtaskjournal.TaskTerminalAssignmentRecord{
@@ -398,9 +435,9 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	clearPlatformComponentTaskChange(ackChange)
 
 	wrongFence, err := store.Transact(ctx, []testkeyvalue.Condition{{
-		Key: platformComponentTaskActiveKey(current.Record.Desired.ID), ModRevision: updated.Entry.ModRevision,
+		Key: testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID), ModRevision: updated.Entry.ModRevision,
 	}}, []testkeyvalue.Mutation{{
-		Type: testkeyvalue.MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(first.ID),
+		Type: testkeyvalue.MutationPut, Key: testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID), Value: []byte(first.ID),
 	}})
 	if err != nil || !wrongFence.Succeeded {
 		t.Fatalf("replace active fence = %#v, %v", wrongFence, err)
@@ -411,9 +448,9 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		t.Fatal("automatic resolver acknowledgement accepted mismatched active-fence ownership")
 	}
 	restoredFence, err := store.Transact(ctx, []testkeyvalue.Condition{{
-		Key: platformComponentTaskActiveKey(current.Record.Desired.ID), ModRevision: wrongFence.Revision,
+		Key: testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID), ModRevision: wrongFence.Revision,
 	}}, []testkeyvalue.Mutation{{
-		Type: testkeyvalue.MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(second.ID),
+		Type: testkeyvalue.MutationPut, Key: testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID), Value: []byte(second.ID),
 	}})
 	if err != nil || !restoredFence.Succeeded {
 		t.Fatalf("restore active fence = %#v, %v", restoredFence, err)
@@ -440,9 +477,12 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	if err != nil || replay.Revision != terminal.Revision {
 		t.Fatalf("replay automatic successor completion = %v", err)
 	}
-	activeAfter, err := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID))
+	activeAfter, err := store.Get(ctx, testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID))
 	if err != nil || activeAfter.Entry != nil {
 		t.Fatalf("completed resolver retained active fence: %v", err)
+	}
+	if _, err := dnsReferences.RequireDNSUnreferenced(ctx, serviceID, "", 0); err != nil {
+		t.Fatalf("acknowledged DNS removal retained stale Service reference: %v", err)
 	}
 	markerKey, err := testidempotency.IdempotencyMarkerKey(*terminal.Record.idempotencyMarker)
 	if err != nil {
@@ -473,8 +513,25 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 	retry.ID = ids.NewAt(ids.KindTask, now, 4)
 	retry.RetryOf = source.ID
 	retry.Actor = testtaskjournal.TaskActorOperator
+	// Explicit Retry may transfer a retained fence owned by this unresolved
+	// source, but it cannot take an unrelated successor's fence.
+	source.Result.ReconciliationRequired = true
+	fenceSeed, err := store.Transact(
+		ctx,
+		nil,
+		[]testkeyvalue.Mutation{
+			{
+				Type:  testkeyvalue.MutationPut,
+				Key:   testplatformcomponents.ActiveTaskKey(source.Target),
+				Value: []byte(source.ID),
+			},
+		},
+	)
+	if err != nil || !fenceSeed.Succeeded {
+		t.Fatalf("seed retained fence: %v", err)
+	}
 	retryChange, err := tasks.preparePlatformDNSResolverTaskRetry(ctx, testkeyvalue.Versioned[TaskRecord]{
-		Record: source, Revision: sourceRead.Entry.ModRevision, ReadRevision: sourceRead.ReadRevision,
+		Record: source, Revision: sourceRead.Entry.ModRevision, ReadRevision: fenceSeed.Revision,
 	}, retry)
 	if err != nil || !retryChange.applies {
 		t.Fatalf("prepare resolver retry = %#v, %v", retryChange, err)
@@ -491,7 +548,7 @@ func TestPlatformDNSResolverTaskFencePublishesAndReplacesActiveTask(t *testing.T
 		t.Fatalf("resolver retry fence transaction = %#v, %v", result, err)
 	}
 	clearHostResolutionReconciliationChange(retryChange)
-	retried, err := store.Get(ctx, platformComponentTaskActiveKey(current.Record.Desired.ID))
+	retried, err := store.Get(ctx, testplatformcomponents.ActiveTaskKey(current.Record.Desired.ID))
 	if err != nil || retried.Entry == nil || string(retried.Entry.Value) != retry.ID {
 		t.Fatalf("active resolver retry = %#v, %v", retried, err)
 	}

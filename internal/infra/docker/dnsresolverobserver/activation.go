@@ -47,7 +47,6 @@ func (executor *Executor) inspectConfiguration(
 		return result, false, err
 	}
 	defer clear(runtime.artifact)
-	defer clear(runtime.logs)
 	if sha256.Sum256(runtime.artifact) != request.ArtifactSHA256 {
 		return result, false, errs.New(errs.KindStateConflict, "DNS resolver mounted artifact digest changed")
 	}
@@ -56,10 +55,6 @@ func (executor *Executor) inspectConfiguration(
 		return result, false, err
 	}
 	result.effectiveDigest, err = effectiveConfigSHA512(request.ArtifactTarget, runtime.artifact)
-	if err != nil {
-		return result, false, err
-	}
-	reported, err := latestReportedConfigSHA512(runtime.logs)
 	if err != nil {
 		return result, false, err
 	}
@@ -72,7 +67,10 @@ func (executor *Executor) inspectConfiguration(
 	if err != nil {
 		return result, false, err
 	}
+	if !present {
+		return result, false, errs.New(errs.KindStateConflict, "DNS resolver reload metric is missing")
+	}
 	result.imageDigest = runtime.verifiedImageDigest
 	result.imageConfigAuthority = runtime.imageConfigAuthority
-	return result, reported == result.effectiveDigest && (!present || metric == result.effectiveDigest), nil
+	return result, metric == result.effectiveDigest, nil
 }

@@ -181,6 +181,94 @@ func taskReportMessage(
 	}}}
 }
 
+// Rationale: unproved resolver restoration must remain a durable failed Task,
+// not a protocol rejection that disconnects the Agent and blocks unrelated work.
+func TestConnectRecordsUnresolvedResolverFailureWithoutDisconnect(t *testing.T) {
+	at := testTime()
+	first := assignmentQuarantineFixture(at, testAgentID, 9501)
+	second := assignmentQuarantineFixture(at, testAgentID, 9502)
+	firstPlan, _, _ := dnsResolverShapePlan(agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_UPDATE)
+	firstPlan.PlanHash = make([]byte, 32)
+	firstPlan.PlanHash[0] = 1
+	first.Task.Record.Steps = append(
+		first.Task.Record.Steps,
+		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, 9503)},
+	)
+	for i := range firstPlan.Steps {
+		firstPlan.Steps[i].StepId = first.Task.Record.Steps[i].ID
+	}
+	secondPlan := testExecutionPlan(t, second.Task.Record)
+	first.Task.Record.PlanHash = hex.EncodeToString(firstPlan.PlanHash)
+	second.Task.Record.PlanHash = hex.EncodeToString(secondPlan.PlanHash)
+	base := &fakeTaskStore{
+		assignments: []etcd.TaskAssignment{first, second},
+		tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{
+			first.Task.Record.ID:  first.Task,
+			second.Task.Record.ID: second.Task,
+		},
+	}
+	store := &recordingTaskReportStore{fakeTaskStore: base}
+	failed := taskReportMessage(
+		first,
+		firstPlan,
+		agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_ACTIVATION_FAILED,
+	)
+	failed.GetTaskAck().GetComposeResult().FailedStepId = first.Task.Record.Steps[1].ID
+	failed.GetTaskAck().GetComposeResult().ReconciliationRequired = true
+	stream := &scriptedStream{
+		messages: []*agentpb.AgentMessage{
+			authenticateMessage(testAgentID, testToken(95)),
+			readyMessage(2),
+			failed,
+			taskReportMessage(second, secondPlan, agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_NONE),
+		},
+	}
+	auth := authorizedAuthenticator()
+	auth.authorization.Generation = 7
+	auth.authorization.Config.MaxConcurrentTasks = 2
+	server := New(
+		auth,
+		NewRegistry(),
+		store,
+		&assignmentQuarantinePlanResolver{
+			plans: map[string]*agentpb.ExecutionPlan{
+				first.Task.Record.ID:  firstPlan,
+				second.Task.Record.ID: secondPlan,
+			},
+		},
+	)
+	server.now = func() time.Time { return at }
+	if err := server.Connect(stream); err != nil {
+		t.Fatalf("valid unresolved report disconnected Agent: %v", err)
+	}
+	if len(store.results) != 2 || !store.results[0].ReconciliationRequired ||
+		store.results[0].FailedStepID != first.Task.Record.Steps[1].ID {
+		t.Fatalf("reports = %#v", store.results)
+	}
+	if base.tasks[first.Task.Record.ID].Record.Status != testtaskjournal.TaskStatusFailed ||
+		base.tasks[second.Task.Record.ID].Record.Status != testtaskjournal.TaskStatusCompleted {
+		t.Fatal("failure was lost or unrelated Task could not complete")
+	}
+}
+
+type recordingTaskReportStore struct {
+	*fakeTaskStore
+	results []testtaskjournal.TaskResultRecord
+}
+
+func (store *recordingTaskReportStore) AcknowledgeTask(
+	ctx context.Context,
+	agentID string,
+	generation uint64,
+	taskID, assignmentID string,
+	terminal testtaskjournal.TaskStatus,
+	result testtaskjournal.TaskResultRecord,
+	at time.Time,
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
+	store.results = append(store.results, result)
+	return store.fakeTaskStore.AcknowledgeTask(ctx, agentID, generation, taskID, assignmentID, terminal, result, at)
+}
+
 // QA: TASK-07/09, CMP-05; two valid wire diagnostics only, not authenticated report or durable acceptance.
 // Rationale: the protobuf catalog reserves distinct Component failure codes,
 // and a failed Compose Task may report either without being misclassified as

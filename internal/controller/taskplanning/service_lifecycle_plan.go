@@ -302,7 +302,8 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 	}
 	sourceTask := etcd.TaskRecord{PlanID: source.PlanID, RenderGeneration: int32(source.Projection.RenderGeneration)}
 	identity := composerender.ComposeReleaseIdentity{
-		ProxyImage: source.ProxyImage, ReleaseID: source.ReleaseID, Target: source.CandidateTarget,
+		ProxyAddresses: source.ProxyAddresses,
+		ProxyImage:     source.ProxyImage, ReleaseID: source.ReleaseID, Target: source.CandidateTarget,
 		Image: source.CandidateWorkload.LocalImageID, ServingReleaseID: source.ReleaseID,
 		ServingTarget: source.CandidateTarget, ServingProxyGeneration: source.ProxyGeneration,
 		Strategy: source.Strategy,

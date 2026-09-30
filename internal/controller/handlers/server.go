@@ -34,7 +34,9 @@ type Server struct {
 	mutationAdmission MutationAdmission
 
 	host                    HostReader
-	controllerConfig        ControllerConfigStore
+	controllerConfig        NativeConfigStore
+	etcdConfig              NativeConfigStore
+	etcdConfigApplier       EtcdConfigApplier
 	controllerUpdates       ControllerUpdater
 	images                  ImageFetcher
 	agents                  AgentReader
@@ -104,7 +106,9 @@ type Options struct {
 	OnHTTPReady             func()
 	MutationAdmission       MutationAdmission
 	Host                    HostReader
-	ControllerConfig        ControllerConfigStore
+	ControllerConfig        NativeConfigStore
+	EtcdConfig              NativeConfigStore
+	EtcdConfigApplier       EtcdConfigApplier
 	ControllerUpdates       ControllerUpdater
 	Images                  ImageFetcher
 	Agents                  AgentReader
@@ -192,6 +196,8 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 		mutationAdmission:       options.MutationAdmission,
 		host:                    options.Host,
 		controllerConfig:        options.ControllerConfig,
+		etcdConfig:              options.EtcdConfig,
+		etcdConfigApplier:       options.EtcdConfigApplier,
 		controllerUpdates:       options.ControllerUpdates,
 		images:                  options.Images,
 		agents:                  options.Agents,
@@ -264,6 +270,7 @@ func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	s.registerProjects()
 	s.registerBackingServices()
 	s.registerControllerConfig()
+	s.registerEtcdConfig()
 	s.registerControllerUpdate()
 	s.registerImageFetch()
 	s.registerComponents()

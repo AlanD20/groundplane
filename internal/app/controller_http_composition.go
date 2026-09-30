@@ -78,6 +78,7 @@ func newControllerHTTPComposition(dependencies controllerHTTPDependencies) (*Con
 	}
 	server := handlers.New(dependencies.store, dependencies.bootstrap.logger, handlers.Options{
 		Host: dependencies.platform.host, ControllerConfig: dependencies.bootstrap.controllerConfig,
+		EtcdConfig: dependencies.bootstrap.etcdLifecycle.Configuration(), EtcdConfigApplier: dependencies.platform.etcdConfig,
 		ControllerUpdates: dependencies.platform.upgrades,
 		Images:            dependencies.images,
 		OnHTTPReady:       dependencies.platform.readiness.MarkHTTPReady, MutationAdmission: dependencies.platform.upgrades,

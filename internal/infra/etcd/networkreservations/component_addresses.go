@@ -13,7 +13,8 @@ import (
 )
 
 type ComponentAddressRegistry struct {
-	Reservations map[string]string `json:"reservations"`
+	Reservations        map[string]string `json:"reservations"`
+	ServiceReservations map[string]string `json:"service_reservations,omitempty"`
 }
 
 func ComponentAddressRegistryKey(zoneID string) string {
@@ -118,6 +119,14 @@ func (registry ComponentAddressRegistry) ReserveExact(
 			)
 		}
 	}
+	for _, reserved := range registry.ServiceReservations {
+		if reserved == rawAddress {
+			return ComponentAddressRegistry{}, errs.New(
+				errs.KindStateConflict,
+				"address is reserved by a Service proxy",
+			)
+		}
+	}
 	next := CloneComponentAddressRegistry(registry)
 	next.Reservations[componentID] = rawAddress
 	return next, nil
@@ -142,13 +151,21 @@ func (registry ComponentAddressRegistry) Release(
 }
 
 func (registry ComponentAddressRegistry) addresses(prefix netip.Prefix) ([]netip.Addr, error) {
-	addresses := make([]netip.Addr, 0, len(registry.Reservations))
+	addresses := make([]netip.Addr, 0, len(registry.Reservations)+len(registry.ServiceReservations))
 	for componentID, raw := range registry.Reservations {
 		if err := ids.Validate(ids.KindComponent, componentID); err != nil {
 			return nil, CorruptComponentAddressRegistry()
 		}
 		address, err := netip.ParseAddr(raw)
 		if err != nil || address.String() != raw || ipam.ValidateUsableIPv4(prefix, address) != nil {
+			return nil, CorruptComponentAddressRegistry()
+		}
+		addresses = append(addresses, address)
+	}
+	for serviceID, raw := range registry.ServiceReservations {
+		address, err := netip.ParseAddr(raw)
+		if ids.Validate(ids.KindService, serviceID) != nil || err != nil || address.String() != raw ||
+			ipam.ValidateUsableIPv4(prefix, address) != nil {
 			return nil, CorruptComponentAddressRegistry()
 		}
 		addresses = append(addresses, address)
@@ -189,6 +206,12 @@ func CloneComponentAddressRegistry(registry ComponentAddressRegistry) ComponentA
 	clone := ComponentAddressRegistry{Reservations: make(map[string]string, len(registry.Reservations))}
 	for componentID, address := range registry.Reservations {
 		clone.Reservations[componentID] = address
+	}
+	if registry.ServiceReservations != nil {
+		clone.ServiceReservations = make(map[string]string, len(registry.ServiceReservations))
+		for serviceID, address := range registry.ServiceReservations {
+			clone.ServiceReservations[serviceID] = address
+		}
 	}
 	return clone
 }

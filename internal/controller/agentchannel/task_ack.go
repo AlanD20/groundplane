@@ -227,9 +227,6 @@ func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agen
 			}
 			return nil
 		}
-		if result.GetReconciliationRequired() {
-			return errs.New(errs.KindValidationFailed, "Component disable compensation is not proven")
-		}
 		failedStepID := result.GetFailedStepId()
 		mutationAttempted := false
 		if failedStepID != "" {
@@ -243,7 +240,7 @@ func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agen
 				return errs.New(errs.KindValidationFailed, "Component disable failed step is not in its sealed plan")
 			}
 		}
-		if mutationAttempted && rollback == nil {
+		if mutationAttempted && rollback == nil && !result.GetReconciliationRequired() {
 			return errs.New(errs.KindValidationFailed, "Component disable is missing rollback serving evidence")
 		}
 		if !mutationAttempted && rollback != nil {
@@ -287,12 +284,6 @@ func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agen
 		}
 		return nil
 	}
-	if result.GetReconciliationRequired() {
-		return errs.New(
-			errs.KindValidationFailed,
-			"Component Task compensation is not proven",
-		)
-	}
 	failurePosition, err := managedConfigFailurePosition(plan, result.GetFailedStepId())
 	if err != nil {
 		return err
@@ -306,7 +297,7 @@ func validateDNSResolverResultShape(acknowledgement *agentpb.TaskAck, plan *agen
 	requiresRollback := mode != agentpb.ComponentLifecycleMode_COMPONENT_LIFECYCLE_MODE_ENABLE &&
 		failurePosition > 0 &&
 		len(managed.GetExpectedPreviousArtifactDigest()) == sha256.Size
-	if requiresRollback && rollback == nil {
+	if requiresRollback && rollback == nil && !result.GetReconciliationRequired() {
 		return errs.New(
 			errs.KindValidationFailed,
 			"compensated Component Task is missing rollback observation evidence",

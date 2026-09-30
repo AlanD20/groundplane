@@ -21,6 +21,7 @@ func NewDNSRenderer() (dnsresolver.Renderer, error) {
 
 func NewDNSManagedConfigProjector(
 	projections controllerdns.PlatformProjectionReader,
+	records controllerdns.DNSRecordsResolver,
 	baselines controllerdns.ResolverBaselineReader,
 	registryAddress netip.Addr,
 ) (*controllerdns.ManagedConfigProjector, error) {
@@ -30,6 +31,7 @@ func NewDNSManagedConfigProjector(
 	}
 	return controllerdns.NewManagedConfigProjector(
 		projections,
+		records,
 		baselines,
 		renderer,
 		registeredcoredns.CorefileTarget,

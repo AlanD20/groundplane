@@ -30,6 +30,30 @@ Use `controller config show` and `controller config set --file PATH` from the
 CLI. The matching API is `GET/PUT /controller/config`.
 See [installation](../deployment.md) before changing listeners or host paths.
 
+## etcd configuration
+
+Open Host → etcd to edit its YAML. Save validates and atomically stores the
+document without restarting anything. Apply is a separate action against the
+saved revision; unsaved text is not applied. It creates a native Controller Task
+and briefly restarts only etcd. Control-plane requests may reconnect; application
+containers are left running. A normal Controller restart does not apply pending
+etcd edits.
+
+The editor accepts quota, snapshot count, heartbeat/election timing, periodic
+compaction retention and log level. Node identity, listeners, data path, image
+and GP's transaction capacity remain bootstrap-owned; unknown keys are rejected.
+The document is limited to 8 KiB. Defaults and bounds live in the
+[configuration schema](../../internal/common/config/etcd.go).
+
+If activation fails, GP restores the exact predecessor settings using the same
+data directory. An interrupted activation has an independent local receipt so
+bootstrap can restore etcd before reading the Task store. Failed Apply requires
+a new explicit Apply, not Task Retry. Local recovery checks are not live workload
+continuity qualification.
+
+CLI: `controller etcd config show`, `set --file PATH`, and `apply`.
+API: `GET/PUT /etcd/config` and `POST /etcd/config/apply`.
+
 ## Agent enrollment and settings
 
 `agent join` creates the local Agent through a Controller Task. GP generates

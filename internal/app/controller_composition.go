@@ -517,6 +517,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Config: cfg, Key: authority.controllerKey, Store: store, Agents: authority.agents, Tasks: authority.tasks,
 		Intents: authority.intentCoordinator, Idempotency: authority.idempotency, Channel: agentRuntime,
 		EtcdEndpoints: bootstrap.etcdEndpoints, Tick: bootstrap.tick, Logger: bootstrap.logger,
+		EtcdLifecycle: bootstrap.etcdLifecycle,
 	})
 	if err != nil {
 		_ = store.Close()
@@ -546,8 +547,9 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
 	}
+	nativeTasks := platform.etcdConfig.Dispatcher(controllerTaskHandler)
 	controllerTaskRunner, err := newControllerTaskRuntime(
-		ctx, authority.tasks, controllerTaskHandler, backupComposition.keys, hierarchyDeletions,
+		ctx, authority.tasks, nativeTasks, backupComposition.keys, hierarchyDeletions,
 		platform.agents, agentRuntime.Registry, platform.native, bootstrap.tick, bootstrap.logger,
 	)
 	if err != nil {
