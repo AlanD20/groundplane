@@ -336,6 +336,55 @@ on the old Controller. Resumed cleanup, normal installer activation and the fres
 Zone/blue-green/Service removal journey remain unqualified. H78's failure
 evidence and original Task records are retained.
 
+## Installer activation and selected cleanup qualification
+
+**H80 — normal Controller update and selected cleanup PASS; retained
+blue-green slot FAIL, 2026-10-01.** The public installer built and activated
+`main` at `3b22e9333676cb3808b066f7972f94c4d9a37430` using `--controller-only`.
+This documentation-only successor has H79's CI-passing production code.
+The protected update Task completed; the running Controller digest matched its
+staged manifest, the bundled CLI matched the ref, and host health was healthy.
+The Agent kept its container and image identities; its process restarted.
+Etcd kept both its identity and start time. Prior failed Task records were unchanged.
+No application workload was present during this update, so it adds no traffic
+or held-connection continuity proof.
+
+Before that normal update, the approved Controller-only maintenance installation
+briefly loaded H79's repair. The original stuck Environment Task completed without
+Retry, preserving its operation, plan and start identity; the Environment and its
+containers were absent. The maintenance verifier incorrectly required an unchanged
+Agent start time and therefore restored the old Controller. This was a verifier
+failure, not a passing normal upgrade or product-owned recovery. The subsequent
+normal installer update above activated the repair without another maintenance
+replacement, reset, database edit, unlock or history rewrite.
+
+A fresh isolated Environment then served an actual HTTP response with its Volume
+sentinel and completed two blue-green Deploys. The second switch removed the prior
+blue slot: the Release ledger and Docker lifecycle events agree, and
+[the proxy executor](../internal/infra/docker/composehelper/service_proxy.go)
+explicitly removes the previous workload after switching. This contradicts the
+[retained-slot contract](features/services-and-releases.md#strategies-and-replicas).
+The requested both-slots-present removal variant therefore failed its prerequisite;
+it was not silently counted as a pass or repaired in this run.
+
+The narrower serving-slot-plus-proxy variant passed. Zone removal retained both
+actual container identities, left them running and disconnected, removed the
+network and membership, preserved the Volume sentinel and replayed the same
+terminal response. No extra regular workload appeared. Normal Service removal
+then removed all of that Service's containers while preserving the physical Volume
+data. Protected Volume removal deleted the confirmed source; Environment, Project
+and Tenant removal completed through GP with API absence and no owned containers.
+Both original and fresh QA hierarchies are now removed, with failure history kept.
+
+Fixture/probe failures remain in ignored evidence separately from the successful
+selected run; they were corrected without product changes or repeated creates.
+
+This closes H78/H79's selected cleanup and publication blockers, not blanket release
+qualification. Both-slot live removal, backing-consumer, concurrent-removal and
+interruption variants remain unqualified. Historical application, Tunnel and Runner
+journeys were not repeated; Backup/Restore, additional stress and alerts remain
+deferred. No release tag was created.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

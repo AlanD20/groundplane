@@ -43,6 +43,18 @@ respect record/transaction bounds. A previous marker-size repair or constructor
 check does not prove the whole operation. Do not replay stale desired input over
 a working Environment simply to repeat historical evidence.
 
+### Blue-green predecessor retention
+
+[H80](../acceptance.md#installer-activation-and-selected-cleanup-qualification)
+reproduced a successful second blue-green Deploy removing its previous healthy
+slot. The [proxy executor](../../internal/infra/docker/composehelper/service_proxy.go)
+explicitly removes that predecessor after switching; the
+[Service contract](../features/services-and-releases.md#strategies-and-replicas)
+requires retaining it. This is an unresolved implementation discrepancy, not a
+reason to weaken that contract. Repair requires preserving exact predecessor
+authority through switch, lifecycle/removal and recovery, then qualifying the
+both-slots-present operator journey. That repair was outside H80's cleanup scope.
+
 ## Installation, upgrades and reboot
 
 The fresh installation run [H76](../acceptance.md#fresh-installation-dns-and-etcd-activation)
@@ -54,18 +66,20 @@ An approved Controller-only maintenance installation loaded the single-publicati
 fix. The original Zone Task settled as timed out; ordinary Retry completed without
 changing its operation or plan. Zone removal then created an extra regular
 workload, blocking Service removal. [H78](../acceptance.md#zone-runtime-repair-and-cleanup-blocker)
-records the scoped network-only repair and passing full local CI; live deployment
-and fresh retest are blocked. After approved one-time orphan removal, normal
-Service removal preserved Volume data and protected Volume removal completed.
-Environment finalization now rejects a retained empty Zone subnet registry as
-live authority. Its running parent blocks the normal Controller update, which
-was aborted before activation. [H79](../acceptance.md#environment-finalization-repair)
-implements atomic empty-registry retirement with non-empty reservation guards;
-full local CI passes. Publication is blocked by GitHub SSH authentication, so
-the approved Controller-only repair, resumed cleanup, normal update and fresh
-runtime journey remain unqualified. No manual unlock or history rewrite
-qualifies recovery.
-The earlier maintenance installation is not normal-upgrade qualification.
+records the scoped network-only repair and passing full local CI. After approved
+one-time orphan removal, normal Service removal preserved Volume data and
+protected Volume removal completed.
+Environment finalization rejected a retained empty Zone subnet registry as live
+authority. [H79](../acceptance.md#environment-finalization-repair) repaired atomic
+empty-registry retirement with non-empty reservation guards and passed full local
+CI. [H80](../acceptance.md#installer-activation-and-selected-cleanup-qualification)
+loaded that repair through approved maintenance, completing the original Task
+without rewriting history, then passed normal public ref-installer activation.
+Fresh serving-slot/proxy Zone removal, Service/data preservation, protected Volume
+removal and Environment/Project/Tenant cleanup passed. Both-slots-present live
+removal remains blocked by the separate predecessor-retention defect above.
+The maintenance installation is not normal-upgrade qualification; H80's subsequent
+normal update had no application workload and adds no traffic-continuity proof.
 Concurrent DNS publication/removal remains unqualified. Do not bypass transaction,
 projection, dependency or updater-idle protections to close these results.
 
