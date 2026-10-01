@@ -385,6 +385,40 @@ interruption variants remain unqualified. Historical application, Tunnel and Run
 journeys were not repeated; Backup/Restore, additional stress and alerts remain
 deferred. No release tag was created.
 
+## Blue-green retention and both-slot cleanup
+
+**H81 — selected retention and cleanup variants PASS, 2026-10-01.**
+`539922bffad57c941962b2441f62390e47f4655b` passes full local `make ci`,
+including targeted runtime, lifecycle-authority, removal and recovery regressions.
+The public `--ref main` installer completed a normal Controller/Agent update on
+disposable QA. The Controller, CLI and Agent matched the exact staged manifest;
+host health was healthy. Etcd retained its identity and start time, and prior
+failed Task records were unchanged. No workload was present during the update,
+so this adds no update traffic-continuity proof. An initial read-only probe used
+an unsupported CLI flag; its corrected invocation passed without product changes.
+
+A fresh isolated Environment applied a recreate singleton with a persistent
+Volume, then completed three blue-green Deploys. The first switch retired the
+singleton. The second retained the exact previous blue container and stable proxy
+alongside the serving green slot. The third replaced only inactive blue; green
+and the proxy kept their identities. An HTTP stream opened on green delivered
+successive lines across that switch, while new HTTP requests reached the new
+candidate. The Volume sentinel stayed intact.
+
+Zone removal kept both slots and proxy running with unchanged identities, removed
+their network memberships and the network, preserved data and replayed the same
+terminal response. Service removal removed all three containers without deleting
+the physical Volume sentinel. Protected Volume removal then deleted only the
+confirmed test source. Environment, Project and Tenant removal completed through
+GP with API absence and no owned containers. All isolated test resources were
+removed; evidence and Task history remain.
+
+This closes H80's predecessor-retention defect and its blocked both-slot removal
+variant. Held WebSockets, failed switches, Start/Stop/Destroy, blue-green-to-recreate,
+backing consumers and concurrent/interrupted removal were not exercised live.
+Historical application, Tunnel and Runner journeys were not repeated. No reset,
+manual repair, compatibility path or release tag was used.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

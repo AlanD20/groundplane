@@ -43,6 +43,12 @@ explicit positive count.
 | `recreate` | Stops the previous set before starting the requested replica count. Downtime is expected. Every selected container must be running; configured healthchecks must also pass. Without a healthcheck, GP reports running, not healthy. |
 | `rolling` | Not implemented; rejected. |
 
+After a blue-green switch, both slots remain running. The next Deploy replaces
+only the inactive slot, then switches traffic after candidate health passes.
+An existing connection can finish on the previous slot until that slot is
+replaced by a later Deploy. On the first switch from recreate to blue-green,
+GP removes the obsolete singleton instead of retaining a third workload.
+
 Switching between blue-green and recreate is accepted only when both the previous
 and candidate counts are one. Replicated blue-green is outside the MVP. Start,
 Stop, Destroy and recovery must address the complete captured set.
