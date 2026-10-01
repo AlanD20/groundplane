@@ -12,13 +12,14 @@ const MAP: Record<string, { label: string; dot: string; text: string }> = {
   failed: { label: 'Failed', dot: 'bg-destructive', text: 'text-destructive' },
   timed_out: { label: 'Timed out', dot: 'bg-destructive', text: 'text-destructive' },
   stopped: { label: 'Stopped', dot: 'bg-muted-foreground', text: 'text-muted-foreground' },
+  unknown: { label: 'Unknown', dot: 'bg-muted-foreground', text: 'text-muted-foreground' },
   absent: { label: 'Absent', dot: 'bg-muted-foreground', text: 'text-muted-foreground' },
   unavailable: { label: 'Unavailable', dot: 'bg-muted-foreground', text: 'text-muted-foreground' },
   offline: { label: 'Offline', dot: 'bg-muted-foreground', text: 'text-muted-foreground' },
 }
 
 export function StatusDot({ status, className }: { status: HealthState | string; className?: string }) {
-  const m = MAP[status] ?? MAP.stopped
+  const m = MAP[status] ?? MAP.unknown
   return <span className={cn('inline-block size-2 shrink-0 rounded-full', m.dot, className)} aria-hidden />
 }
 
@@ -31,7 +32,7 @@ export function StatusBadge({
   label?: string
   className?: string
 }) {
-  const m = MAP[status] ?? MAP.stopped
+  const m = MAP[status] ?? MAP.unknown
   return (
     <span
       className={cn(

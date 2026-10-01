@@ -17,8 +17,8 @@ type observedConfiguration struct {
 }
 
 // CoreDNS notices atomically replaced files on its reload interval. Only valid
-// but stale serving evidence is pending; ownership, bytes and malformed evidence
-// still fail immediately. The caller's proof deadline bounds the whole wait.
+// but absent or stale serving evidence is pending; ownership, bytes and malformed
+// evidence still fail immediately. The caller's proof deadline bounds the wait.
 func (executor *Executor) awaitConfiguration(ctx context.Context, request Request) (observedConfiguration, error) {
 	for {
 		if err := ctx.Err(); err != nil {
@@ -68,7 +68,7 @@ func (executor *Executor) inspectConfiguration(
 		return result, false, err
 	}
 	if !present {
-		return result, false, errs.New(errs.KindStateConflict, "DNS resolver reload metric is missing")
+		return result, false, nil
 	}
 	result.imageDigest = runtime.verifiedImageDigest
 	result.imageConfigAuthority = runtime.imageConfigAuthority

@@ -24,7 +24,7 @@ func (runtime *delayedResolverRuntime) Inspect(ctx context.Context, request Requ
 
 func (*delayedResolverRuntime) Close() error { return nil }
 
-// DNS-02/04: a replaced Corefile precedes CoreDNS's periodic reload. Waiting
+// DNS-02/04: startup metrics and a replaced Corefile precede CoreDNS's reload. Waiting
 // must accept only the exact candidate after both observations converge, and
 // must recheck mounted bytes rather than bless an intervening replacement.
 func TestAwaitConfigurationAcrossReload(t *testing.T) {
@@ -51,7 +51,7 @@ func TestAwaitConfigurationAcrossReload(t *testing.T) {
 			executor := &Executor{
 				runtime: runtime,
 				metrics: &observerMetricsStub{values: [][]byte{
-					forwardMetrics(&old, 0, 0), forwardMetrics(&old, 0, 0), forwardMetrics(&effective, 0, 0),
+					forwardMetrics(nil, 0, 0), forwardMetrics(&old, 0, 0), forwardMetrics(&effective, 0, 0),
 				}},
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
