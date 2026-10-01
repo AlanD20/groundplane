@@ -285,6 +285,40 @@ No forced unlock, history rewrite, VM reset or tag was performed.
 Historical application, Tunnel and Runner journeys were not repeated;
 Backup/Restore, additional stress and alerts remain deferred.
 
+## Zone runtime repair and cleanup blocker
+
+**H78 — local repair PASS; deployment and fresh live retest BLOCKED,
+2026-10-01.** Source `0bee842f77df596e44ba4bcb8d48755bd7111396` passed
+full local `make ci` and was pushed on `main`, without a tag. Zone removal now
+disconnects existing network members rather than reapplying desired Compose.
+The execution/replay regression covers an empty network, a regular workload,
+and a proxy with both blue-green slots; unexpected container mutations fail it.
+The backing-cascade caller uses the same procedure. Neither its live variant nor
+the fresh blue-green journey has run on this candidate.
+
+The owner approved removal of only H77's verified extra regular QA workload.
+Its labels and exact identity were checked before non-force stop/removal. The
+blue-green workload, Volume sentinel and original Task records were unchanged.
+Normal GP Service removal then completed; independent Docker inventory found no
+remaining Service containers. The sentinel persisted in the Volume's bind source
+after Docker unmounted it. Protected Volume removal subsequently completed,
+with API absence and physical data-directory removal verified. That disposable
+QA data was intentionally destroyed through the approved removal workflow.
+
+Environment removal's Agent child completed, but its Controller parent remained
+running with `environment retained live child authority`. Read-only inspection
+identified an empty Zone subnet registry (`reservations: {}`); the finalizer
+requires this key to be absent rather than retiring the empty registry. Normal
+Abort returned `state.conflict`. Environment and parent hierarchy cleanup remain
+blocked; no record was manually deleted or unlocked.
+
+The public ref installer built and staged the exact candidate, but its normal
+Controller update remained pending behind the cleanup Task. Only that unstarted
+update was aborted through GP; the installer reported failure and retained its
+installation files. The old Controller remains installed. This is not a passing
+upgrade or live qualification of the repair. Failed evidence and Task history
+remain retained locally. No VM reset, compatibility path or release tag was used.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

@@ -52,13 +52,17 @@ Deploy-accounting and removal-admission defects: normal installer update,
 recreate/blue-green DNS stability and desired/last-applied DNS guards passed.
 An approved Controller-only maintenance installation loaded the single-publication
 fix. The original Zone Task settled as timed out; ordinary Retry completed without
-changing its operation or plan. However, Zone removal recreated a regular workload
-and left the previously serving blue-green workload running. Subsequent Service
-removal rejected this extra runtime. Fix Zone membership changes to reconcile the
-acknowledged physical members, then qualify removal without orphan containers or
-weakening ownership checks. Service/Volume/hierarchy cleanup remains blocked;
-the data sentinel is intact. The maintenance installation is not normal-upgrade
-qualification.
+changing its operation or plan. Zone removal then created an extra regular
+workload, blocking Service removal. [H78](../acceptance.md#zone-runtime-repair-and-cleanup-blocker)
+records the scoped network-only repair and passing full local CI; live deployment
+and fresh retest are blocked. After approved one-time orphan removal, normal
+Service removal preserved Volume data and protected Volume removal completed.
+Environment finalization now rejects a retained empty Zone subnet registry as
+live authority. Its running parent blocks the normal Controller update, which
+was aborted before activation. Retire the empty registry atomically while
+preserving non-empty reservation guards, then resume cleanup, normal update and
+the fresh runtime journey. No manual unlock or history rewrite qualifies recovery.
+The earlier maintenance installation is not normal-upgrade qualification.
 Concurrent DNS publication/removal remains unqualified. Do not bypass transaction,
 projection, dependency or updater-idle protections to close these results.
 
