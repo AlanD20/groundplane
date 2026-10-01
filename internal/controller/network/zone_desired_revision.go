@@ -36,7 +36,7 @@ func buildZoneRemovalProjection(
 	candidate := current
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
-	candidate.DesiredZones = make([]projectionrecord.EnvironmentZoneProjection, 0, len(current.DesiredZones)-1)
+	candidate.DesiredZones = nil
 	foundDesired := false
 	for _, zone := range current.DesiredZones {
 		if zone.Desired.ID == zoneID && zone.Desired.Name == zoneName {
@@ -61,7 +61,7 @@ func buildZoneRemovalProjection(
 	affected := make([]string, 0)
 	for index, service := range current.DesiredServices {
 		candidate.DesiredServices[index] = service
-		candidate.DesiredServices[index].Desired.Zones = make([]string, 0, len(service.Desired.Zones))
+		candidate.DesiredServices[index].Desired.Zones = nil
 		removed := false
 		for _, name := range service.Desired.Zones {
 			if name == zoneName {

@@ -137,7 +137,7 @@ func ValidateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		}
 		expected.DesiredServices = append(expected.DesiredServices, desired)
 	}
-	expected.VolumeMounts = expected.VolumeMounts[:0]
+	expected.VolumeMounts = nil
 	for _, mount := range intent.CurrentProjection.VolumeMounts {
 		if mount.ServiceID != intent.ServiceID {
 			expected.VolumeMounts = append(expected.VolumeMounts, mount)

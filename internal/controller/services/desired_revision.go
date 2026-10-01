@@ -333,7 +333,7 @@ func buildServiceRemovalProjection(
 	candidate := controllerrevision.CloneProjection(current)
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
-	candidate.DesiredServices = make([]servicerecord.EnvironmentServiceProjection, 0, len(current.DesiredServices)-1)
+	candidate.DesiredServices = nil
 	for _, desired := range current.DesiredServices {
 		if desired.Desired.ID != record.Desired.ID {
 			candidate.DesiredServices = append(candidate.DesiredServices, desired)
@@ -345,7 +345,7 @@ func buildServiceRemovalProjection(
 			"Service desired record is absent",
 		)
 	}
-	candidate.VolumeMounts = candidate.VolumeMounts[:0]
+	candidate.VolumeMounts = nil
 	for _, mount := range current.VolumeMounts {
 		if mount.ServiceID != record.Desired.ID {
 			candidate.VolumeMounts = append(candidate.VolumeMounts, mount)

@@ -179,7 +179,8 @@ func (ledger *ReleaseLedger) Publish(
 		fragment.condition,
 	}
 	conditions = append(conditions, hookFragment.conditions...)
-	conditions = append(conditions, evidence.ProxyAddresses.Conditions()...)
+	proxyConditions := evidence.ProxyAddresses.Conditions()
+	conditions = append(conditions, proxyConditions...)
 	configurationCondition, hasConfiguration, err := taskConfigurationCondition(evidence.Task)
 	if err != nil {
 		return ReleasePublicationResult{}, err
@@ -190,7 +191,8 @@ func (ledger *ReleaseLedger) Publish(
 		configurationConditions = 1
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(evidence.Manifest.Record.Members)*2+11)
-	mutations = append(mutations, evidence.ProxyAddresses.Mutations()...)
+	proxyMutations := evidence.ProxyAddresses.Mutations()
+	mutations = append(mutations, proxyMutations...)
 	for _, member := range evidence.Manifest.Record.Members {
 		environmentValue, encodeErr := json.Marshal(releases.ReleaseEnvironmentIndexValue{
 			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,
@@ -251,17 +253,10 @@ func (ledger *ReleaseLedger) Publish(
 			Value: slices.Clone(evidence.EnvironmentEpochValue),
 		},
 	)
-	if len(conditions) != 11+len(hookFragment.conditions)+configurationConditions ||
-		len(mutations) != len(evidence.Manifest.Record.Members)*2+11+len(hookFragment.mutations) ||
-		len(
-			conditions,
-		)+len(
-			mutations,
-		)+len(
-			pinChange.conditions,
-		)+len(
-			pinChange.mutations,
-		) > etcdstore.MaximumOperations {
+	operations := len(conditions) + len(mutations) + len(pinChange.conditions) + len(pinChange.mutations)
+	if len(conditions) != 11+len(hookFragment.conditions)+len(proxyConditions)+configurationConditions ||
+		len(mutations) != len(evidence.Manifest.Record.Members)*2+11+len(hookFragment.mutations)+len(proxyMutations) ||
+		operations > etcdstore.MaximumOperations {
 		return ReleasePublicationResult{}, errs.New(
 			errs.KindInternal,
 			"release publication operation budget is invalid",

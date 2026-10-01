@@ -1,6 +1,7 @@
 package services
 
 import (
+	"crypto/sha256"
 	"net/http"
 	"strings"
 	"testing"
@@ -15,11 +16,12 @@ import (
 	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	"google.golang.org/protobuf/proto"
 )
 
-// SVC-04: direct Service creation leaves optional runtime files absent; a
-// later removal must preserve that exact projection shape while sealing its
-// durable candidate intent.
+// SVC-04 / DNS-05: removing the final Volume-consuming Service must seal a
+// durable candidate without phantom mounts while retaining persistent storage.
 func TestServiceRemovalCandidatePreservesAbsentRuntimeFiles(t *testing.T) {
 	t.Parallel()
 	createdAt := time.Date(2026, time.September, 20, 12, 0, 0, 0, time.UTC)
@@ -51,6 +53,24 @@ func TestServiceRemovalCandidatePreservesAbsentRuntimeFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildServiceDesiredProjection() error = %v", err)
 	}
+	volumeID := ids.NewAt(ids.KindVolume, createdAt, 7)
+	current.Volumes = []testenvironmentprojection.EnvironmentVolumeIdentity{{ID: volumeID, Slug: "data", Key: "data"}}
+	current.VolumeMounts = []testenvironmentprojection.EnvironmentServiceVolumeMount{{
+		ServiceID: serviceID, VolumeID: volumeID, Target: "/data",
+	}}
+	artifact := &agentpb.ComposeArtifact{}
+	if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
+		t.Fatal(err)
+	}
+	artifact.Volumes = []*agentpb.ComposeVolume{{VolumeId: volumeID, ComposeName: "data"}}
+	artifact.CanonicalYaml = append(artifact.CanonicalYaml, []byte("volumes:\n  data: {}\n")...)
+	digest := sha256.Sum256(artifact.CanonicalYaml)
+	artifact.YamlSha256 = digest[:]
+	current.ComposeArtifact, err = (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current.NormalizedCompose = append(current.NormalizedCompose, []byte("volumes:\n  data: {}\n")...)
 	candidate, err := buildServiceRemovalProjection(
 		tenantID,
 		projectID,
@@ -91,5 +111,16 @@ func TestServiceRemovalCandidatePreservesAbsentRuntimeFiles(t *testing.T) {
 	}
 	if intent.ServiceID != serviceID || intent.CandidateProjection.RevisionID != candidateRevisionID {
 		t.Fatalf("removal intent = %#v", intent)
+	}
+	if len(intent.CandidateProjection.VolumeMounts) != 0 || len(intent.CandidateProjection.Volumes) != 1 ||
+		intent.CandidateProjection.Volumes[0].ID != volumeID || len(current.VolumeMounts) != 1 {
+		t.Fatal("removal changed retained storage or the baseline mount")
+	}
+	encoded, err := testenvironmentchanges.EncodeServiceRemovalIntent(intent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testenvironmentchanges.DecodeServiceRemovalIntent(encoded); err != nil {
+		t.Fatalf("persisted removal candidate cannot be read: %v", err)
 	}
 }
