@@ -54,6 +54,13 @@ func TestCaptureAcknowledgedRuntimePreservesReceiptBytesAndRetainedProxy(t *test
 		},
 		Revision: 83, ReadRevision: revision,
 	}
+	reader.renders[retainedReleaseID] = testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]{
+		Record: testreleaserender.ReleaseRenderInput{
+			ReleaseID: retainedReleaseID, ServiceID: serviceID, EnvironmentID: environmentID,
+			Strategy: domain.StrategyBlueGreen, CandidateTarget: domain.WorkloadGreen,
+		},
+		Revision: 84, ReadRevision: revision,
+	}
 	newArtifactID := ids.New(ids.KindConfig)
 	captured, err := CaptureAcknowledgedRuntime(
 		context.Background(),
@@ -67,7 +74,8 @@ func TestCaptureAcknowledgedRuntimePreservesReceiptBytesAndRetainedProxy(t *test
 		t.Fatal(err)
 	}
 	defer captured.Clear()
-	if captured.RuntimeRevision != 89 || captured.RetainedPriorReleaseID != retainedReleaseID {
+	if captured.RuntimeRevision != 89 || captured.RetainedPriorReleaseID != retainedReleaseID ||
+		captured.Release.RetainedPrior == nil || captured.Release.RetainedPrior.ReleaseID != retainedReleaseID {
 		t.Fatalf("capture identity = %#v", captured)
 	}
 	assertReidentifiedRuntimeArtifact(t, record.Runtime.CurrentArtifact, captured.CurrentArtifact, newArtifactID)

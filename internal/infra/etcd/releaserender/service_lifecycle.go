@@ -152,7 +152,7 @@ func ValidateServiceLifecycleRelease(authority ServiceLifecycleRelease, input Se
 		prior.ServiceID != input.ServiceID || prior.EnvironmentID != input.EnvironmentID ||
 		authority.Current.Strategy != domain.StrategyBlueGreen ||
 		authority.Current.PriorStrategy != domain.StrategyBlueGreen ||
-		authority.Current.PriorArtifactID != "" || prior.CandidateTarget != authority.Current.PriorTarget {
+		prior.CandidateTarget != authority.Current.PriorTarget {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle retained Release authority is invalid")
 	}
 	return nil

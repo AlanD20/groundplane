@@ -53,7 +53,7 @@ func CaptureRelease(
 	}
 	if current.Record.Strategy == domain.StrategyBlueGreen &&
 		current.Record.PriorStrategy == domain.StrategyBlueGreen &&
-		current.Record.PriorArtifactID == "" && serving.Intent.PriorServingReleaseID != "" {
+		serving.Intent.PriorServingReleaseID != "" {
 		prior, priorErr := reader.GetReleaseRenderInputAt(
 			ctx,
 			serving.Intent.PriorServingReleaseID,

@@ -176,7 +176,10 @@ func executeServiceProxy(
 			return failure, err
 		}
 	}
-	if value := step.GetServiceProxySwitch(); value != nil && value.PriorArtifactId != "" {
+	// Recreate-to-blue-green retires the singleton. A blue-green predecessor
+	// stays in its slot until the next candidate replaces that inactive slot.
+	if value := step.GetServiceProxySwitch(); value != nil && value.PriorArtifactId != "" &&
+		value.FromTarget == "singleton" {
 		prior := composeArtifactByID(plan, value.PriorArtifactId)
 		if prior == nil {
 			return nil, errs.New(errs.KindValidationFailed, "release prior topology artifact is missing")

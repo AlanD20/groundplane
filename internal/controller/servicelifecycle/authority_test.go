@@ -43,6 +43,7 @@ func TestCaptureReleaseUsesOneAppliedRevisionAndRetainsExactBlueGreenPredecessor
 		ReleaseID: currentID, ServiceID: serviceID, EnvironmentID: envID,
 		Strategy: domain.StrategyBlueGreen, PriorStrategy: domain.StrategyBlueGreen,
 		CandidateTarget: domain.WorkloadGreen, PriorTarget: domain.WorkloadBlue,
+		PriorArtifactID: "cfg_01ARZ3NDEKTSV4RRFFQ69G5FAW",
 	}
 	prior := testreleaserender.ReleaseRenderInput{
 		ReleaseID: priorID, ServiceID: serviceID, EnvironmentID: envID,
