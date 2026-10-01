@@ -50,10 +50,15 @@ passed CoreDNS bootstrap and selected live etcd Save/Apply/recovery variants.
 [H77](../acceptance.md#dns-lifecycle-repair-and-installer-update) repaired its
 Deploy-accounting and removal-admission defects: normal installer update,
 recreate/blue-green DNS stability and desired/last-applied DNS guards passed.
-Normal Zone cleanup then exposed duplicate terminal transaction assembly;
-its original Task cannot settle on the deployed Controller. The scoped
-single-publication fix passes locally but still needs live installation,
-original-Task settlement and isolated Service/Volume/hierarchy cleanup.
+An approved Controller-only maintenance installation loaded the single-publication
+fix. The original Zone Task settled as timed out; ordinary Retry completed without
+changing its operation or plan. However, Zone removal recreated a regular workload
+and left the previously serving blue-green workload running. Subsequent Service
+removal rejected this extra runtime. Fix Zone membership changes to reconcile the
+acknowledged physical members, then qualify removal without orphan containers or
+weakening ownership checks. Service/Volume/hierarchy cleanup remains blocked;
+the data sentinel is intact. The maintenance installation is not normal-upgrade
+qualification.
 Concurrent DNS publication/removal remains unqualified. Do not bypass transaction,
 projection, dependency or updater-idle protections to close these results.
 

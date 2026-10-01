@@ -234,7 +234,7 @@ repeated; Backup/Restore, additional stress and alerts remain deferred.
 
 ## DNS lifecycle repair and installer update
 
-**H77 — selected update and DNS variants PASS; Zone cleanup BLOCKED,
+**H77 — selected update and DNS variants PASS; post-Zone Service cleanup FAIL,
 2026-10-01.** Source `0bea315a06b9582e7d37c890fac591014707dd3c` passed
 full local `make ci` and fixed H76's Deploy accounting and removal-projection
 admission defects. The public installer resolved that exact `main` commit and
@@ -258,14 +258,30 @@ and both Agent steps, but its acknowledgement repeatedly failed with
 `environment mutation contains a duplicate compare key`. The terminal assembler
 added the same Zone-removal fragment twice. Its scoped repair removes that
 duplicate path; the Agent completion/replay regression and full local `make ci`
-pass. Live
-settlement, Service removal and protected Volume/hierarchy cleanup remain
-blocked on loading that repair. The cleanup probe also corrected its initial
-assumption that the Volume API exposes a host path; actual container mounts
-provide the independent data check. No failed evidence was overwritten.
+pass. GitHub CI also passed for `86e9467cf44e5048188049198f55a429d66222ba`.
+An explicitly approved, Controller-only maintenance installation loaded that
+repair. Agent and etcd container identities, CLI, configuration, keys and Volume
+sentinel were unchanged. This was manual repair, not a normal protected upgrade;
+the predecessor binary and settled native receipt were retained unchanged.
 
-Original DNS settings are restored; the isolated resources and original Task
-are retained. No forced unlock, history rewrite, VM reset or tag was performed.
+The original Zone Task settled as timed out after its deadline had expired.
+Ordinary Retry completed with the same operation ID and plan hash. The Zone API
+returned 404, its Docker network was absent, and Service membership was empty.
+However, subsequent Service Remove failed with `Service removal has unexpected
+or remaining runtime`. Independent Docker inspection found both the regular
+workload created by Zone removal and the earlier blue-green workload still
+running. The Zone procedure recreates the desired Compose member rather than
+reconciling the acknowledged slot runtime; the extra regular member is outside
+the Service removal plan's captured runtime. This also blocks SVC-04's selected
+post-Zone-removal variant. Zone Task completion therefore does
+not qualify correct blue-green runtime cleanup. Service removal and protected
+Volume/hierarchy cleanup remain blocked. The Volume sentinel is intact and
+Controller, Agent and etcd remain healthy; no force-removal was used.
+
+Cleanup probes corrected their assumptions about host paths and omitted empty
+membership fields. Raw failures and original Task history remain retained.
+Original DNS settings are restored; the remaining isolated resources are retained.
+No forced unlock, history rewrite, VM reset or tag was performed.
 Historical application, Tunnel and Runner journeys were not repeated;
 Backup/Restore, additional stress and alerts remain deferred.
 
