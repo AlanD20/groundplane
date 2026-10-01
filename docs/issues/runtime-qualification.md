@@ -45,14 +45,17 @@ a working Environment simply to repeat historical evidence.
 
 ## Installation, upgrades and reboot
 
-The fresh current-candidate run [H76](../acceptance.md#fresh-installation-dns-and-etcd-activation)
-passed CoreDNS bootstrap and selected live etcd Save/Apply/recovery variants,
-but found release blockers in ordinary TCP Service Deploy and Service/Zone
-removal. Deploy rejects the added stable-proxy transaction fragments through
-stale exact-shape accounting. Removal rejects its candidate projection before
-the DNS dependency guard. Repair those owning paths and repeat DNS-05 before
-claiming redeployment, removal safety or release readiness; do not bypass the
-transaction limit, projection validation or dependency protections.
+The fresh installation run [H76](../acceptance.md#fresh-installation-dns-and-etcd-activation)
+passed CoreDNS bootstrap and selected live etcd Save/Apply/recovery variants.
+[H77](../acceptance.md#dns-lifecycle-repair-and-installer-update) repaired its
+Deploy-accounting and removal-admission defects: normal installer update,
+recreate/blue-green DNS stability and desired/last-applied DNS guards passed.
+Normal Zone cleanup then exposed duplicate terminal transaction assembly;
+its original Task cannot settle on the deployed Controller. The scoped
+single-publication fix passes locally but still needs live installation,
+original-Task settlement and isolated Service/Volume/hierarchy cleanup.
+Concurrent DNS publication/removal remains unqualified. Do not bypass transaction,
+projection, dependency or updater-idle protections to close these results.
 
 H55 closed the missing-candidate error-classification defect; H65 passed a bounded
 idle full-stack host return. Neither proves the current installer across every

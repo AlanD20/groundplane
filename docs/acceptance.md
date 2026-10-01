@@ -232,6 +232,43 @@ VM reset or tag was performed. Raw captures and host identities remain ignored
 locally. Historical application, public ingress and Runner qualification was not
 repeated; Backup/Restore, additional stress and alerts remain deferred.
 
+## DNS lifecycle repair and installer update
+
+**H77 — selected update and DNS variants PASS; Zone cleanup BLOCKED,
+2026-10-01.** Source `0bea315a06b9582e7d37c890fac591014707dd3c` passed
+full local `make ci` and fixed H76's Deploy accounting and removal-projection
+admission defects. The public installer resolved that exact `main` commit and
+completed its normal guarded Controller/Agent update on the same disposable
+Ubuntu amd64 host. The activation probe recorded 114 successful HTTP requests
+and no held-stream error. The application process, Volume sentinel and etcd
+container identity remained unchanged; its background writer progressed.
+Installed Controller, Agent and etcd were healthy, and owned build containers
+were absent. This is a bounded private-HTTP check, not public ingress or load
+qualification.
+
+DNS-05 passed recreate and blue-green redeployment with the same actual proxy
+address and DNS answer. Desired DNS references blocked Service/Zone removal
+with `resource.in_use`. An accepted invalid Corefile failed without replacing
+the old answer; last-applied references still blocked both removals. Reserved
+name admission and subsequent valid restoration passed. Publication/removal
+races were not injected.
+
+After normal DNS-record removal, last-membership Zone Remove passed admission
+and both Agent steps, but its acknowledgement repeatedly failed with
+`environment mutation contains a duplicate compare key`. The terminal assembler
+added the same Zone-removal fragment twice. Its scoped repair removes that
+duplicate path; the Agent completion/replay regression and full local `make ci`
+pass. Live
+settlement, Service removal and protected Volume/hierarchy cleanup remain
+blocked on loading that repair. The cleanup probe also corrected its initial
+assumption that the Volume API exposes a host path; actual container mounts
+provide the independent data check. No failed evidence was overwritten.
+
+Original DNS settings are restored; the isolated resources and original Task
+are retained. No forced unlock, history rewrite, VM reset or tag was performed.
+Historical application, Tunnel and Runner journeys were not repeated;
+Backup/Restore, additional stress and alerts remain deferred.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

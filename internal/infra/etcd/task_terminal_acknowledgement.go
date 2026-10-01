@@ -251,19 +251,6 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, environmentConditions...)
 			mutations = append(mutations, environmentMutations...)
 		}
-		if zoneRemoval {
-			zoneConditions, zoneMutations, err := repository.prepareZoneRemovalAcknowledgement(
-				ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
-			)
-			if err != nil {
-				journal.clearPrimary()
-				clear(environmentValue)
-				return etcdstore.Versioned[TaskRecord]{}, err
-			}
-			defer etcdstore.ClearMutationValues(zoneMutations)
-			conditions = append(conditions, zoneConditions...)
-			mutations = append(mutations, zoneMutations...)
-		}
 		attachChange, err := repository.prepareAcknowledgedAttachTask(
 			ctx, terminal, assignment, primaryAndAssignment.ReadRevision,
 		)

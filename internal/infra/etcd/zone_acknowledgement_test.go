@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
@@ -13,6 +14,40 @@ import (
 	"testing"
 	"time"
 )
+
+// DNS-05: an ordinary Agent Zone removal must publish its terminal change once,
+// then replay the same acknowledgement without duplicate comparison keys.
+func TestAgentZoneRemovalCompletionAndReplay(t *testing.T) {
+	fixture, tasks := beginZoneRemoval(t, false)
+	ctx := context.Background()
+	agentID := ids.NewAt(ids.KindAgent, fixture.task.CreatedAt, 99)
+	assignment, found, err := tasks.ClaimNextTask(ctx, agentID, 1, fixture.task.CreatedAt.Add(time.Second))
+	if err != nil || !found {
+		t.Fatalf("ClaimNextTask() = %#v/%v/%v", assignment, found, err)
+	}
+	for range 2 {
+		terminal, err := tasks.AcknowledgeTask(ctx, agentID, 1, fixture.task.ID,
+			assignment.Assignment.Record.AssignmentID, testtaskjournal.TaskStatusCompleted,
+			completedComposeTaskResult(), fixture.task.CreatedAt.Add(2*time.Second))
+		if err != nil || terminal.Record.Status != testtaskjournal.TaskStatusCompleted {
+			t.Fatalf("Agent Zone removal completion = %#v/%v", terminal, err)
+		}
+	}
+	current, found, err := fixture.hierarchy.GetEnvironmentComposeProjection(ctx, fixture.environment.Record.ID)
+	if err != nil || !found ||
+		!testenvironmentchanges.SameServiceRemovalProjection(current.Record, fixture.intent.CandidateProjection) {
+		t.Fatalf("completed desired projection = %#v/%v/%v", current, found, err)
+	}
+	for _, key := range []string{
+		testenvironmentchanges.ZoneRemovalIntentKey(fixture.intent.OperationID),
+		testdeletions.TombstoneKey(string(testdeletions.DeletionTargetZone), fixture.zone.Record.Desired.ID),
+	} {
+		state, err := fixture.store.Get(ctx, key)
+		if err != nil || state.Entry != nil {
+			t.Fatalf("retained Zone removal authority = %#v/%v", state, err)
+		}
+	}
+}
 
 func TestZoneRemovalCompletionPromotesCandidate(t *testing.T) {
 	fixture, tasks := beginAndClaimZoneRemoval(t)
@@ -64,7 +99,19 @@ func TestZoneRemovalCompletionPromotesCandidate(t *testing.T) {
 
 func beginAndClaimZoneRemoval(t *testing.T) (*zoneDeletionProjectionFixture, *TaskRepository) {
 	t.Helper()
-	fixture := newZoneDeletionProjectionFixture(t, true)
+	fixture, tasks := beginZoneRemoval(t, true)
+	claimed, found, err := tasks.ClaimNextControllerTask(
+		context.Background(), fixture.task.CreatedAt.Add(time.Second),
+	)
+	if err != nil || !found || claimed.Task.Record.ID != fixture.task.ID {
+		t.Fatalf("ClaimNextControllerTask() = %#v/%v/%v", claimed, found, err)
+	}
+	return fixture, tasks
+}
+
+func beginZoneRemoval(t *testing.T, backing bool) (*zoneDeletionProjectionFixture, *TaskRepository) {
+	t.Helper()
+	fixture := newZoneDeletionProjectionFixture(t, backing)
 	epochValue, err := testbackupruntime.EncodeEnvironmentMutationEpochRecord(
 		testbackupruntime.EnvironmentMutationEpochRecord{
 			EnvironmentID: fixture.environment.Record.ID,
@@ -91,12 +138,6 @@ func beginAndClaimZoneRemoval(t *testing.T) (*zoneDeletionProjectionFixture, *Ta
 	tasks, err := newTaskRepository(fixture.store)
 	if err != nil {
 		t.Fatal(err)
-	}
-	claimed, found, err := tasks.ClaimNextControllerTask(
-		context.Background(), fixture.task.CreatedAt.Add(time.Second),
-	)
-	if err != nil || !found || claimed.Task.Record.ID != fixture.task.ID {
-		t.Fatalf("ClaimNextControllerTask() = %#v/%v/%v", claimed, found, err)
 	}
 	return fixture, tasks
 }
