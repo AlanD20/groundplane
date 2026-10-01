@@ -57,6 +57,11 @@ uses durable child receipts, so Task status or a missing Docker name alone is
 not proof of cleanup. Bounded scans summarize the complete plan before the
 parent-last final transaction removes the resource and releases its slug.
 
+An empty Zone reservation registry and unconfigured scheduling defaults are
+metadata, not surviving children. Finalization validates and retires them in
+the same revision-checked transaction as their Environment. Live reservations,
+configured scheduling, corrupt records or concurrent changes still block it.
+
 Failure, abort, timeout, restart or contradictory evidence retains the
 tombstone, lock, plan, receipts and already completed checkpoints. A six-hour
 attempt stops new dispatch but does not abandon an active external effect. Task

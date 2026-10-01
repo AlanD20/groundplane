@@ -12,12 +12,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletionfinalization"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
 
 // OWN-05/OWN-06: Apply's inert defaults must not wedge parent-last deletion;
 // configured authority and concurrent metadata changes must never be discarded.
 func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
-	for _, scenario := range []string{"idle", "configured", "active-schedule", "foreign-owner", "retained-key", "policy-race", "coordination-race"} {
+	for _, scenario := range []string{"idle", "configured", "active-schedule", "foreign-owner", "retained-key", "policy-race", "coordination-race", "zone-reserved", "zone-corrupt", "zone-race"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx := context.Background()
 			fixture := newEnvironmentDeletionLockFixture(t)
@@ -55,6 +57,19 @@ func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
 			}
 			fixture.putRaw(t, policyKey, policyValue)
 			fixture.putRaw(t, coordinationKey, coordinationValue)
+			poolKey := networkreservations.ZonePoolRegistryKey(environmentID)
+			pool := networkreservations.ZonePoolRegistry{Reservations: map[string]string{}}
+			if scenario == "zone-reserved" {
+				pool.Reservations[ids.NewAt(ids.KindNetwork, fixture.now, 9903)] = "10.92.0.0/25"
+			}
+			poolValue, err := recordcodec.Encode("zone_pool_registry", pool)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "zone-corrupt" {
+				poolValue = []byte("corrupt")
+			}
+			fixture.putRaw(t, poolKey, poolValue)
 			if scenario == "retained-key" {
 				fixture.putRaw(t, backuppolicy.BackupKeyKey(environmentID), []byte("retained authority"))
 			}
@@ -75,7 +90,7 @@ func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
 					TargetID:   environmentID, TargetRevision: primary.Entry.ModRevision,
 				})
 			blocked := scenario == "configured" || scenario == "active-schedule" || scenario == "foreign-owner" ||
-				scenario == "retained-key"
+				scenario == "retained-key" || scenario == "zone-reserved" || scenario == "zone-corrupt"
 			if blocked {
 				if err == nil {
 					t.Fatal("retained authority was accepted")
@@ -91,6 +106,14 @@ func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
 				if scenario == "coordination-race" {
 					fixture.putRaw(t, coordinationKey, coordinationValue)
 				}
+				if scenario == "zone-race" {
+					pool.Reservations[ids.NewAt(ids.KindNetwork, fixture.now, 9903)] = "10.92.0.0/25"
+					changed, err := recordcodec.Encode("zone_pool_registry", pool)
+					if err != nil {
+						t.Fatal(err)
+					}
+					fixture.putRaw(t, poolKey, changed)
+				}
 				result, err := fixture.store.Transact(ctx, effects.Conditions(), effects.Mutations())
 				if err != nil {
 					t.Fatal(err)
@@ -99,7 +122,7 @@ func TestHierarchyEnvironmentFinalizationRetiresOnlyIdleMetadata(t *testing.T) {
 					t.Fatalf("transaction succeeded = %t", result.Succeeded)
 				}
 			}
-			for _, key := range []string{hierarchy.EnvironmentKey(environmentID), policyKey, coordinationKey} {
+			for _, key := range []string{hierarchy.EnvironmentKey(environmentID), policyKey, coordinationKey, poolKey} {
 				value, err := fixture.store.Get(ctx, key)
 				if err != nil {
 					t.Fatal(err)

@@ -112,6 +112,16 @@ func TestEnvironmentDeletionCompletionRemovesDesiredProjectionBeforeParent(t *te
 	t.Parallel()
 	fixture := newEnvironmentDeletionLockFixture(t)
 	fixture.mustBegin(t)
+	// OWN-05: removing the last Zone leaves an empty registry. Parent completion
+	// must retire it atomically, not mistake it for a surviving child.
+	poolKey := testnetworkreservations.ZonePoolRegistryKey(fixture.environment.Record.ID)
+	poolValue, err := testrecordcodec.Encode("zone_pool_registry", testnetworkreservations.ZonePoolRegistry{
+		Reservations: map[string]string{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.putRaw(t, poolKey, poolValue)
 	projectionTask := environmentBlueprintTestTask(
 		t, fixture.project.Record, fixture.environment.Record, 84,
 	)
@@ -157,6 +167,7 @@ func TestEnvironmentDeletionCompletionRemovesDesiredProjectionBeforeParent(t *te
 	); err != nil {
 		t.Fatalf("AcknowledgeTask() error = %v", err)
 	}
+	assertEnvironmentDeletionCompanion(t, fixture.store, poolKey, false)
 	headKey := testblueprints.EnvironmentBlueprintHeadKey(fixture.environment.Record.ID)
 	projectionKey := testenvironmentprojection.EnvironmentComposeProjectionStorageKey(fixture.environment.Record.ID)
 	parentKey := testhierarchy.EnvironmentKey(fixture.environment.Record.ID)

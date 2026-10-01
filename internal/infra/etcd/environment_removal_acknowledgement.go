@@ -158,6 +158,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		return nil, nil, err
 	}
 	conditions = append(conditions, intentConditions...)
+	var metadata hierarchydeletionfinalization.Effects
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		projectedKeys := make([]string, 0)
 		if stored.Values[2] != nil || stored.Values[3] != nil {
@@ -180,20 +181,17 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 					deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Desired.ID))
 			}
 		}
-		if err := hierarchydeletionfinalization.RequireEnvironmentDeletionLiveAuthorityEmpty(
+		metadata, err = hierarchydeletionfinalization.PrepareEnvironmentDeletionFinalization(
 			ctx, repository.store, environment.ID, task.OperationID, readRevision, projectedKeys...,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, nil, err
 		}
-		conditions = append(
-			conditions,
-			hierarchydeletionfinalization.EnvironmentDeletionLiveAuthorityConditions(
-				environment.ID,
-				task.OperationID,
-				projectedKeys...)...)
+		conditions = append(conditions, metadata.Conditions()...)
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(intentMutations)+12)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
+		mutations = append(mutations, metadata.Mutations()...)
 		mutations = append(
 			mutations,
 			etcdstore.Mutation{

@@ -11,9 +11,7 @@ import (
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
-	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -23,16 +21,25 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func RequireEnvironmentDeletionLiveAuthorityEmpty(
+func PrepareEnvironmentDeletionFinalization(
 	ctx context.Context,
 	store finalizationStore,
 	environmentID string,
 	operationID string,
 	revision int64,
 	projectedKeys ...string,
-) error {
-	return requireEnvironmentDeletionAuthorityEmpty(ctx, store, environmentID, operationID, revision,
-		append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...))
+) (Effects, error) {
+	metadata, err := readIdleEnvironmentMetadata(ctx, store, environmentID, revision)
+	if err != nil {
+		return Effects{}, err
+	}
+	keys := append(environmentDeletionChildAuthorityKeys(environmentID), projectedKeys...)
+	if err := requireEnvironmentDeletionAuthorityEmpty(ctx, store, environmentID, operationID, revision, keys); err != nil {
+		return Effects{}, err
+	}
+	metadata.conditions = append(metadata.conditions,
+		environmentDeletionAuthorityConditions(environmentID, operationID, keys)...)
+	return metadata, nil
 }
 
 func requireEnvironmentDeletionAuthorityEmpty(
@@ -98,13 +105,6 @@ func requireEnvironmentDeletionAuthorityEmpty(
 	return nil
 }
 
-func EnvironmentDeletionLiveAuthorityConditions(
-	environmentID string, operationID string, projectedKeys ...string,
-) []etcdstore.Condition {
-	keys := append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...)
-	return environmentDeletionAuthorityConditions(environmentID, operationID, keys)
-}
-
 func environmentDeletionAuthorityConditions(environmentID, operationID string, keys []string) []etcdstore.Condition {
 	conditions := make([]etcdstore.Condition, 0, len(keys)+18)
 	for _, key := range keys {
@@ -120,14 +120,8 @@ func environmentDeletionAuthorityConditions(environmentID, operationID string, k
 	return conditions
 }
 
-func environmentDeletionLiveAuthorityKeys(environmentID string) []string {
-	return append(environmentDeletionChildAuthorityKeys(environmentID),
-		coordinationrecord.Key(environmentID), backuppolicy.BackupPolicyKey(environmentID))
-}
-
 func environmentDeletionChildAuthorityKeys(environmentID string) []string {
 	return []string{
-		networkreservations.ZonePoolRegistryKey(environmentID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 		removalrecord.EnvironmentLockKey(environmentID),
 		backuppolicy.BackupKeyKey(environmentID),

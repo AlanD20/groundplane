@@ -691,7 +691,15 @@ func TestEnvironmentDeletionCompletionRejectsRetainedDurableChildren(t *testing.
 				result,
 				fixture.now.Add(2*time.Second),
 			)
-			assertExactStateConflict(t, err, "AcknowledgeTask(retained "+test.name+")")
+			if test.name == "coordination authority" || test.name == "zone reservation" {
+				// These two entries require decoding before empty metadata can be
+				// retired. This raw fixture is corrupt, not a valid live record.
+				if !isKind(err, errs.KindInternal) {
+					t.Fatalf("AcknowledgeTask(corrupt %s) = %v", test.name, err)
+				}
+			} else {
+				assertExactStateConflict(t, err, "AcknowledgeTask(retained "+test.name+")")
+			}
 			assertEnvironmentDeletionCompanion(
 				t, fixture.store, testhierarchy.EnvironmentKey(fixture.environment.Record.ID), true,
 			)
