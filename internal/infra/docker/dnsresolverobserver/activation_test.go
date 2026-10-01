@@ -35,6 +35,29 @@ func TestAwaitConfigurationAcrossReload(t *testing.T) {
 		ArtifactSHA256: sha256.Sum256(artifact), ArtifactTarget: "/etc/coredns/Corefile",
 		ReloadMetric: "coredns_reload_version_info",
 	}
+	t.Run("fresh startup without reload metric", func(t *testing.T) {
+		executor := &Executor{
+			runtime: observerRuntimeStub{
+				evidence: runtimeEvidence{artifact: artifact, servingConfiguration: &effective},
+			},
+			metrics: &observerMetricsStub{values: [][]byte{forwardMetrics(nil, 0, 0)}},
+		}
+		result, err := executor.awaitConfiguration(context.Background(), request)
+		if err != nil || result.effectiveDigest != effective {
+			t.Fatalf("fresh startup: digest=%x, error=%v", result.effectiveDigest, err)
+		}
+	})
+	t.Run("reload metric cannot prove a failed candidate is serving", func(t *testing.T) {
+		executor := &Executor{
+			runtime: observerRuntimeStub{evidence: runtimeEvidence{artifact: artifact, servingConfiguration: &old}},
+			metrics: &observerMetricsStub{values: [][]byte{forwardMetrics(&effective, 0, 0)}},
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		if _, err := executor.awaitConfiguration(ctx, request); err == nil {
+			t.Fatal("a matching reload metric overruled the last successful serving configuration")
+		}
+	})
 	for _, changed := range []bool{false, true} {
 		name := "delayed reload and metric"
 		if changed {
@@ -46,7 +69,7 @@ func TestAwaitConfigurationAcrossReload(t *testing.T) {
 				candidate.artifact = []byte("unexpected replacement")
 			}
 			runtime := &delayedResolverRuntime{values: []runtimeEvidence{
-				{artifact: artifact}, candidate,
+				{artifact: artifact, servingConfiguration: &old}, candidate,
 			}}
 			executor := &Executor{
 				runtime: runtime,

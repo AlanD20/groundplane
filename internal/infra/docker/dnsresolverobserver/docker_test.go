@@ -59,7 +59,8 @@ func (engine imageIdentityEngine) ContainerInspect(
 	client.ContainerInspectOptions,
 ) (client.ContainerInspectResult, error) {
 	return client.ContainerInspectResult{Container: containertypes.InspectResponse{
-		ID: "container", Image: engine.containerImageID, State: &containertypes.State{Running: true},
+		ID: "container", Image: engine.containerImageID,
+		State:                   &containertypes.State{Running: true, StartedAt: "2026-10-01T00:00:00Z"},
 		ImageManifestDescriptor: engine.containerDescriptor,
 		Config: &containertypes.Config{
 			Image: engine.imageReference, Tty: true, Labels: map[string]string{"owned": "true"},

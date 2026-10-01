@@ -23,6 +23,13 @@ type observerRuntimeStub struct{ evidence runtimeEvidence }
 func (runtime observerRuntimeStub) Inspect(context.Context, Request) (runtimeEvidence, error) {
 	evidence := runtime.evidence
 	evidence.artifact = append([]byte(nil), evidence.artifact...)
+	if evidence.servingConfiguration == nil {
+		digest, err := effectiveConfigSHA512("/etc/coredns/Corefile", evidence.artifact)
+		if err != nil {
+			return runtimeEvidence{}, err
+		}
+		evidence.servingConfiguration = &digest
+	}
 	return evidence, nil
 }
 func (observerRuntimeStub) Close() error { return nil }
@@ -143,7 +150,7 @@ func TestObserveReturnsTypedExactCandidateEvidence(t *testing.T) {
 	}
 }
 
-// Rationale: raw-byte hashes and missing, stale, malformed or ambiguous live
+// Rationale: raw-byte hashes and stale, malformed or ambiguous live
 // metrics must never prove that the candidate configuration is serving.
 func TestObserveRejectsInvalidEffectiveConfigurationEvidence(t *testing.T) {
 	artifact := []byte(". {\n  reload\n  prometheus 127.0.0.1:9153\n  forward . 1.1.1.1\n}\n")
@@ -164,8 +171,7 @@ func TestObserveRejectsInvalidEffectiveConfigurationEvidence(t *testing.T) {
 	tests := map[string]struct {
 		metrics []byte
 	}{
-		"raw artifact hash":     {metrics: forwardMetrics(&raw, 0, 0)},
-		"missing reload metric": {metrics: forwardMetrics(nil, 0, 0)},
+		"raw artifact hash": {metrics: forwardMetrics(&raw, 0, 0)},
 		"malformed metric": {
 			metrics: []byte("coredns_reload_version_info{hash=\"sha512\",value=\"malformed\"} 1\n"),
 		},

@@ -9,6 +9,7 @@ import (
 	"io"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/moby/moby/client"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -22,6 +23,7 @@ type dockerEngine interface {
 	ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error)
 	CopyFromContainer(context.Context, string, client.CopyFromContainerOptions) (client.CopyFromContainerResult, error)
 	ImageInspect(context.Context, string, ...client.ImageInspectOption) (client.ImageInspectResult, error)
+	ContainerLogs(context.Context, string, client.ContainerLogsOptions) (client.ContainerLogsResult, error)
 	Close() error
 }
 
@@ -97,9 +99,25 @@ func (inspector *dockerRuntimeInspector) Inspect(ctx context.Context, request Re
 		clear(artifact)
 		return runtimeEvidence{}, err
 	}
+	if _, err := time.Parse(time.RFC3339Nano, container.State.StartedAt); err != nil {
+		clear(artifact)
+		return runtimeEvidence{}, errs.New(errs.KindStateConflict, "DNS resolver process start time is invalid")
+	}
+	logs, err := inspector.engine.ContainerLogs(ctx, container.ID, client.ContainerLogsOptions{
+		ShowStdout: true, ShowStderr: true, Since: container.State.StartedAt, Tail: "all",
+	})
+	if err != nil {
+		clear(artifact)
+		return runtimeEvidence{}, errs.Wrap(errs.KindInternal, err)
+	}
+	serving, err := readServingConfiguration(logs, container.Config.Tty)
+	if err != nil {
+		clear(artifact)
+		return runtimeEvidence{}, err
+	}
 	return runtimeEvidence{
 		artifact: artifact, verifiedImageDigest: digest,
-		imageConfigAuthority: configAuthority,
+		imageConfigAuthority: configAuthority, servingConfiguration: serving,
 	}, nil
 }
 

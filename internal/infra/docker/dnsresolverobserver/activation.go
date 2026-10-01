@@ -67,10 +67,14 @@ func (executor *Executor) inspectConfiguration(
 	if err != nil {
 		return result, false, err
 	}
-	if !present {
+	// CoreDNS publishes this metric only after a reload, including failed ones.
+	// The successful instance-start log is always required; a metric alone can
+	// never establish serving authority. Fresh startup has no metric yet.
+	if runtime.servingConfiguration == nil || *runtime.servingConfiguration != result.effectiveDigest ||
+		(present && metric != result.effectiveDigest) {
 		return result, false, nil
 	}
 	result.imageDigest = runtime.verifiedImageDigest
 	result.imageConfigAuthority = runtime.imageConfigAuthority
-	return result, metric == result.effectiveDigest, nil
+	return result, true, nil
 }

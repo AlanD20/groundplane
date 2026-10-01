@@ -5,6 +5,7 @@ package dnsresolverobserver
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/sha512"
 	"net/http"
 	"strings"
 	"time"
@@ -48,8 +49,9 @@ type Request struct {
 }
 
 type runtimeEvidence struct {
-	artifact            []byte
-	verifiedImageDigest [sha256.Size]byte
+	artifact             []byte
+	verifiedImageDigest  [sha256.Size]byte
+	servingConfiguration *[sha512.Size]byte
 	// imageConfigAuthority is observed for classic Docker, or bound from the
 	// sealed catalog after verifying the selected child on containerd. It is
 	// never the child digest mislabeled as an independently observed config.
