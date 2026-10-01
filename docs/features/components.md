@@ -5,6 +5,11 @@ Environment's HTTP routing, and Cloudflare Tunnel for its outbound edge tunnel.
 There is no runtime plugin loader or operator-uploaded planner. Controller and
 Agent are host processes, not Components.
 
+Removing a Zone disconnects its existing containers and removes its bridge.
+It does not redeploy Services, apply pending Service edits or delete their data.
+Other Zone memberships remain connected; losing the last membership removes
+network reachability without replacing the workload.
+
 ## Routes and the HTTP router
 
 An Environment can enable one logical HTTP router. Routes belong to the

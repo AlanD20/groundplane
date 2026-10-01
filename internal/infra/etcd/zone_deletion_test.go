@@ -24,8 +24,6 @@ import (
 	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	"google.golang.org/protobuf/proto"
 )
 
 func TestBeginZoneDeletionFencesDistinctDesiredAndAppliedProjections(t *testing.T) {
@@ -376,12 +374,6 @@ func zoneDeletionAgentTask(
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifact := &agentpb.ComposeArtifact{}
-	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(
-		intent.CandidateProjection.ComposeArtifact, artifact,
-	); err != nil {
-		t.Fatal(err)
-	}
 	return TaskRecord{
 		ID: ids.NewAt(ids.KindTask, at, 83), OperationID: intent.OperationID,
 		Owner: owner, Actor: testtaskjournal.TaskActorOperator, Executor: testtaskjournal.TaskExecutorAgent,
@@ -393,7 +385,6 @@ func zoneDeletionAgentTask(
 			testtaskjournal.TaskZoneEnvironmentParam:       environment.ID,
 			testtaskjournal.TaskZoneRemovalOperationParam:  intent.OperationID,
 			testblueprints.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
-			testtaskjournal.TaskComposeArtifactParam:       artifact.GetArtifactId(),
 		},
 		Steps: []testtaskjournal.TaskStepRecord{
 			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, 85)},

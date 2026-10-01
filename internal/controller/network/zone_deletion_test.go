@@ -10,7 +10,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -177,23 +176,15 @@ func (*fakeZoneDeletionPlans) ResolveExecutionPlan(
 
 func (*fakeZoneDeletionPlans) PrepareZoneRemovalTask(
 	_ context.Context, task etcd.TaskRecord, intent testenvironmentchanges.ZoneRemovalIntent,
-	procedure testtaskplanning.ZoneRemovalTaskProcedureIDs,
+	networkStepID string,
 ) (etcd.TaskRecord, error) {
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Params = map[string]string{
 		testtaskjournal.TaskZoneEnvironmentParam:       intent.EnvironmentID,
 		testtaskjournal.TaskZoneRemovalOperationParam:  intent.OperationID,
 		testblueprints.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
-		testtaskjournal.TaskComposeArtifactParam:       procedure.ArtifactID,
 	}
-	task.Steps = make([]testtaskjournal.TaskStepRecord, 0, len(procedure.ServiceStepIDs)+1)
-	for _, id := range procedure.ServiceStepIDs {
-		task.Steps = append(task.Steps, testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: id})
-	}
-	task.Steps = append(
-		task.Steps,
-		testtaskjournal.TaskStepRecord{Kind: testtaskjournal.TaskStepOperation, ID: procedure.NetworkStepID},
-	)
+	task.Steps = []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: networkStepID}}
 	task.PlanHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	return task, nil
 }

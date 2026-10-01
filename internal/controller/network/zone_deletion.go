@@ -19,7 +19,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -201,7 +200,7 @@ type zoneDeletionPlanResolver interface {
 		context.Context,
 		etcd.TaskRecord,
 		environmentchanges.ZoneRemovalIntent,
-		taskplanning.ZoneRemovalTaskProcedureIDs,
+		string,
 	) (etcd.TaskRecord, error)
 }
 
@@ -482,14 +481,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	} else {
-		serviceSteps := make([]string, len(affected))
-		for index := range serviceSteps {
-			serviceSteps[index] = ids.New(ids.KindStep)
-		}
-		task, err = service.plans.PrepareZoneRemovalTask(ctx, task, intent, taskplanning.ZoneRemovalTaskProcedureIDs{
-			ArtifactID:     zoneStableIDFromRevision(ids.KindConfig, claim.RevisionID),
-			ServiceStepIDs: serviceSteps, NetworkStepID: ids.New(ids.KindStep),
-		})
+		task, err = service.plans.PrepareZoneRemovalTask(ctx, task, intent, ids.New(ids.KindStep))
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
