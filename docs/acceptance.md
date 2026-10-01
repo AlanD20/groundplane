@@ -319,6 +319,23 @@ installation files. The old Controller remains installed. This is not a passing
 upgrade or live qualification of the repair. Failed evidence and Task history
 remain retained locally. No VM reset, compatibility path or release tag was used.
 
+## Environment finalization repair
+
+**H79 — local repair PASS; live qualification NOT RUN, 2026-10-01.** Source
+`b9f6e17f98d702d3e8348bbef8c655a2e17b1fcf` passes full local `make ci`.
+Direct and aggregate Environment finalization now share one revision-checked
+preparation: retire only empty Zone reservations and inert scheduling defaults,
+while preserving active-child guards. Existing behavioral regressions cover
+successful retirement, non-empty and corrupt records, concurrent reservation
+insertion and terminal parent removal. The root-package allowance decreased;
+no compatibility or manual-unlock path was added.
+
+Publication is blocked by unavailable GitHub SSH authentication. The approved
+Controller-only repair has not run; the original QA cleanup Task remains stuck
+on the old Controller. Resumed cleanup, normal installer activation and the fresh
+Zone/blue-green/Service removal journey remain unqualified. H78's failure
+evidence and original Task records are retained.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

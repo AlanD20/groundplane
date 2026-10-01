@@ -59,9 +59,12 @@ and fresh retest are blocked. After approved one-time orphan removal, normal
 Service removal preserved Volume data and protected Volume removal completed.
 Environment finalization now rejects a retained empty Zone subnet registry as
 live authority. Its running parent blocks the normal Controller update, which
-was aborted before activation. Retire the empty registry atomically while
-preserving non-empty reservation guards, then resume cleanup, normal update and
-the fresh runtime journey. No manual unlock or history rewrite qualifies recovery.
+was aborted before activation. [H79](../acceptance.md#environment-finalization-repair)
+implements atomic empty-registry retirement with non-empty reservation guards;
+full local CI passes. Publication is blocked by GitHub SSH authentication, so
+the approved Controller-only repair, resumed cleanup, normal update and fresh
+runtime journey remain unqualified. No manual unlock or history rewrite
+qualifies recovery.
 The earlier maintenance installation is not normal-upgrade qualification.
 Concurrent DNS publication/removal remains unqualified. Do not bypass transaction,
 projection, dependency or updater-idle protections to close these results.
