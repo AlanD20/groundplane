@@ -185,6 +185,53 @@ scopes, host reboot, registry restart and arm64 variants were not run. Moved-tag
 and replay behavior has local regression proof only. No new load, installation,
 upgrade or general production-readiness claim follows from this run.
 
+## Fresh installation, DNS and etcd activation
+
+**H76 — selected installation and etcd variants PASS; DNS lifecycle BLOCKED,
+2026-10-01.** Source `e51089e0ad99b7d1f96f366e30a9173ebba346b3` passed
+local `make ci` and GitHub CI. The public Pages installer matched that source's
+installer bytes. On a fresh Ubuntu 24.04.4 amd64 host, documented Docker build
+prerequisites were installed first; `install.sh --ref main` then resolved that
+exact commit, built and installed GP itself. CoreDNS bootstrap completed without
+Retry, actual registry and upstream DNS answers passed, LAN Console returned
+HTTP 200, and the existing API/CLI Host journey passed with owned tunnel cleanup.
+Owned build containers, temporary tags and source directories were removed;
+no host Go or Node toolchain remained. This is not other-platform qualification.
+
+For HOST-12, Save remained pending through a Controller restart with unchanged
+etcd container identity. Stale Save was rejected. Explicit Apply changed etcd
+arguments; terminal exact replay returned the original Task without another
+container replacement. An isolated HTTP application's process, held stream and
+Volume sentinel survived, and its background writer progressed.
+
+For HOST-13, killing only the new etcd candidate caused GP to restore its exact
+predecessor arguments and data mount. Separately, killing the Controller during
+prepared candidate activation caused automatic restart and receipt-owned rollback.
+Both original Tasks failed, desired candidates remained pending, application
+runtime/data survived, and subsequent store writes succeeded. The candidate-kill
+probe timed out while polling during the expected outage; separate inspection
+confirmed recovery. The corrected probe finished the independent interruption
+case without repeating earlier passing checks. Explicit failed-request replay,
+other crash points and sustained load were not run. Original etcd settings were
+restored through Save and Apply, not by editing recovery files.
+
+DNS-05 reached actual explicit-IP and stable Service-proxy answers. An invalid
+reserved-name edit was rejected; a separately accepted invalid Corefile Task
+failed without replacing the serving answer, and normal configuration restoration
+completed. Redeployment stopped at HTTP 500, `release publication operation
+budget is invalid`: proxy-reservation transaction fragments were added without
+updating the exact shape accounting. Service removal returned HTTP 422,
+`Service removal candidate projection changed`; Zone removal returned HTTP 422,
+`Zone removal candidate desired Services changed`. Both stopped before the DNS
+dependency guard, so neither guard nor successful resource cleanup is qualified.
+These failures block release signoff; they are not passing safety checks.
+
+Original DNS settings were restored. The small isolated canary is retained for
+repair/retest, with its failed-run evidence; no manual unlock, history rewrite,
+VM reset or tag was performed. Raw captures and host identities remain ignored
+locally. Historical application, public ingress and Runner qualification was not
+repeated; Backup/Restore, additional stress and alerts remain deferred.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or
