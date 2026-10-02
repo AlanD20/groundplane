@@ -525,10 +525,19 @@ func TestExecuteReleaseConcurrentRetriesKeepEvidenceIsolated(t *testing.T) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
-			runReleaseExecution(t, pool, taskID, "task-original", plan)
+			executeReleaseFixture(t, pool, taskID, "task-original", plan)
 		}()
 	}
 	wait.Wait()
+	results := map[string]int{}
+	for len(pool.outputs) > 0 {
+		if output := <-pool.outputs; output.Result != nil {
+			results[output.Result.TaskID]++
+		}
+	}
+	if len(results) != 2 || results["task-a"] != 1 || results["task-b"] != 1 {
+		t.Fatalf("concurrent retry results = %#v", results)
+	}
 	helper.mu.Lock()
 	defer helper.mu.Unlock()
 	seen := map[string]int{}
@@ -561,6 +570,19 @@ func runReleaseExecution(
 	retryOf string,
 	plan *agentpb.ExecutionPlan,
 ) TaskResult {
+	t.Helper()
+	executeReleaseFixture(t, pool, taskID, retryOf, plan)
+	for len(pool.outputs) > 0 {
+		output := <-pool.outputs
+		if output.Result != nil && output.Result.TaskID == taskID {
+			return *output.Result
+		}
+	}
+	t.Fatalf("release execution for %s emitted no result", taskID)
+	return TaskResult{}
+}
+
+func executeReleaseFixture(t *testing.T, pool *WorkerPool, taskID, retryOf string, plan *agentpb.ExecutionPlan) {
 	t.Helper()
 	plan = proto.Clone(plan).(*agentpb.ExecutionPlan)
 	if testtaskassignment.ComposeArtifact(plan, "candidate-artifact") == nil {
@@ -596,14 +618,6 @@ func runReleaseExecution(
 		}
 	}
 	pool.executeRelease(context.Background(), reservation)
-	for len(pool.outputs) > 0 {
-		output := <-pool.outputs
-		if output.Result != nil && output.Result.TaskID == taskID {
-			return *output.Result
-		}
-	}
-	t.Fatalf("release execution for %s emitted no result", taskID)
-	return TaskResult{}
 }
 
 func releaseForwardSwitch(stepID string) *agentpb.ExecutionStep {
