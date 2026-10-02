@@ -453,6 +453,54 @@ Controller startup. The approved disposable host reset removed that runtime and
 data after retaining incident evidence. This reset does not prove recovery of the
 original failed Task; a fresh fault-injected run is required.
 
+## Complete retained recovery and installer continuity
+
+**H83 — selected lifecycle, recovery, rollback and normal update PASS,
+2026-10-02.** Disposable Ubuntu 24.04 amd64 was installed through the public
+`install.sh --ref main`, without a manual source clone, at `a59acf782`.
+An isolated Python HTTP Service used a persistent Volume, stable TCP proxy and
+two blue-green slots. Stop stopped all three containers without replacing their
+identities; Start returned both slots and the proxy to running with the same
+data sentinel. Service and Environment tail300/follow, cancellation/reopening
+and CLI output passed on this installation.
+
+That initial candidate still failed complete restoration: an Alpine candidate
+could not execute the Python command, and recovery closed the failed Task while
+leaving the inactive retained slot missing. The serving process and data survived.
+A separate normal good Deploy rebuilt the baseline; it did not repair or rewrite
+the failed Task. This failure remains recorded, not converted into a pass.
+
+The normal public installer then updated Controller and Agent to `39841e304`.
+The update Task completed and installed bytes matched its staged manifest and
+Controller checksum. During 342 seconds, 1,705 private HTTP requests succeeded
+with p95 8.1 ms. A held HTTP stream delivered 685 lines and remained open through
+completion. Both workload slots, proxy, serving process start time, data sentinel
+and independent etcd identity/start time were unchanged; the background counter
+advanced. This was normal updater activation, not a maintenance installation.
+
+A fresh Alpine fault on the updated candidate failed Task
+`task_01M3XJHNNY34S3V13ZZCS0C16B` with `reconciliation_required: false`.
+Independent Docker inventory found both captured slots and the proxy running;
+HTTP still reached the unchanged serving process and preserved sentinel. The
+destroyed inactive slot was recreated from its sealed predecessor, not confused
+with the failed candidate. An initial rollback check correctly rejected a tag
+whose retained predecessor the fixture had already replaced. After explicitly
+establishing a successful Python 3.13 then 3.14 pair, historical rollback Task
+`task_01M3XJP6182W6R7MFS52264Z87` completed and HTTP reported Python 3.13.15.
+
+Destroy removed all three containers while leaving the physical Volume sentinel.
+Service removal, impact-confirmed Volume removal and Environment/Project/Tenant
+removal completed through GP. API absence and removal of the Volume path were
+checked. No owned test runtime remained. Failure and passing transcripts are
+retained in ignored local evidence. Full local CI passed for `39841e304`; this
+does not cover subsequent Backup protocol work.
+
+These are selected singleton/private HTTP variants, not held WebSocket,
+public-ingress, multi-Service/replica, every OS/architecture, concurrent mutation,
+reboot or Backup/Restore qualification. Historical public application and Runner
+checks were not repeated. No Task-history rewrite, forced unlock, manual runtime
+repair during this run, compatibility path or release tag was used.
+
 ## Supplementary router and observation evidence
 
 The 2026-09-10/12 Router work predates the numbered register and remains local or

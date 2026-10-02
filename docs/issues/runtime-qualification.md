@@ -7,9 +7,10 @@ acting. Completed fix narratives belong in Git history or the
 
 ## Architecture baseline
 
-The temporary 0.0.1 deferrals have been retired. Older baseline allowances remain
-explicit in [the baseline](../../architecture-baseline.json); they were not expanded
-by the integration-test migration. [Delivery](../delivery.md#architecture-gate)
+The temporary 0.0.1 deferrals and older pattern, import and oversized-file
+allowances have been retired. The [baseline](../../architecture-baseline.json)
+freezes application wiring and caps direct root-etcd code at 75,000 lines.
+[Delivery](../delivery.md#architecture-gate)
 explains what a passing architecture gate establishes. Local checks do not replace
 the live qualification below.
 
@@ -41,18 +42,17 @@ respect record/transaction bounds. A previous marker-size repair or constructor
 check does not prove the whole operation. Do not replay stale desired input over
 a working Environment simply to repeat historical evidence.
 
-Blue-green Start/Stop/Destroy, conversion back to recreate, failed-switch recovery
-and held WebSockets still need selected live proof. [H81](../acceptance.md#blue-green-retention-and-both-slot-cleanup)
+Blue-green conversion back to recreate and held WebSockets still need selected
+live proof. [H81](../acceptance.md#blue-green-retention-and-both-slot-cleanup)
 qualifies predecessor retention, inactive-slot replacement, a held HTTP stream
 and both-slot Zone/Service cleanup, not those remaining variants.
 
-H82 reproduced two blockers on that candidate: Stop rebuilt stable-proxy ownership
-from the newer Release and rejected the actual proxy; a failed candidate start
-replaced the inactive slot, but recovery required a completed forward step before
-authorizing compensation. The serving process and data remained intact while the
-Task stayed nonterminal. Exact acknowledged-member planning and durable
-mutation-based compensation have local repairs; integration and live retesting
-remain pending. Do not weaken ownership checks or rewrite the original Task.
+[H83](../acceptance.md#complete-retained-recovery-and-installer-continuity)
+closes H82's selected lifecycle and failed-start blockers and the subsequently
+reproduced missing-retained-slot proof defect. Whole-set Stop/Start, failed
+candidate restoration, explicit retained historical rollback and Destroy/data
+preservation passed. This does not qualify arbitrary mixed-tag histories,
+interrupted compensation, all lifecycle repetitions or concurrent removal.
 
 ## Installation, upgrades and reboot
 
@@ -92,6 +92,12 @@ real requests, held connections, jobs and data checks. Normal Controller restart
 must leave etcd independent. Record unavoidable host-reboot downtime separately.
 Selected production ingress, including Tunnel when used, needs its own continuity
 evidence; private HTTP alone is not enough.
+
+H83 adds normal public ref-installer Controller/Agent activation under private
+5-request/second traffic, a held HTTP stream and background/data assertions.
+Application container identities and independent etcd stayed unchanged. Busy
+refusal, activation failure, interrupted updates and supported-platform coverage
+remain separate requirements.
 
 ## Incomplete features
 
