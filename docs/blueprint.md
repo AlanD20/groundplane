@@ -107,10 +107,12 @@ trust and execution design.
 An Environment Blueprint declares operator-managed resources. Removing an Entry
 key removes that Entry from the Environment on Apply. Directly created Entries
 appear in canonical export too. Persistent Volumes are different: omitting one
-is rejected until its protected Remove action completes. Other omission paths
-are [not yet fully implemented](issues/runtime-qualification.md#incomplete-features);
-Validate must describe the actual candidate effect, not imply a removal that
-Apply will retain or reject.
+is rejected until its protected Remove action completes. Current Validate and
+Apply also reject omission of existing Services, Zones, Attaches and Routes.
+Use their explicit dependency-checked Remove or Detach actions first, then export
+and edit the updated Blueprint. Omission is not a shortcut around protected
+removal. Other removal and recovery variants remain
+[not fully qualified](issues/runtime-qualification.md#incomplete-features).
 
 Omitted native Compose `configs` and `secrets` definitions are not copied from
 the prior Blueprint. Companion file bytes are carried forward only when the
@@ -140,7 +142,7 @@ An Environment import is one closed `BlueprintBundle` containing:
 - one normalized relative root path carrying the Groundplane envelope;
 - an ordered list of Compose source paths beginning with that root;
 - every Compose source and companion file in a declared, normalized
-  path-to-bytes namespace; and
+  path-to-bytes namespace, with file declarations sorted by path; and
 - an explicit interpolation map containing only non-secret values.
 
 The CLI reads every regular file under `--bundle-dir`, including nested and
@@ -264,6 +266,7 @@ Groundplane adds these restrictions to native Compose:
 
 | Compose input | Groundplane consequence |
 | --- | --- |
+| top-level `name` | Rejected. GP derives the Compose project identity from the Environment id. |
 | `build` | Rejected. Images are preloaded; Apply never builds or pulls. |
 | nonempty service `ports` | Rejected for tenant workloads. Use `expose` plus a Groundplane Route and router Component. |
 | host `devices` | Rejected. |
@@ -278,10 +281,10 @@ Groundplane adds these restrictions to native Compose:
 | rolling release | Declared but deferred in the MVP. `x-gp-release.default_strategy: rolling` is rejected. |
 | runtime intent | Controller-owned operational state; it is not authored here. |
 
-**Current Apply limits:** native `configs` and Compose `secrets`, including
-external definitions, are rejected after parsing. Use Entries for configuration.
+**Current Validate and Apply limits:** native `configs` and Compose `secrets`,
+including external definitions, are rejected after parsing. Use Entries for configuration.
 External networks and network extensions are unavailable. Volumes must be
-GP-managed: `external` Volumes and any `driver_opts` are rejected, including
+GP-managed: `external` Volumes, non-`local` drivers and any `driver_opts` are rejected, including
 read-only local bind Volume definitions that satisfy the accepted grammar.
 Service-level read-only binds from bundle files remain a separate supported
 input. These limits do not remove the accepted syntax above.
@@ -588,16 +591,19 @@ Script definition; this snippet is not a separate root section. Replace the
 illustrative digest with the exact digest of an available image.
 
 Explicit execution requires a repository reference pinned by a lowercase
-SHA-256 digest and an explicit numeric `uid:gid`. The image must already be
+SHA-256 digest and an explicit canonical numeric `uid:gid`, without leading zeros
+or signs. Each number is from 0 through 4294967295. The image must already be
 local. It has no network, Docker socket, host path, inherited environment, or
 inherited Service runtime. Omitted `volumes` and `entries` grant nothing.
 
 There are at most 32 Volume grants and 64 Entry grants. `volume` is the
 immutable Compose Volume key; each target is a non-root absolute container path
 and every `read_only` decision is explicit. Targets cannot overlap each other,
-Entry file targets, `/groundplane-script-body`, Docker-managed host files, or
-reserved system trees such as `/proc`, `/sys`, `/dev`, `/run`, `/bin`, `/sbin`,
-`/usr`, `/lib`, and `/lib64`.
+Entry file targets, `/groundplane-script-body`, `/etc/hosts`, `/etc/hostname`,
+`/etc/resolv.conf`, or the reserved system trees `/proc`, `/sys`, `/dev`, `/run`,
+`/var/run`, `/bin`, `/sbin`, `/usr`, `/lib`, and `/lib64`. Ancestors of reserved
+paths are also rejected; for example, `/etc` overlaps Docker-managed files,
+while an application path such as `/etc/tls` can be used.
 
 Groundplane supplies execution isolation, not application semantics. The Script
 author owns idempotency, staging, validation, and atomic publication of output.
@@ -670,7 +676,7 @@ embedded in Component configuration.
 
 ### `x-gp-backup`
 
-**Backup/Restore is not operationally complete and remains deferred.** This
+**Backup/Restore is not operationally complete or qualified.** This
 section defines policy input, not a qualified data-recovery procedure.
 
 Backup policy is Environment desired state, not Compose topology:
@@ -701,7 +707,9 @@ immutable Compose key. Valkey and Custom Attach backup sources are unsupported.
 12 distinct sources in explicit order for a configured policy.
 `keep` is an integer from 1 through
 `9007199254740991`. An enabled policy requires a Connector. `enabled: false`
-alone is the unconfigured disabled form. Omitting `x-gp-backup` also disables
+alone is the unconfigured disabled form. A disabled policy may instead retain a
+complete frequency, retention, encryption and source configuration; partial
+configuration is rejected. Omitting `x-gp-backup` also disables
 and unconfigures the policy; it does not retain the previous settings or sources.
 Frequency, encryption, retention,
 restore, and recovery-point behavior belong to [Backups](features/backups.md).
@@ -719,8 +727,10 @@ volumes:
 The Compose map key is immutable authored identity. The optional slug is a
 renamable label of 1 through 63 lowercase ASCII letters, digits, and hyphens,
 starting and ending with a letter or digit. When omitted for a new Volume, the
-map key must satisfy that slug grammar and becomes the initial slug. Changing
-the slug retains the stable Volume id, storage path, and mounts.
+map key must satisfy that slug grammar and becomes the initial slug. For an
+existing Volume, omission preserves its current slug. Slugs must be unique within
+the Environment. Changing the slug retains the stable Volume id, storage path,
+and mounts.
 
 ### `x-gp-adapter` in a Backing Blueprint
 
@@ -763,12 +773,6 @@ services:
         detach:
           command: [/opt/remove-consumer]
           timeout_seconds: 60
-        before_stop:
-          command: [/opt/check-stop]
-          timeout_seconds: 30
-        after_start:
-          command: [/opt/check-start]
-          timeout_seconds: 30
         inputs:
           - key: PORT
             value: "8080"
@@ -786,7 +790,10 @@ services:
 Each hook command is a nonempty literal argument array, not an implicit shell
 command, and its timeout is 1 through 900 seconds. Each input selects exactly
 one of `value`, `secret_ref`, or `generate: password`. `HOST` is reserved.
-Generated values belong to an Attach and are unavailable to lifecycle hooks.
+Generated values belong to an Attach. A configuration containing
+`generate: password`, such as the example above, cannot also define
+`before_stop` or `after_start`. Those optional lifecycle hooks use the same
+command/timeout shape, with plain or Secret-backed inputs instead.
 Declared fact keys are the only accepted hook outputs; fact declarations
 require an attach hook. The full input/output protocol and lifecycle limits are
 in [Backing services](features/backing-services.md).

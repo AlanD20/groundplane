@@ -18,6 +18,8 @@ Use `groundplane --help` and `groundplane <resource> <action> --help` for the
 installed command and flag inventory. [OpenAPI](../openapi.json), also served at
 `/openapi.json` on the Controller, owns exact HTTP paths, fields and responses.
 Examples here illustrate workflows rather than maintaining another catalogue.
+For an installed release, use that Controller's OpenAPI and the installed CLI's
+help: the repository reference can describe changes newer than your installation.
 
 ## Connect and configure the CLI
 
@@ -179,8 +181,9 @@ reading. Blueprint Show writes YAML directly and rejects an explicit `--output`;
 Task Events writes one JSON event per line; workload logs write log lines.
 
 Exit 0 means the CLI request succeeded, including acceptance of asynchronous
-work. Exit 1 indicates an error; Ctrl-C uses exit 130. Automation must inspect
-the Task's eventual status separately.
+work. A downstream pipe closing early also exits 0; it does not prove complete
+output was consumed. Exit 1 indicates an error; Ctrl-C uses exit 130. Automation
+must inspect the Task's eventual status separately.
 
 ## Call the HTTP API
 
@@ -256,7 +259,10 @@ execution attempt after failure.
 The CLI generates keys automatically. Most commands have no operator-supplied
 replay key, so rerunning them is a new request. Blueprint Apply exposes the
 recovery flags in its guide; Image Fetch and Remove expose `--idempotency-key`.
-Use the API when automation needs explicit replay control.
+Backup Restore's `--idempotency-key` is part of the unfinished recovery surface;
+its API/client integration is incomplete. Do not use it as an available recovery
+procedure. Use the API when automation needs explicit replay control for an
+implemented operation.
 
 ## Blueprint requests
 
@@ -284,7 +290,9 @@ Do not add a charset parameter to either part's content type.
 
 The manifest identifies the root path, ordered `compose_sources` beginning with
 the root, explicit non-secret `interpolation`, and each file's path, part name,
-byte size and lowercase SHA-256. File parts are named `file-000001`,
+byte size and lowercase SHA-256. The `files` array must be sorted by path with
+no duplicates; this order is independent of Compose layer precedence.
+File parts are named `file-000001`,
 `file-000002`, and so on. Bytes must match their size and digest; undeclared,
 missing or trailing parts are rejected. The entire body is bounded to 2 MiB;
 the manifest to 256 KiB.
@@ -320,8 +328,10 @@ page size. Ordinary collection limits default to 50 and allow 1 through 200.
 The cursor fixes the read snapshot; an expired snapshot needs a new first page.
 Non-page responses such as live image inventory have their own shape.
 
-Task, Activity and Release CLI lists expose `--limit` and `--cursor`. Other CLI lists
-may only show the first page and have no continuation flag; consult their help
+Task, Activity and Release CLI lists expose `--limit` and `--cursor`.
+`backup points` exposes `--cursor` with a server-selected page size and no
+`--limit`. Other CLI lists may only show the first page and have no continuation
+flag; consult their help
 and use the API for complete traversal. Task journal filters select one
 hierarchy scope or `--workspace`, not both. Configured scope also counts when
 checking that exclusivity.

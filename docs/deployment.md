@@ -4,6 +4,12 @@ The installer targets Ubuntu 24.04, Ubuntu 26.04 and Debian 13 on native
 amd64/arm64. It requires root. Supported targets are not proof that every fresh
 installation and upgrade combination has passed QA; see [current limitations](capabilities.md).
 
+The host must use systemd. Published-bundle installation checks for at least
+2 GiB of free space before downloading and again before installation; Git-ref
+builds require at least 10 GiB. These are admission checks, not total storage
+estimates. Package installation and runtime image downloads also need network
+access, including when the GP archive is supplied locally.
+
 ## Install a published release
 
 ```sh
@@ -55,6 +61,33 @@ non-overlapping address pools. Bootstrap fills its pinned image selections.
 The installer does not configure public ingress, wildcard listeners or host
 firewalls. Do not expose the API to an untrusted network.
 
+## Connect after installation
+
+With the default configuration, the Console is served at `http://127.0.0.1:8080`
+on the installed host. The CLI is installed as `groundplane`:
+
+```sh
+groundplane version
+groundplane host show
+```
+
+For a remote host that retains the loopback default, use an SSH tunnel from your
+workstation:
+
+```sh
+ssh -N -L 18080:127.0.0.1:8080 user@your-host
+```
+
+Keep that connection open and visit `http://127.0.0.1:18080`. Replace the SSH
+user and host with your own. If the CLI is also installed on your workstation,
+use `groundplane --host http://127.0.0.1:18080 host show` through the same tunnel.
+A configured private listener can be reached directly from its trusted network.
+Custom startup YAML may select a different HTTP port.
+
+The Console and API share the Controller's HTTP listener. A successful host read
+checks control-plane access; it does not prove that an application is serving.
+Continue with [CLI/API usage](api-cli.md) and [Blueprint authoring](blueprint.md).
+
 ## Build and install a Git ref
 
 ```sh
@@ -67,8 +100,9 @@ a published GP release and does not publish per-commit artifacts. The selected
 commit must contain the ref installer and build Dockerfile. Its deployment helpers
 execute as root, so selecting a ref is a code-trust decision.
 
-Docker Engine must already be running. Go, Node, npm, Git and Buildx are not
-installed on the host; build tools run in containers. Internet access and at least
+The default local Docker Engine must already be running. Remote `DOCKER_HOST`
+values and a nonempty `DOCKER_CONTEXT` are rejected. Go, Node, npm, Git and Buildx
+are not installed on the host; build tools run in containers. Internet access and at least
 10 GiB of free build space are required. This is a preflight minimum, not a bound
 on peak disk or memory use.
 
@@ -81,11 +115,15 @@ recovery are intentionally retained.
 Existing installations skip the Runner build and retain their Runner, etcd,
 configuration and keys. A successful automatic Controller update also installs
 the matching CLI after its protected Task completes. Builds use the resolved
-commit's timestamp for image metadata; the displayed version includes its
-commit. Activation still checks exact image and binary identities.
+commit's timestamp for image metadata. Branch and commit refs produce a
+`VERSION-ref.COMMIT` version; stable `vX.Y.Z`, `controller/vX.Y.Z` and
+`agent/vX.Y.Z` refs retain a component release version instead. Activation still
+checks exact image and binary identities, not just that version label.
 
 `--ref` cannot combine with `--version`, `--bundle` or `--sha256`. Scope flags,
-`--stage-only`, `--listen-ip` and initial-only `--config` retain their normal roles.
+`--listen-ip` and initial-only `--config` retain their normal roles.
+`--stage-only` requires an existing guarded installation. Agent-only installation
+rejects both `--stage-only` and `--config`, including with `--ref`.
 
 ## Independent release scopes
 
@@ -97,6 +135,9 @@ commit. Activation still checks exact image and binary identities.
 
 Updates select only the component namespaces, never plain `v` releases. With no
 version specified, each selected component resolves its own latest stable version.
+Pass numeric `--version X.Y.Z`, without a `v` or component prefix. On a combined
+update this pins both component releases to that version; use a component scope
+when their desired versions differ.
 Runtime images use immutable digests. OCI repositories use `vX.Y.Z` image tags
 because `/` is not valid in an image tag; embedded component versions retain their
 Git namespace.
@@ -157,7 +198,8 @@ helper/resume path; never delete the update journal or bundle to force a new
 request. A recovered failed update stays failed. Only a completed Task is success.
 
 See [update safety](features/upgrade-safety.md) for busy-work, interruption and
-application-continuity guarantees. Current source has not been freshly qualified.
+application-continuity guarantees. [Capability status](capabilities.md) separates
+recorded qualification from cases still needing proof for the selected release.
 
 ## Maintainer deployment helper
 

@@ -23,10 +23,12 @@ remain incomplete.
 
 ## Use Groundplane
 
-Start with the [operator guides](docs/README.md#operators).
-The [Blueprint reference](docs/blueprint.md) describes Compose-compatible desired
-state with Groundplane extensions. The [changelog](CHANGELOG.md) records release
-changes.
+After installation, [connect to the Console and CLI](docs/deployment.md#connect-after-installation).
+Use [CLI and API usage](docs/api-cli.md) for configuration, resource selection,
+requests and Task results, and the [Blueprint reference](docs/blueprint.md) for
+Compose-compatible desired state with Groundplane extensions.
+The [documentation index](docs/README.md) links the remaining guides.
+The [changelog](CHANGELOG.md) records release changes.
 
 ## Work on Groundplane
 
@@ -39,5 +41,7 @@ the [Makefile](Makefile). Run direct development commands through
 `bash scripts/repo-env.sh COMMAND [ARG...]` so temporary files and caches stay
 inside the checkout. See [repository tooling](docs/agents.md#supported-tooling-invocation).
 
-Production restructuring is integrated but has not been build- or runtime-verified
-after that migration. A clean working tree is not release qualification.
+Documentation in a source checkout describes that revision. An installed release
+may expose different commands or fields; use its command help and Controller's
+`/openapi.json` when checking compatibility. See [current limitations](docs/capabilities.md)
+for implementation and qualification boundaries.
