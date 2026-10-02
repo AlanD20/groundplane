@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backupformat"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -290,6 +291,177 @@ func TestEncryptStreamCopyFailurePrecedesFinalizationFailure(t *testing.T) {
 		t.Fatal("EncryptStream did not attempt finalization after copy failure")
 	}
 	assertInternalProblemDoesNotContain(t, err, "private-copy-failure")
+}
+
+// BAK-10/BAK-15: decryption must authenticate the complete artifact, reject a
+// wrong identity and enforce the plaintext bound before accepting excess bytes.
+// A valid prefix in private staging cannot turn a damaged final chunk into success.
+func TestDecryptStreamIntegrityAndBounds(t *testing.T) {
+	t.Parallel()
+	owner, err := GenerateKeypair()
+	if err != nil {
+		t.Fatalf("GenerateKeypair(owner) error = %v", err)
+	}
+	other, err := GenerateKeypair()
+	if err != nil {
+		t.Fatalf("GenerateKeypair(other) error = %v", err)
+	}
+	const marker = "private-restore-marker"
+	plaintext := bytes.Repeat([]byte(marker+"\x00"), 7<<10)
+	defer clear(plaintext)
+	encrypted, err := streamToBuffer(owner.Recipient, bytes.NewReader(plaintext))
+	if err != nil {
+		t.Fatalf("EncryptStream() error = %v", err)
+	}
+	empty, err := streamToBuffer(owner.Recipient, bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("EncryptStream(empty) error = %v", err)
+	}
+	tampered := bytes.Clone(encrypted)
+	tampered[len(tampered)-1] ^= 1
+	appended := append(bytes.Clone(encrypted), 1)
+	cases := []struct {
+		name        string
+		ciphertext  []byte
+		identity    string
+		maximum     uint64
+		want        []byte
+		wantKind    errs.Kind
+		shortWrite  bool
+		headerBound bool
+	}{
+		{name: "empty", ciphertext: empty, identity: owner.Identity, maximum: 0, want: []byte{}},
+		{name: "exact bound", ciphertext: encrypted, identity: owner.Identity, maximum: uint64(len(plaintext)), want: plaintext},
+		{name: "largest allowed bound", ciphertext: encrypted, identity: owner.Identity, maximum: backupformat.MaxAgeSourceBytes, want: plaintext},
+		{name: "zero bound exceeded", ciphertext: encrypted, identity: owner.Identity, maximum: 0, wantKind: errs.KindValidationFailed},
+		{name: "bound exceeded", ciphertext: encrypted, identity: owner.Identity, maximum: uint64(len(plaintext) - 1), wantKind: errs.KindValidationFailed},
+		{name: "maximum rejected", ciphertext: encrypted, identity: owner.Identity, maximum: backupformat.MaxAgeSourceBytes + 1, wantKind: errs.KindValidationFailed},
+		{name: "tampered final chunk", ciphertext: tampered, identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
+		{name: "truncated final chunk", ciphertext: encrypted[:len(encrypted)-1], identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
+		{name: "truncated header", ciphertext: encrypted[:x25519HeaderSize/2], identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
+		{name: "oversized header", ciphertext: []byte("age-encryption.org/v1\n-> X25519 " + strings.Repeat("A", 2*encryptionStreamBufferSize)), identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed, headerBound: true},
+		{name: "appended ciphertext", ciphertext: appended, identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
+		{name: "wrong identity", ciphertext: encrypted, identity: other.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
+		{name: "invalid identity", ciphertext: encrypted, identity: marker, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
+		{name: "short output write", ciphertext: encrypted, identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindInternal, shortWrite: true},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			ciphertext := bytes.NewReader(test.ciphertext)
+			input := &closableReader{reader: ciphertext}
+			output := &closableWriter{}
+			defer func() { clear(output.Bytes()) }()
+			var destination io.Writer = output
+			if test.shortWrite {
+				destination = shortWriter{}
+			}
+			interrupted := false
+			err := DecryptStream(context.Background(), test.identity, input, destination, test.maximum, func() {
+				interrupted = true
+			})
+			if test.want != nil {
+				if err != nil || !bytes.Equal(output.Bytes(), test.want) {
+					t.Fatalf("DecryptStream() error = %v, bytes = %d; want exact %d-byte plaintext", err, output.Len(), len(test.want))
+				}
+			} else {
+				kind, ok := errs.KindOf(err)
+				if !ok || kind != test.wantKind {
+					t.Fatalf("DecryptStream() error = %v, want kind %d", err, test.wantKind)
+				}
+				var domainError *errs.Error
+				if !errors.As(err, &domainError) {
+					t.Fatalf("error type = %T, want *errs.Error", err)
+				}
+				if detail := domainError.ToProblem().Detail; strings.Contains(detail, marker) || strings.Contains(detail, owner.Identity) {
+					t.Fatal("public problem leaked plaintext or identity")
+				}
+				if test.shortWrite && !errors.Is(err, io.ErrShortWrite) {
+					t.Fatalf("DecryptStream(short write) error = %v, want io.ErrShortWrite", err)
+				}
+			}
+			if uint64(output.Len()) > test.maximum {
+				t.Fatalf("DecryptStream wrote %d bytes, maximum = %d", output.Len(), test.maximum)
+			}
+			if test.headerBound && int64(len(test.ciphertext)-ciphertext.Len()) > storedFixedSize {
+				t.Fatal("DecryptStream consumed an unbounded encrypted header")
+			}
+			if input.closed || output.closed || interrupted {
+				t.Fatal("DecryptStream changed caller-owned endpoint lifetime without cancellation")
+			}
+		})
+	}
+}
+
+// BAK-16: cancellation during either header or later payload input must
+// interrupt the actual blocked I/O and join its watcher before returning.
+func TestDecryptStreamInterruptsBlockedReadOnCancellation(t *testing.T) {
+	owner, err := GenerateKeypair()
+	if err != nil {
+		t.Fatalf("GenerateKeypair() error = %v", err)
+	}
+	plaintext := make([]byte, 2*streamChunkSize+37)
+	defer clear(plaintext)
+	encrypted, err := streamToBuffer(owner.Recipient, bytes.NewReader(plaintext))
+	if err != nil {
+		t.Fatalf("EncryptStream() error = %v", err)
+	}
+	for _, phase := range []string{"header", "payload"} {
+		t.Run(phase, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			blocked := newBlockingReader()
+			var input io.Reader = blocked
+			if phase == "payload" {
+				prefixSize := storedFixedSize + streamChunkSize + streamTagSize
+				input = io.MultiReader(bytes.NewReader(encrypted[:prefixSize]), blocked)
+			}
+			var output bytes.Buffer
+			defer func() { clear(output.Bytes()) }()
+			result := make(chan error, 1)
+			go func() {
+				result <- DecryptStream(ctx, owner.Identity, input, &output, uint64(len(plaintext)), blocked.Interrupt)
+			}()
+			waitSignal(t, blocked.started, "DecryptStream did not enter blocked Read")
+			cancel()
+			if err := waitResult(t, result); !errors.Is(err, context.Canceled) {
+				t.Fatalf("DecryptStream(blocked Read) error = %v, want context.Canceled", err)
+			}
+			if !blocked.interrupted {
+				t.Fatal("DecryptStream returned before the read interrupt completed")
+			}
+			if phase == "payload" && output.Len() == 0 {
+				t.Fatal("payload cancellation did not follow a decrypted chunk")
+			}
+		})
+	}
+}
+
+// BAK-16: private staging can block on Write; cancellation must release that
+// write and join the interrupt instead of abandoning an owned plaintext buffer.
+func TestDecryptStreamInterruptsBlockedWriteOnCancellation(t *testing.T) {
+	owner, err := GenerateKeypair()
+	if err != nil {
+		t.Fatalf("GenerateKeypair() error = %v", err)
+	}
+	encrypted, err := streamToBuffer(owner.Recipient, strings.NewReader("artifact"))
+	if err != nil {
+		t.Fatalf("EncryptStream() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	output := newBlockingWriter()
+	result := make(chan error, 1)
+	go func() {
+		result <- DecryptStream(ctx, owner.Identity, bytes.NewReader(encrypted), output, 8, output.Interrupt)
+	}()
+	waitSignal(t, output.started, "DecryptStream did not enter blocked Write")
+	cancel()
+	if err := waitResult(t, result); !errors.Is(err, context.Canceled) {
+		t.Fatalf("DecryptStream(blocked Write) error = %v, want context.Canceled", err)
+	}
+	if !output.interrupted {
+		t.Fatal("DecryptStream returned before the write interrupt completed")
+	}
 }
 
 func streamToBuffer(recipient string, reader io.Reader) ([]byte, error) {
