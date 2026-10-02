@@ -5,6 +5,7 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -17,6 +18,30 @@ import (
 
 func runtimeConfigurationHeadKey(environmentID string) string {
 	return "/v1/runtime/environment-configurations/" + environmentID
+}
+
+// Desired publication compares and rewrites the Environment epoch at this
+// revision, preventing concurrent acceptance of an absent configuration writer.
+func (repository *HierarchyRepository) requireSettledEnvironmentConfiguration(
+	ctx context.Context, environmentID string, revision int64,
+) error {
+	page, err := recordquery.ListVisibleIndex(
+		ctx, repository.store, "tasks", "environment", environmentID,
+		taskjournal.TaskEnvironmentIndexPrefix+environmentID+"/",
+		taskjournal.TaskStorageKey, ids.KindTask,
+		etcdstore.PageRequest{Limit: 1, Revision: revision},
+		DecodeTaskRecord, func(task TaskRecord) string { return task.ID },
+		func(task TaskRecord) bool { return task.Owner.EnvironmentID == environmentID },
+		func(task TaskRecord) bool {
+			return task.Configuration != nil && !taskjournal.IsTerminalTaskStatus(task.Status)
+		},
+	)
+	if err != nil || len(page.Items) == 0 {
+		return err
+	}
+	return errs.Newf(errs.KindStateConflict,
+		"Environment configuration is still being applied by Task %s; wait for it to finish",
+		page.Items[0].Record.ID)
 }
 
 func (ledger *ReleaseLedger) PrepareTaskConfigurationAtRevision(

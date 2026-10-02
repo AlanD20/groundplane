@@ -227,6 +227,11 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	// Only Apply or an explicit file writer acknowledges configuration. Sharing
 	// desired publication does not grant a metadata/Volume Task file authority.
 	if publishDomain || len(task.Materializations) != 0 {
+		if claim.SourceKind == blueprints.EnvironmentBlueprintSourceMutation {
+			if err := repository.requireSettledEnvironmentConfiguration(ctx, environment.Record.ID, fence.ReadRevision()); err != nil {
+				return IdempotencyTransactionResult{}, err
+			}
+		}
 		task, err = prepareRuntimeConfigurationTask(ctx, repository.store, task, fence.ReadRevision())
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
