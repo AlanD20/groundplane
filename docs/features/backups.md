@@ -1,6 +1,6 @@
 # Backups
 
-**Not operationally complete. Backup/Restore work is deferred.** Policy and
+**Not operationally complete.** Policy and
 Recovery Point scaffolding is not a qualified backup system. The behavior below
 is the accepted target, not an instruction to rely on current GP for data recovery.
 

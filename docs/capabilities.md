@@ -23,14 +23,14 @@ it does not redefine the [product contract](mvp.md) or authorize implementation.
 | Backing services | PostgreSQL, explicit Valkey authentication modes and Custom creation/hooks exist. | Current live provisioning, hook timeout/retry and credential-retention evidence. New Custom hook owners must Attach before a Blueprint consumes their facts. Permanent backing deletion is not supported. |
 | Components and ingress | CoreDNS, Caddy and Cloudflare Tunnel integrations exist. | Real DNS, template/reload, restart and selected public/private ingress continuity. Provider setup is not performed by GP. |
 | Secrets and Connectors | Scoped Secret lifecycle and Environment-owned Connector metadata exist. | Current execution pin/deletion races and provider use. Connector creation does not validate remote storage. |
-| Backup/Restore | Policy, source, key and Recovery Point scaffolding plus partial execution exist. | Incomplete and deferred. Restore is not operationally qualified; Valkey has no safe accepted source/artifact contract. |
+| Backup/Restore | Policy, source, key and Recovery Point scaffolding plus partial execution exist. | Incomplete. Restore is not operationally qualified; Valkey has no safe accepted source/artifact contract. |
 | GitHub Runners | Direct-rootless runtime, private registry/CoreDNS wiring and explicit image Fetch through API/CLI/Console are integrated. H75 qualifies a Project-owned trusted workflow through Deploy, build/push/fetch failure preservation, same-boot listener restart and owned removal on Ubuntu amd64. | Full isolation, token-failure, quota/concurrency, reboot, private-address change, registry-restart and arm64 variants remain unqualified. Moved-tag/replay checks are local only. Creation needs a fresh operator registration token; registered restart does not. |
 | Console, CLI and API | Production surfaces and generated clients exist. | Current generation/build cleanliness and complete operator-action parity. Packaging or schema generation alone does not prove parity. |
 
 ## Release boundary
 
-The owner deferred Backup/Restore from the immediate hosting assessment. That is
-not a Gate B pass or data-loss acceptance. Failed-rollout recovery remains part
+The earlier hosting assessment excluded Backup/Restore; it did not establish
+a Gate B pass or data-loss acceptance. Failed-rollout recovery remains part
 of hosting safety and is distinct from restoring a database backup.
 
 Select an exact candidate and required deployment-specific cases before QA.

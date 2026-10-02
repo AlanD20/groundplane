@@ -68,8 +68,8 @@ The lockfile must have no known vulnerabilities at delivery; do not use
 Default CI does not run sudo or privileged host tests.
 `backupstage-host-acceptance-compile` compiles the mount test;
 `backupstage-host-acceptance` executes it only on an explicitly authorized
-disposable root-capable host. Backup/Restore qualification remains deferred;
-an unrun privileged check is not a pass.
+disposable root-capable host. An unrun privileged check is not a pass;
+Backup/Restore qualification requires its separate source-specific journeys.
 
 ### Architecture gate
 
