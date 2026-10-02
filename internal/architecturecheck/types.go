@@ -15,8 +15,8 @@ type FileLines struct {
 // OversizedFile is an accepted line count for a file over its normal limit.
 type OversizedFile = FileLines
 
-// FrozenTotal is an exact physical line total for one direct Go package.
-type FrozenTotal = FileLines
+// PackageTotal freezes application wiring and caps direct root-etcd code.
+type PackageTotal = FileLines
 
 // LegacyFinding records one exact pre-Q0 architecture violation.
 type LegacyFinding struct {
@@ -31,7 +31,7 @@ type Baseline struct {
 	Version        int             `json:"version"`
 	Limits         Limits          `json:"limits"`
 	OversizedFiles []OversizedFile `json:"oversized_files"`
-	FrozenTotals   []FrozenTotal   `json:"frozen_totals"`
+	PackageTotals  []PackageTotal  `json:"package_totals"`
 	LegacyFindings []LegacyFinding `json:"legacy_findings"`
 }
 

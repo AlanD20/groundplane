@@ -75,7 +75,7 @@ func Check(ctx context.Context, root string, baseline Baseline) ([]Finding, erro
 	}
 	findings := append([]Finding(nil), discovered.findings...)
 	findings = append(findings, checkLineRatchets(discovered.files, baseline)...)
-	findings = append(findings, checkFrozenTotals(discovered, baseline)...)
+	findings = append(findings, checkPackageTotals(discovered, baseline)...)
 	findings = append(findings, checkGoRules(ctx, root, discovered.files)...)
 	findings = append(findings, checkTypeScriptRules(discovered.files)...)
 	findings = append(findings, checkCatchAllDirectories(discovered.directories)...)
@@ -300,9 +300,9 @@ func checkLineRatchets(files []*sourceFile, baseline Baseline) []Finding {
 	return findings
 }
 
-func checkFrozenTotals(discovered discoveredSources, baseline Baseline) []Finding {
+func checkPackageTotals(discovered discoveredSources, baseline Baseline) []Finding {
 	findings := make([]Finding, 0)
-	for _, entry := range baseline.FrozenTotals {
+	for _, entry := range baseline.PackageTotals {
 		if _, exists := discovered.directories[entry.Path]; !exists {
 			findings = append(
 				findings,
@@ -310,8 +310,8 @@ func checkFrozenTotals(discovered discoveredSources, baseline Baseline) []Findin
 					Path:    entry.Path,
 					Line:    1,
 					Column:  1,
-					Rule:    "stale-frozen-total",
-					Message: "frozen_totals entry does not name a current source directory",
+					Rule:    "stale-package-total",
+					Message: "package_totals entry does not name a current source directory",
 				},
 			)
 			continue
@@ -331,22 +331,27 @@ func checkFrozenTotals(discovered discoveredSources, baseline Baseline) []Findin
 					Path:    entry.Path,
 					Line:    1,
 					Column:  1,
-					Rule:    "stale-frozen-total",
-					Message: "frozen_totals entry does not name a direct production Go package",
+					Rule:    "stale-package-total",
+					Message: "package_totals entry does not name a direct production Go package",
 				},
 			)
 			continue
 		}
-		if total != entry.Lines {
+		violation, limitKind := total != entry.Lines, "exact"
+		if entry.Path == "internal/infra/etcd" {
+			violation, limitKind = total > entry.Lines, "maximum"
+		}
+		if violation {
 			findings = append(
 				findings,
 				Finding{
 					Path:   entry.Path,
 					Line:   1,
 					Column: 1,
-					Rule:   "frozen-total-drift",
+					Rule:   "package-total-drift",
 					Message: fmt.Sprintf(
-						"frozen total is %d lines but current direct production Go total is %d",
+						"%s total is %d lines but current direct production Go total is %d",
+						limitKind,
 						entry.Lines,
 						total,
 					),

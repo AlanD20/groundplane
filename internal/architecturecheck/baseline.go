@@ -128,7 +128,7 @@ func validateRequiredBaselineFields(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return fmt.Errorf("decode baseline object: %w", err)
 	}
-	for _, field := range []string{"version", "limits", "oversized_files", "frozen_totals", "legacy_findings"} {
+	for _, field := range []string{"version", "limits", "oversized_files", "package_totals", "legacy_findings"} {
 		if _, ok := fields[field]; !ok {
 			return fmt.Errorf("baseline field %q is required", field)
 		}
@@ -143,22 +143,22 @@ func validateBaseline(baseline Baseline) error {
 	if baseline.Limits.Production != productionLimit || baseline.Limits.Test != testLimit {
 		return fmt.Errorf("baseline limits must be production=%d and test=%d", productionLimit, testLimit)
 	}
-	if baseline.OversizedFiles == nil || baseline.FrozenTotals == nil || baseline.LegacyFindings == nil {
+	if baseline.OversizedFiles == nil || baseline.PackageTotals == nil || baseline.LegacyFindings == nil {
 		return fmt.Errorf("baseline arrays must be present")
 	}
 	if err := validateFileLines("oversized_files", baseline.OversizedFiles, true); err != nil {
 		return err
 	}
-	if err := validateFileLines("frozen_totals", baseline.FrozenTotals, false); err != nil {
+	if err := validateFileLines("package_totals", baseline.PackageTotals, false); err != nil {
 		return err
 	}
-	requiredFrozenTotals := []string{"internal/app", "internal/infra/etcd"}
-	if len(baseline.FrozenTotals) != len(requiredFrozenTotals) {
-		return fmt.Errorf("frozen_totals must contain internal/app and internal/infra/etcd")
+	requiredPackageTotals := []string{"internal/app", "internal/infra/etcd"}
+	if len(baseline.PackageTotals) != len(requiredPackageTotals) {
+		return fmt.Errorf("package_totals must contain internal/app and internal/infra/etcd")
 	}
-	for index, required := range requiredFrozenTotals {
-		if baseline.FrozenTotals[index].Path != required {
-			return fmt.Errorf("frozen_totals must contain internal/app and internal/infra/etcd")
+	for index, required := range requiredPackageTotals {
+		if baseline.PackageTotals[index].Path != required {
+			return fmt.Errorf("package_totals must contain internal/app and internal/infra/etcd")
 		}
 	}
 	previous := ""

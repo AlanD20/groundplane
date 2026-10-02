@@ -45,7 +45,7 @@ func TestReadBaselineStrictness(t *testing.T) {
 	}
 }
 
-func TestCheckRatchetsAndFrozenTotals(t *testing.T) {
+func TestCheckRatchetsAndPackageTotals(t *testing.T) {
 	baseline := validBaseline()
 	root := checkRoot(t)
 	writeFixtureAt(t, root, "internal/app/base.go", "package app\n\nvar A = 1\n")
@@ -53,8 +53,17 @@ func TestCheckRatchetsAndFrozenTotals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(findings) != 1 || findings[0].Rule != "frozen-total-drift" {
+	if len(findings) != 1 || findings[0].Rule != "package-total-drift" {
 		t.Fatalf("findings = %+v", findings)
+	}
+	writeFixtureAt(t, root, "internal/app/base.go", "package app\n")
+	baseline.PackageTotals[1].Lines = 3
+	for _, lines := range []int{2, 3, 4} {
+		writeFixtureAt(t, root, "internal/infra/etcd/base.go", "package etcd\n"+strings.Repeat("\n", lines-1))
+		findings, err = Check(context.Background(), root, baseline)
+		if err != nil || hasRule(findings, "package-total-drift") != (lines > 3) {
+			t.Fatalf("root-etcd lines=%d findings=%+v error=%v", lines, findings, err)
+		}
 	}
 	writeFixtureAt(t, root, "internal/foo/a.go", "package foo\n"+strings.Repeat("\n", 600))
 	findings, err = Check(context.Background(), root, validBaseline())
@@ -247,13 +256,13 @@ func validBaseline() Baseline {
 		Version:        1,
 		Limits:         Limits{Production: 600, Test: 1000},
 		OversizedFiles: []OversizedFile{},
-		FrozenTotals:   []FrozenTotal{{Path: "internal/app", Lines: 1}, {Path: "internal/infra/etcd", Lines: 1}},
+		PackageTotals:  []PackageTotal{{Path: "internal/app", Lines: 1}, {Path: "internal/infra/etcd", Lines: 1}},
 		LegacyFindings: []LegacyFinding{},
 	}
 }
 
 func baselineJSON(suffix string) string {
-	return `{"version":1,"limits":{"production":600,"test":1000},"oversized_files":[],"frozen_totals":[{"path":"internal/app","lines":1},{"path":"internal/infra/etcd","lines":1}],"legacy_findings":[]` + suffix + `}`
+	return `{"version":1,"limits":{"production":600,"test":1000},"oversized_files":[],"package_totals":[{"path":"internal/app","lines":1},{"path":"internal/infra/etcd","lines":1}],"legacy_findings":[]` + suffix + `}`
 }
 
 func checkRoot(t *testing.T) string {

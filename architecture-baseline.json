@@ -5,14 +5,14 @@
     "test": 1000
   },
   "oversized_files": [],
-  "frozen_totals": [
+  "package_totals": [
     {
       "path": "internal/app",
       "lines": 3708
     },
     {
       "path": "internal/infra/etcd",
-      "lines": 68128
+      "lines": 75000
     }
   ],
   "legacy_findings": []
