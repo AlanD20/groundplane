@@ -331,19 +331,101 @@ func TestDecryptStreamIntegrityAndBounds(t *testing.T) {
 		headerBound bool
 	}{
 		{name: "empty", ciphertext: empty, identity: owner.Identity, maximum: 0, want: []byte{}},
-		{name: "exact bound", ciphertext: encrypted, identity: owner.Identity, maximum: uint64(len(plaintext)), want: plaintext},
-		{name: "largest allowed bound", ciphertext: encrypted, identity: owner.Identity, maximum: backupformat.MaxAgeSourceBytes, want: plaintext},
-		{name: "zero bound exceeded", ciphertext: encrypted, identity: owner.Identity, maximum: 0, wantKind: errs.KindValidationFailed},
-		{name: "bound exceeded", ciphertext: encrypted, identity: owner.Identity, maximum: uint64(len(plaintext) - 1), wantKind: errs.KindValidationFailed},
-		{name: "maximum rejected", ciphertext: encrypted, identity: owner.Identity, maximum: backupformat.MaxAgeSourceBytes + 1, wantKind: errs.KindValidationFailed},
-		{name: "tampered final chunk", ciphertext: tampered, identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
-		{name: "truncated final chunk", ciphertext: encrypted[:len(encrypted)-1], identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
-		{name: "truncated header", ciphertext: encrypted[:x25519HeaderSize/2], identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
-		{name: "oversized header", ciphertext: []byte("age-encryption.org/v1\n-> X25519 " + strings.Repeat("A", 2*encryptionStreamBufferSize)), identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed, headerBound: true},
-		{name: "appended ciphertext", ciphertext: appended, identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
-		{name: "wrong identity", ciphertext: encrypted, identity: other.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
-		{name: "invalid identity", ciphertext: encrypted, identity: marker, maximum: uint64(len(plaintext)), wantKind: errs.KindValidationFailed},
-		{name: "short output write", ciphertext: encrypted, identity: owner.Identity, maximum: uint64(len(plaintext)), wantKind: errs.KindInternal, shortWrite: true},
+		{
+			name:       "exact bound",
+			ciphertext: encrypted,
+			identity:   owner.Identity,
+			maximum:    uint64(len(plaintext)),
+			want:       plaintext,
+		},
+		{
+			name:       "largest allowed bound",
+			ciphertext: encrypted,
+			identity:   owner.Identity,
+			maximum:    backupformat.MaxAgeSourceBytes,
+			want:       plaintext,
+		},
+		{
+			name:       "zero bound exceeded",
+			ciphertext: encrypted,
+			identity:   owner.Identity,
+			maximum:    0,
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name:       "bound exceeded",
+			ciphertext: encrypted,
+			identity:   owner.Identity,
+			maximum:    uint64(len(plaintext) - 1),
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name:       "maximum rejected",
+			ciphertext: encrypted,
+			identity:   owner.Identity,
+			maximum:    backupformat.MaxAgeSourceBytes + 1,
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name:       "tampered final chunk",
+			ciphertext: tampered,
+			identity:   owner.Identity,
+			maximum:    uint64(len(plaintext)),
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name:       "truncated final chunk",
+			ciphertext: encrypted[:len(encrypted)-1],
+			identity:   owner.Identity,
+			maximum:    uint64(len(plaintext)),
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name:       "truncated header",
+			ciphertext: encrypted[:x25519HeaderSize/2],
+			identity:   owner.Identity,
+			maximum:    uint64(len(plaintext)),
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name: "oversized header",
+			ciphertext: []byte(
+				"age-encryption.org/v1\n-> X25519 " + strings.Repeat("A", 2*encryptionStreamBufferSize),
+			),
+			identity:    owner.Identity,
+			maximum:     uint64(len(plaintext)),
+			wantKind:    errs.KindValidationFailed,
+			headerBound: true,
+		},
+		{
+			name:       "appended ciphertext",
+			ciphertext: appended,
+			identity:   owner.Identity,
+			maximum:    uint64(len(plaintext)),
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name:       "wrong identity",
+			ciphertext: encrypted,
+			identity:   other.Identity,
+			maximum:    uint64(len(plaintext)),
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name:       "invalid identity",
+			ciphertext: encrypted,
+			identity:   marker,
+			maximum:    uint64(len(plaintext)),
+			wantKind:   errs.KindValidationFailed,
+		},
+		{
+			name:       "short output write",
+			ciphertext: encrypted,
+			identity:   owner.Identity,
+			maximum:    uint64(len(plaintext)),
+			wantKind:   errs.KindInternal,
+			shortWrite: true,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -361,7 +443,12 @@ func TestDecryptStreamIntegrityAndBounds(t *testing.T) {
 			})
 			if test.want != nil {
 				if err != nil || !bytes.Equal(output.Bytes(), test.want) {
-					t.Fatalf("DecryptStream() error = %v, bytes = %d; want exact %d-byte plaintext", err, output.Len(), len(test.want))
+					t.Fatalf(
+						"DecryptStream() error = %v, bytes = %d; want exact %d-byte plaintext",
+						err,
+						output.Len(),
+						len(test.want),
+					)
 				}
 			} else {
 				kind, ok := errs.KindOf(err)

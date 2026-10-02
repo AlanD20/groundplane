@@ -61,6 +61,13 @@ func NewRestorationObservation(
 		if err != nil {
 			return nil, err
 		}
+		if retained := authority.GetNativePredecessors()[index].GetRetainedPriorArtifact(); len(retained) != 0 {
+			prior, err := openNativePredecessorArtifact(authority.GetEnvironmentId(), retained)
+			if err != nil {
+				return nil, err
+			}
+			artifact = completeRestorationObservationArtifact(artifact, prior)
+		}
 		return &RestorationObservation{artifact: artifact,
 			candidateWorkloads: RestorationCandidateWorkloads(owned, member.GetServiceId())}, nil
 	}
@@ -84,14 +91,77 @@ func NewPlanRestorationObservation(
 			(artifactID != serving.GetPriorArtifactId() && artifactID != member.GetCandidateArtifactId()) {
 			continue
 		}
-		for _, artifact := range owned.GetArtifacts() {
-			if artifact.GetArtifactId() == artifactID {
-				return &RestorationObservation{artifact: artifact,
-					candidateWorkloads: RestorationCandidateWorkloads(owned, member.GetServiceId())}, nil
-			}
+		artifact, _, err := PlanRestorationExpectedArtifact(owned, member.GetServiceId(), artifactID)
+		if err != nil {
+			return nil, err
 		}
+		return &RestorationObservation{artifact: artifact,
+			candidateWorkloads: RestorationCandidateWorkloads(owned, member.GetServiceId())}, nil
 	}
 	return nil, invalidRestorationObservation()
+}
+
+// PlanRestorationExpectedArtifact selects read-only workload proof metadata from
+// an already admitted plan. A selected predecessor includes its declared retained
+// prior; a candidate remains unchanged. The boolean identifies the predecessor
+// selection. This helper does not validate a plan or authorize any mutation.
+func PlanRestorationExpectedArtifact(
+	plan *agentpb.ExecutionPlan,
+	serviceID, artifactID string,
+) (*agentpb.ComposeArtifact, bool, error) {
+	var selected *agentpb.ComposeArtifact
+	for _, artifact := range plan.GetArtifacts() {
+		if artifact.GetArtifactId() == artifactID {
+			selected = proto.CloneOf(artifact)
+		}
+	}
+	if selected == nil {
+		return nil, false, invalidRestorationObservation()
+	}
+	for _, member := range plan.GetCandidateReleaseProcedure().GetMembers() {
+		serving := member.GetServingPredecessor()
+		if member.GetServiceId() != serviceID || serving == nil || serving.GetPriorArtifactId() != artifactID {
+			continue
+		}
+		if serving.GetRetainedPriorArtifactId() == "" {
+			return selected, true, nil
+		}
+		for _, retained := range plan.GetArtifacts() {
+			if retained.GetArtifactId() == serving.GetRetainedPriorArtifactId() {
+				return completeRestorationObservationArtifact(selected, retained), true, nil
+			}
+		}
+		return nil, true, invalidRestorationObservation()
+	}
+	return selected, false, nil
+}
+
+// The combined descriptor is read-only observation authority. Mutations still
+// execute each captured artifact's own canonical YAML and historical labels.
+func completeRestorationObservationArtifact(current, retained *agentpb.ComposeArtifact) *agentpb.ComposeArtifact {
+	complete := proto.CloneOf(current)
+	for _, service := range retained.GetServices() {
+		complete.Services = append(complete.Services, proto.CloneOf(service))
+	}
+	for _, volume := range retained.GetVolumes() {
+		found := false
+		for _, existing := range complete.GetVolumes() {
+			found = found || existing.GetDockerName() == volume.GetDockerName()
+		}
+		if !found {
+			complete.Volumes = append(complete.Volumes, proto.CloneOf(volume))
+		}
+	}
+	for _, network := range retained.GetNetworks() {
+		found := false
+		for _, existing := range complete.GetNetworks() {
+			found = found || existing.GetDockerName() == network.GetDockerName()
+		}
+		if !found {
+			complete.Networks = append(complete.Networks, proto.CloneOf(network))
+		}
+	}
+	return complete
 }
 
 // RestorationCandidateWorkloads selects only the current member's candidate

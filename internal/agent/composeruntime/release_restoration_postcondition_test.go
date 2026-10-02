@@ -123,3 +123,47 @@ func TestReleaseRestorationWorkloadSetRequiresExactHealthyLineage(t *testing.T) 
 		t.Fatal("stopped singleton without healthcheck accepted as restored")
 	}
 }
+
+// SVC-09/SVC-15: a healthy serving slot alone is not the captured predecessor
+// runtime. The retained slot must also have its exact image, lineage and health.
+func TestReleaseRestorationRequiresBothCapturedSlots(t *testing.T) {
+	image := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	artifact := &agentpb.ComposeArtifact{ProjectName: "gp-release"}
+	observed := &agentpb.ObservedProject{ProjectName: artifact.ProjectName}
+	for index, slot := range []string{"blue", "green"} {
+		labels := []*agentpb.LabelPair{{Key: "com.groundplane.runtime-role", Value: "slot"},
+			{Key: "com.groundplane.slot", Value: slot}, {Key: "com.groundplane.release-id", Value: "prior-" + slot}}
+		artifact.Services = append(
+			artifact.Services,
+			&agentpb.ComposeService{ServiceId: "api", ComposeName: "api-" + slot,
+				Role: agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, Slot: slot, ImageReference: image,
+				ExpectedReplicas: 1, HasHealthcheck: true, ExpectedLabels: labels},
+		)
+		observed.Containers = append(
+			observed.Containers,
+			&agentpb.ObservedContainer{ContainerId: fmt.Sprintf("%064x", index+1),
+				ServiceId: "api", ImageReference: image, ImageId: image, Labels: labels,
+				State:  agentpb.ObservedContainerState_OBSERVED_CONTAINER_STATE_RUNNING,
+				Health: agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_HEALTHY},
+		)
+	}
+	for _, scenario := range []string{"complete", "missing retained", "unhealthy retained", "wrong retained image", "wrong retained release"} {
+		t.Run(scenario, func(t *testing.T) {
+			actual := proto.CloneOf(observed)
+			switch scenario {
+			case "missing retained":
+				actual.Containers = actual.Containers[:1]
+			case "unhealthy retained":
+				actual.Containers[1].Health = agentpb.ObservedContainerHealth_OBSERVED_CONTAINER_HEALTH_UNHEALTHY
+			case "wrong retained image":
+				actual.Containers[1].ImageId = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+			case "wrong retained release":
+				actual.Containers[1].Labels[2].Value = "failed-candidate"
+			}
+			err := releaseRestorationWorkloadSetProven(artifact, actual, "api")
+			if (err == nil) != (scenario == "complete") {
+				t.Fatalf("captured runtime proof = %v, scenario=%s", err, scenario)
+			}
+		})
+	}
+}

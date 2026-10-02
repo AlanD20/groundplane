@@ -35,7 +35,17 @@ func executeServingPredecessor(
 	if err != nil {
 		return nil, err
 	}
-	inventory, err := inspectServingInventory(executionCtx, taskRunner, predecessor, candidate,
+	retained := &agentpb.ComposeArtifact{}
+	for _, witness := range request.GetRestorationAuthority().GetNativePredecessors() {
+		if witness.GetServiceId() == service.GetServiceId() && len(witness.GetRetainedPriorArtifact()) != 0 {
+			if err := proto.Unmarshal(witness.GetRetainedPriorArtifact(), retained); err != nil {
+				return nil, errs.Wrap(errs.KindValidationFailed, err)
+			}
+		}
+	}
+	complete := proto.CloneOf(predecessor)
+	complete.Services = append(complete.Services, retained.GetServices()...)
+	inventory, err := inspectServingInventory(executionCtx, taskRunner, complete, candidate,
 		service.GetServiceId(), restorationStepCandidateReleaseID(step), proxy)
 	if err != nil {
 		return failedResponse(1), nil
@@ -51,7 +61,7 @@ func executeServingPredecessor(
 		if removeErr != nil || removed.ExitCode != 0 {
 			return failedResponse(1), nil
 		}
-		inventory, err = inspectServingInventory(executionCtx, taskRunner, predecessor, candidate,
+		inventory, err = inspectServingInventory(executionCtx, taskRunner, complete, candidate,
 			service.GetServiceId(), restorationStepCandidateReleaseID(step), proxy)
 		if err != nil || len(inventory.candidates) != 0 {
 			return failedResponse(1), nil
@@ -95,13 +105,38 @@ func executeServingPredecessor(
 		}
 		proven, probeErr = servingMemberProven(executionCtx, taskRunner, predecessor, service, proxy)
 	}
+	for _, retainedService := range retained.GetServices() {
+		retainedProven, retainedErr := servingPredecessorProven(executionCtx, taskRunner, retained, retainedService)
+		if retainedErr != nil {
+			return failedResponse(1), nil
+		}
+		if !retainedProven && step.GetCandidateRestorationCompensate() != nil {
+			base := []string{"compose", "--project-name", retained.GetProjectName(), "--project-directory",
+				composeProjectDirectory(retained), "--file", "-"}
+			for _, suffix := range [][]string{{"config", "--quiet"}, {"up", "--detach", "--no-deps", "--", retainedService.GetComposeName()}} {
+				result, err := taskRunner.Run(executionCtx, runner.RunCmdOpts{
+					Name: DockerExecutable, Args: append(slices.Clone(base), suffix...),
+					Dir: composeProjectDirectory(retained), Env: slices.Clone(fixedEnvironment), ReplaceEnv: true,
+					Stdin: slices.Clone(retained.GetCanonicalYaml()),
+				})
+				if err != nil || result.ExitCode != 0 {
+					return failedResponse(1), nil
+				}
+			}
+			retainedProven, retainedErr = servingPredecessorProven(executionCtx, taskRunner, retained, retainedService)
+		}
+		proven = proven && retainedProven
+		if retainedErr != nil {
+			return failedResponse(1), nil
+		}
+	}
 	if probeErr == nil && !proven && step.GetCandidateRestorationProbe() != nil {
 		return restorationRequiredResponse(), nil
 	}
 	if probeErr != nil || !proven {
 		return failedResponse(1), nil
 	}
-	inventory, err = inspectServingInventory(executionCtx, taskRunner, predecessor, candidate,
+	inventory, err = inspectServingInventory(executionCtx, taskRunner, complete, candidate,
 		service.GetServiceId(), restorationStepCandidateReleaseID(step), proxy)
 	if err != nil || len(inventory.candidates) != 0 || inventory.proxyNeedsRestore {
 		return failedResponse(1), nil

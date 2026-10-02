@@ -125,11 +125,20 @@ func (runtime *Runtime) verifyReleaseRestorationPostcondition(
 			assignment.RestorationAuthority,
 			step.GetStepId(),
 		)
+		target, releaseID = "", ""
 		if err == nil {
+			artifact = observation.Artifact()
 			observed, err = runtime.observer.ObserveRestoration(ctx, observation)
 		}
 	} else {
 		observed, err = runtime.observer.ObserveReleaseRestoration(ctx, observationPlan, step.GetStepId(), artifact.GetArtifactId())
+		if err == nil {
+			var predecessor bool
+			artifact, predecessor, err = executionplan.PlanRestorationExpectedArtifact(observationPlan, serviceID, artifact.GetArtifactId())
+			if predecessor {
+				target, releaseID = "", ""
+			}
+		}
 	}
 	result.Observed = observed
 	if err == nil {

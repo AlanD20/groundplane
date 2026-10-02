@@ -53,8 +53,20 @@ func TestBlueprintNativeAssignmentSelectsCurrentWitnessOverAppliedArtifact(t *te
 	if err != nil {
 		t.Fatalf("open native serving predecessor: %v", err)
 	}
-	if opened := observation.Artifact(); !proto.Equal(opened, current) {
+	expected := proto.CloneOf(current)
+	expected.Services = append(expected.Services, proto.CloneOf(retained.Services[0]))
+	if opened := observation.Artifact(); !proto.Equal(opened, expected) {
 		t.Fatalf("selected predecessor = %#v", opened)
+	}
+	// SVC-09/SVC-15: original-plan and native recovery must independently
+	// observe the retained inactive slot as part of the captured runtime.
+	ordinary, err := NewPlanRestorationObservation(
+		sealed,
+		member.ServingPredecessor.CompensateStepId,
+		current.ArtifactId,
+	)
+	if err != nil || !proto.Equal(ordinary.Artifact(), expected) {
+		t.Fatalf("original-plan complete predecessor = %v, %v", ordinary, err)
 	}
 	if !bytes.Equal(
 		authority.AppliedPredecessor.ComposeArtifact,

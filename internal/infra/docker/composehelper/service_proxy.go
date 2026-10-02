@@ -175,6 +175,31 @@ func executeServiceProxy(
 			failure != nil {
 			return failure, err
 		}
+		for _, member := range plan.GetCandidateReleaseProcedure().GetMembers() {
+			serving := member.GetServingPredecessor()
+			if member.GetServiceId() != serviceID || serving.GetCompensateStepId() != step.GetStepId() ||
+				serving.GetRetainedPriorArtifactId() == "" {
+				continue
+			}
+			retained := composeArtifactByID(plan, serving.GetRetainedPriorArtifactId())
+			if retained == nil {
+				return nil, errs.New(errs.KindValidationFailed, "release retained topology artifact is missing")
+			}
+			retainedBase, cleanup, err := releaseComposeBase(retained)
+			if err != nil {
+				return nil, err
+			}
+			defer cleanup()
+			if _, failure, err := runWithComposeBase(executionCtx, taskRunner, retainedBase, nil, "config", "--quiet", "--no-interpolate"); err != nil ||
+				failure != nil {
+				return failure, err
+			}
+			args := append([]string{"up", "--detach", "--no-deps"}, serviceNames(retained, []string{serviceID})...)
+			if _, failure, err := runWithComposeBase(executionCtx, taskRunner, retainedBase, nil, args...); err != nil ||
+				failure != nil {
+				return failure, err
+			}
+		}
 	}
 	// Recreate-to-blue-green retires the singleton. A blue-green predecessor
 	// stays in its slot until the next candidate replaces that inactive slot.
