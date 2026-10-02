@@ -11,7 +11,7 @@ import ssl
 import subprocess
 
 import private_registry
-from release_postgres16 import DIGEST, read_manifest
+from release_postgres16 import DIGEST, read_manifest, native_configuration_digest
 
 REPOSITORY = "localhost:5000/groundplane-postgres16"
 
@@ -20,7 +20,7 @@ def output(*args: str) -> str:
     return subprocess.check_output(args, text=True, timeout=120).strip()
 
 
-def native_manifest(reference: str, image_id: str) -> None:
+def native_manifest(reference: str, image_id: str) -> str:
     """Read exactly the pushed manifest, with the registry's existing TLS identity."""
     digest = reference.removeprefix(REPOSITORY + "@")
     if not DIGEST.fullmatch(digest):
@@ -42,9 +42,7 @@ def native_manifest(reference: str, image_id: str) -> None:
                 or "sha256:" + hashlib.sha256(data).hexdigest() != digest):
             raise ValueError("managed PostgreSQL registry manifest identity changed")
         manifest = json.loads(data)
-        if (manifest.get("schemaVersion") != 2 or manifest.get("manifests")
-                or manifest.get("config", {}).get("digest") != image_id):
-            raise ValueError("managed PostgreSQL registry manifest does not select the measured image")
+        return native_configuration_digest(manifest, reference, image_id)
     finally:
         connection.close()
 
@@ -76,8 +74,8 @@ def build_release(source: Path, common: list[str], buildx: list[str], identity: 
     if len(references) != 1:
         raise ValueError("managed PostgreSQL publication did not return one native repository digest")
     reference = references[0]
-    native_manifest(reference, image_id)
+    configuration_digest = native_manifest(reference, image_id)
     catalog = {"schema": 1, "image": reference, "images": [
-        {"repository_digest": reference, "image_id": image_id, "manifest": manifest},
+        {"repository_digest": reference, "image_id": configuration_digest, "manifest": manifest},
     ]}
     return base64.b64encode(json.dumps(catalog, separators=(",", ":")).encode()).decode()

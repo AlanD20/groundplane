@@ -46,7 +46,7 @@ func (executor *Executor) ResolveContainer(ctx context.Context, selection Select
 		return Container{}, errs.New(errs.KindStateConflict, "managed PostgreSQL Service container is not unique")
 	}
 	candidate := listed.Items[0]
-	if !validDockerID(candidate.ID) || candidate.ImageID != executor.imageID ||
+	if !validDockerID(candidate.ID) || !executor.matchesRuntimeImageID(candidate.ImageID) ||
 		!labelsMatch(candidate.Labels, selection.Labels) {
 		return Container{}, errs.New(errs.KindStateConflict, "managed PostgreSQL Service identity changed")
 	}
@@ -61,17 +61,20 @@ func (executor *Executor) ResolveContainer(ctx context.Context, selection Select
 		return Container{}, errs.Wrap(errs.KindInternal, err)
 	}
 	observed := inspected.Container
-	if observed.ID != candidate.ID || observed.HostConfig == nil || observed.Config == nil ||
-		len(observed.Mounts) != 1 || observed.Mounts[0].Type != mount.TypeVolume ||
+	if observed.ID != candidate.ID || observed.Image != candidate.ImageID ||
+		observed.HostConfig == nil || observed.Config == nil ||
+		len(observed.Mounts) != 1 ||
+		observed.Mounts[0].Type != mount.TypeVolume ||
 		observed.Mounts[0].Name != selection.VolumeName ||
 		observed.Mounts[0].Source != volume.Volume.Mountpoint ||
-		observed.Mounts[0].Destination != postgresDataPath || !observed.Mounts[0].RW ||
+		observed.Mounts[0].Destination != postgresDataPath ||
+		!observed.Mounts[0].RW ||
 		mountShadowsProtected(observed.Mounts[0].Destination) {
 		return Container{}, errs.New(errs.KindStateConflict, "managed PostgreSQL container mounts changed")
 	}
 	data := observed.Mounts[0]
 	expected := Container{
-		ID: observed.ID, Name: observed.Name,
+		ID: observed.ID, ImageID: observed.Image, Name: observed.Name,
 		NetworkMode: string(observed.HostConfig.NetworkMode), Runtime: observed.HostConfig.Runtime,
 		AppArmorProfile: observed.AppArmorProfile,
 		UsernsMode:      string(observed.HostConfig.UsernsMode),

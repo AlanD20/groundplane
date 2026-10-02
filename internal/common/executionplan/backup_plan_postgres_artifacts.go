@@ -83,7 +83,7 @@ func backupPostgresArtifactImage(service *agentpb.ComposeService, fact *agentpb.
 	}
 	imageID := "sha256:" + hex.EncodeToString(fact.LocalImageIdSha256)
 	for _, image := range release.Images {
-		if image.ImageID == imageID &&
+		if release.MatchesRuntimeImageID(image, imageID) &&
 			(service.ImageReference == release.Image || service.ImageReference == image.RepositoryDigest) {
 			return true
 		}

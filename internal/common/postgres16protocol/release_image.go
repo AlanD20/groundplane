@@ -12,7 +12,8 @@ import (
 
 // ManagedReleaseImage binds the measured helper files to one native OCI
 // manifest and its configuration digest. These are different identities:
-// Docker's image ID is not the image manifest or the multi-platform index.
+// ImageID stores the OCI configuration digest, not an engine-local identifier.
+// Docker's local identifier can instead be the native manifest or index digest.
 // This record must come from authenticated release packaging, not inspection
 // of an operator-selected container.
 type ManagedReleaseImage struct {
@@ -77,9 +78,16 @@ func (index ManagedReleaseIndex) Select(architecture string) (ManagedReleaseImag
 	return ManagedReleaseImage{}, invalidConfinement("managed PostgreSQL build does not support this architecture")
 }
 
-func (index ManagedReleaseIndex) ContainsImageID(imageID string) bool {
+// MatchesRuntimeImageID recognizes only the identities bound by this release.
+// The executor separately attests the selected native platform and container.
+func (index ManagedReleaseIndex) MatchesRuntimeImageID(image ManagedReleaseImage, imageID string) bool {
+	_, indexDigest, _ := strings.Cut(index.Image, "@")
+	return imageID == image.ImageID || imageID == image.ManifestDigest() || imageID == indexDigest
+}
+
+func (index ManagedReleaseIndex) ContainsRuntimeImageID(imageID string) bool {
 	for _, image := range index.Images {
-		if image.ImageID == imageID {
+		if index.MatchesRuntimeImageID(image, imageID) {
 			return true
 		}
 	}

@@ -86,7 +86,9 @@ def install(bundle: Path, args, manifest: dict, layout: Layout) -> None:
     expected = next(image for image in postgres["images"] if image["manifest"]["architecture"] == manifest["arch"])
     observed = json.loads(subprocess.check_output(
         ["docker", "image", "inspect", manifest["postgres_image"]], text=True, timeout=30))[0]
-    if (observed["Id"] != expected["image_id"] or observed["Os"] != "linux"
+    pinned_ids = {expected["image_id"], expected["repository_digest"].rsplit("@", 1)[1],
+                  postgres["image"].rsplit("@", 1)[1]}
+    if (observed["Id"] not in pinned_ids or observed["Os"] != "linux"
             or observed["Architecture"] != manifest["arch"]):
         raise ValueError("pulled PostgreSQL image differs from the authenticated bundle")
     subprocess.run(["sh", str(bundle / "install-runtime.sh"), str(bundle), args.version,

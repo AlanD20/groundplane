@@ -68,6 +68,7 @@ type Mount struct {
 // sealed Service/assignment plan, never derived from the current Docker inspect.
 type Container struct {
 	ID              string
+	ImageID         string
 	Name            string
 	NetworkMode     string
 	Runtime         string
@@ -233,7 +234,7 @@ func (executor *Executor) acknowledgeStart(
 	executor.spent[request.Nonce] = struct{}{}
 	start := Start{
 		Request: request, Container: expected, ExecID: execID,
-		ImageReference: executor.imageReference, ImageID: executor.imageID,
+		ImageReference: executor.imageReference, ImageID: expected.ImageID,
 		ManifestDigest: executor.manifestDigest,
 	}
 	if request.Operation == postgres16protocol.OperationDump {

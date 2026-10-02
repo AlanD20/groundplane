@@ -31,14 +31,16 @@ var protectedPaths = []string{
 
 func (executor *Executor) attest(ctx context.Context, expected Container) error {
 	if !validDockerID(expected.ID) || expected.Name == "" || expected.NetworkMode == "" ||
-		len(expected.Labels) == 0 || !validExpectedMounts(expected.Mounts) {
+		len(
+			expected.Labels,
+		) == 0 || !validExpectedMounts(expected.Mounts) || !executor.matchesRuntimeImageID(expected.ImageID) {
 		return errs.New(errs.KindValidationFailed, "managed PostgreSQL container authority is invalid")
 	}
-	image, err := executor.engine.ImageInspect(ctx, executor.imageID)
+	image, err := executor.engine.ImageInspect(ctx, expected.ImageID)
 	if err != nil {
 		return errs.Wrap(errs.KindInternal, err)
 	}
-	if image.ID != executor.imageID || image.Os != executor.manifest.OS ||
+	if image.ID != expected.ImageID || image.Os != executor.manifest.OS ||
 		image.Architecture != executor.manifest.Architecture ||
 		(executor.manifest.Architecture == "amd64" && image.Variant != "" ||
 			executor.manifest.Architecture == "arm64" && image.Variant != "" && image.Variant != "v8") ||
@@ -52,10 +54,10 @@ func (executor *Executor) attest(ctx context.Context, expected Container) error 
 		return errs.Wrap(errs.KindInternal, err)
 	}
 	observed := inspected.Container
-	if observed.ID != expected.ID || observed.Name != expected.Name || observed.Image != executor.imageID ||
+	if observed.ID != expected.ID || observed.Name != expected.Name || observed.Image != expected.ImageID ||
 		observed.Platform != executor.manifest.OS || observed.Config == nil ||
 		(observed.Config.Image != executor.imageReference && observed.Config.Image != executor.indexReference &&
-			observed.Config.Image != executor.imageID) ||
+			observed.Config.Image != expected.ImageID) ||
 		observed.Config.Tty || !labelsMatch(observed.Config.Labels, expected.Labels) ||
 		observed.State == nil || !observed.State.Running || observed.State.Paused ||
 		observed.State.Restarting || observed.State.Dead || observed.HostConfig == nil ||
@@ -79,6 +81,10 @@ func (executor *Executor) attest(ctx context.Context, expected Container) error 
 func (executor *Executor) matchesImageDescriptor(digest string) bool {
 	_, indexDigest, _ := strings.Cut(executor.indexReference, "@")
 	return digest == executor.manifestDigest || digest == indexDigest
+}
+
+func (executor *Executor) matchesRuntimeImageID(digest string) bool {
+	return digest == executor.imageID || executor.matchesImageDescriptor(digest)
 }
 
 func imageHasReference(image client.ImageInspectResult, reference string) bool {

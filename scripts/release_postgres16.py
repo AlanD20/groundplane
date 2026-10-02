@@ -61,6 +61,17 @@ def output(*args: str) -> str:
     return subprocess.check_output(args, cwd=ROOT, text=True, timeout=120).strip()
 
 
+def native_configuration_digest(manifest: dict, reference: str, local_id: str) -> str:
+    """Bind engine-local identity to the authenticated native OCI manifest."""
+    digest = manifest.get("config", {}).get("digest", "")
+    manifest_digest = reference.rsplit("@", 1)[-1]
+    if (manifest.get("schemaVersion") != 2 or manifest.get("manifests")
+            or not DIGEST.fullmatch(digest) or not DIGEST.fullmatch(manifest_digest)
+            or local_id not in {digest, manifest_digest}):
+        raise ValueError("native PostgreSQL manifest does not bind the measured image")
+    return digest
+
+
 def read_manifest(image_id: str, arch: str) -> dict:
     # The helper is never started to retrieve metadata. Remove only this
     # temporary stopped container and the anonymous volumes Docker created.
@@ -129,9 +140,8 @@ def main() -> None:
         raise ValueError("native PostgreSQL publication did not return one repository digest")
     reference = references[0]
     remote = json.loads(output("docker", "manifest", "inspect", reference))
-    if remote.get("config", {}).get("digest") != image_id or remote.get("manifests"):
-        raise ValueError("native PostgreSQL manifest does not bind the measured image configuration")
-    metadata = {"repository_digest": reference, "image_id": image_id, "manifest": manifest}
+    configuration_digest = native_configuration_digest(remote, reference, image_id)
+    metadata = {"repository_digest": reference, "image_id": configuration_digest, "manifest": manifest}
     with metadata_path.open("x") as file:
         file.write(json.dumps(metadata, separators=(",", ":")) + "\n")
     with reference_path.open("x") as file:

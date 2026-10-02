@@ -686,7 +686,9 @@ def preload_postgres_release(deployment: Deployment, catalog: dict) -> None:
     result = run([*deployment.ssh_base, shlex.join([
         "docker", "image", "inspect", "--format", "{{.Id}} {{.Os}} {{.Architecture}}",
         catalog["image"]])], capture=True)
-    if result.stdout.strip() != f"{native['image_id']} linux {architecture}":
+    pinned_ids = {native["image_id"], native["repository_digest"].rsplit("@", 1)[1],
+                  catalog["image"].rsplit("@", 1)[1]}
+    if result.stdout.strip() not in {f"{identity} linux {architecture}" for identity in pinned_ids}:
         raise ValueError("target PostgreSQL image differs from the Controller's managed catalog")
 
 

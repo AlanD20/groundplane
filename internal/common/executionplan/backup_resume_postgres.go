@@ -63,9 +63,9 @@ func postgresObservationMatchesService(value *agentpb.BackupPostgresContainerObs
 		}
 		for _, image := range release.Images {
 			manifest, manifestErr := hex.DecodeString(strings.TrimPrefix(image.ManifestDigest(), "sha256:"))
-			imageID, imageErr := hex.DecodeString(strings.TrimPrefix(image.ImageID, "sha256:"))
-			if manifestErr == nil && imageErr == nil && bytes.Equal(manifest, value.RepositoryDigest) &&
-				bytes.Equal(imageID, fact.LocalImageIdSha256) {
+			imageID := "sha256:" + hex.EncodeToString(fact.LocalImageIdSha256)
+			if manifestErr == nil && bytes.Equal(manifest, value.RepositoryDigest) &&
+				release.MatchesRuntimeImageID(image, imageID) {
 				return true
 			}
 		}

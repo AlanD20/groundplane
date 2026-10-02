@@ -66,10 +66,6 @@ func postgresSourceAuthority(step *agentpb.BackupStepAuthority, services []*agen
 	if err != nil {
 		return postgresStepAuthority{}, err
 	}
-	imageDigest, err := hex.DecodeString(strings.TrimPrefix(image.ImageID, "sha256:"))
-	if err != nil || len(imageDigest) != sha256.Size {
-		return postgresStepAuthority{}, invalidAgentStaging()
-	}
 	repositorySHA, err := hex.DecodeString(strings.TrimPrefix(image.ManifestDigest(), "sha256:"))
 	if err != nil || len(repositorySHA) != sha256.Size {
 		return postgresStepAuthority{}, invalidAgentStaging()
@@ -85,7 +81,8 @@ func postgresSourceAuthority(step *agentpb.BackupStepAuthority, services []*agen
 	}
 	if fact == nil || fact.PriorRuntimeIntent.GetKind() !=
 		agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING ||
-		!bytes.Equal(fact.LocalImageIdSha256, imageDigest) {
+		len(fact.LocalImageIdSha256) != sha256.Size ||
+		!index.MatchesRuntimeImageID(image, "sha256:"+hex.EncodeToString(fact.LocalImageIdSha256)) {
 		return postgresStepAuthority{}, invalidAgentStaging()
 	}
 	var selected *agentpb.ComposeService
@@ -127,8 +124,9 @@ func postgresSourceAuthority(step *agentpb.BackupStepAuthority, services []*agen
 		index: index, selection: postgres16execution.Selection{Labels: labels,
 			VolumeName: volume.DockerName, VolumeLabels: volumeLabels},
 		serviceID: serviceID, artifactID: selectedArtifact.ArtifactId, labelsSHA256: labelsSHA,
-		repositorySHA: repositorySHA, imageID: image.ImageID, maxPlaintext: maxPlaintext,
-		database: database, role: role,
+		repositorySHA: repositorySHA, imageID: "sha256:" + hex.EncodeToString(fact.LocalImageIdSha256),
+		maxPlaintext: maxPlaintext,
+		database:     database, role: role,
 	}, nil
 }
 
