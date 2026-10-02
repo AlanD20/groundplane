@@ -31,6 +31,7 @@ case "$(uname -sm)" in
 esac
 
 docker build --platform "linux/$arch" --file Dockerfile.postgres16 \
+  --build-arg "BUILDARCH=$arch" --build-arg "TARGETARCH=$arch" \
   --build-arg "POSTGRES16_BASE=$base_image" --tag "$image" .
 printf 'Built native linux/%s image %s. Not published or qualified.\n' "$arch" "$image"
 printf 'Release metadata is embedded at /usr/local/share/groundplane/postgres16-release.json.\n'
